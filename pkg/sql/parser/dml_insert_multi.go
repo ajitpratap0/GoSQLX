@@ -75,7 +75,7 @@ func (p *Parser) parseMultiTableInsert(stmt *ast.InsertStatement) (ast.Statement
 		return nil, err
 	}
 	stmt.Query = qe
-	stmt.MultiTable = m
+	stmt.EnsureExtras().MultiTable = m
 	return stmt, nil
 }
 

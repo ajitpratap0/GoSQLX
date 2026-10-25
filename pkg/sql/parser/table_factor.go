@@ -43,7 +43,7 @@ func hasTableSample(ref *ast.TableReference) bool {
 // parseTableOnly consumes the PostgreSQL ONLY modifier before a table name
 // (FROM ONLY parent) and reports whether it was present.
 func (p *Parser) parseTableOnly() bool {
-	if !p.IsPostgreSQL() || !p.isTokenMatch("ONLY") {
+	if !p.isTokenMatch("ONLY") || !p.IsPostgreSQL() {
 		return false
 	}
 	next := p.peekToken().Token.Type
@@ -58,7 +58,7 @@ func (p *Parser) parseTableOnly() bool {
 // table name (t@remote_db, t@lnk.example.com). The tokenizer yields the
 // "@name" part as a placeholder token.
 func (p *Parser) parseOracleDBLink(ref *ast.TableReference) {
-	if !p.IsOracle() || !p.isType(models.TokenTypePlaceholder) {
+	if !p.isType(models.TokenTypePlaceholder) || !p.IsOracle() {
 		return
 	}
 	v := p.currentToken.Token.Value
@@ -79,7 +79,7 @@ func (p *Parser) parseOracleDBLink(ref *ast.TableReference) {
 // isForSystemTimeStart reports whether the current token starts a
 // FOR SYSTEM_TIME temporal clause (MariaDB, SQL Server).
 func (p *Parser) isForSystemTimeStart() bool {
-	return (p.IsMariaDB() || p.IsSQLServer()) && p.isType(models.TokenTypeFor) &&
+	return p.isType(models.TokenTypeFor) && (p.IsMariaDB() || p.IsSQLServer()) &&
 		strings.EqualFold(p.peekToken().Token.Value, "SYSTEM_TIME")
 }
 
@@ -242,11 +242,44 @@ func (p *Parser) parseTableSample() (*ast.TableSampleClause, error) {
 	return clause, nil
 }
 
+// atTableModifierBoundary rejects the common table-factor terminators before
+// probing dialect-specific modifiers. Word-shaped contextual tokens still take
+// the full path, preserving keyword and quoted-name disambiguation.
+func (p *Parser) atTableModifierBoundary() bool {
+	switch p.currentToken.Token.Type {
+	case models.TokenTypeEOF, models.TokenTypeSemicolon, models.TokenTypeComma,
+		models.TokenTypeRParen, models.TokenTypeWhere, models.TokenTypeGroup,
+		models.TokenTypeHaving, models.TokenTypeOrder, models.TokenTypeLimit,
+		models.TokenTypeOffset, models.TokenTypeFetch, models.TokenTypeUnion,
+		models.TokenTypeIntersect, models.TokenTypeExcept, models.TokenTypeJoin,
+		models.TokenTypeInner, models.TokenTypeLeft, models.TokenTypeRight,
+		models.TokenTypeFull, models.TokenTypeCross, models.TokenTypeOn:
+		return true
+	}
+	return false
+}
+
 // parseTableModifiersBeforeAlias parses the table modifiers that come
 // between a table name and its alias: MySQL PARTITION (...), FOR
 // SYSTEM_TIME, Snowflake time travel, SAMPLE / TABLESAMPLE and Oracle
 // flashback.
 func (p *Parser) parseTableModifiersBeforeAlias(ref *ast.TableReference) error {
+	if p.atTableModifierBoundary() {
+		return nil
+	}
+	// Most identifiers here are aliases. Only these token types or contextual
+	// words can begin a modifier; leave non-ASCII spellings to the full checks.
+	switch p.currentToken.Token.Type {
+	case models.TokenTypeWith, models.TokenTypePartition, models.TokenTypeFor, models.TokenTypeAs:
+	default:
+		v := p.currentToken.Token.Value
+		if len(v) < 2 {
+			return nil
+		}
+		if c := v[0] | 0x20; v[0] < 0x80 && c != 'a' && c != 'b' && c != 'c' && c != 's' && c != 't' && c != 'v' {
+			return nil
+		}
+	}
 	if p.isOpenJSONSchemaStart(ref) {
 		cols, err := p.parseOpenJSONSchema()
 		if err != nil {
@@ -328,6 +361,17 @@ func (p *Parser) parseTableModifiersBeforeAlias(ref *ast.TableReference) error {
 // alias itself: index hints, SQLite INDEXED BY / NOT INDEXED, Oracle
 // flashback, FOR SYSTEM_TIME.
 func (p *Parser) isTableModifierAfterAliasStart() bool {
+	switch p.currentToken.Token.Type {
+	case models.TokenTypeNot, models.TokenTypeAs:
+	default:
+		v := p.currentToken.Token.Value
+		if len(v) < 3 {
+			return false
+		}
+		if c := v[0] | 0x20; v[0] < 0x80 && c != 'u' && c != 'f' && c != 'i' && c != 'v' {
+			return false
+		}
+	}
 	return p.isIndexHintStart() || p.isSQLiteIndexedStart() || p.isOracleFlashbackStart()
 }
 
@@ -335,6 +379,9 @@ func (p *Parser) isTableModifierAfterAliasStart() bool {
 // alias: TABLESAMPLE, ClickHouse FINAL, MySQL index hints, SQLite INDEXED BY
 // / NOT INDEXED and SQL Server bare table hints t (NOLOCK).
 func (p *Parser) parseTableModifiersAfterAlias(ref *ast.TableReference) error {
+	if p.atTableModifierBoundary() {
+		return nil
+	}
 	if !hasTableSample(ref) && p.isTableSampleStart() {
 		sample, err := p.parseTableSample()
 		if err != nil {
@@ -514,7 +561,7 @@ var sqlServerTableHints = map[string]bool{
 // known hint names qualify, so a table-valued function call is not mistaken
 // for one.
 func (p *Parser) isBareTableHintListStart() bool {
-	if !p.IsSQLServer() || !p.isType(models.TokenTypeLParen) {
+	if !p.isType(models.TokenTypeLParen) || !p.IsSQLServer() {
 		return false
 	}
 	next := p.peekToken().Token
@@ -936,8 +983,8 @@ func (p *Parser) isEmptyNamePart() bool {
 // schema of a SQL Server OPENJSON(...) table function rather than table
 // hints.
 func (p *Parser) isOpenJSONSchemaStart(ref *ast.TableReference) bool {
-	return p.IsSQLServer() && ref.TableFunc != nil && strings.EqualFold(ref.TableFunc.Name, "OPENJSON") &&
-		p.isType(models.TokenTypeWith) && p.peekToken().Token.Type == models.TokenTypeLParen
+	return p.isType(models.TokenTypeWith) && ref.TableFunc != nil && p.IsSQLServer() &&
+		strings.EqualFold(ref.TableFunc.Name, "OPENJSON") && p.peekToken().Token.Type == models.TokenTypeLParen
 }
 
 // parseOpenJSONSchema parses WITH (name type ['$.path'] [AS JSON], ...).

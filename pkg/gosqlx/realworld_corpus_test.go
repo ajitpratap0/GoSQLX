@@ -20,11 +20,13 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"regexp"
 	"sort"
 	"strings"
 	"testing"
 
+	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/keywords"
 )
 
@@ -46,6 +48,11 @@ func TestRealWorldCorpus(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read %s: %v", realworldRoot, err)
 	}
+	// After every statement has been parsed, formatted and re-parsed, the
+	// shared read-only stand-ins returned by the DialectExtras/DialectModifiers
+	// accessors must still be empty: a write through one would leak into every
+	// AST that lacks its own extras.
+	t.Cleanup(func() { assertDialectStandInsUntouched(t) })
 	known := loadKnownFailures(t)
 	seen := map[string]bool{}
 	var current []string // "key stage" for every failing statement
@@ -330,4 +337,24 @@ func compact(s string) string {
 		s = s[:240] + "…"
 	}
 	return s
+}
+
+func assertDialectStandInsUntouched(t *testing.T) {
+	t.Helper()
+	checks := []struct {
+		name      string
+		got, want any
+	}{
+		{"FunctionCall", *(&ast.FunctionCall{}).DialectExtras(), ast.FunctionExtras{}},
+		{"BinaryExpression", *(&ast.BinaryExpression{}).DialectExtras(), ast.BinaryExtras{}},
+		{"InsertStatement", *(&ast.InsertStatement{}).DialectExtras(), ast.InsertDialectFields{}},
+		{"SelectStatement", *(&ast.SelectStatement{}).DialectExtras(), ast.SelectExtras{}},
+		{"TableReference", *(&ast.TableReference{}).DialectModifiers(), ast.TableModifiers{}},
+		{"LiteralValue", (&ast.LiteralValue{}).DialectExtras(), ast.LiteralExtras{}},
+	}
+	for _, c := range checks {
+		if !reflect.DeepEqual(c.got, c.want) {
+			t.Errorf("%s: shared read-only dialect stand-in was mutated: %+v", c.name, c.got)
+		}
+	}
 }

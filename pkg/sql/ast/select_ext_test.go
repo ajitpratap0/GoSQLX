@@ -34,11 +34,11 @@ func TestSelectExt_SQL(t *testing.T) {
 		mod  func(s *SelectStatement)
 		want string
 	}{
-		{"limit expr", func(s *SelectStatement) { s.LimitExpr = ph("$1") }, "SELECT a FROM t LIMIT $1"},
-		{"limit int wins over expr", func(s *SelectStatement) { v := 3; s.Limit = &v; s.LimitExpr = ph("$1") }, "SELECT a FROM t LIMIT 3"},
-		{"limit all", func(s *SelectStatement) { s.LimitAll = true }, "SELECT a FROM t LIMIT ALL"},
-		{"offset expr rows", func(s *SelectStatement) { s.OffsetExpr = ph("@s"); s.OffsetRows = true }, "SELECT a FROM t OFFSET @s ROWS"},
-		{"offset one row", func(s *SelectStatement) { v := 1; s.Offset = &v; s.OffsetRows = true }, "SELECT a FROM t OFFSET 1 ROW"},
+		{"limit expr", func(s *SelectStatement) { s.EnsureExtras().LimitExpr = ph("$1") }, "SELECT a FROM t LIMIT $1"},
+		{"limit int wins over expr", func(s *SelectStatement) { v := 3; s.Limit = &v; s.EnsureExtras().LimitExpr = ph("$1") }, "SELECT a FROM t LIMIT 3"},
+		{"limit all", func(s *SelectStatement) { s.EnsureExtras().LimitAll = true }, "SELECT a FROM t LIMIT ALL"},
+		{"offset expr rows", func(s *SelectStatement) { s.EnsureExtras().OffsetExpr = ph("@s"); s.EnsureExtras().OffsetRows = true }, "SELECT a FROM t OFFSET @s ROWS"},
+		{"offset one row", func(s *SelectStatement) { v := 1; s.Offset = &v; s.EnsureExtras().OffsetRows = true }, "SELECT a FROM t OFFSET 1 ROW"},
 		{"offset gets rows before fetch", func(s *SelectStatement) {
 			v := 4
 			s.Offset = &v
@@ -49,10 +49,12 @@ func TestSelectExt_SQL(t *testing.T) {
 			v := 100
 			s.Limit = &v
 		}, "SELECT a FROM t LIMIT 2 OFFSET 1 BY u, p LIMIT 100"},
-		{"group by all with totals", func(s *SelectStatement) { s.GroupByModifiers = GroupByModifiers{All: true, WithTotals: true} }, "SELECT a FROM t GROUP BY ALL WITH TOTALS"},
+		{"group by all with totals", func(s *SelectStatement) {
+			s.EnsureExtras().GroupByModifiers = GroupByModifiers{All: true, WithTotals: true}
+		}, "SELECT a FROM t GROUP BY ALL WITH TOTALS"},
 		{"group by with cube", func(s *SelectStatement) {
 			s.GroupBy = []Expression{id("a")}
-			s.GroupByModifiers.WithCube = true
+			s.EnsureExtras().GroupByModifiers.WithCube = true
 		}, "SELECT a FROM t GROUP BY a WITH CUBE"},
 		{"modifiers and top", func(s *SelectStatement) {
 			s.EnsureExtras().SelectModifiers = []string{"HIGH_PRIORITY", "SQL_NO_CACHE"}
@@ -77,7 +79,7 @@ func TestSelectExt_SQL(t *testing.T) {
 		}, "SELECT a FROM t INTO OUTFILE 'f' CHARACTER SET utf8mb4 FIELDS TERMINATED BY ',' ESCAPED BY 'x' LINES STARTING BY '>'"},
 		{"order siblings and interpolate", func(s *SelectStatement) {
 			s.OrderBy = []OrderByExpression{{Expression: id("a"), Ascending: true, UsingOperator: ">"}}
-			s.OrderSiblings = true
+			s.EnsureExtras().OrderSiblings = true
 			s.EnsureExtras().Interpolate = &InterpolateClause{}
 		}, "SELECT a FROM t ORDER SIBLINGS BY a USING > INTERPOLATE"},
 		{"for xml raw", func(s *SelectStatement) {
@@ -171,9 +173,9 @@ func TestSelectExt_Children(t *testing.T) {
 	// Nested expression fields reached through the statement.
 	lim, off, cnt := &Identifier{Name: "l"}, &Identifier{Name: "o"}, &Identifier{Name: "c"}
 	s := SelectStatement{
-		LimitExpr:  lim,
-		OffsetExpr: off,
+
 		Extras: &SelectExtras{
+			LimitExpr: lim, OffsetExpr: off,
 			LimitBy:    &LimitByClause{Count: cnt},
 			QueryHints: []QueryHint{{Name: "MAXDOP", Value: &Identifier{Name: "h"}}},
 		},
@@ -192,14 +194,9 @@ func TestSelectExt_Children(t *testing.T) {
 func TestSelectExt_ReleaseClearsFields(t *testing.T) {
 	n := 3
 	s := &SelectStatement{
-		GroupByModifiers: GroupByModifiers{All: true},
-		OrderSiblings:    true,
-		LimitExpr:        &Identifier{Name: "$1"},
-		OffsetExpr:       &Identifier{Name: "$2"},
-		LimitAll:         true,
-		OffsetRows:       true,
-		LimitWithTies:    true,
+
 		Extras: &SelectExtras{
+			GroupByModifiers: GroupByModifiers{All: true}, OrderSiblings: true, LimitExpr: &Identifier{Name: "$1"}, OffsetExpr: &Identifier{Name: "$2"}, LimitAll: true, OffsetRows: true, LimitWithTies: true,
 			SelectModifiers: []string{"SQL_NO_CACHE"},
 			Into:            &SelectInto{Kind: SelectIntoVariables, Targets: []Expression{&Identifier{Name: "@x"}}},
 			Interpolate:     &InterpolateClause{Items: []InterpolateItem{{Column: "c", Expr: &Identifier{Name: "c"}}}},

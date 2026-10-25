@@ -55,9 +55,16 @@ func (p *Parser) parseExpression() (ast.Expression, error) {
 	}
 
 	// Start by parsing XOR/AND expressions (higher precedence)
-	left, err := p.parseXorExpression()
+	left, err := p.parseAndExpression()
 	if err != nil {
 		return nil, err
+	}
+
+	if p.currentToken.Token.Type == models.TokenTypeIdentifier && p.isMySQLFamily() && equalsUpper(p.currentToken.Token.Value, "XOR") {
+		left, err = p.parseXorTail(left)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	// Handle OR operators (lowest precedence, left-associative). In MySQL and
@@ -93,8 +100,8 @@ func (p *Parser) parseExpression() (ast.Expression, error) {
 
 	// MySQL / MariaDB user-variable assignment: @a := expr (right-associative,
 	// the loosest operator).
-	if p.isMySQLFamily() && (p.isType(models.TokenTypeAssignment) ||
-		p.isType(models.TokenTypeColon) && p.peekTypeAt(1) == models.TokenTypeEq && p.nextAdjacent(1)) {
+	if (p.isType(models.TokenTypeAssignment) ||
+		p.isType(models.TokenTypeColon) && p.peekTypeAt(1) == models.TokenTypeEq && p.nextAdjacent(1)) && p.isMySQLFamily() {
 		opPos := p.currentLocation()
 		if !p.isType(models.TokenTypeAssignment) {
 			p.advance() // Consume : of a split ":="
@@ -258,9 +265,16 @@ func (p *Parser) parseAdditiveExpression() (ast.Expression, error) {
 // parseMultiplicativeExpression parses expressions with *, /, and % operators
 func (p *Parser) parseMultiplicativeExpression() (ast.Expression, error) {
 	// Parse the left side using the power/XOR expression (higher precedence)
-	left, err := p.parsePowerExpression()
+	left, err := p.parseJSONExpression()
 	if err != nil {
 		return nil, err
+	}
+
+	if p.caretOperator() {
+		left, err = p.parsePowerTail(left)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	// Handle *, /, and % operators (left-associative)

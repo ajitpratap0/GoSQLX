@@ -431,7 +431,7 @@ func (b *BinaryExpression) writeSQL(buf *bytes.Buffer) {
 			buf.WriteString(canon)
 			buf.WriteByte(' ')
 			writeExpr(buf, b.Right)
-			writeEscape(buf, b.Escape)
+			writeEscape(buf, b.DialectExtras().Escape)
 			return
 		}
 		buf.WriteString("NOT (")
@@ -454,7 +454,7 @@ func (b *BinaryExpression) writeSQL(buf *bytes.Buffer) {
 	}
 	buf.WriteByte(' ')
 	writeExpr(buf, b.Right)
-	writeEscape(buf, b.Escape)
+	writeEscape(buf, b.DialectExtras().Escape)
 }
 
 // notQualifiedOperator reports whether op (case-insensitively) is one of the
@@ -865,12 +865,12 @@ func (f *FunctionCall) writeSQL(buf *bytes.Buffer) {
 		buf.WriteString(" ORDER BY ")
 		writeOrderBy(buf, f.OrderBy)
 	}
-	if f.Separator != nil {
+	if f.DialectExtras().Separator != nil {
 		buf.WriteString(" SEPARATOR ")
-		f.Separator.writeSQL(buf)
+		f.DialectExtras().Separator.writeSQL(buf)
 	}
 	buf.WriteByte(')')
-	f.Keep.writeSQL(buf)
+	f.DialectExtras().Keep.writeSQL(buf)
 	// NullTreatment is IGNORE NULLS or RESPECT NULLS; anything else can only
 	// come from a hand-built AST and is dropped rather than written raw.
 	if NullTreatmentText(f.NullTreatment) != "" {
@@ -1366,7 +1366,7 @@ func (s *SelectStatement) writeSQL(buf *bytes.Buffer) {
 	}
 
 	if len(s.OrderBy) > 0 {
-		if s.OrderSiblings {
+		if s.DialectExtras().OrderSiblings {
 			buf.WriteString(" ORDER SIBLINGS BY ")
 		} else {
 			buf.WriteString(" ORDER BY ")
@@ -1431,7 +1431,7 @@ func (i *InsertStatement) writeSQL(buf *bytes.Buffer) {
 		buf.WriteByte(' ')
 	}
 
-	if i.MultiTable != nil {
+	if i.DialectExtras().MultiTable != nil {
 		i.writeMultiTableInsert(buf)
 		return
 	}
@@ -1454,7 +1454,7 @@ func (i *InsertStatement) writeSQL(buf *bytes.Buffer) {
 			buf.WriteByte(')')
 		}
 
-		writeDMLOutput(buf, i.Output, i.OutputInto)
+		writeDMLOutput(buf, i.Output, i.DialectExtras().OutputInto)
 		i.writeInsertBeforeSource(buf)
 
 		if i.Query != nil {
@@ -1478,8 +1478,8 @@ func (i *InsertStatement) writeSQL(buf *bytes.Buffer) {
 		writeAssignments(buf, i.OnDuplicateKey.Updates)
 	}
 
-	writeReturning(buf, i.Returning, i.ReturningInto)
-	writeLogErrors(buf, i.LogErrors)
+	writeReturning(buf, i.Returning, i.DialectExtras().ReturningInto)
+	writeLogErrors(buf, i.DialectExtras().LogErrors)
 	i.writeInsertFormat(buf)
 }
 
@@ -2193,9 +2193,9 @@ func writeTableRef(buf *bytes.Buffer, t *TableReference) {
 		buf.WriteByte('(')
 		t.SetSubquery.writeSQL(buf)
 		buf.WriteByte(')')
-	} else if t.Values != nil {
+	} else if t.DialectModifiers().Values != nil {
 		buf.WriteByte('(')
-		t.Values.writeSQL(buf)
+		t.DialectModifiers().Values.writeSQL(buf)
 		buf.WriteByte(')')
 	} else {
 		if t.Only {

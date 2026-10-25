@@ -78,7 +78,9 @@ func SetNameQuoteStyle(node Node, style rune, keepBareHash bool) {
 				v.ColumnQuotes[i] = restyle(v.ColumnQuotes[i])
 			}
 		case *InsertStatement:
-			v.TableNameQuote = restyle(v.TableNameQuote)
+			if v.Extras != nil {
+				v.Extras.TableNameQuote = restyle(v.Extras.TableNameQuote)
+			}
 		case *UpdateStatement:
 			v.TableNameQuote = restyle(v.TableNameQuote)
 			v.AliasQuote = restyle(v.AliasQuote)

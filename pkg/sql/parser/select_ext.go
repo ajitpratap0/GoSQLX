@@ -549,7 +549,7 @@ func (p *Parser) parseLimitOffsetInto(s *ast.SelectStatement) error {
 					switch {
 					case s.Extras != nil && s.Extras.LimitBy != nil:
 						return goerrors.InvalidSyntaxError("only one LIMIT ... BY clause is allowed", p.currentLocation(), "")
-					case s.LimitWithTies:
+					case s.DialectExtras().LimitWithTies:
 						return goerrors.InvalidSyntaxError("WITH TIES cannot be used with LIMIT ... BY", p.currentLocation(), "")
 					case offsetBeforeLimit:
 						return goerrors.InvalidSyntaxError("OFFSET for LIMIT ... BY must follow the LIMIT count", p.currentLocation(), "")
@@ -606,7 +606,7 @@ func (p *Parser) parseLimitValue(s *ast.SelectStatement) error {
 
 	if p.isType(models.TokenTypeAll) {
 		p.advance()
-		s.Limit, s.LimitExpr, s.LimitAll = nil, nil, true
+		s.Limit, s.EnsureExtras().LimitExpr, s.EnsureExtras().LimitAll = nil, nil, true
 		return nil
 	}
 	if p.isType(models.TokenTypeEOF) || p.isType(models.TokenTypeSemicolon) {
@@ -623,15 +623,22 @@ func (p *Parser) parseLimitValue(s *ast.SelectStatement) error {
 		if err != nil {
 			return err
 		}
-		s.Offset, s.OffsetExpr = n, e
+		s.Offset = n
+		if e != nil || s.Extras != nil {
+			s.EnsureExtras().OffsetExpr = e
+		}
 		n, e = cn, ce
 	}
-	s.Limit, s.LimitExpr, s.LimitAll = n, e, false
+	s.Limit = n
+	if e != nil || s.Extras != nil {
+		x := s.EnsureExtras()
+		x.LimitExpr, x.LimitAll = e, false
+	}
 	if p.dialect == string(keywords.DialectClickHouse) && p.isType(models.TokenTypeWith) &&
 		p.peekToken().Token.Type == models.TokenTypeTies {
 		p.advance() // WITH
 		p.advance() // TIES
-		s.LimitWithTies = true
+		s.EnsureExtras().LimitWithTies = true
 	}
 	return nil
 }
@@ -647,9 +654,12 @@ func (p *Parser) parseOffsetValue(s *ast.SelectStatement) error {
 	if err != nil {
 		return err
 	}
-	s.Offset, s.OffsetExpr = n, e
+	s.Offset = n
+	if e != nil || s.Extras != nil {
+		s.EnsureExtras().OffsetExpr = e
+	}
 	if p.isAnyType(models.TokenTypeRow, models.TokenTypeRows) && !p.isRowsExamined() {
-		s.OffsetRows = true
+		s.EnsureExtras().OffsetRows = true
 		p.advance()
 	}
 	return nil
@@ -676,14 +686,14 @@ func (p *Parser) parseRowsExamined(s *ast.SelectStatement) error {
 // parseLimitByTail moves the LIMIT / OFFSET just parsed into a ClickHouse
 // LIMIT BY clause and parses its BY list; the current token is BY.
 func (p *Parser) parseLimitByTail(s *ast.SelectStatement) error {
-	lb := &ast.LimitByClause{Count: rowCountExpr(s.Limit, s.LimitExpr)}
+	lb := &ast.LimitByClause{Count: rowCountExpr(s.Limit, s.DialectExtras().LimitExpr)}
 	if s.HasOffset() {
-		lb.Offset = rowCountExpr(s.Offset, s.OffsetExpr)
+		lb.Offset = rowCountExpr(s.Offset, s.DialectExtras().OffsetExpr)
 	}
 	if lb.Count == nil {
 		return p.expectedError("row count before LIMIT ... BY")
 	}
-	s.Limit, s.LimitExpr, s.Offset, s.OffsetExpr, s.OffsetRows = nil, nil, nil, nil, false
+	s.Limit, s.EnsureExtras().LimitExpr, s.Offset, s.EnsureExtras().OffsetExpr, s.EnsureExtras().OffsetRows = nil, nil, nil, nil, false
 	p.advance() // BY
 	for {
 		e, err := p.parseExpression()
@@ -754,7 +764,7 @@ func (p *Parser) parseLockWaitOption(fc *ast.ForClause) error {
 // isForOutputStart reports whether the current FOR starts a SQL Server FOR
 // JSON / FOR XML / FOR BROWSE clause.
 func (p *Parser) isForOutputStart() bool {
-	if p.dialect != string(keywords.DialectSQLServer) || !p.isType(models.TokenTypeFor) {
+	if !p.isType(models.TokenTypeFor) || p.dialect != string(keywords.DialectSQLServer) {
 		return false
 	}
 	v := p.peekToken().Token.Value

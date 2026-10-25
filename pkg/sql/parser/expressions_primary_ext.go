@@ -134,14 +134,14 @@ func isTypedLiteralType(name string) bool {
 // typed literals. A word glued to the quote (E'..', X'..', _utf8mb4'..') is a
 // string prefix, not a type.
 func (p *Parser) isTypedLiteralStart() bool {
-	next := p.peekToken()
-	if next.Token.Type != models.TokenTypeString && next.Token.Type != models.TokenTypeSingleQuotedString {
+	nextType := p.peekTypeAt(1)
+	if nextType != models.TokenTypeString && nextType != models.TokenTypeSingleQuotedString {
 		return false
 	}
 	if !p.isType(models.TokenTypeIdentifier) || p.currentToken.Token.Quote != 0 {
 		return false
 	}
-	if p.currentToken.End == next.Start && !p.currentToken.End.IsZero() {
+	if p.currentToken.End == p.peekToken().Start && !p.currentToken.End.IsZero() {
 		return false
 	}
 	switch p.dialect {

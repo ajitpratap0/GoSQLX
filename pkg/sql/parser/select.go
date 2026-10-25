@@ -44,7 +44,10 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 
 	// MySQL / MariaDB select modifiers (SQL_CALC_FOUND_ROWS, STRAIGHT_JOIN, ...),
 	// which may also precede DISTINCT.
-	selectModifiers := p.parseSelectModifiers()
+	var selectModifiers []string
+	if p.isMySQLFamily() {
+		selectModifiers = p.parseSelectModifiers()
+	}
 	if len(selectModifiers) > 0 && !isDistinct && p.isType(models.TokenTypeDistinct) {
 		if isDistinct, distinctOnColumns, err = p.parseDistinctModifier(); err != nil {
 			return nil, err
@@ -69,10 +72,13 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 		)
 	}
 
-	// SQL Server TOP clause
-	topClause, err := p.parseTopClause()
-	if err != nil {
-		return nil, err
+	// TOP is a clause only in SQL Server and Snowflake. Other dialects
+	// have already rejected it above or treat it as an ordinary name.
+	var topClause *ast.TopClause
+	if p.dialect == string(keywords.DialectSQLServer) || p.dialect == string(keywords.DialectSnowflake) {
+		if topClause, err = p.parseTopClause(); err != nil {
+			return nil, err
+		}
 	}
 
 	// Column list
@@ -113,7 +119,10 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 	// Migrated from p.dialect == "clickhouse" to Capabilities in Sprint 2.
 	// SupportsArrayJoin is true only for ClickHouse in dialect.Capabilities,
 	// preserving the exact previous behaviour.
-	if p.Capabilities().SupportsArrayJoin {
+	// Dialect options are fixed for a parse; read the capability value once
+	// for the clauses below instead of copying the matrix for each gate.
+	capabilities := p.Capabilities()
+	if capabilities.SupportsArrayJoin {
 		if selectStmt.ArrayJoin, err = p.parseArrayJoinClause(); err != nil {
 			return nil, err
 		}
@@ -130,7 +139,7 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 	// Migrated from p.dialect == "clickhouse" to Capabilities in Sprint 2.
 	// SupportsPrewhere is true only for ClickHouse in dialect.Capabilities,
 	// preserving the exact previous behaviour.
-	if p.Capabilities().SupportsPrewhere {
+	if capabilities.SupportsPrewhere {
 		if selectStmt.PrewhereClause, err = p.parsePrewhereClause(); err != nil {
 			return nil, err
 		}
@@ -157,7 +166,7 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 	// Migrated from p.dialect == "snowflake"/"bigquery" to Capabilities in
 	// Sprint 2. SupportsQualify is true only for Snowflake and BigQuery in
 	// dialect.Capabilities, preserving the exact previous behaviour.
-	if p.Capabilities().SupportsQualify &&
+	if capabilities.SupportsQualify &&
 		strings.EqualFold(p.currentToken.Token.Value, "QUALIFY") {
 		p.advance() // Consume QUALIFY
 		qexpr, qerr := p.parseExpression()
@@ -270,7 +279,7 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 	if p.isOrderSiblingsBy() {
 		p.advance() // ORDER
 		p.advance() // SIBLINGS
-		selectStmt.OrderSiblings = true
+		selectStmt.EnsureExtras().OrderSiblings = true
 		if selectStmt.OrderBy, err = p.parseOrderByList(); err != nil {
 			return nil, err
 		}
@@ -288,8 +297,10 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 	}
 
 	// LIMIT / OFFSET (either order), ClickHouse LIMIT ... BY
-	if err = p.parseLimitOffsetInto(selectStmt); err != nil {
-		return nil, err
+	if p.isType(models.TokenTypeLimit) || p.isType(models.TokenTypeOffset) {
+		if err = p.parseLimitOffsetInto(selectStmt); err != nil {
+			return nil, err
+		}
 	}
 
 	// FETCH FIRST / NEXT
@@ -325,8 +336,11 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 	}
 
 	// SQL Server FOR JSON / XML and OPTION (...), ClickHouse FORMAT
-	if err = p.parseSelectTail(selectStmt); err != nil {
-		return nil, err
+	if v := p.currentToken.Token.Value; p.isType(models.TokenTypeFor) ||
+		(len(v) > 0 && (v[0] >= 0x80 || v[0]|0x20 == 'f' || v[0]|0x20 == 'o')) {
+		if err = p.parseSelectTail(selectStmt); err != nil {
+			return nil, err
+		}
 	}
 
 	return selectStmt, nil
@@ -335,7 +349,7 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 // isOrderSiblingsBy reports whether the current tokens are Oracle
 // ORDER SIBLINGS BY.
 func (p *Parser) isOrderSiblingsBy() bool {
-	return p.dialect == string(keywords.DialectOracle) && p.isType(models.TokenTypeOrder) &&
+	return p.isType(models.TokenTypeOrder) && p.dialect == string(keywords.DialectOracle) &&
 		equalsUpper(p.peekToken().Token.Value, "SIBLINGS")
 }
 

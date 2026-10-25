@@ -256,9 +256,6 @@ func tableRefFieldSamples() map[string]func(*ast.TableReference) {
 				IndexedBy:   "i",
 			}
 		},
-		"Values": func(r *ast.TableReference) {
-			r.Values = &ast.Values{Rows: [][]ast.Expression{{num("1")}}}
-		},
 	}
 }
 
@@ -322,6 +319,9 @@ func TestRender_TableReferenceRendersEveryField(t *testing.T) {
 func TestRender_TableModifiersRendersEveryField(t *testing.T) {
 	num := func(v string) *ast.LiteralValue { return &ast.LiteralValue{Value: v, Type: "int"} }
 	samples := map[string]func(*ast.TableModifiers){
+		"Values": func(m *ast.TableModifiers) {
+			m.Values = &ast.Values{Rows: [][]ast.Expression{{num("1")}}}
+		},
 		"TableSample": func(m *ast.TableModifiers) {
 			m.TableSample = &ast.TableSampleClause{Keyword: "SAMPLE", Args: []ast.Expression{num("5")}}
 		},

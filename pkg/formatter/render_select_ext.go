@@ -154,7 +154,7 @@ func arrayJoinSQL(a *ast.ArrayJoinClause, f *nodeFormatter) string {
 // groupBySQL renders the GROUP BY clause with its modifiers, or "" when the
 // statement has none.
 func groupBySQL(s *ast.SelectStatement, f *nodeFormatter) string {
-	m := s.GroupByModifiers
+	m := s.DialectExtras().GroupByModifiers
 	if len(s.GroupBy) == 0 && !m.All {
 		return ""
 	}
@@ -235,12 +235,12 @@ func writeLimitOffsetClauses(sb *strings.Builder, s *ast.SelectStatement, f *nod
 		switch {
 		case s.Limit != nil:
 			sb.WriteString(strconv.Itoa(*s.Limit))
-		case s.LimitExpr != nil:
-			sb.WriteString(exprSQL(s.LimitExpr))
+		case s.DialectExtras().LimitExpr != nil:
+			sb.WriteString(exprSQL(s.DialectExtras().LimitExpr))
 		default:
 			sb.WriteString(f.kw("ALL"))
 		}
-		if s.LimitWithTies {
+		if s.DialectExtras().LimitWithTies {
 			sb.WriteString(" ")
 			sb.WriteString(f.kw("WITH TIES"))
 		}
@@ -252,9 +252,9 @@ func writeLimitOffsetClauses(sb *strings.Builder, s *ast.SelectStatement, f *nod
 		if s.Offset != nil {
 			sb.WriteString(strconv.Itoa(*s.Offset))
 		} else {
-			sb.WriteString(exprSQL(s.OffsetExpr))
+			sb.WriteString(exprSQL(s.DialectExtras().OffsetExpr))
 		}
-		if s.OffsetRows || s.Fetch != nil {
+		if s.DialectExtras().OffsetRows || s.Fetch != nil {
 			sb.WriteString(" ")
 			sb.WriteString(f.kw(ast.OffsetRowsKeyword(s)))
 		}
@@ -416,8 +416,13 @@ func normalizeLimitForDialect(s *ast.SelectStatement, dialect string) {
 	if dialect != "sqlserver" && dialect != "oracle" {
 		return
 	}
-	s.LimitAll = false
-	if s.Limit == nil && s.LimitExpr == nil {
+	if s.Extras != nil {
+		// renderSelect copied the statement; detach metadata before normalization.
+		x := *s.Extras
+		s.Extras = &x
+		s.Extras.LimitAll = false
+	}
+	if s.Limit == nil && s.DialectExtras().LimitExpr == nil {
 		return
 	}
 	newFetch := func(fetchType string) *ast.FetchClause {
@@ -426,12 +431,15 @@ func normalizeLimitForDialect(s *ast.SelectStatement, dialect string) {
 			v := int64(*s.Limit)
 			fc.FetchValue = &v
 		} else {
-			fc.FetchExpr = s.LimitExpr
+			fc.FetchExpr = s.DialectExtras().LimitExpr
 		}
 		return fc
 	}
 	clearLimit := func() {
-		s.Limit, s.LimitExpr, s.LimitWithTies = nil, nil, false
+		s.Limit = nil
+		if s.Extras != nil {
+			s.Extras.LimitExpr, s.Extras.LimitWithTies = nil, false
+		}
 	}
 	// moveOffset moves an integer OFFSET into the FETCH clause; an OFFSET
 	// expression stays on the statement and renders as OFFSET expr ROWS.
@@ -441,7 +449,7 @@ func normalizeLimitForDialect(s *ast.SelectStatement, dialect string) {
 			v := int64(*s.Offset)
 			fc.OffsetValue = &v
 			s.Offset = nil
-		case s.OffsetExpr == nil && defaultZero:
+		case s.DialectExtras().OffsetExpr == nil && defaultZero:
 			var zero int64
 			fc.OffsetValue = &zero
 		}
@@ -459,7 +467,7 @@ func normalizeLimitForDialect(s *ast.SelectStatement, dialect string) {
 			moveOffset(s.Fetch, true)
 		} else {
 			// Simple TOP N
-			var count ast.Expression = s.LimitExpr
+			var count ast.Expression = s.DialectExtras().LimitExpr
 			if s.Limit != nil {
 				count = &ast.LiteralValue{Value: *s.Limit, Type: "int"}
 			}

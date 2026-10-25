@@ -27,6 +27,13 @@ import (
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/keywords"
 )
 
+// isShortTableAlias skips clause probes below their minimum spelling length.
+// Empty and non-ASCII values retain the complete contextual-clause checks.
+func (p *Parser) isShortTableAlias() bool {
+	v := p.currentToken.Token.Value
+	return p.currentToken.Token.Type == models.TokenTypeIdentifier && len(v) == 1 && v[0] < 0x80
+}
+
 // parseFromTableReference parses a single table reference in a FROM clause,
 // including derived tables (subqueries), LATERAL, and optional aliases.
 func (p *Parser) parseFromTableReference() (ast.TableReference, error) {
@@ -101,7 +108,7 @@ func (p *Parser) parseFromTableReference() (ast.TableReference, error) {
 		if err != nil {
 			return tableRef, err
 		}
-		tableRef = ast.TableReference{Lateral: isLateral, Values: values}
+		tableRef = ast.TableReference{Lateral: isLateral, Modifiers: &ast.TableModifiers{Values: values}}
 	} else if p.isClickHouseKeywordTableFunction() {
 		// ClickHouse table function named by a keyword token: url(...),
 		// merge(...), values(...), null(...).
@@ -130,16 +137,28 @@ func (p *Parser) parseFromTableReference() (ast.TableReference, error) {
 			Lateral:   isLateral,
 			Only:      only,
 		}
-		p.parseOracleDBLink(&tableRef)
+		if p.isType(models.TokenTypePlaceholder) {
+			p.parseOracleDBLink(&tableRef)
+		}
 
 		// Function-call table reference (Snowflake FLATTEN, TABLE(...),
 		// IDENTIFIER(...), PostgreSQL unnest(...), BigQuery UNNEST(...),
 		// ClickHouse numbers(...), remote(...)).
 		// If the parsed name is followed by '(' at FROM position, reparse
 		// it as a function call. Gated to dialects that actually use this.
-		if err := p.parseTableFunctionCall(&tableRef); err != nil {
-			return tableRef, err
+		if p.isType(models.TokenTypeLParen) {
+			if err := p.parseTableFunctionCall(&tableRef); err != nil {
+				return tableRef, err
+			}
 		}
+	}
+
+	// Canonical query boundaries cannot introduce an alias or table modifier.
+	// Check both kind and spelling so caller-supplied contextual token values
+	// continue through the existing disambiguation below.
+	if tok := p.currentToken.Token; (tok.Type == models.TokenTypeEOF && tok.Value == "") ||
+		(tok.Type == models.TokenTypeRParen && tok.Value == ")") {
+		return tableRef, nil
 	}
 
 	// Modifiers between the table and its alias: PARTITION (...), FOR
@@ -154,7 +173,7 @@ func (p *Parser) parseFromTableReference() (ast.TableReference, error) {
 	// Similarly, START followed by WITH is a hierarchical query seed, not an alias.
 	// Don't consume PIVOT/UNPIVOT as a table alias — they are contextual
 	// keywords in SQL Server/Oracle and must reach the pivot-clause parser below.
-	if (p.isIdentifier() || p.isType(models.TokenTypeAs)) && !p.isMariaDBClauseStart() && !p.isPivotKeyword() && !p.isUnpivotKeyword() && !p.isQualifyKeyword() && !p.isMinusSetOp() && !p.isSnowflakeTimeTravelStart() && !p.isSampleKeyword() && !p.isMatchRecognizeKeyword() && !p.isWindowClauseKeyword() && !p.isSettingsKeyword() && !p.isDMLReturningKeyword() && !p.isSelectExtClauseStart() && !p.isTableModifierAfterAliasStart() && !p.isTSQLStatementStart() {
+	if p.isShortTableAlias() || ((p.isIdentifier() || p.isType(models.TokenTypeAs)) && !p.isMariaDBClauseStart() && !p.isPivotKeyword() && !p.isUnpivotKeyword() && !p.isQualifyKeyword() && !p.isMinusSetOp() && !p.isSnowflakeTimeTravelStart() && !p.isSampleKeyword() && !p.isMatchRecognizeKeyword() && !p.isWindowClauseKeyword() && !p.isSettingsKeyword() && !p.isDMLReturningKeyword() && !p.isSelectExtClauseStart() && !p.isTableModifierAfterAliasStart() && !p.isTSQLStatementStart()) {
 		if p.isType(models.TokenTypeAs) {
 			p.advance() // Consume AS
 			if !p.isIdentifier() {
@@ -252,7 +271,7 @@ func (p *Parser) setDerivedQuery(ref *ast.TableReference, q ast.Statement) error
 	case *ast.SetOperation:
 		ref.SetSubquery = s
 	case *ast.Values:
-		ref.Values = s
+		ref.EnsureModifiers().Values = s
 	default:
 		return p.expectedError("SELECT statement in derived table")
 	}
@@ -313,12 +332,16 @@ func (p *Parser) parseJoinedTableRef(joinType string) (ast.TableReference, error
 			)
 		}
 		ref = ast.TableReference{Name: joinedName, NameQuote: joinedQuote, Lateral: isLateral, Only: only}
-		p.parseOracleDBLink(&ref)
+		if p.isType(models.TokenTypePlaceholder) {
+			p.parseOracleDBLink(&ref)
+		}
 		if err := p.parseApplyFunctionCall(joinType, &ref); err != nil {
 			return ref, err
 		}
-		if err := p.parseTableFunctionCall(&ref); err != nil {
-			return ref, err
+		if p.isType(models.TokenTypeLParen) {
+			if err := p.parseTableFunctionCall(&ref); err != nil {
+				return ref, err
+			}
 		}
 	}
 
@@ -331,7 +354,7 @@ func (p *Parser) parseJoinedTableRef(joinType string) (ast.TableReference, error
 	// Similarly, START followed by WITH is a hierarchical query seed, not an alias.
 	// Don't consume PIVOT/UNPIVOT as a table alias — they are contextual
 	// keywords in SQL Server/Oracle and must reach the pivot-clause parser below.
-	if (p.isIdentifier() || p.isType(models.TokenTypeAs)) && !p.isMariaDBClauseStart() && !p.isPivotKeyword() && !p.isUnpivotKeyword() && !p.isQualifyKeyword() && !p.isMinusSetOp() && !p.isSnowflakeTimeTravelStart() && !p.isSampleKeyword() && !p.isMatchRecognizeKeyword() && !p.isWindowClauseKeyword() && !p.isSettingsKeyword() && !p.isDMLReturningKeyword() && !p.isSelectExtClauseStart() && !p.isTableModifierAfterAliasStart() && !p.isTSQLStatementStart() {
+	if p.isShortTableAlias() || ((p.isIdentifier() || p.isType(models.TokenTypeAs)) && !p.isMariaDBClauseStart() && !p.isPivotKeyword() && !p.isUnpivotKeyword() && !p.isQualifyKeyword() && !p.isMinusSetOp() && !p.isSnowflakeTimeTravelStart() && !p.isSampleKeyword() && !p.isMatchRecognizeKeyword() && !p.isWindowClauseKeyword() && !p.isSettingsKeyword() && !p.isDMLReturningKeyword() && !p.isSelectExtClauseStart() && !p.isTableModifierAfterAliasStart() && !p.isTSQLStatementStart()) {
 		if p.isType(models.TokenTypeAs) {
 			p.advance()
 			if !p.isIdentifier() {

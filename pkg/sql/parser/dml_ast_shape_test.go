@@ -238,14 +238,14 @@ func TestDMLShape_Insert(t *testing.T) {
 	}{
 		{"modifiers", keywords.DialectMySQL, "INSERT IGNORE INTO t (a) VALUES (1)",
 			func(t *testing.T, i *ast.InsertStatement) {
-				if !reflect.DeepEqual(i.Modifiers, []string{"IGNORE"}) || i.TableName != "t" {
-					t.Errorf("Modifiers = %v, TableName = %q", i.Modifiers, i.TableName)
+				if !reflect.DeepEqual(i.DialectExtras().Modifiers, []string{"IGNORE"}) || i.TableName != "t" {
+					t.Errorf("Modifiers = %v, TableName = %q", i.DialectExtras().Modifiers, i.TableName)
 				}
 			}},
 		{"sqlite or replace", keywords.DialectSQLite, "INSERT OR REPLACE INTO t (a) VALUES (1)",
 			func(t *testing.T, i *ast.InsertStatement) {
-				if !reflect.DeepEqual(i.Modifiers, []string{"OR REPLACE"}) {
-					t.Errorf("Modifiers = %v", i.Modifiers)
+				if !reflect.DeepEqual(i.DialectExtras().Modifiers, []string{"OR REPLACE"}) {
+					t.Errorf("Modifiers = %v", i.DialectExtras().Modifiers)
 				}
 			}},
 		{"default values items", keywords.DialectPostgreSQL, "INSERT INTO t (a, b) VALUES (DEFAULT, 1)",
@@ -262,8 +262,8 @@ func TestDMLShape_Insert(t *testing.T) {
 			}},
 		{"row alias", keywords.DialectMySQL, "INSERT INTO t (a) VALUES (1) AS n (x) ON DUPLICATE KEY UPDATE a = n.x",
 			func(t *testing.T, i *ast.InsertStatement) {
-				if i.RowAlias != "n" || !reflect.DeepEqual(i.RowAliasColumns, []string{"x"}) || i.OnDuplicateKey == nil {
-					t.Errorf("RowAlias = %q %v, OnDuplicateKey = %v", i.RowAlias, i.RowAliasColumns, i.OnDuplicateKey)
+				if i.DialectExtras().RowAlias != "n" || !reflect.DeepEqual(i.DialectExtras().RowAliasColumns, []string{"x"}) || i.OnDuplicateKey == nil {
+					t.Errorf("RowAlias = %q %v, OnDuplicateKey = %v", i.DialectExtras().RowAlias, i.DialectExtras().RowAliasColumns, i.OnDuplicateKey)
 				}
 			}},
 		{"on conflict target where", keywords.DialectPostgreSQL, "INSERT INTO t (a) VALUES (1) ON CONFLICT (lower(a)) WHERE b > 0 DO NOTHING",
@@ -277,14 +277,14 @@ func TestDMLShape_Insert(t *testing.T) {
 			}},
 		{"overriding", keywords.DialectPostgreSQL, "INSERT INTO t (a) OVERRIDING SYSTEM VALUE VALUES (1)",
 			func(t *testing.T, i *ast.InsertStatement) {
-				if i.Overriding != "SYSTEM" {
-					t.Errorf("Overriding = %q", i.Overriding)
+				if i.DialectExtras().Overriding != "SYSTEM" {
+					t.Errorf("Overriding = %q", i.DialectExtras().Overriding)
 				}
 			}},
 		{"returning alias into", keywords.DialectOracle, "INSERT INTO t (a) VALUES (1) RETURNING a AS x INTO :v",
 			func(t *testing.T, i *ast.InsertStatement) {
-				if len(i.Returning) != 1 || len(i.ReturningInto) != 1 {
-					t.Fatalf("Returning = %v, ReturningInto = %v", i.Returning, i.ReturningInto)
+				if len(i.Returning) != 1 || len(i.DialectExtras().ReturningInto) != 1 {
+					t.Fatalf("Returning = %v, ReturningInto = %v", i.Returning, i.DialectExtras().ReturningInto)
 				}
 				if _, ok := i.Returning[0].(*ast.AliasedExpression); !ok {
 					t.Errorf("Returning[0]: expected *ast.AliasedExpression, got %T", i.Returning[0])
@@ -292,25 +292,25 @@ func TestDMLShape_Insert(t *testing.T) {
 			}},
 		{"output into", keywords.DialectSQLServer, "INSERT INTO t (a) OUTPUT inserted.id INTO @ids (id) VALUES (1)",
 			func(t *testing.T, i *ast.InsertStatement) {
-				if len(i.Output) != 1 || i.OutputInto == nil || i.OutputInto.Target != "@ids" {
-					t.Errorf("Output = %v, OutputInto = %+v", i.Output, i.OutputInto)
+				if len(i.Output) != 1 || i.DialectExtras().OutputInto == nil || i.DialectExtras().OutputInto.Target != "@ids" {
+					t.Errorf("Output = %v, OutputInto = %+v", i.Output, i.DialectExtras().OutputInto)
 				}
 			}},
 		{"clickhouse settings function format", keywords.DialectClickHouse, "INSERT INTO FUNCTION s3('x') SETTINGS a = 1 FORMAT CSV",
 			func(t *testing.T, i *ast.InsertStatement) {
-				if i.TableFunction == nil || i.TableName != "" {
-					t.Errorf("TableFunction = %v, TableName = %q", i.TableFunction, i.TableName)
+				if i.DialectExtras().TableFunction == nil || i.TableName != "" {
+					t.Errorf("TableFunction = %v, TableName = %q", i.DialectExtras().TableFunction, i.TableName)
 				}
-				if len(i.Settings) != 1 || i.Settings[0].Name != "a" {
-					t.Errorf("Settings = %+v", i.Settings)
+				if len(i.DialectExtras().Settings) != 1 || i.DialectExtras().Settings[0].Name != "a" {
+					t.Errorf("Settings = %+v", i.DialectExtras().Settings)
 				}
-				if i.DataFormat != "CSV" {
-					t.Errorf("DataFormat = %q", i.DataFormat)
+				if i.DialectExtras().DataFormat != "CSV" {
+					t.Errorf("DataFormat = %q", i.DialectExtras().DataFormat)
 				}
 			}},
 		{"oracle insert first", keywords.DialectOracle, "INSERT FIRST WHEN a > 1 THEN INTO x VALUES (a) INTO y (b) VALUES (a) ELSE INTO z SELECT a FROM s",
 			func(t *testing.T, i *ast.InsertStatement) {
-				m := i.MultiTable
+				m := i.DialectExtras().MultiTable
 				if m == nil || !m.First || len(m.Branches) != 2 {
 					t.Fatalf("MultiTable = %+v", m)
 				}

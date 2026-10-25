@@ -202,7 +202,9 @@ func walkExpr(expr ast.Expression, fn func(ast.Expression) ast.Expression) ast.E
 	case *ast.BinaryExpression:
 		e.Left = walkExpr(e.Left, fn)
 		e.Right = walkExpr(e.Right, fn)
-		e.Escape = walkExpr(e.Escape, fn)
+		if e.Extras != nil {
+			e.Extras.Escape = walkExpr(e.Extras.Escape, fn)
+		}
 	case *ast.AtTimeZoneExpression:
 		e.Expr = walkExpr(e.Expr, fn)
 		e.Zone = walkExpr(e.Zone, fn)

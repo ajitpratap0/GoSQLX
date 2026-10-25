@@ -27,6 +27,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   identifier delimiters through rendering.
 
 ### Changed
+- **AST field layout**: unreleased dialect fields move under optional SELECT/INSERT/function/binary `Extras`, table `Modifiers.Values`, and literal metadata accessors (`DialectExtras`, `EnsureExtras`, `SetRawBackslash`) to reduce common parse allocations.
 - **Strict default string escapes**: without a dialect, unknown backslash
   escapes now return an error instead of silently rewriting the value. Select
   the source dialect explicitly when parsing dialect-specific strings.

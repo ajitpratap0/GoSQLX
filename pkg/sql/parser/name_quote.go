@@ -103,13 +103,21 @@ func (p *Parser) isOracleBareHashName() bool {
 // single-part name: the part is marked when the token is a delimited
 // identifier that must stay delimited (see delimitedNameMustStayQuoted).
 func (p *Parser) currentNameQuote() ast.NameQuote {
-	return p.appendNamePart(0)
+	quote := p.currentIdentQuote()
+	if !p.nameQuoteRelevant(quote) {
+		return 0
+	}
+	return p.appendNamePartQuoted(0, quote)
 }
 
 // appendNamePart returns q extended by the current token as the next part of
 // a dotted name (see ast.NameQuote.AppendPart).
 func (p *Parser) appendNamePart(q ast.NameQuote) ast.NameQuote {
-	return p.appendNamePartQuoted(q, p.currentIdentQuote())
+	quote := p.currentIdentQuote()
+	if q == 0 && !p.nameQuoteRelevant(quote) {
+		return 0
+	}
+	return p.appendNamePartQuoted(q, quote)
 }
 
 // nameQuoteRelevant reports whether a name part with delimiter quote (0 for
@@ -145,14 +153,24 @@ func (p *Parser) parseQualifiedNameQuoted() (string, ast.NameQuote, error) {
 	if !p.isIdentifier() && !p.isNonReservedKeyword() {
 		return "", 0, p.expectedError("identifier")
 	}
-	var parts [maxQualifiedNameParts]string
-	parts[0] = p.currentToken.Token.Value
+	name := p.currentToken.Token.Value
 	var q ast.NameQuote
 	if quote := p.currentIdentQuote(); p.nameQuoteRelevant(quote) {
 		q = p.appendNamePartQuoted(0, quote)
 	}
-	n := 1
 	p.advance()
+	if !p.isType(models.TokenTypePeriod) {
+		return name, q, nil
+	}
+	return p.parseQualifiedNameTail(name, q)
+}
+
+// parseQualifiedNameTail keeps the multipart-name scratch array off the common
+// single-name path. The first name and its quote metadata are already parsed.
+func (p *Parser) parseQualifiedNameTail(name string, q ast.NameQuote) (string, ast.NameQuote, error) {
+	var parts [maxQualifiedNameParts]string
+	parts[0] = name
+	n := 1
 
 	// Check for schema.table or db.schema.table
 	for p.isType(models.TokenTypePeriod) {
@@ -183,9 +201,6 @@ func (p *Parser) parseQualifiedNameQuoted() (string, ast.NameQuote, error) {
 		p.advance()
 	}
 
-	if n == 1 {
-		return parts[0], q, nil
-	}
 	return strings.Join(parts[:n], "."), q, nil
 }
 
@@ -214,11 +229,15 @@ func nameQuoteAt(qs []ast.NameQuote, i int) ast.NameQuote {
 // how it was delimited. It does not advance.
 func (p *Parser) currentColumnIdent() *ast.Identifier {
 	q := p.currentIdentQuote()
+	var quotes ast.NameQuote
+	if p.nameQuoteRelevant(q) {
+		quotes = p.appendNamePartQuoted(0, q)
+	}
 	return &ast.Identifier{
 		Name:       p.currentToken.Token.Value,
 		Pos:        p.currentLocation(),
 		Quoted:     q == '"',
 		QuoteStyle: q,
-		Quotes:     p.appendNamePartQuoted(0, q),
+		Quotes:     quotes,
 	}
 }

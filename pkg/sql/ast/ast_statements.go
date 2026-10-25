@@ -183,14 +183,6 @@ type SelectStatement struct {
 	Settings  []QuerySetting  // ClickHouse trailing SETTINGS name = value, ... (query-level settings)
 	Pos       models.Location // Source position of the SELECT keyword (1-based line and column)
 
-	// SELECT-body clauses added for dialect coverage (see select_ext.go).
-	GroupByModifiers GroupByModifiers // GROUP BY ALL, WITH ROLLUP / CUBE / TOTALS
-	OrderSiblings    bool             // Oracle ORDER SIBLINGS BY
-	LimitExpr        Expression       // LIMIT value that is not a plain integer ($1, ?, -1, 1 + 1); Limit wins when both are set
-	OffsetExpr       Expression       // OFFSET value that is not a plain integer; Offset wins when both are set
-	LimitAll         bool             // PostgreSQL LIMIT ALL
-	OffsetRows       bool             // OFFSET n ROW / ROWS
-	LimitWithTies    bool             // ClickHouse LIMIT n WITH TIES
 	// Extras holds the rarer dialect-specific clauses (select modifiers,
 	// INTO, INTERPOLATE, LIMIT BY, FOR JSON/XML, OPTION hints, FORMAT); nil
 	// when the statement has none of them. See SelectExtras.
@@ -318,10 +310,10 @@ type InsertStatement struct {
 	// The assignments are stored as Columns plus a single Values row
 	// (Columns[i] = Values[0][i]); renderers emit SET when the shapes match.
 	SetSyntax bool
-	// InsertDialectFields holds the dialect-specific INSERT clauses
+	// Extras holds the dialect-specific INSERT clauses
 	// (modifiers, OVERRIDING, row alias, OUTPUT INTO, RETURNING INTO,
 	// ClickHouse SETTINGS / FUNCTION / FORMAT, Oracle INSERT ALL/FIRST).
-	InsertDialectFields
+	Extras *InsertDialectFields
 }
 
 func (i *InsertStatement) statementNode()      {}
@@ -372,7 +364,7 @@ func (i InsertStatement) Children() []Node {
 	if i.OnDuplicateKey != nil {
 		children = append(children, i.OnDuplicateKey)
 	}
-	return i.insertDialectChildren(children)
+	return i.DialectExtras().insertDialectChildren(children)
 }
 
 // Values represents VALUES clause

@@ -134,7 +134,10 @@ func releaseInsertStatement(stmt *InsertStatement, mode releaseMode) {
 	stmt.Pos = models.Location{}
 	stmt.DefaultValues = false
 	stmt.SetSyntax = false
-	releaseInsertDialectFields(&stmt.InsertDialectFields, mode)
+	if stmt.Extras != nil {
+		releaseInsertDialectFields(stmt.Extras, mode)
+		stmt.Extras = nil
+	}
 
 	// Return to pool
 	if mode == releaseAll {

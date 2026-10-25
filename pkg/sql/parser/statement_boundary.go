@@ -164,7 +164,7 @@ func (p *Parser) isTableVariableAt(i int) bool {
 // target: a possibly qualified name, or in SQL Server a table variable
 // (FROM @t, INSERT INTO @t, UPDATE @t, MERGE @t).
 func (p *Parser) parseTableNameQuoted() (string, ast.NameQuote, error) {
-	if p.isTableVariableAt(p.currentPos) {
+	if p.isType(models.TokenTypePlaceholder) && p.isTableVariableAt(p.currentPos) {
 		name := p.currentToken.Token.Value
 		p.advance()
 		return name, 0, nil

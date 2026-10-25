@@ -35,9 +35,9 @@ func TestLiteralValueNULRendering(t *testing.T) {
 		{"escaping literal", &LiteralValue{Value: "a\x00b", Type: "string"}, `'a\0b'`},
 		{"escaping literal before digit", &LiteralValue{Value: "a\x001", Type: "string"}, `'a\01'`},
 		{"escaping literal only NUL", &LiteralValue{Value: "\x00", Type: "STRING"}, `'\0'`},
-		{"charset introducer", &LiteralValue{Value: "a\x00", Type: "string", Prefix: "_utf8mb4"}, `_utf8mb4'a\0'`},
-		{"E-string", &LiteralValue{Value: "a\x001", Type: "string", Prefix: "E"}, `E'a\0001'`},
-		{"raw literal", &LiteralValue{Value: "a\x00b", Type: "string", RawBackslash: true}, `'ab'`},
+		{"charset introducer", &LiteralValue{Value: "a\x00", Type: "string", extras: &LiteralExtras{Prefix: "_utf8mb4"}}, `_utf8mb4'a\0'`},
+		{"E-string", &LiteralValue{Value: "a\x001", Type: "string", extras: &LiteralExtras{Prefix: "E"}}, `E'a\0001'`},
+		{"raw literal", &LiteralValue{Value: "a\x00b", Type: "string", extras: &LiteralExtras{RawBackslash: true}}, `'ab'`},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

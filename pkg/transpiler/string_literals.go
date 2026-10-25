@@ -48,11 +48,11 @@ func retargetStringLiterals(node ast.Node, to keywords.SQLDialect) error {
 			return
 		}
 		retargetPrefix(lit, target)
-		if lit.Prefix == "E" || lit.Prefix == "e" {
+		if lit.DialectExtras().Prefix == "E" || lit.DialectExtras().Prefix == "e" {
 			// A kept E'..' is always written with escapes.
-			lit.RawBackslash = false
+			lit.SetRawBackslash(false)
 		} else {
-			lit.RawBackslash = esc == dialect.StringEscapeNone
+			lit.SetRawBackslash(esc == dialect.StringEscapeNone)
 		}
 		text, ok := lit.Value.(string)
 		if !ok {
@@ -73,13 +73,13 @@ func retargetStringLiterals(node ast.Node, to keywords.SQLDialect) error {
 // a tokenizer with no dialect rejects both). An E'..' literal spells them
 // \000 and raw, which PostgreSQL reads back.
 func unrepresentable(lit *ast.LiteralValue, esc dialect.StringEscape, text string) (rune, bool) {
-	if lit.Prefix == "E" || lit.Prefix == "e" {
+	if lit.DialectExtras().Prefix == "E" || lit.DialectExtras().Prefix == "e" {
 		return 0, false
 	}
 	hasNUL := strings.IndexByte(text, 0) >= 0
 	hasSUB := strings.IndexByte(text, 0x1a) >= 0
 	switch {
-	case lit.RawBackslash:
+	case lit.DialectExtras().RawBackslash:
 		return 0, hasNUL
 	case esc == dialect.StringEscapeMySQL:
 		return 0, false
@@ -98,19 +98,19 @@ func unrepresentable(lit *ast.LiteralValue, esc dialect.StringEscape, text strin
 // introducer outside the MySQL family. N, X and B change the literal's type
 // and are kept.
 func retargetPrefix(lit *ast.LiteralValue, target dialect.Dialect) {
-	switch p := lit.Prefix; {
+	switch p := lit.DialectExtras().Prefix; {
 	case p == "":
 	case p == "E" || p == "e":
 		if target != dialect.PostgreSQL {
-			lit.Prefix = ""
+			lit.EnsureExtras().Prefix = ""
 		}
 	case p == "q" || p == "Q":
 		if target != dialect.Oracle {
-			lit.Prefix = ""
+			lit.EnsureExtras().Prefix = ""
 		}
 	case p[0] == '_':
 		if target != dialect.MySQL && target != dialect.MariaDB {
-			lit.Prefix = ""
+			lit.EnsureExtras().Prefix = ""
 		}
 	}
 }

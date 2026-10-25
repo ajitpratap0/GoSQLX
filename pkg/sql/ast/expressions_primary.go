@@ -477,11 +477,11 @@ func writeIntervalUnit(buf *bytes.Buffer, unit string) {
 // appendClauseChildren appends the SEPARATOR expression and the KEEP ORDER BY
 // items of f to children.
 func (f *FunctionCall) appendClauseChildren(children []Node) []Node {
-	if f.Separator != nil {
-		children = append(children, f.Separator)
+	if f.DialectExtras().Separator != nil {
+		children = append(children, f.DialectExtras().Separator)
 	}
-	if f.Keep != nil {
-		children = append(children, f.Keep)
+	if f.DialectExtras().Keep != nil {
+		children = append(children, f.DialectExtras().Keep)
 	}
 	return children
 }

@@ -42,16 +42,11 @@ func (t *QueryTail) Select() *SelectStatement {
 	if t == nil {
 		return nil
 	}
-	return &SelectStatement{
-		OrderBy:    t.OrderBy,
-		Limit:      t.Limit,
-		LimitExpr:  t.LimitExpr,
-		LimitAll:   t.LimitAll,
-		Offset:     t.Offset,
-		OffsetExpr: t.OffsetExpr,
-		OffsetRows: t.OffsetRows,
-		Fetch:      t.Fetch,
+	s := &SelectStatement{OrderBy: t.OrderBy, Limit: t.Limit, Offset: t.Offset, Fetch: t.Fetch}
+	if t.LimitExpr != nil || t.LimitAll || t.OffsetExpr != nil || t.OffsetRows {
+		s.Extras = &SelectExtras{LimitExpr: t.LimitExpr, LimitAll: t.LimitAll, OffsetExpr: t.OffsetExpr, OffsetRows: t.OffsetRows}
 	}
+	return s
 }
 
 // QueryTailFrom returns the tail clauses of s as a QueryTail and removes them
@@ -60,11 +55,11 @@ func QueryTailFrom(s *SelectStatement) *QueryTail {
 	return &QueryTail{
 		OrderBy:    s.OrderBy,
 		Limit:      s.Limit,
-		LimitExpr:  s.LimitExpr,
-		LimitAll:   s.LimitAll,
+		LimitExpr:  s.DialectExtras().LimitExpr,
+		LimitAll:   s.DialectExtras().LimitAll,
 		Offset:     s.Offset,
-		OffsetExpr: s.OffsetExpr,
-		OffsetRows: s.OffsetRows,
+		OffsetExpr: s.DialectExtras().OffsetExpr,
+		OffsetRows: s.DialectExtras().OffsetRows,
 		Fetch:      s.Fetch,
 	}
 }

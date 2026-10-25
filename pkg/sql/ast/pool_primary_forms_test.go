@@ -44,7 +44,7 @@ func TestPutExpression_PrimaryFormChildren(t *testing.T) {
 			return &IntervalExpression{Value: "x DAY", ValueExpr: c, Unit: "DAY"}
 		}},
 		{"FunctionCall KEEP", func(c Expression) Expression {
-			return &FunctionCall{Name: "MAX", Keep: &KeepClause{OrderBy: []OrderByExpression{{Expression: c}}}}
+			return &FunctionCall{Name: "MAX", Extras: &FunctionExtras{Keep: &KeepClause{OrderBy: []OrderByExpression{{Expression: c}}}}}
 		}},
 	}
 	for _, tt := range tests {

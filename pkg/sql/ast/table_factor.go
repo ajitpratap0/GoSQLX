@@ -118,6 +118,9 @@ type IndexHint struct {
 // pointer on TableReference so the many references without any of them pay
 // one word.
 type TableModifiers struct {
+	// Values is a derived table whose body is a VALUES table constructor:
+	// FROM (VALUES (1, 'a'), (2, 'b')) AS v(id, name).
+	Values *Values
 	// TableSample is a row-sampling clause: TABLESAMPLE / SAMPLE.
 	TableSample *TableSampleClause
 	// Flashback is the Oracle AS OF / VERSIONS BETWEEN flashback clause.
@@ -736,7 +739,7 @@ func releaseTableFactorModifiers(tr *TableReference, mode releaseMode) {
 			m.PartitionFor.Values[i] = nil
 		}
 	}
-	if v := tr.Values; v != nil {
+	if v := tr.DialectModifiers().Values; v != nil {
 		for _, row := range v.Rows {
 			for i := range row {
 				releaseExpression(row[i], mode)
@@ -744,7 +747,7 @@ func releaseTableFactorModifiers(tr *TableReference, mode releaseMode) {
 			}
 		}
 		v.Rows = nil
-		tr.Values = nil
+		tr.EnsureModifiers().Values = nil
 	}
 	if g := tr.joinGroup(); g != nil {
 		for i := range g.Tables {

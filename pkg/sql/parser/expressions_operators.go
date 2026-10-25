@@ -43,14 +43,38 @@ const (
 // caller, which rejects it.
 func (p *Parser) parseComparisonExpression() (ast.Expression, error) {
 	// Parse the left side with bitwise and arithmetic operators binding tighter.
-	left, err := p.parseBitwiseExpression(1)
+	left, err := p.parseStringConcatExpression()
 	if err != nil {
 		return nil, err
 	}
 
+	if p.startsBitwiseOperator() {
+		left, err = p.parseBitwiseTail(left, 1)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	afterComparison := false
 	for {
-		next, kind, err := p.parseComparisonSuffix(left, afterComparison)
+		var next ast.Expression
+		var kind int
+		// Common symbolic comparisons bypass the extended word-predicate
+		// parser. Clause boundaries leave this level without a suffix frame.
+		switch p.currentToken.Token.Type {
+		case models.TokenTypeEq, models.TokenTypeLt, models.TokenTypeGt,
+			models.TokenTypeNeq, models.TokenTypeLtEq, models.TokenTypeGtEq,
+			models.TokenTypeTilde, models.TokenTypeTildeAsterisk,
+			models.TokenTypeExclamationMarkTilde, models.TokenTypeExclamationMarkTildeAsterisk,
+			models.TokenTypeSpaceship, models.TokenTypeDoubleEq:
+			next, kind, err = p.parseBinaryComparison(left, afterComparison)
+		case models.TokenTypeIdentifier, models.TokenTypeKeyword,
+			models.TokenTypeNot, models.TokenTypeBetween, models.TokenTypeLike, models.TokenTypeILike,
+			models.TokenTypeIn, models.TokenTypeIs:
+			next, kind, err = p.parseComparisonSuffix(left)
+		default:
+			return left, nil
+		}
 		if err != nil {
 			return nil, err
 		}
@@ -80,12 +104,9 @@ func (p *Parser) notOperatorFollows() bool {
 	return false
 }
 
-// parseComparisonSuffix parses at most one comparison or predicate operator
-// following left and returns the combined expression. It returns suffixNone
-// (and a nil expression) when no operator follows. afterComparison is set when
-// the previous suffix was a comparison operator, which may not be followed by
-// another one.
-func (p *Parser) parseComparisonSuffix(left ast.Expression, afterComparison bool) (ast.Expression, int, error) {
+// parseComparisonSuffix parses at most one word predicate following left.
+// It returns suffixNone (and a nil expression) when no operator follows.
+func (p *Parser) parseComparisonSuffix(left ast.Expression) (ast.Expression, int, error) {
 	// Check for NOT prefix for BETWEEN, LIKE, IN operators
 	notPrefix := false
 	if p.isType(models.TokenTypeNot) && p.notOperatorFollows() {
@@ -291,6 +312,10 @@ func (p *Parser) parseComparisonSuffix(left ast.Expression, afterComparison bool
 		return is, suffixPredicate, nil
 	}
 
+	return nil, suffixNone, nil
+}
+
+func (p *Parser) parseBinaryComparison(left ast.Expression, afterComparison bool) (ast.Expression, int, error) {
 	// Comparison operators do not chain: "a = b = c" is left to the caller.
 	if afterComparison {
 		return nil, suffixNone, nil
@@ -357,13 +382,16 @@ func (p *Parser) parsePatternMatch(left ast.Expression, operator string, not, al
 			return nil, suffixNone, err
 		}
 	}
-	return &ast.BinaryExpression{
+	node := &ast.BinaryExpression{
 		Left:     left,
 		Operator: operator,
 		Right:    pattern,
 		Not:      not,
-		Escape:   escape,
-	}, suffixPredicate, nil
+	}
+	if escape != nil {
+		node.EnsureExtras().Escape = escape
+	}
+	return node, suffixPredicate, nil
 }
 
 // parseInTail parses the right side of IN once left (and any NOT / GLOBAL)

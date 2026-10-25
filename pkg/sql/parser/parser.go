@@ -123,6 +123,7 @@ func (p *Parser) resetDialectState() {
 	p.dialectTyped = dialect.Unknown
 	p.capabilitiesCache = dialect.Unknown.Capabilities()
 	p.capabilitiesSet = true
+	p.rawStringLiterals = false // Unknown.StringEscape() is StringEscapeStrict.
 	p.refreshPipesMode()
 }
 
@@ -268,6 +269,7 @@ func WithDialect(newDialect string) ParserOption {
 		p.dialectTyped = dialect.Parse(newDialect)
 		p.capabilitiesCache = p.dialectTyped.Capabilities()
 		p.capabilitiesSet = true
+		p.rawStringLiterals = p.dialectTyped.StringEscape() == dialect.StringEscapeNone
 		p.refreshPipesMode()
 	}
 }
@@ -360,6 +362,9 @@ type Parser struct {
 	// Capabilities.PipesAsLogicalOr (MySQL, MariaDB) and pipesAsConcat is
 	// unset. Derived by refreshPipesMode; never set it directly.
 	pipesAsOr bool
+	// rawStringLiterals caches the dialect's string escape mode for each
+	// literal, avoiding repeated dialect dispatch on the expression path.
+	rawStringLiterals bool
 	// implicitEnd is one more than the token index at which a T-SQL utility
 	// statement ended without a ';' because the next statement began there
 	// (0: none). See utility_implicit_end.go.
@@ -443,9 +448,11 @@ func (p *Parser) parseTokens(tokens []models.TokenWithSpan) (*ast.AST, error) {
 			p.advance()
 			continue
 		}
-		if separator, ok := p.parseBatchSeparator(); ok {
-			result.Statements = append(result.Statements, separator)
-			continue
+		if p.IsSQLServer() {
+			if separator, ok := p.parseBatchSeparator(); ok {
+				result.Statements = append(result.Statements, separator)
+				continue
+			}
 		}
 
 		stmt, err := p.parseStatement()
@@ -459,7 +466,7 @@ func (p *Parser) parseTokens(tokens []models.TokenWithSpan) (*ast.AST, error) {
 		// Optionally consume semicolon after statement
 		if p.isType(models.TokenTypeSemicolon) {
 			p.advance()
-		} else {
+		} else if p.currentPos < len(p.tokens) {
 			p.noteStatementEnd()
 		}
 	}
@@ -645,9 +652,11 @@ func (p *Parser) parseContextTokens(ctx context.Context, tokens []models.TokenWi
 			p.advance()
 			continue
 		}
-		if separator, ok := p.parseBatchSeparator(); ok {
-			result.Statements = append(result.Statements, separator)
-			continue
+		if p.IsSQLServer() {
+			if separator, ok := p.parseBatchSeparator(); ok {
+				result.Statements = append(result.Statements, separator)
+				continue
+			}
 		}
 
 		stmt, err := p.parseStatement()
@@ -661,7 +670,7 @@ func (p *Parser) parseContextTokens(ctx context.Context, tokens []models.TokenWi
 		// Optionally consume semicolon after statement
 		if p.isType(models.TokenTypeSemicolon) {
 			p.advance()
-		} else {
+		} else if p.currentPos < len(p.tokens) {
 			p.noteStatementEnd()
 		}
 	}
@@ -1115,7 +1124,11 @@ func (p *Parser) parseIdent() *ast.Identifier {
 	}
 	pos := p.currentLocation()
 	q := p.currentIdentQuote()
-	ident := &ast.Identifier{Name: p.currentToken.Token.Value, Pos: pos, Quoted: q == '"', QuoteStyle: q, Quotes: p.appendNamePartQuoted(0, q)}
+	var quotes ast.NameQuote
+	if p.nameQuoteRelevant(q) {
+		quotes = p.appendNamePartQuoted(0, q)
+	}
+	ident := &ast.Identifier{Name: p.currentToken.Token.Value, Pos: pos, Quoted: q == '"', QuoteStyle: q, Quotes: quotes}
 	p.advance()
 	return ident
 }
@@ -1369,10 +1382,15 @@ func (p *Parser) nextStartsTableClause() bool {
 // but NOT contextual clause keywords that would be consumed as aliases by mistake
 // (e.g. MINUS in Snowflake/Oracle, QUALIFY in Snowflake/BigQuery, WINDOW).
 func (p *Parser) canBeAlias() bool {
+	// Punctuation and clause tokens cannot be aliases, regardless of dialect.
+	// Reject them before probing contextual clauses and T-SQL boundaries.
+	if !p.isIdentifier() && !p.isNonReservedKeyword() {
+		return false
+	}
 	if p.isMinusSetOp() || p.isQualifyKeyword() || p.isWindowClauseKeyword() || p.isSettingsKeyword() || p.isDMLReturningKeyword() || p.isSelectExtClauseStart() || p.isTSQLStatementStart() {
 		return false
 	}
-	return p.isIdentifier() || p.isNonReservedKeyword()
+	return true
 }
 
 // parseAlterTableStmt is a simplified version for the parser implementation

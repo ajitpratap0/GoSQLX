@@ -446,6 +446,13 @@ func (p *Parser) isApplyDialect() bool {
 // with a dialect word that isJoinKeyword does not know: ClickHouse ASOF /
 // SEMI / ANTI, Snowflake ASOF, MySQL STRAIGHT_JOIN, Oracle OUTER APPLY.
 func (p *Parser) isExtJoinStart() bool {
+	// Every extension begins with ASOF, SEMI, ANTI, STRAIGHT_JOIN or OUTER.
+	// Reject ordinary clause and boundary tokens before consulting the dialect.
+	v := p.currentToken.Token.Value
+	if p.currentToken.Token.Type != models.TokenTypeOuter &&
+		(len(v) == 0 || (v[0] < 0x80 && v[0]|0x20 != 'a' && v[0]|0x20 != 's' && v[0]|0x20 != 'o')) {
+		return false
+	}
 	switch p.dialect {
 	case string(keywords.DialectClickHouse), string(keywords.DialectSnowflake):
 		return p.isJoinStrictnessStart()
@@ -798,7 +805,7 @@ func (p *Parser) parseGroupByClause(stmt *ast.SelectStatement) ([]ast.Expression
 	// non-aggregate select item.
 	if p.isType(models.TokenTypeAll) && p.supportsGroupByAll() {
 		p.advance() // Consume ALL
-		stmt.GroupByModifiers.All = true
+		stmt.EnsureExtras().GroupByModifiers.All = true
 		p.parseGroupByWithModifiers(stmt)
 		return nil, nil
 	}
@@ -856,12 +863,12 @@ func (p *Parser) parseGroupByWithModifiers(stmt *ast.SelectStatement) {
 	for p.isType(models.TokenTypeWith) {
 		next := p.peekToken().Token.Value
 		switch {
-		case equalsUpper(next, "ROLLUP") && !stmt.GroupByModifiers.WithCube:
-			stmt.GroupByModifiers.WithRollup = true
-		case equalsUpper(next, "CUBE") && !stmt.GroupByModifiers.WithRollup:
-			stmt.GroupByModifiers.WithCube = true
+		case equalsUpper(next, "ROLLUP") && !stmt.DialectExtras().GroupByModifiers.WithCube:
+			stmt.EnsureExtras().GroupByModifiers.WithRollup = true
+		case equalsUpper(next, "CUBE") && !stmt.DialectExtras().GroupByModifiers.WithRollup:
+			stmt.EnsureExtras().GroupByModifiers.WithCube = true
 		case equalsUpper(next, "TOTALS"):
-			stmt.GroupByModifiers.WithTotals = true
+			stmt.EnsureExtras().GroupByModifiers.WithTotals = true
 		default:
 			return
 		}

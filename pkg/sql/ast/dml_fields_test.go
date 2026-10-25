@@ -55,13 +55,13 @@ func TestDMLDialectFields_ResetOnPut(t *testing.T) {
 		}},
 		{"Insert", func() any {
 			s := GetInsertStatement()
-			fillNonZero(reflect.ValueOf(&s.InsertDialectFields).Elem())
+			fillNonZero(reflect.ValueOf(s.EnsureExtras()).Elem())
 			s.OnConflict = &OnConflict{TargetWhere: &Identifier{Name: "x"}}
 			PutInsertStatement(s)
 			return s
 		}, func() any { return GetInsertStatement() }, func(v any) bool {
 			s, ok := v.(*InsertStatement)
-			return ok && reflect.ValueOf(s.InsertDialectFields).IsZero() && s.OnConflict == nil
+			return ok && reflect.ValueOf(s.Extras).IsZero() && s.OnConflict == nil
 		}},
 	}
 	for _, tc := range cases {
@@ -94,14 +94,14 @@ func TestDMLRender_UnknownKeywordTextDropped(t *testing.T) {
 		t.Errorf("UPDATE SQL() = %q, want %q", got, want)
 	}
 	i := &InsertStatement{
-		TableName:           "t",
-		Values:              [][]Expression{{&LiteralValue{Value: "1", Type: "int"}}},
-		InsertDialectFields: InsertDialectFields{Modifiers: []string{"OR REPLACE", "evil"}, Overriding: "evil"},
-	}
+		TableName: "t",
+		Values:    [][]Expression{{&LiteralValue{Value: "1", Type: "int"}}},
+
+		Extras: &InsertDialectFields{Modifiers: []string{"OR REPLACE", "evil"}, Overriding: "evil"}}
 	if got, want := i.SQL(), "INSERT OR REPLACE INTO t VALUES (1)"; got != want {
 		t.Errorf("INSERT SQL() = %q, want %q", got, want)
 	}
-	i.DataFormat = "x; DROP"
+	i.EnsureExtras().DataFormat = "x; DROP"
 	if got := i.SQL(); !strings.HasSuffix(got, ` FORMAT "x; DROP"`) {
 		t.Errorf("FORMAT name not quoted: %q", got)
 	}

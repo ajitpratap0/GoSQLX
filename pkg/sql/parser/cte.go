@@ -175,7 +175,10 @@ func (p *Parser) parseCommonTableExpr() (*ast.CommonTableExpr, error) {
 	}
 	cteNamePos := p.currentLocation()
 	name := p.currentToken.Token.Value
-	nameQuote := p.currentNameQuote()
+	var nameQuote ast.NameQuote
+	if quote := p.currentIdentQuote(); p.nameQuoteRelevant(quote) {
+		nameQuote = p.appendNamePartQuoted(0, quote)
+	}
 	p.advance()
 
 	// Parse optional column list
@@ -285,8 +288,10 @@ func (p *Parser) parseCommonTableExpr() (*ast.CommonTableExpr, error) {
 		ColumnQuotes: columnQuotes,
 	}
 	// SQL:1999 SEARCH / CYCLE clauses of a recursive CTE.
-	if err := p.parseCTESearchCycle(cte); err != nil {
-		return nil, err
+	if p.isTokenMatch("SEARCH") || p.isTokenMatch("CYCLE") {
+		if err := p.parseCTESearchCycle(cte); err != nil {
+			return nil, err
+		}
 	}
 	return cte, nil
 }

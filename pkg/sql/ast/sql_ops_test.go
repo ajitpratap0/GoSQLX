@@ -54,8 +54,8 @@ func TestOperatorNodesSQL(t *testing.T) {
 		{"in bare", &InExpression{Expr: id("a"), List: []Expression{id("tbl")}, Bare: true}, "a IN tbl"},
 		{"in bare not", &InExpression{Expr: id("a"), List: []Expression{id("tbl")}, Bare: true, Not: true}, "a NOT IN tbl"},
 		{"in empty", &InExpression{Expr: id("a")}, "a IN ()"},
-		{"like escape", &BinaryExpression{Left: id("a"), Operator: "LIKE", Right: str("x"), Escape: str("!")}, "a LIKE 'x' ESCAPE '!'"},
-		{"not like escape", &BinaryExpression{Left: id("a"), Operator: "LIKE", Right: str("x"), Escape: str("!"), Not: true}, "a NOT LIKE 'x' ESCAPE '!'"},
+		{"like escape", &BinaryExpression{Left: id("a"), Operator: "LIKE", Right: str("x"), Extras: &BinaryExtras{Escape: str("!")}}, "a LIKE 'x' ESCAPE '!'"},
+		{"not like escape", &BinaryExpression{Left: id("a"), Operator: "LIKE", Right: str("x"), Not: true, Extras: &BinaryExtras{Escape: str("!")}}, "a NOT LIKE 'x' ESCAPE '!'"},
 		{"not regexp", &BinaryExpression{Left: id("a"), Operator: "REGEXP", Right: str("x"), Not: true}, "a NOT REGEXP 'x'"},
 		{"not glob", &BinaryExpression{Left: id("a"), Operator: "GLOB", Right: str("x"), Not: true}, "a NOT GLOB 'x'"},
 		{"is distinct from", &BinaryExpression{Left: id("a"), Operator: "IS DISTINCT FROM", Right: id("b")}, "a IS DISTINCT FROM b"},
@@ -88,7 +88,7 @@ func TestOperatorNodesChildren(t *testing.T) {
 		{"collate", &CollateExpression{Expr: a, Collation: "x"}, 1},
 		{"any all", &AnyAllExpression{Expr: a, Array: b}, 2},
 		{"ternary", &TernaryExpression{Cond: a, Then: b, Else: c}, 3},
-		{"binary with escape", &BinaryExpression{Left: a, Right: b, Escape: c}, 3},
+		{"binary with escape", &BinaryExpression{Left: a, Right: b, Extras: &BinaryExtras{Escape: c}}, 3},
 		{"nil operands", &AtTimeZoneExpression{}, 0},
 	}
 	for _, tc := range tests {
@@ -125,7 +125,7 @@ func TestPooledOperatorFieldsAreCleared(t *testing.T) {
 
 	for i := 0; i < 50; i++ {
 		b := GetBinaryExpression()
-		b.Operator, b.Escape = "LIKE", lit
+		b.Operator, b.EnsureExtras().Escape = "LIKE", lit
 		PutBinaryExpression(b)
 
 		in := GetInExpression()
@@ -133,8 +133,8 @@ func TestPooledOperatorFieldsAreCleared(t *testing.T) {
 		PutInExpression(in)
 
 		b2 := GetBinaryExpression()
-		if b2.Escape != nil || b2.Operator != "" {
-			t.Fatalf("pooled BinaryExpression kept Escape=%v Operator=%q", b2.Escape, b2.Operator)
+		if b2.DialectExtras().Escape != nil || b2.Operator != "" {
+			t.Fatalf("pooled BinaryExpression kept Escape=%v Operator=%q", b2.DialectExtras().Escape, b2.Operator)
 		}
 		in2 := GetInExpression()
 		if in2.Global || in2.Bare {

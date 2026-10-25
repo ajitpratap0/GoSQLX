@@ -30,6 +30,61 @@ import (
 
 // parsePrimaryExpression parses a primary expression (literals, identifiers, function calls)
 func (p *Parser) parsePrimaryExpression() (ast.Expression, error) {
+	// Model-token callers can represent the unquoted BINARY prefix using a
+	// primitive token type. Preserve that interpretation before literal dispatch.
+	if v := p.currentToken.Token.Value; len(v) == len("BINARY") && p.currentToken.Token.Quote == 0 && (v[0] == 'B' || v[0] == 'b') {
+		switch p.currentToken.Token.Type {
+		case models.TokenTypeAsterisk, models.TokenTypeMul, models.TokenTypeNumber,
+			models.TokenTypeTrue, models.TokenTypeFalse, models.TokenTypeNull,
+			models.TokenTypeString, models.TokenTypeDollarQuotedString, models.TokenTypeSingleQuotedString:
+			if p.isMySQLBinaryOperator() {
+				return p.parseMySQLBinaryPrimary()
+			}
+		}
+	}
+
+	// These token types have no special prefix, function-name or identifier
+	// interpretation. Keep their common path ahead of dialect-specific probes.
+	switch p.currentToken.Token.Type {
+	case models.TokenTypeAsterisk, models.TokenTypeMul:
+		p.advance()
+		return &ast.Identifier{Name: "*"}, nil
+	case models.TokenTypeNumber:
+		value := p.currentToken.Token.Value
+		p.advance()
+		return &ast.LiteralValue{Value: value, Type: numericLiteralType(value)}, nil
+	case models.TokenTypeTrue, models.TokenTypeFalse:
+		value := p.currentToken.Token.Value
+		p.advance()
+		return &ast.LiteralValue{Value: value, Type: "bool"}, nil
+	case models.TokenTypeNull:
+		p.advance()
+		return &ast.LiteralValue{Value: nil, Type: "null"}, nil
+	case models.TokenTypeString, models.TokenTypeDollarQuotedString:
+		return p.parseStringLiteralExpr(), nil
+	case models.TokenTypeSingleQuotedString:
+		if p.currentToken.Token.Quote != 'q' {
+			return p.parseStringLiteralExpr(), nil
+		}
+	}
+
+	// An unquoted ordinary identifier cannot start the special primary forms.
+	// Keep candidate names and following literal/function syntax on the full
+	// path, then share the same identifier construction below.
+	if p.currentToken.Token.Type == models.TokenTypeIdentifier && p.currentToken.Token.Quote == 0 {
+		v := p.currentToken.Token.Value
+		if len(v) > 0 && v[0] < 0x80 && v[0] != '_' &&
+			v[0] != 'B' && v[0] != 'b' && v[0] != 'P' && v[0] != 'p' &&
+			v[0] != 'C' && v[0] != 'c' {
+			switch p.peekTypeAt(1) {
+			case models.TokenTypeLParen, models.TokenTypeString, models.TokenTypeSingleQuotedString:
+				// Functions and typed/prefixed literals need the full dispatch.
+			default:
+				return p.parseIdentifierPrimary()
+			}
+		}
+	}
+
 	// Handle unary minus/plus (-6, -3.14, +x)
 	if p.isType(models.TokenTypeMinus) || p.isType(models.TokenTypePlus) {
 		unaryPos := p.currentLocation()
@@ -85,13 +140,7 @@ func (p *Parser) parsePrimaryExpression() (ast.Expression, error) {
 
 	// MySQL / MariaDB BINARY expr: casts the operand to a binary string.
 	if p.isMySQLBinaryOperator() {
-		unaryPos := p.currentLocation()
-		p.advance() // Consume BINARY
-		expr, err := p.parseUnaryOperand()
-		if err != nil {
-			return nil, err
-		}
-		return &ast.UnaryExpression{Operator: ast.MySQLBinary, Expr: expr, Pos: unaryPos}, nil
+		return p.parseMySQLBinaryPrimary()
 	}
 
 	// CONNECT BY: PRIOR is a prefix operator that binds to its operand, so
@@ -106,8 +155,26 @@ func (p *Parser) parsePrimaryExpression() (ast.Expression, error) {
 		return &ast.UnaryExpression{Operator: ast.Prior, Expr: operand, Pos: priorPos}, nil
 	}
 
-	if lit, ok := p.parsePrefixedStringLiteral(); ok {
-		return lit, nil
+	// Most primaries are ordinary identifiers or numbers. Only these token
+	// shapes can carry a string introducer.
+	switch p.currentToken.Token.Type {
+	case models.TokenTypeNationalStringLiteral, models.TokenTypeHexStringLiteral,
+		models.TokenTypeByteStringLiteral, models.TokenTypeEscapedStringLiteral:
+		if lit, ok := p.parsePrefixedStringLiteral(); ok {
+			return lit, nil
+		}
+	case models.TokenTypeSingleQuotedString:
+		if p.currentToken.Token.Quote == 'q' {
+			if lit, ok := p.parsePrefixedStringLiteral(); ok {
+				return lit, nil
+			}
+		}
+	case models.TokenTypeIdentifier:
+		if v := p.currentToken.Token.Value; len(v) > 1 && v[0] == '_' {
+			if lit, ok := p.parsePrefixedStringLiteral(); ok {
+				return lit, nil
+			}
+		}
 	}
 
 	if p.isType(models.TokenTypeCase) {
@@ -124,8 +191,8 @@ func (p *Parser) parsePrimaryExpression() (ast.Expression, error) {
 	// an identifier (the snowflake keyword table is not wired into the
 	// tokenizer); detect by name when followed by '('.
 	if (p.isType(models.TokenTypeIdentifier) || p.isType(models.TokenTypeKeyword)) &&
-		strings.EqualFold(p.currentToken.Token.Value, "TRY_CAST") &&
-		p.peekToken().Token.Type == models.TokenTypeLParen {
+		p.peekTypeAt(1) == models.TokenTypeLParen &&
+		strings.EqualFold(p.currentToken.Token.Value, "TRY_CAST") {
 		return p.parseTryCastExpression()
 	}
 
@@ -187,8 +254,8 @@ func (p *Parser) parsePrimaryExpression() (ast.Expression, error) {
 	// EXTRACT(field FROM source) — SQL standard date/time extraction.
 	// Tokenized as an identifier; detect by name when followed by '('.
 	if (p.isType(models.TokenTypeIdentifier) || p.isType(models.TokenTypeKeyword)) &&
-		strings.EqualFold(p.currentToken.Token.Value, "EXTRACT") &&
-		p.peekToken().Token.Type == models.TokenTypeLParen {
+		p.peekTypeAt(1) == models.TokenTypeLParen &&
+		strings.EqualFold(p.currentToken.Token.Value, "EXTRACT") {
 		return p.parseExtractExpression()
 	}
 
@@ -228,147 +295,7 @@ func (p *Parser) parsePrimaryExpression() (ast.Expression, error) {
 			return p.parseHierarchicalOperator()
 		}
 
-		identPos := p.currentLocation()
-		identName := p.currentToken.Token.Value
-		identQuote := p.currentIdentQuote()
-		var identQuotes ast.NameQuote
-		if p.nameQuoteRelevant(identQuote) {
-			identQuotes = p.appendNamePartQuoted(0, identQuote)
-		}
-		p.advance()
-
-		// Check for function call (identifier followed by parentheses)
-		if p.isType(models.TokenTypeLParen) {
-			// Oracle outer-join marker: col(+)
-			if p.isOuterJoinMarker() {
-				return p.parseOuterJoinMarker(&ast.Identifier{Name: identName, Pos: identPos, Quoted: identQuote == '"', QuoteStyle: identQuote, Quotes: identQuotes}), nil
-			}
-			// This is a function call
-			funcCall, err := p.parseFunctionCall(identName)
-			if err != nil {
-				return nil, err
-			}
-			funcCall.NameQuote = identQuotes
-			// Assign position of function name
-			if funcCall.Pos.IsZero() {
-				funcCall.Pos = identPos
-			}
-
-			// MySQL MATCH(...) AGAINST(...) full-text search
-			if strings.EqualFold(identName, "MATCH") && strings.EqualFold(p.currentToken.Token.Value, "AGAINST") {
-				return p.parseMatchAgainst(funcCall)
-			}
-
-			// Subscript or slice on the call result: groupArray(x)[1],
-			// quantiles(0.5, 0.9)(x)[1] (#605). Mirrors identifier[...] below.
-			// SQLite tokenizes [name] as LBRACKET, where it is a bracket-quoted
-			// alias (count(*) [cnt]), so it is not treated as a subscript there.
-			if p.isType(models.TokenTypeLBracket) && p.dialect != string(keywords.DialectSQLite) {
-				return p.parseArrayAccessExpression(funcCall)
-			}
-
-			return funcCall, nil
-		}
-
-		// Handle regular identifier or qualified identifier (table.column or table.*)
-		ident := &ast.Identifier{Name: identName, Pos: identPos, Quoted: identQuote == '"', QuoteStyle: identQuote, Quotes: identQuotes}
-
-		// Check for qualified identifier (table.column) or qualified asterisk (table.*)
-		if p.isType(models.TokenTypePeriod) {
-			p.advance() // Consume .
-			if p.isType(models.TokenTypeAsterisk) || p.isType(models.TokenTypeMul) {
-				// Handle table.* (qualified asterisk).
-				// Both TokenTypeAsterisk and TokenTypeMul represent '*'.
-				// ident has not escaped yet, so promote it in place
-				// (one allocation per qualified reference). Pos is already identPos.
-				ident.Table = ident.Name
-				ident.Name = "*"
-				ident.Quoted = false
-				ident.Quotes = ident.Quotes.AppendPart(false)
-				p.advance()
-			} else if p.isQualifiedNamePart() {
-				// Handle table.column (qualified identifier).
-				// isNonReservedKeyword covers reserved words valid as column
-				// names after a dot, e.g. table.KEY, schema.INDEX, alias.VIEW.
-				// ClickHouse also allows numeric element access: d.1, tuple.2.
-				// ident has not escaped yet, so promote it in place; Table must
-				// be copied from Name before Name is overwritten.
-				ident.Table = ident.Name
-				ident.Name = p.currentToken.Token.Value
-				q := p.currentIdentQuote()
-				ident.Quoted = q == '"'
-				if q != 0 {
-					ident.QuoteStyle = q
-				}
-				if ident.Quotes != 0 || p.nameQuoteRelevant(q) {
-					ident.Quotes = p.appendNamePartQuoted(ident.Quotes, q)
-				}
-				p.advance()
-
-				// Multi-part reference: db.table.column (MySQL/MariaDB),
-				// catalog.schema.table.column (PostgreSQL, SQL Server, Snowflake).
-				// Every qualifier is folded into Table as a dotted string, mirroring
-				// TableReference.Name ("db.table"), so Table + "." + Name always
-				// reproduces the source reference. Only reached with 3+ parts, so the
-				// two-part path stays single-allocation.
-				if p.isType(models.TokenTypePeriod) {
-					if err := p.parseMultiPartColumnRef(ident); err != nil {
-						return nil, err
-					}
-				}
-			} else {
-				return nil, goerrors.InvalidSyntaxError(
-					"expected column name or * after table qualifier (use table.column or table.*)",
-					p.currentLocation(),
-					"",
-				)
-			}
-		}
-
-		if p.isType(models.TokenTypeLParen) {
-			// Oracle outer-join marker: t.col(+)
-			if p.isOuterJoinMarker() {
-				return p.parseOuterJoinMarker(ident), nil
-			}
-			// Qualified function call: pg_catalog.now(), pkg.fn(1)
-			if ident.Table != "" && ident.Name != "*" {
-				return p.parseQualifiedFunctionCall(ident)
-			}
-		}
-
-		// Check for array subscript or slice syntax: identifier[...]
-		// This handles: arr[1], arr[1][2], arr[1:3], arr[2:], arr[:5]
-		if p.isType(models.TokenTypeLBracket) {
-			return p.parseArrayAccessExpression(ident)
-		}
-
-		return ident, nil
-	}
-
-	if p.isType(models.TokenTypeAsterisk) || p.isType(models.TokenTypeMul) {
-		// Handle asterisk (e.g., in COUNT(*) or SELECT *).
-		// Both TokenTypeAsterisk and TokenTypeMul represent '*' from the tokenizer.
-		p.advance()
-		return &ast.Identifier{Name: "*"}, nil
-	}
-
-	if p.isStringLiteral() {
-		// Handle string literals
-		return p.parseStringLiteralExpr(), nil
-	}
-
-	if p.isNumericLiteral() {
-		// Handle numeric literals (int or float)
-		value := p.currentToken.Token.Value
-		p.advance()
-		return &ast.LiteralValue{Value: value, Type: numericLiteralType(value)}, nil
-	}
-
-	if p.isBooleanLiteral() {
-		// Handle boolean literals (uses O(1) switch instead of O(n) isAnyType)
-		value := p.currentToken.Token.Value
-		p.advance()
-		return &ast.LiteralValue{Value: value, Type: "bool"}, nil
+		return p.parseIdentifierPrimary()
 	}
 
 	if p.isType(models.TokenTypePlaceholder) {
@@ -390,12 +317,6 @@ func (p *Parser) parsePrimaryExpression() (ast.Expression, error) {
 			return p.parseVariableAssignment(ph)
 		}
 		return ph, nil
-	}
-
-	if p.isType(models.TokenTypeNull) {
-		// Handle NULL literal
-		p.advance()
-		return &ast.LiteralValue{Value: nil, Type: "null"}, nil
 	}
 
 	if p.isType(models.TokenTypeLParen) {
@@ -548,6 +469,137 @@ func (p *Parser) parsePrimaryExpression() (ast.Expression, error) {
 		return expr, err
 	}
 	return nil, p.errUnexpectedPrimary()
+}
+
+// parseMySQLBinaryPrimary consumes a previously recognized BINARY prefix.
+func (p *Parser) parseMySQLBinaryPrimary() (ast.Expression, error) {
+	unaryPos := p.currentLocation()
+	p.advance() // Consume BINARY
+	expr, err := p.parseUnaryOperand()
+	if err != nil {
+		return nil, err
+	}
+	return &ast.UnaryExpression{Operator: ast.MySQLBinary, Expr: expr, Pos: unaryPos}, nil
+}
+
+// parseIdentifierPrimary is the shared identifier/function implementation once
+// string prefixes, typed literals and hierarchical operators are ruled out.
+func (p *Parser) parseIdentifierPrimary() (ast.Expression, error) {
+	identPos := p.currentLocation()
+	identName := p.currentToken.Token.Value
+	identQuote := p.currentIdentQuote()
+	var identQuotes ast.NameQuote
+	if p.nameQuoteRelevant(identQuote) {
+		identQuotes = p.appendNamePartQuoted(0, identQuote)
+	}
+	p.advance()
+
+	// Check for function call (identifier followed by parentheses)
+	if p.isType(models.TokenTypeLParen) {
+		// Oracle outer-join marker: col(+)
+		if p.isOuterJoinMarker() {
+			return p.parseOuterJoinMarker(&ast.Identifier{Name: identName, Pos: identPos, Quoted: identQuote == '"', QuoteStyle: identQuote, Quotes: identQuotes}), nil
+		}
+		// This is a function call
+		funcCall, err := p.parseFunctionCall(identName)
+		if err != nil {
+			return nil, err
+		}
+		funcCall.NameQuote = identQuotes
+		// Assign position of function name
+		if funcCall.Pos.IsZero() {
+			funcCall.Pos = identPos
+		}
+
+		// MySQL MATCH(...) AGAINST(...) full-text search
+		if strings.EqualFold(identName, "MATCH") && strings.EqualFold(p.currentToken.Token.Value, "AGAINST") {
+			return p.parseMatchAgainst(funcCall)
+		}
+
+		// Subscript or slice on the call result: groupArray(x)[1],
+		// quantiles(0.5, 0.9)(x)[1] (#605). Mirrors identifier[...] below.
+		// SQLite tokenizes [name] as LBRACKET, where it is a bracket-quoted
+		// alias (count(*) [cnt]), so it is not treated as a subscript there.
+		if p.isType(models.TokenTypeLBracket) && p.dialect != string(keywords.DialectSQLite) {
+			return p.parseArrayAccessExpression(funcCall)
+		}
+
+		return funcCall, nil
+	}
+
+	// Handle regular identifier or qualified identifier (table.column or table.*)
+	ident := &ast.Identifier{Name: identName, Pos: identPos, Quoted: identQuote == '"', QuoteStyle: identQuote, Quotes: identQuotes}
+
+	// Check for qualified identifier (table.column) or qualified asterisk (table.*)
+	if p.isType(models.TokenTypePeriod) {
+		p.advance() // Consume .
+		if p.isType(models.TokenTypeAsterisk) || p.isType(models.TokenTypeMul) {
+			// Handle table.* (qualified asterisk).
+			// Both TokenTypeAsterisk and TokenTypeMul represent '*'.
+			// ident has not escaped yet, so promote it in place
+			// (one allocation per qualified reference). Pos is already identPos.
+			ident.Table = ident.Name
+			ident.Name = "*"
+			ident.Quoted = false
+			ident.Quotes = ident.Quotes.AppendPart(false)
+			p.advance()
+		} else if p.isQualifiedNamePart() {
+			// Handle table.column (qualified identifier).
+			// isNonReservedKeyword covers reserved words valid as column
+			// names after a dot, e.g. table.KEY, schema.INDEX, alias.VIEW.
+			// ClickHouse also allows numeric element access: d.1, tuple.2.
+			// ident has not escaped yet, so promote it in place; Table must
+			// be copied from Name before Name is overwritten.
+			ident.Table = ident.Name
+			ident.Name = p.currentToken.Token.Value
+			q := p.currentIdentQuote()
+			ident.Quoted = q == '"'
+			if q != 0 {
+				ident.QuoteStyle = q
+			}
+			if ident.Quotes != 0 || p.nameQuoteRelevant(q) {
+				ident.Quotes = p.appendNamePartQuoted(ident.Quotes, q)
+			}
+			p.advance()
+
+			// Multi-part reference: db.table.column (MySQL/MariaDB),
+			// catalog.schema.table.column (PostgreSQL, SQL Server, Snowflake).
+			// Every qualifier is folded into Table as a dotted string, mirroring
+			// TableReference.Name ("db.table"), so Table + "." + Name always
+			// reproduces the source reference. Only reached with 3+ parts, so the
+			// two-part path stays single-allocation.
+			if p.isType(models.TokenTypePeriod) {
+				if err := p.parseMultiPartColumnRef(ident); err != nil {
+					return nil, err
+				}
+			}
+		} else {
+			return nil, goerrors.InvalidSyntaxError(
+				"expected column name or * after table qualifier (use table.column or table.*)",
+				p.currentLocation(),
+				"",
+			)
+		}
+	}
+
+	if p.isType(models.TokenTypeLParen) {
+		// Oracle outer-join marker: t.col(+)
+		if p.isOuterJoinMarker() {
+			return p.parseOuterJoinMarker(ident), nil
+		}
+		// Qualified function call: pg_catalog.now(), pkg.fn(1)
+		if ident.Table != "" && ident.Name != "*" {
+			return p.parseQualifiedFunctionCall(ident)
+		}
+	}
+
+	// Check for array subscript or slice syntax: identifier[...]
+	// This handles: arr[1], arr[1][2], arr[1:3], arr[2:], arr[:5]
+	if p.isType(models.TokenTypeLBracket) {
+		return p.parseArrayAccessExpression(ident)
+	}
+
+	return ident, nil
 }
 
 // isConnectByPrior reports whether the current token is the PRIOR operator

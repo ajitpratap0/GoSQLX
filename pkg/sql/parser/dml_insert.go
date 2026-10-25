@@ -37,7 +37,11 @@ func (p *Parser) parseInsertStatement() (ast.Statement, error) {
 		return p.parseMultiTableInsert(stmt)
 	}
 
-	stmt.Modifiers = p.parseDMLModifiers(dmlInsert)
+	if !p.isType(models.TokenTypeInto) {
+		if modifiers := p.parseDMLModifiers(dmlInsert); len(modifiers) > 0 {
+			stmt.EnsureExtras().Modifiers = modifiers
+		}
+	}
 
 	// Parse INTO. SQL Server, MySQL and MariaDB make it optional.
 	if p.isType(models.TokenTypeInto) {
@@ -62,7 +66,7 @@ func (p *Parser) parseInsertStatement() (ast.Statement, error) {
 		if err != nil {
 			return nil, err
 		}
-		stmt.TableFunction = fn
+		stmt.EnsureExtras().TableFunction = fn
 	} else {
 		// Parse table name (supports schema.table qualification and double-quoted identifiers)
 		tableName, tableQuote, err := p.parseTableNameQuoted()
@@ -70,7 +74,9 @@ func (p *Parser) parseInsertStatement() (ast.Statement, error) {
 			return nil, p.qualifiedNameError(err, "table name")
 		}
 		stmt.TableName = tableName
-		stmt.TableNameQuote = tableQuote
+		if tableQuote != 0 {
+			stmt.EnsureExtras().TableNameQuote = tableQuote
+		}
 	}
 
 	// Parse column list if present
@@ -88,7 +94,11 @@ func (p *Parser) parseInsertStatement() (ast.Statement, error) {
 	// and allows dialect-agnostic parsing of T-SQL INSERT statements.
 	if equalsUpper(p.currentToken.Token.Value, "OUTPUT") {
 		var err error
-		stmt.Output, stmt.OutputInto, err = p.parseDMLOutputClause()
+		var into *ast.OutputInto
+		stmt.Output, into, err = p.parseDMLOutputClause()
+		if into != nil {
+			stmt.EnsureExtras().OutputInto = into
+		}
 		if err != nil {
 			return nil, err
 		}
@@ -101,7 +111,7 @@ func (p *Parser) parseInsertStatement() (ast.Statement, error) {
 			if err != nil {
 				return nil, err
 			}
-			stmt.Settings = settings
+			stmt.EnsureExtras().Settings = settings
 		}
 		// ClickHouse-only: INSERT INTO t [(cols)] FORMAT <name> with the
 		// data payload being external (network / file). There is no VALUES
@@ -119,9 +129,9 @@ func (p *Parser) parseInsertStatement() (ast.Statement, error) {
 		p.advance() // Consume OVERRIDING
 		switch {
 		case p.isTokenMatch("SYSTEM"):
-			stmt.Overriding = "SYSTEM"
+			stmt.EnsureExtras().Overriding = "SYSTEM"
 		case p.isTokenMatch("USER"):
-			stmt.Overriding = "USER"
+			stmt.EnsureExtras().Overriding = "USER"
 		default:
 			return nil, p.expectedError("SYSTEM or USER")
 		}
@@ -220,7 +230,11 @@ func (p *Parser) parseInsertStatement() (ast.Statement, error) {
 	// Parse RETURNING clause if present (PostgreSQL, SQLite, MariaDB, Oracle INTO)
 	if p.isReturningKeyword() {
 		var err error
-		stmt.Returning, stmt.ReturningInto, err = p.parseReturningClause()
+		var into []ast.Expression
+		stmt.Returning, into, err = p.parseReturningClause()
+		if len(into) > 0 {
+			stmt.EnsureExtras().ReturningInto = into
+		}
 		if err != nil {
 			return nil, err
 		}
@@ -229,7 +243,7 @@ func (p *Parser) parseInsertStatement() (ast.Statement, error) {
 	// Oracle error logging clause: LOG ERRORS [INTO t] [(tag)] [REJECT LIMIT n]
 	if p.IsOracle() && p.isUnquotedWord("LOG") && p.peekValueIs(1, "ERRORS") {
 		var err error
-		if stmt.LogErrors, err = p.parseLogErrors(); err != nil {
+		if stmt.EnsureExtras().LogErrors, err = p.parseLogErrors(); err != nil {
 			return nil, err
 		}
 	}
@@ -279,7 +293,7 @@ func (p *Parser) parseInsertFormat(stmt *ast.InsertStatement) error {
 	if !p.isWordToken() {
 		return p.expectedError("format name after FORMAT")
 	}
-	stmt.DataFormat = p.currentToken.Token.Value
+	stmt.EnsureExtras().DataFormat = p.currentToken.Token.Value
 	p.advance()
 	return nil
 }
@@ -417,7 +431,7 @@ func (p *Parser) parseInsertRowAlias(stmt *ast.InsertStatement) error {
 	if !p.isWordToken() {
 		return p.expectedError("row alias after AS")
 	}
-	stmt.RowAlias = p.currentToken.Token.Value
+	stmt.EnsureExtras().RowAlias = p.currentToken.Token.Value
 	p.advance()
 	if !p.isType(models.TokenTypeLParen) {
 		return nil
@@ -427,7 +441,8 @@ func (p *Parser) parseInsertRowAlias(stmt *ast.InsertStatement) error {
 		if !p.isWordToken() {
 			return p.expectedError("column alias")
 		}
-		stmt.RowAliasColumns = append(stmt.RowAliasColumns, p.currentToken.Token.Value)
+		x := stmt.EnsureExtras()
+		x.RowAliasColumns = append(x.RowAliasColumns, p.currentToken.Token.Value)
 		p.advance()
 		if !p.isType(models.TokenTypeComma) {
 			break

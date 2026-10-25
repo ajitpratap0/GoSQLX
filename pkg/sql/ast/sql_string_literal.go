@@ -59,23 +59,23 @@ func writeRawStringLiteral(buf *bytes.Buffer, s string) {
 // plain word (letters, digits, underscore). A hand-built AST could otherwise
 // smuggle arbitrary text in front of the opening quote.
 func (l *LiteralValue) safeStringPrefix() string {
-	for i := 0; i < len(l.Prefix); i++ {
-		c := l.Prefix[i]
+	for i := 0; i < len(l.DialectExtras().Prefix); i++ {
+		c := l.DialectExtras().Prefix[i]
 		if c != '_' && (c < 'a' || c > 'z') && (c < 'A' || c > 'Z') && (c < '0' || c > '9') {
 			return ""
 		}
 	}
-	return l.Prefix
+	return l.DialectExtras().Prefix
 }
 
 // stringSQL renders a STRING literal.
 func (l *LiteralValue) stringSQL() string {
 	text := literalText(l.Value)
-	if l.Prefix == "" {
-		if !l.RawBackslash && !stringLiteralNeedsEscape(text) {
+	if l.DialectExtras().Prefix == "" {
+		if !l.DialectExtras().RawBackslash && !stringLiteralNeedsEscape(text) {
 			return "'" + text + "'"
 		}
-		if l.RawBackslash && !stringLiteralNeedsEscapeRaw(text) {
+		if l.DialectExtras().RawBackslash && !stringLiteralNeedsEscapeRaw(text) {
 			return "'" + text + "'"
 		}
 	}
@@ -89,7 +89,7 @@ func (l *LiteralValue) stringSQL() string {
 // quote, the text escaped with the literal's own rules, and the closing quote.
 func (l *LiteralValue) writeStringSQL(buf *bytes.Buffer) {
 	text := literalText(l.Value)
-	switch l.Prefix {
+	switch l.DialectExtras().Prefix {
 	case "E", "e":
 		// PostgreSQL escape string: backslash sequences are decoded, so the
 		// text is escaped like a MySQL string, except that Ctrl-Z has no \Z.
@@ -116,7 +116,7 @@ func (l *LiteralValue) writeStringSQL(buf *bytes.Buffer) {
 	}
 	buf.WriteString(l.safeStringPrefix())
 	buf.WriteByte('\'')
-	if l.RawBackslash {
+	if l.DialectExtras().RawBackslash {
 		writeRawStringLiteral(buf, text)
 	} else {
 		writeEscapedStringLiteral(buf, text)

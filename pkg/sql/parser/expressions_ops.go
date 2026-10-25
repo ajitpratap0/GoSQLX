@@ -142,6 +142,26 @@ func (p *Parser) parseBitwiseExpression(minPrec int) (ast.Expression, error) {
 	if err != nil {
 		return nil, err
 	}
+	if !p.startsBitwiseOperator() {
+		return left, nil
+	}
+	return p.parseBitwiseTail(left, minPrec)
+}
+
+// startsBitwiseOperator rejects ordinary expression terminators before entering
+// the precedence-climbing path or consulting dialect-specific operator rules.
+func (p *Parser) startsBitwiseOperator() bool {
+	switch p.currentToken.Token.Type {
+	case models.TokenTypePipe, models.TokenTypeAmpersand, models.TokenTypeAtAt,
+		models.TokenTypeOverlap, models.TokenTypeSharp, models.TokenTypeLtEq,
+		models.TokenTypeLt, models.TokenTypeGt, models.TokenTypeShiftLeft,
+		models.TokenTypeShiftRight, models.TokenTypeSpaceship, models.TokenTypeCustomBinaryOperator:
+		return true
+	}
+	return false
+}
+
+func (p *Parser) parseBitwiseTail(left ast.Expression, minPrec int) (ast.Expression, error) {
 	for {
 		op, prec, n := p.bitwiseOperator()
 		if n == 0 || prec < minPrec {
@@ -203,6 +223,13 @@ func (p *Parser) parseXorExpression() (ast.Expression, error) {
 	if err != nil {
 		return nil, err
 	}
+	if p.currentToken.Token.Type != models.TokenTypeIdentifier || !p.isMySQLFamily() || !equalsUpper(p.currentToken.Token.Value, "XOR") {
+		return left, nil
+	}
+	return p.parseXorTail(left)
+}
+
+func (p *Parser) parseXorTail(left ast.Expression) (ast.Expression, error) {
 	for p.currentToken.Token.Type == models.TokenTypeIdentifier && p.isMySQLFamily() && equalsUpper(p.currentToken.Token.Value, "XOR") {
 		opPos := p.currentLocation()
 		p.advance() // Consume XOR

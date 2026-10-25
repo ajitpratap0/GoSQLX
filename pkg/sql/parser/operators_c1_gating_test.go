@@ -141,9 +141,9 @@ func TestOperatorsC1_NodeFields(t *testing.T) {
 		if !ok {
 			t.Fatalf("WHERE is %T, want *ast.BinaryExpression", stmt.Where)
 		}
-		esc, ok := bin.Escape.(*ast.LiteralValue)
+		esc, ok := bin.DialectExtras().Escape.(*ast.LiteralValue)
 		if !ok {
-			t.Fatalf("Escape is %T, want *ast.LiteralValue", bin.Escape)
+			t.Fatalf("Escape is %T, want *ast.LiteralValue", bin.DialectExtras().Escape)
 		}
 		if esc.Value != "!" {
 			t.Errorf("Escape = %v, want !", esc.Value)

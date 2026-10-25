@@ -117,7 +117,7 @@ func (r *RedundantOrderByInCTERule) Analyze(stmt ast.Statement) []Suggestion {
 			continue
 		}
 		// ORDER BY without LIMIT/FETCH/TOP is redundant in a CTE
-		hasLimit := cteQuery.Limit != nil || cteQuery.LimitExpr != nil || cteQuery.Fetch != nil || cteQuery.Top != nil
+		hasLimit := cteQuery.Limit != nil || cteQuery.DialectExtras().LimitExpr != nil || cteQuery.Fetch != nil || cteQuery.Top != nil
 		if len(cteQuery.OrderBy) > 0 && !hasLimit {
 			suggestions = append(suggestions, Suggestion{
 				RuleID:   r.ID(),
@@ -323,7 +323,7 @@ func (r *MissingLimitRule) Analyze(stmt ast.Statement) []Suggestion {
 	if !ok {
 		return nil
 	}
-	hasLimit := sel.Limit != nil || sel.LimitExpr != nil || sel.Fetch != nil || sel.Top != nil
+	hasLimit := sel.Limit != nil || sel.DialectExtras().LimitExpr != nil || sel.Fetch != nil || sel.Top != nil
 	if len(sel.OrderBy) > 0 && !hasLimit {
 		return []Suggestion{{
 			RuleID:       r.ID(),

@@ -94,7 +94,7 @@ func (o OutputInto) TokenLiteral() string { return "INTO" }
 func (o OutputInto) Children() []Node     { return nodifyExpressions(o.Columns) }
 
 // InsertDialectFields holds the dialect-specific parts of INSERT. It is
-// embedded in InsertStatement, so its fields are accessed directly.
+// held behind InsertStatement.Extras, allocated only for dialect clauses.
 type InsertDialectFields struct {
 	// Modifiers are the keywords between INSERT and INTO, upper-cased and in
 	// source order: MySQL IGNORE / LOW_PRIORITY / HIGH_PRIORITY / DELAYED,

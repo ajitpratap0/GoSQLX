@@ -56,7 +56,7 @@ func TestSelectExt_LimitOffsetValues(t *testing.T) {
 			if s.Limit != nil {
 				t.Fatalf("Limit = %d, want nil", *s.Limit)
 			}
-			if got := exprSQLText(s.LimitExpr); got != want {
+			if got := exprSQLText(s.DialectExtras().LimitExpr); got != want {
 				t.Errorf("LimitExpr = %q, want %q", got, want)
 			}
 		}
@@ -68,7 +68,7 @@ func TestSelectExt_LimitOffsetValues(t *testing.T) {
 		{"arithmetic", keywords.DialectPostgreSQL, "SELECT * FROM t LIMIT 1 + 1", limitExpr("1 + 1")},
 		{"subquery", keywords.DialectPostgreSQL, "SELECT * FROM t LIMIT (SELECT 1)", limitExpr("(SELECT 1)")},
 		{"sqlite negative", keywords.DialectSQLite, "SELECT a FROM t LIMIT -1 OFFSET 5", func(t *testing.T, s *ast.SelectStatement) {
-			if got := exprSQLText(s.LimitExpr); got != "-1" {
+			if got := exprSQLText(s.DialectExtras().LimitExpr); got != "-1" {
 				t.Errorf("LimitExpr = %q, want -1", got)
 			}
 			if s.Offset == nil || *s.Offset != 5 {
@@ -76,16 +76,16 @@ func TestSelectExt_LimitOffsetValues(t *testing.T) {
 			}
 		}},
 		{"plain integers stay ints", keywords.DialectPostgreSQL, "SELECT * FROM t LIMIT 10 OFFSET 20", func(t *testing.T, s *ast.SelectStatement) {
-			if s.Limit == nil || *s.Limit != 10 || s.LimitExpr != nil {
-				t.Errorf("Limit = %v / %v, want 10", s.Limit, s.LimitExpr)
+			if s.Limit == nil || *s.Limit != 10 || s.DialectExtras().LimitExpr != nil {
+				t.Errorf("Limit = %v / %v, want 10", s.Limit, s.DialectExtras().LimitExpr)
 			}
-			if s.Offset == nil || *s.Offset != 20 || s.OffsetExpr != nil || s.OffsetRows {
-				t.Errorf("Offset = %v / %v rows=%v, want 20", s.Offset, s.OffsetExpr, s.OffsetRows)
+			if s.Offset == nil || *s.Offset != 20 || s.DialectExtras().OffsetExpr != nil || s.DialectExtras().OffsetRows {
+				t.Errorf("Offset = %v / %v rows=%v, want 20", s.Offset, s.DialectExtras().OffsetExpr, s.DialectExtras().OffsetRows)
 			}
 		}},
 		{"limit all", keywords.DialectPostgreSQL, "SELECT * FROM t LIMIT ALL", func(t *testing.T, s *ast.SelectStatement) {
-			if !s.LimitAll || s.Limit != nil || s.LimitExpr != nil {
-				t.Errorf("LimitAll = %v Limit = %v LimitExpr = %v", s.LimitAll, s.Limit, s.LimitExpr)
+			if !s.DialectExtras().LimitAll || s.Limit != nil || s.DialectExtras().LimitExpr != nil {
+				t.Errorf("LimitAll = %v Limit = %v LimitExpr = %v", s.DialectExtras().LimitAll, s.Limit, s.DialectExtras().LimitExpr)
 			}
 		}},
 		{"offset before limit", keywords.DialectPostgreSQL, "SELECT * FROM t OFFSET 10 LIMIT 5", func(t *testing.T, s *ast.SelectStatement) {
@@ -94,13 +94,13 @@ func TestSelectExt_LimitOffsetValues(t *testing.T) {
 			}
 		}},
 		{"offset rows", keywords.DialectPostgreSQL, "SELECT * FROM t LIMIT ALL OFFSET 5 ROWS", func(t *testing.T, s *ast.SelectStatement) {
-			if !s.LimitAll || !s.OffsetRows || s.Offset == nil || *s.Offset != 5 {
-				t.Errorf("LimitAll = %v OffsetRows = %v Offset = %v", s.LimitAll, s.OffsetRows, s.Offset)
+			if !s.DialectExtras().LimitAll || !s.DialectExtras().OffsetRows || s.Offset == nil || *s.Offset != 5 {
+				t.Errorf("LimitAll = %v OffsetRows = %v Offset = %v", s.DialectExtras().LimitAll, s.DialectExtras().OffsetRows, s.Offset)
 			}
 		}},
 		{"mysql placeholders offset count", keywords.DialectMySQL, "SELECT * FROM t LIMIT ?, ?", func(t *testing.T, s *ast.SelectStatement) {
-			if exprSQLText(s.LimitExpr) != "?" || exprSQLText(s.OffsetExpr) != "?" {
-				t.Errorf("LimitExpr = %v OffsetExpr = %v", s.LimitExpr, s.OffsetExpr)
+			if exprSQLText(s.DialectExtras().LimitExpr) != "?" || exprSQLText(s.DialectExtras().OffsetExpr) != "?" {
+				t.Errorf("LimitExpr = %v OffsetExpr = %v", s.DialectExtras().LimitExpr, s.DialectExtras().OffsetExpr)
 			}
 		}},
 		{"sqlite offset count", keywords.DialectSQLite, "SELECT * FROM t LIMIT 10, 20", func(t *testing.T, s *ast.SelectStatement) {
@@ -109,8 +109,8 @@ func TestSelectExt_LimitOffsetValues(t *testing.T) {
 			}
 		}},
 		{"sqlserver offset fetch variables", keywords.DialectSQLServer, "SELECT * FROM t ORDER BY id OFFSET @s ROWS FETCH NEXT @n ROWS ONLY", func(t *testing.T, s *ast.SelectStatement) {
-			if exprSQLText(s.OffsetExpr) != "@s" || !s.OffsetRows {
-				t.Errorf("OffsetExpr = %v OffsetRows = %v", s.OffsetExpr, s.OffsetRows)
+			if exprSQLText(s.DialectExtras().OffsetExpr) != "@s" || !s.DialectExtras().OffsetRows {
+				t.Errorf("OffsetExpr = %v OffsetRows = %v", s.DialectExtras().OffsetExpr, s.DialectExtras().OffsetRows)
 			}
 			if s.Fetch == nil || exprSQLText(s.Fetch.FetchExpr) != "@n" || s.Fetch.FetchValue != nil {
 				t.Errorf("Fetch = %+v, want FetchExpr @n", s.Fetch)
@@ -122,8 +122,8 @@ func TestSelectExt_LimitOffsetValues(t *testing.T) {
 			}
 		}},
 		{"clickhouse limit with ties", keywords.DialectClickHouse, "SELECT x FROM t ORDER BY x LIMIT 10 WITH TIES", func(t *testing.T, s *ast.SelectStatement) {
-			if s.Limit == nil || *s.Limit != 10 || !s.LimitWithTies {
-				t.Errorf("Limit = %v LimitWithTies = %v", s.Limit, s.LimitWithTies)
+			if s.Limit == nil || *s.Limit != 10 || !s.DialectExtras().LimitWithTies {
+				t.Errorf("Limit = %v LimitWithTies = %v", s.Limit, s.DialectExtras().LimitWithTies)
 			}
 		}},
 		{"clickhouse limit by then limit", keywords.DialectClickHouse, "SELECT user_id, page FROM e ORDER BY ts DESC LIMIT 2 BY user_id, page LIMIT 100", func(t *testing.T, s *ast.SelectStatement) {
@@ -305,26 +305,26 @@ func TestSelectExt_FromlessAndGroupBy(t *testing.T) {
 			}
 		}},
 		{"mysql with rollup kept as modifier", keywords.DialectMySQL, "SELECT a, b FROM t GROUP BY a, b WITH ROLLUP", func(t *testing.T, s *ast.SelectStatement) {
-			if !s.GroupByModifiers.WithRollup || len(s.GroupBy) != 2 {
-				t.Errorf("GroupByModifiers = %+v GroupBy = %v", s.GroupByModifiers, s.GroupBy)
+			if !s.DialectExtras().GroupByModifiers.WithRollup || len(s.GroupBy) != 2 {
+				t.Errorf("GroupByModifiers = %+v GroupBy = %v", s.DialectExtras().GroupByModifiers, s.GroupBy)
 			}
 			if _, ok := s.GroupBy[0].(*ast.RollupExpression); ok {
 				t.Errorf("WITH ROLLUP must not become ROLLUP(...)")
 			}
 		}},
 		{"clickhouse with totals", keywords.DialectClickHouse, "SELECT d, sum(x) FROM s GROUP BY d WITH TOTALS ORDER BY d", func(t *testing.T, s *ast.SelectStatement) {
-			if !s.GroupByModifiers.WithTotals || len(s.OrderBy) != 1 {
-				t.Errorf("GroupByModifiers = %+v OrderBy = %v", s.GroupByModifiers, s.OrderBy)
+			if !s.DialectExtras().GroupByModifiers.WithTotals || len(s.OrderBy) != 1 {
+				t.Errorf("GroupByModifiers = %+v OrderBy = %v", s.DialectExtras().GroupByModifiers, s.OrderBy)
 			}
 		}},
 		{"snowflake group by all", keywords.DialectSnowflake, "SELECT a, COUNT(*) FROM t GROUP BY ALL", func(t *testing.T, s *ast.SelectStatement) {
-			if !s.GroupByModifiers.All || len(s.GroupBy) != 0 {
-				t.Errorf("GroupByModifiers = %+v GroupBy = %v", s.GroupByModifiers, s.GroupBy)
+			if !s.DialectExtras().GroupByModifiers.All || len(s.GroupBy) != 0 {
+				t.Errorf("GroupByModifiers = %+v GroupBy = %v", s.DialectExtras().GroupByModifiers, s.GroupBy)
 			}
 		}},
 		{"clickhouse group by all", keywords.DialectClickHouse, "SELECT a FROM t GROUP BY ALL", func(t *testing.T, s *ast.SelectStatement) {
-			if !s.GroupByModifiers.All {
-				t.Errorf("GroupByModifiers = %+v", s.GroupByModifiers)
+			if !s.DialectExtras().GroupByModifiers.All {
+				t.Errorf("GroupByModifiers = %+v", s.DialectExtras().GroupByModifiers)
 			}
 		}},
 	})
@@ -333,8 +333,8 @@ func TestSelectExt_FromlessAndGroupBy(t *testing.T) {
 func TestSelectExt_HierarchicalAndOrdering(t *testing.T) {
 	runSelectExtCases(t, []selectExtCase{
 		{"order siblings by", keywords.DialectOracle, "SELECT name FROM e START WITH m IS NULL CONNECT BY PRIOR id = m ORDER SIBLINGS BY name", func(t *testing.T, s *ast.SelectStatement) {
-			if !s.OrderSiblings || len(s.OrderBy) != 1 || s.StartWith == nil || s.ConnectBy == nil {
-				t.Errorf("OrderSiblings = %v OrderBy = %v", s.OrderSiblings, s.OrderBy)
+			if !s.DialectExtras().OrderSiblings || len(s.OrderBy) != 1 || s.StartWith == nil || s.ConnectBy == nil {
+				t.Errorf("OrderSiblings = %v OrderBy = %v", s.DialectExtras().OrderSiblings, s.OrderBy)
 			}
 		}},
 		{"start with after connect by", keywords.DialectOracle, "SELECT id FROM e CONNECT BY NOCYCLE PRIOR id = m START WITH id = 101", func(t *testing.T, s *ast.SelectStatement) {
@@ -569,8 +569,14 @@ func TestSelectExtras_OnlyWhenUsed(t *testing.T) {
 		sql     string
 		check   func(x *ast.SelectExtras) bool // nil: Extras must be nil
 	}{
-		{"plain", keywords.DialectPostgreSQL, "SELECT a, b FROM t WHERE c = 1 ORDER BY a LIMIT $1 OFFSET 2", nil},
-		{"group by rollup", keywords.DialectMySQL, "SELECT a, COUNT(*) FROM t GROUP BY a WITH ROLLUP", nil},
+		{"plain", keywords.DialectPostgreSQL, "SELECT a, b FROM t WHERE c = 1 ORDER BY a LIMIT 10 OFFSET 2", nil},
+		{"limit expression", keywords.DialectPostgreSQL, "SELECT a, b FROM t WHERE c = 1 ORDER BY a LIMIT $1 OFFSET 2",
+			func(x *ast.SelectExtras) bool {
+				lit, ok := x.LimitExpr.(*ast.LiteralValue)
+				return ok && lit.Value == "$1"
+			}},
+		{"group by rollup", keywords.DialectMySQL, "SELECT a, COUNT(*) FROM t GROUP BY a WITH ROLLUP",
+			func(x *ast.SelectExtras) bool { return x.GroupByModifiers.WithRollup }},
 		{"select modifiers", keywords.DialectMySQL, "SELECT SQL_NO_CACHE a FROM t",
 			func(x *ast.SelectExtras) bool { return len(x.SelectModifiers) == 1 }},
 		{"into leading", keywords.DialectSQLServer, "SELECT a INTO #t FROM s",

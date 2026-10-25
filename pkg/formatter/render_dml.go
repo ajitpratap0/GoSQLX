@@ -136,33 +136,33 @@ func writeReturning(sb *strings.Builder, f *nodeFormatter, returning, into []ast
 func writeInsertHead(sb *strings.Builder, f *nodeFormatter, i *ast.InsertStatement) {
 	sb.WriteString(f.kw("INSERT"))
 	sb.WriteString(" ")
-	writeDMLModifiers(sb, f, i.Modifiers)
+	writeDMLModifiers(sb, f, i.DialectExtras().Modifiers)
 	sb.WriteString(f.kw("INTO"))
 	sb.WriteString(" ")
-	if i.TableFunction != nil {
+	if i.DialectExtras().TableFunction != nil {
 		sb.WriteString(f.kw("FUNCTION"))
 		sb.WriteString(" ")
-		sb.WriteString(exprSQL(i.TableFunction))
+		sb.WriteString(exprSQL(i.DialectExtras().TableFunction))
 		return
 	}
-	sb.WriteString(ast.QuoteQualifiedNameWith(i.TableName, f.nq(i.TableNameQuote)))
+	sb.WriteString(ast.QuoteQualifiedNameWith(i.TableName, f.nq(i.DialectExtras().TableNameQuote)))
 }
 
 // writeInsertBeforeSource writes ClickHouse SETTINGS and PostgreSQL
 // OVERRIDING ... VALUE, which sit between the column list and the source.
 func writeInsertBeforeSource(sb *strings.Builder, f *nodeFormatter, i *ast.InsertStatement) {
-	if len(i.Settings) > 0 {
+	if len(i.DialectExtras().Settings) > 0 {
 		sb.WriteString(" ")
 		sb.WriteString(f.kw("SETTINGS"))
 		sb.WriteString(" ")
-		for k := range i.Settings {
+		for k := range i.DialectExtras().Settings {
 			if k > 0 {
 				sb.WriteString(", ")
 			}
-			sb.WriteString(i.Settings[k].SQL())
+			sb.WriteString(i.DialectExtras().Settings[k].SQL())
 		}
 	}
-	if t := ast.OverridingText(i.Overriding); t != "" {
+	if t := ast.OverridingText(i.DialectExtras().Overriding); t != "" {
 		sb.WriteString(" ")
 		sb.WriteString(f.kw("OVERRIDING " + t + " VALUE"))
 	}
@@ -170,24 +170,24 @@ func writeInsertBeforeSource(sb *strings.Builder, f *nodeFormatter, i *ast.Inser
 
 // writeInsertAfterSource writes the MySQL row alias AS name [(cols)].
 func writeInsertAfterSource(sb *strings.Builder, f *nodeFormatter, i *ast.InsertStatement) {
-	if i.RowAlias == "" {
+	if i.DialectExtras().RowAlias == "" {
 		return
 	}
 	sb.WriteString(" ")
 	sb.WriteString(f.kw("AS"))
 	sb.WriteString(" ")
-	sb.WriteString(ast.QuoteTableAlias(i.RowAlias))
-	if len(i.RowAliasColumns) > 0 {
+	sb.WriteString(ast.QuoteTableAlias(i.DialectExtras().RowAlias))
+	if len(i.DialectExtras().RowAliasColumns) > 0 {
 		sb.WriteString(" (")
-		sb.WriteString(quoteColumnNames(i.RowAliasColumns))
+		sb.WriteString(quoteColumnNames(i.DialectExtras().RowAliasColumns))
 		sb.WriteString(")")
 	}
 }
 
 // writeInsertTail writes RETURNING [INTO] and the ClickHouse FORMAT name.
 func writeInsertTail(sb *strings.Builder, f *nodeFormatter, i *ast.InsertStatement) {
-	writeReturning(sb, f, i.Returning, i.ReturningInto)
-	if l := i.LogErrors; l != nil {
+	writeReturning(sb, f, i.Returning, i.DialectExtras().ReturningInto)
+	if l := i.DialectExtras().LogErrors; l != nil {
 		sb.WriteString(f.clauseSep())
 		sb.WriteString(f.kw("LOG ERRORS"))
 		if l.Into != "" {
@@ -208,11 +208,11 @@ func writeInsertTail(sb *strings.Builder, f *nodeFormatter, i *ast.InsertStateme
 			sb.WriteString(f.kw(lim))
 		}
 	}
-	if i.DataFormat != "" {
+	if i.DialectExtras().DataFormat != "" {
 		sb.WriteString(f.clauseSep())
 		sb.WriteString(f.kw("FORMAT"))
 		sb.WriteString(" ")
-		sb.WriteString(formatNameSQL(i.DataFormat))
+		sb.WriteString(formatNameSQL(i.DialectExtras().DataFormat))
 	}
 }
 

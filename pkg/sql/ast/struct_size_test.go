@@ -33,9 +33,15 @@ func TestHotStructSizes(t *testing.T) {
 		size uintptr
 		max  uintptr
 	}{
-		// 448 is a size class; above 512 bytes a pointerful object also
-		// carries an 8-byte malloc header and lands in the 576 class.
-		{"SelectStatement", unsafe.Sizeof(SelectStatement{}), 448},
+		// The origin/main fields remain inline for API compatibility. On a
+		// 64-bit platform, a cold-fields pointer requires one additional
+		// word where the original layout has no reusable pointer-sized padding.
+		{"InsertStatement", unsafe.Sizeof(InsertStatement{}), 184},
+		{"LiteralValue", unsafe.Sizeof(LiteralValue{}), 40},
+		{"SelectStatement", unsafe.Sizeof(SelectStatement{}), 392},
+		{"TableReference", unsafe.Sizeof(TableReference{}), 144},
+		{"BinaryExpression", unsafe.Sizeof(BinaryExpression{}), 88},
+		{"FunctionCall", unsafe.Sizeof(FunctionCall{}), 184},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

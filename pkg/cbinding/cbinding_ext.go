@@ -108,11 +108,14 @@ func parseResultFor(sql, dialect string) ParseResult {
 
 	stmtTypes := make([]string, 0, len(tree.Statements))
 	for _, stmt := range tree.Statements {
+		if _, ok := stmt.(*ast.BatchSeparator); ok {
+			continue // a GO line is a client directive, not a statement
+		}
 		stmtTypes = append(stmtTypes, statementTypeName(stmt))
 	}
 	return ParseResult{
 		Success:   true,
-		StmtCount: len(tree.Statements),
+		StmtCount: len(stmtTypes),
 		StmtTypes: stmtTypes,
 	}
 }

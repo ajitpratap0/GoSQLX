@@ -29,6 +29,7 @@ import (
 	"github.com/ajitpratap0/GoSQLX/pkg/linter"
 	"github.com/ajitpratap0/GoSQLX/pkg/linter/rules"
 	"github.com/ajitpratap0/GoSQLX/pkg/linter/rules/keywords"
+	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
 	sqlkeywords "github.com/ajitpratap0/GoSQLX/pkg/sql/keywords"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/security"
 )
@@ -239,11 +240,14 @@ func parseSQLInternal(sql string) (map[string]any, error) {
 
 	stmtTypes := make([]string, 0, len(tree.Statements))
 	for _, stmt := range tree.Statements {
+		if _, ok := stmt.(*ast.BatchSeparator); ok {
+			continue // a GO line is a client directive, not a statement
+		}
 		stmtTypes = append(stmtTypes, fmt.Sprintf("%T", stmt))
 	}
 
 	return map[string]any{
-		"statement_count": len(tree.Statements),
+		"statement_count": len(stmtTypes),
 		"statement_types": stmtTypes,
 	}, nil
 }

@@ -628,7 +628,7 @@ func Example_analyzeQuery() {
 	// Output:
 	// Query Analysis:
 	// - Joins 2 tables
-	// - References 8 columns
+	// - References 7 columns
 	// - Uses 3 functions
 }
 

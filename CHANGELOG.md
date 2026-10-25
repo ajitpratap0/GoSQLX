@@ -68,6 +68,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   top-level set operations.
 - `gosqlx format --dialect sqlserver` runs the statement-count guard again,
   counting GO lines and statements that end without `;`.
+- **`ExtractColumns` / `ExtractColumnsQualified` no longer report SELECT aliases**
+  (#849): an unqualified name in `ORDER BY` or `HAVING` that matches a
+  SELECT-list alias of the same query block is treated as the alias, not a
+  column (e.g. `... AS orders ... ORDER BY orders` no longer lists `orders`).
+  Qualified references stay columns, and aliases never cross subquery, CTE or
+  UNION boundaries. This also corrects the MCP `extract_metadata` /
+  `analyze_sql` tools.
 - **BigQuery PIVOT / UNPIVOT** (#854): the parser gated PIVOT/UNPIVOT on a
   hard-coded SQL Server / Oracle / Snowflake list, so BigQuery rejected them
   with E2002 although its capabilities advertise `SupportsPivotUnpivot`. The

@@ -245,10 +245,11 @@ func (p *Parser) parseAdditiveExpression() (ast.Expression, error) {
 		}
 
 		left = &ast.BinaryExpression{
-			Left:     left,
-			Operator: operator,
-			Right:    right,
-			Pos:      opPos,
+			Left:       left,
+			Operator:   operator,
+			Right:      right,
+			BitwiseXor: operator == "^", // only SQL Server reaches here with ^
+			Pos:        opPos,
 		}
 	}
 
@@ -330,7 +331,7 @@ func (p *Parser) parsePowerTail(left ast.Expression) (ast.Expression, error) {
 		if err != nil {
 			return nil, err
 		}
-		left = &ast.BinaryExpression{Left: left, Operator: "^", Right: right, Pos: opPos}
+		left = &ast.BinaryExpression{Left: left, Operator: "^", Right: right, BitwiseXor: p.isMySQLFamily(), Pos: opPos}
 	}
 	return left, nil
 }

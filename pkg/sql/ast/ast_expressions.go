@@ -538,8 +538,13 @@ type BinaryExpression struct {
 	// formatting does not change the meaning for servers running with
 	// PIPES_AS_CONCAT. Code that emits SQL for a dialect where || is
 	// concatenation must clear it first (the transpiler does).
-	PipesOr  bool
-	CustomOp *CustomBinaryOperator // For PostgreSQL custom operators
+	PipesOr bool
+	// BitwiseXor records that an Operator "^" is bitwise XOR (MySQL,
+	// MariaDB, SQL Server) rather than exponentiation (PostgreSQL), so code
+	// that emits SQL for another dialect can keep its meaning; the
+	// transpiler rewrites it for the target.
+	BitwiseXor bool
+	CustomOp   *CustomBinaryOperator // For PostgreSQL custom operators
 	// Escape is the ESCAPE character expression of a LIKE / ILIKE /
 	// SIMILAR TO pattern match (a LIKE 'x!%' ESCAPE '!'); nil when absent.
 	Escape Expression

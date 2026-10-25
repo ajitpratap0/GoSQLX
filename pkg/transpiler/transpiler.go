@@ -55,6 +55,10 @@ type RewriteRule func(stmt ast.Statement) error
 // (parsed and reformatted without dialect-specific changes).
 // SQL Server GO batch scopes cannot be represented in other dialects and
 // return an error rather than dropping boundaries or repeat counts.
+// Operators and literals whose meaning depends on the dialect (^ as power or
+// XOR, PostgreSQL prefix operators, SQL Server money literals, Snowflake
+// object constants) are rewritten for the target or return an error; see
+// retargetOperators.
 func Transpile(sql string, from, to keywords.SQLDialect) (string, error) {
 	// Use ParseWithDialect so the tokenizer and parser understand dialect-
 	// specific syntax (e.g. MySQL backtick identifiers, PG ILIKE, etc.).
@@ -80,6 +84,9 @@ func Transpile(sql string, from, to keywords.SQLDialect) (string, error) {
 			if err := rule(stmt); err != nil {
 				return "", fmt.Errorf("rewrite: %w", err)
 			}
+		}
+		if err := retargetOperators(stmt, from, to); err != nil {
+			return "", fmt.Errorf("rewrite: %w", err)
 		}
 		requoteIdentifiers(stmt, from, to)
 	}

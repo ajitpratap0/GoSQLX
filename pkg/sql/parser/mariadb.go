@@ -33,6 +33,11 @@ func (p *Parser) isMariaDB() bool {
 // MariaDB or Oracle hierarchical-query clause (CONNECT BY or START WITH) rather
 // than a table alias. Used to guard alias parsing in FROM and JOIN table references.
 func (p *Parser) isMariaDBClauseStart() bool {
+	return (p.isMariaDB() || p.dialect == string(keywords.DialectOracle)) && p.isMariaDBClauseStartAt()
+}
+
+// isMariaDBClauseStartAt is isMariaDBClauseStart past its inline screen (MariaDB and Oracle only).
+func (p *Parser) isMariaDBClauseStartAt() bool {
 	if !p.isMariaDB() && p.dialect != string(keywords.DialectOracle) {
 		return false
 	}

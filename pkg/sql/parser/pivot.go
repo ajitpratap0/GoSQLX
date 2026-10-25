@@ -131,6 +131,11 @@ func (p *Parser) unpivotNullHandlingAllowed() bool {
 // Sprint 2. SupportsQualify is true only for Snowflake and BigQuery in
 // dialect.Capabilities, preserving the exact previous behaviour.
 func (p *Parser) isQualifyKeyword() bool {
+	return len(p.currentToken.Token.Value) >= len("QUALIFY") && p.isQualifyKeywordAt()
+}
+
+// isQualifyKeywordAt is isQualifyKeyword past its inline screen (a matching word is at least as long as QUALIFY).
+func (p *Parser) isQualifyKeywordAt() bool {
 	if !p.Capabilities().SupportsQualify {
 		return false
 	}
@@ -141,6 +146,11 @@ func (p *Parser) isQualifyKeyword() bool {
 // keyword in a dialect that supports it. PIVOT is non-reserved, so it may
 // arrive as either an identifier or a keyword token.
 func (p *Parser) isPivotKeyword() bool {
+	return len(p.currentToken.Token.Value) >= len("PIVOT") && p.isPivotKeywordAt()
+}
+
+// isPivotKeywordAt is isPivotKeyword past its inline screen (a matching word is at least as long as PIVOT).
+func (p *Parser) isPivotKeywordAt() bool {
 	if !p.pivotDialectAllowed() {
 		return false
 	}
@@ -153,6 +163,11 @@ func (p *Parser) isPivotKeyword() bool {
 
 // isUnpivotKeyword mirrors isPivotKeyword for UNPIVOT.
 func (p *Parser) isUnpivotKeyword() bool {
+	return len(p.currentToken.Token.Value) >= len("UNPIVOT") && p.isUnpivotKeywordAt()
+}
+
+// isUnpivotKeywordAt is isUnpivotKeyword past its inline screen (a matching word is at least as long as UNPIVOT).
+func (p *Parser) isUnpivotKeywordAt() bool {
 	if !p.pivotDialectAllowed() {
 		return false
 	}
@@ -563,6 +578,11 @@ func (p *Parser) parseOneTimeTravelClause() (*ast.TimeTravelClause, error) {
 // isSnowflakeTimeTravelStart returns true when the current token begins an
 // AT / BEFORE / CHANGES time-travel clause in the Snowflake dialect.
 func (p *Parser) isSnowflakeTimeTravelStart() bool {
+	return p.dialect == string(keywords.DialectSnowflake) && p.isSnowflakeTimeTravelStartAt()
+}
+
+// isSnowflakeTimeTravelStartAt is isSnowflakeTimeTravelStart past its inline screen (Snowflake only).
+func (p *Parser) isSnowflakeTimeTravelStartAt() bool {
 	if p.dialect != string(keywords.DialectSnowflake) {
 		return false
 	}
@@ -584,6 +604,11 @@ func (p *Parser) isSnowflakeTimeTravelStart() bool {
 // rather than a table alias. Used to prevent the FROM-alias parser from
 // consuming these tokens.
 func (p *Parser) isSampleKeyword() bool {
+	return len(p.currentToken.Token.Value) >= len("SAMPLE") && p.isSampleKeywordAt()
+}
+
+// isSampleKeywordAt is isSampleKeyword past its inline screen (a matching word is at least as long as SAMPLE).
+func (p *Parser) isSampleKeywordAt() bool {
 	v := p.currentToken.Token.Value
 	if !equalsUpper(v, "SAMPLE") && !equalsUpper(v, "TABLESAMPLE") {
 		return false

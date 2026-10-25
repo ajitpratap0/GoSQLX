@@ -175,6 +175,26 @@ func (p *Parser) atOperandEnd() bool {
 	return operandEndTypes.has(p.currentToken.Token.Type)
 }
 
+// bitwiseEndTypes holds the token types at which no operator of the bitwise
+// level or a tighter one (^, * / %, + -, ||, and the bitwise and "other"
+// operators of bitwiseOperator) continues an operand: operandEndTypes plus
+// the comparison operators that never start a bitwise operator and the
+// predicate and logical keywords. (<, >, <= and <=> are left out: they can
+// start <<, >>, <-> and pgvector's <=>.)
+var bitwiseEndTypes = func() *tokenTypeSet {
+	s := *operandEndTypes
+	for _, t := range []models.TokenType{
+		models.TokenTypeEq, models.TokenTypeNeq, models.TokenTypeGtEq, models.TokenTypeDoubleEq,
+		models.TokenTypeTilde, models.TokenTypeTildeAsterisk,
+		models.TokenTypeExclamationMarkTilde, models.TokenTypeExclamationMarkTildeAsterisk,
+		models.TokenTypeNot, models.TokenTypeBetween, models.TokenTypeLike, models.TokenTypeIn,
+		models.TokenTypeIs, models.TokenTypeAnd, models.TokenTypeOr,
+	} {
+		s[t] = true
+	}
+	return &s
+}()
+
 // parseArithmeticTail continues the ^, * / %, + - and || levels after an
 // operand parsed by parseJSONExpression; with parseJSONExpression it is
 // parseStringConcatExpression.
@@ -197,12 +217,12 @@ func (p *Parser) parseArithmeticTail(left ast.Expression) (ast.Expression, error
 // the caller. The operands are string-concatenation expressions.
 func (p *Parser) parseBitwiseExpression(minPrec int) (ast.Expression, error) {
 	// parseStringConcatExpression, with a shortcut for an operand that no
-	// operator follows.
+	// operator of this level or a tighter one follows.
 	left, err := p.parseJSONExpression()
 	if err != nil {
 		return nil, err
 	}
-	if p.atOperandEnd() {
+	if bitwiseEndTypes.has(p.currentToken.Token.Type) {
 		return left, nil
 	}
 	if left, err = p.parseArithmeticTail(left); err != nil {
@@ -454,10 +474,8 @@ func (p *Parser) parseIsSuffix(left ast.Expression, isPos models.Location, isNot
 // isSomeQuantifier reports whether the current token is the SOME quantifier
 // (a synonym of ANY) followed by an opening parenthesis.
 func (p *Parser) isSomeQuantifier() bool {
-	if p.currentToken.Token.Type != models.TokenTypeSome && !equalsUpper(p.currentToken.Token.Value, "SOME") {
-		return false
-	}
-	return p.peekTypeAt(1) == models.TokenTypeLParen
+	return p.peekTypeAt(1) == models.TokenTypeLParen &&
+		(p.currentToken.Token.Type == models.TokenTypeSome || equalsUpper(p.currentToken.Token.Value, "SOME"))
 }
 
 // parseQuantifiedComparison parses the quantifier part of "expr op ANY|ALL|SOME

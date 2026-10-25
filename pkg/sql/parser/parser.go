@@ -1284,6 +1284,11 @@ func (p *Parser) isOraclePseudoColumn2(name string) bool {
 // keyword that starts a named window clause (SQL:2003). Must not be consumed
 // as a table alias.
 func (p *Parser) isWindowClauseKeyword() bool {
+	return len(p.currentToken.Token.Value) >= len("WINDOW") && p.isWindowClauseKeywordAt()
+}
+
+// isWindowClauseKeywordAt is isWindowClauseKeyword past its inline screen (a matching word is at least as long as WINDOW).
+func (p *Parser) isWindowClauseKeywordAt() bool {
 	return p.isIdentifier() && strings.EqualFold(p.currentToken.Token.Value, "WINDOW")
 }
 
@@ -1330,6 +1335,11 @@ func (p *Parser) isQuotedIdentifierToken() bool {
 // alias (FROM s JOIN r returning ON ..., FROM s returning LEFT JOIN ...), as
 // it is in dialects that do not reserve the word.
 func (p *Parser) isDMLReturningKeyword() bool {
+	return p.dmlReturning && p.isDMLReturningKeywordAt()
+}
+
+// isDMLReturningKeywordAt is isDMLReturningKeyword past its inline screen (only inside an INSERT source or UPDATE FROM).
+func (p *Parser) isDMLReturningKeywordAt() bool {
 	if !p.dmlReturning || !p.isReturningKeyword() {
 		return false
 	}

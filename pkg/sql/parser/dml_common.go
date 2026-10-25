@@ -153,51 +153,76 @@ func (p *Parser) parseDMLTargetRef() (ast.TableReference, error) {
 	if p.isType(models.TokenTypeLParen) {
 		return p.parseFromTableReference()
 	}
-	name, nameQuote, err := p.parseTableNameQuoted()
+	var ref ast.TableReference
+	err := p.parseDMLTargetName(&ref.Name, &ref.NameQuote, &ref.Alias, &ref.AliasQuote)
+	return ref, err
+}
+
+// parseDMLTargetName parses a plain UPDATE/DELETE target: a possibly
+// qualified table name with an optional alias. The alias is set only after
+// the name parsed; on an error after AS only the name is set.
+func (p *Parser) parseDMLTargetName(name *string, nameQuote *ast.NameQuote, alias *string, aliasQuote *ast.NameQuote) error {
+	n, q, err := p.parseTableNameQuoted()
 	if err != nil {
-		return ast.TableReference{}, p.qualifiedNameError(err, "table name")
+		return p.qualifiedNameError(err, "table name")
 	}
-	ref := ast.TableReference{Name: name, NameQuote: nameQuote}
+	*name, *nameQuote = n, q
 	if p.isType(models.TokenTypeAs) {
 		p.advance() // Consume AS
 		if !p.isIdentifier() {
-			return ref, p.expectedError("alias after AS")
+			return p.expectedError("alias after AS")
 		}
-		ref.Alias = p.currentToken.Token.Value
-		ref.AliasQuote = p.currentNameQuote()
+		*alias, *aliasQuote = p.currentToken.Token.Value, p.currentNameQuote()
 		p.advance()
 	} else if p.isDMLTargetAlias() {
-		ref.Alias = p.currentToken.Token.Value
-		ref.AliasQuote = p.currentNameQuote()
+		*alias, *aliasQuote = p.currentToken.Token.Value, p.currentNameQuote()
 		p.advance()
 	}
-	return ref, nil
+	return nil
 }
 
 // parseDMLTargets parses the target list of UPDATE/DELETE. The first target
 // is stored in *name / *alias when it is a plain table name and in d.Tables
 // otherwise; further comma-separated targets (multi=true, MySQL multi-table
-// forms) go to d.Tables.
-func (p *Parser) parseDMLTargets(name, alias *string, d *ast.DMLTargetFields, multi bool) (ast.TableReference, error) {
-	first, err := p.parseDMLTargetRef()
-	if err != nil {
-		return first, err
-	}
-	if first.Subquery == nil && first.SetSubquery == nil && first.TableFunc == nil {
-		*name, *alias = first.Name, first.Alias
-		d.TableNameQuote, d.AliasQuote = first.NameQuote, first.AliasQuote
+// forms) go to d.Tables. When the first target is parenthesized it is also
+// copied to *paren (if paren is not nil) and isParen is set; otherwise it is
+// fully described by *name, *alias and d's quotes.
+func (p *Parser) parseDMLTargets(name, alias *string, d *ast.DMLTargetFields, multi bool, paren *ast.TableReference) (isParen bool, err error) {
+	if !p.isType(models.TokenTypeLParen) {
+		// A plain table name: parsed straight into the statement, without
+		// building a TableReference.
+		var n, a string
+		var nq, aq ast.NameQuote
+		if err := p.parseDMLTargetName(&n, &nq, &a, &aq); err != nil {
+			return false, err
+		}
+		*name, *alias = n, a
+		d.TableNameQuote, d.AliasQuote = nq, aq
 	} else {
-		d.Tables = append(d.Tables, first)
+		first, err := p.parseFromTableReference()
+		if err != nil {
+			return false, err
+		}
+		if first.Subquery == nil && first.SetSubquery == nil && first.TableFunc == nil {
+			*name, *alias = first.Name, first.Alias
+			d.TableNameQuote, d.AliasQuote = first.NameQuote, first.AliasQuote
+		} else {
+			d.Tables = append(d.Tables, first)
+		}
+		if paren != nil {
+			*paren = first
+		}
+		isParen = true
 	}
 	for multi && p.isType(models.TokenTypeComma) {
 		p.advance() // Consume ,
 		ref, err := p.parseDMLTargetRef()
 		if err != nil {
-			return first, err
+			return isParen, err
 		}
 		d.Tables = append(d.Tables, ref)
 	}
-	return first, nil
+	return isParen, nil
 }
 
 // isWordToken reports whether the current token is a bare word (identifier

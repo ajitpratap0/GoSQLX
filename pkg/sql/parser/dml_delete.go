@@ -54,7 +54,7 @@ func (p *Parser) parseDeleteStatement() (ast.Statement, error) {
 			p.advance() // Consume ONLY
 		}
 		// MySQL: DELETE FROM t1, t2 USING t1 JOIN t2 ...
-		if _, err := p.parseDMLTargets(&stmt.TableName, &stmt.Alias, &stmt.DMLTargetFields, p.isMySQLFamily()); err != nil {
+		if _, err := p.parseDMLTargets(&stmt.TableName, &stmt.Alias, &stmt.DMLTargetFields, p.isMySQLFamily(), nil); err != nil {
 			return nil, err
 		}
 		// MySQL names several targets only in the USING form; without it
@@ -67,7 +67,7 @@ func (p *Parser) parseDeleteStatement() (ast.Statement, error) {
 		if !multiFrom && p.dialect != string(keywords.DialectOracle) {
 			return nil, p.expectedError("FROM")
 		}
-		if _, err := p.parseDMLTargets(&stmt.TableName, &stmt.Alias, &stmt.DMLTargetFields, p.isMySQLFamily()); err != nil {
+		if _, err := p.parseDMLTargets(&stmt.TableName, &stmt.Alias, &stmt.DMLTargetFields, p.isMySQLFamily(), nil); err != nil {
 			return nil, err
 		}
 		if p.isDMLOutputKeyword() {

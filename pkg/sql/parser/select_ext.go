@@ -48,6 +48,11 @@ func (p *Parser) isUnquotedWord(upper string) bool {
 // ANTI, Snowflake ASOF / MATCH_CONDITION, MySQL STRAIGHT_JOIN / LOCK IN
 // SHARE MODE, SQL Server OPTION (...).
 func (p *Parser) isSelectExtClauseStart() bool {
+	return (p.dialect != "" && p.currentToken.Token.Type == models.TokenTypeIdentifier) && p.isSelectExtClauseStartAt()
+}
+
+// isSelectExtClauseStartAt is isSelectExtClauseStart past its inline screen (no clause in the default dialect).
+func (p *Parser) isSelectExtClauseStartAt() bool {
 	if p.currentToken.Token.Type != models.TokenTypeIdentifier {
 		return false
 	}

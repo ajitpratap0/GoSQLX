@@ -25,6 +25,11 @@ import (
 // Sprint 2. SupportsMatchRecognize is true only for Oracle and Snowflake
 // in dialect.Capabilities, preserving the exact previous behaviour.
 func (p *Parser) isMatchRecognizeKeyword() bool {
+	return len(p.currentToken.Token.Value) >= len("MATCH_RECOGNIZE") && p.isMatchRecognizeKeywordAt()
+}
+
+// isMatchRecognizeKeywordAt is isMatchRecognizeKeyword past its inline screen (a matching word is at least as long as MATCH_RECOGNIZE).
+func (p *Parser) isMatchRecognizeKeywordAt() bool {
 	if !p.Capabilities().SupportsMatchRecognize {
 		return false
 	}

@@ -424,14 +424,14 @@ func (p *Parser) isNonTopDialect() bool {
 // plain identifier/keyword literal.  A future lexer enhancement could introduce
 // models.TokenTypeTop and replace the equalsUpper check below.
 func (p *Parser) parseTopClause() (*ast.TopClause, error) {
-	if !equalsUpper(p.currentToken.Token.Value, "TOP") {
-		return nil, nil
-	}
 	switch p.dialect {
 	case string(keywords.DialectSQLServer):
+		if !equalsUpper(p.currentToken.Token.Value, "TOP") {
+			return nil, nil
+		}
 	case string(keywords.DialectSnowflake):
 		// Snowflake TOP <n>; a column named top is left alone.
-		if p.peekToken().Token.Type != models.TokenTypeNumber {
+		if !equalsUpper(p.currentToken.Token.Value, "TOP") || p.peekToken().Token.Type != models.TokenTypeNumber {
 			return nil, nil
 		}
 	default:

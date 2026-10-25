@@ -750,7 +750,7 @@ func (p *Parser) isMySQLBinaryOperator() bool {
 // isMySQLBinaryOperatorAt is isMySQLBinaryOperator past the length screen.
 func (p *Parser) isMySQLBinaryOperatorAt() bool {
 	if v := p.currentToken.Token.Value; len(v) != len("BINARY") || p.currentToken.Token.Quote != 0 ||
-		!equalsUpper(v, "BINARY") || !p.isMySQLFamily() {
+		!p.isMySQLFamily() || !equalsUpper(v, "BINARY") {
 		return false
 	}
 	next := p.peekToken().Token

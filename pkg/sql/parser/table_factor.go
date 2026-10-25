@@ -79,6 +79,11 @@ func (p *Parser) parseOracleDBLink(ref *ast.TableReference) {
 // isForSystemTimeStart reports whether the current token starts a
 // FOR SYSTEM_TIME temporal clause (MariaDB, SQL Server).
 func (p *Parser) isForSystemTimeStart() bool {
+	return p.isType(models.TokenTypeFor) && p.isForSystemTimeStartAt()
+}
+
+// isForSystemTimeStartAt is isForSystemTimeStart past its inline screen (it starts with FOR).
+func (p *Parser) isForSystemTimeStartAt() bool {
 	return (p.IsMariaDB() || p.IsSQLServer()) && p.isType(models.TokenTypeFor) &&
 		strings.EqualFold(p.peekToken().Token.Value, "SYSTEM_TIME")
 }
@@ -86,6 +91,11 @@ func (p *Parser) isForSystemTimeStart() bool {
 // isOracleFlashbackStart reports whether the current token starts an Oracle
 // flashback clause: AS OF {SCN | TIMESTAMP} or VERSIONS BETWEEN.
 func (p *Parser) isOracleFlashbackStart() bool {
+	return p.IsOracle() && p.isOracleFlashbackStartAt()
+}
+
+// isOracleFlashbackStartAt is isOracleFlashbackStart past its inline screen (Oracle only).
+func (p *Parser) isOracleFlashbackStartAt() bool {
 	if !p.IsOracle() {
 		return false
 	}
@@ -170,6 +180,11 @@ func (p *Parser) parseFlashbackBound() (ast.Expression, error) {
 // TABLESAMPLE clause on a table reference. A ClickHouse SAMPLE followed by a
 // number is the SELECT-level sampling clause instead.
 func (p *Parser) isTableSampleStart() bool {
+	return len(p.currentToken.Token.Value) >= len("SAMPLE") && p.isTableSampleStartAt()
+}
+
+// isTableSampleStartAt is isTableSampleStart past its inline screen (a matching word is at least as long as SAMPLE).
+func (p *Parser) isTableSampleStartAt() bool {
 	if !p.isSampleKeyword() {
 		return false
 	}
@@ -416,6 +431,11 @@ func (p *Parser) parseTableModifiersAfterAlias(ref *ast.TableReference) error {
 // isIndexHintStart reports whether the current token starts a MySQL /
 // MariaDB index hint: {USE | FORCE | IGNORE} {INDEX | KEY}.
 func (p *Parser) isIndexHintStart() bool {
+	return p.isMySQLFamily() && p.isIndexHintStartAt()
+}
+
+// isIndexHintStartAt is isIndexHintStart past its inline screen (MySQL and MariaDB only).
+func (p *Parser) isIndexHintStartAt() bool {
 	if !p.isMySQLFamily() {
 		return false
 	}
@@ -508,6 +528,11 @@ func (p *Parser) parseParenthesizedWordList(what string) ([]string, error) {
 // isSQLiteIndexedStart reports whether the current token starts SQLite
 // INDEXED BY or NOT INDEXED.
 func (p *Parser) isSQLiteIndexedStart() bool {
+	return p.IsSQLite() && p.isSQLiteIndexedStartAt()
+}
+
+// isSQLiteIndexedStartAt is isSQLiteIndexedStart past its inline screen (SQLite only).
+func (p *Parser) isSQLiteIndexedStartAt() bool {
 	if !p.IsSQLite() {
 		return false
 	}
@@ -955,6 +980,11 @@ func (p *Parser) isEmptyNamePart() bool {
 // schema of a SQL Server OPENJSON(...) table function rather than table
 // hints.
 func (p *Parser) isOpenJSONSchemaStart(ref *ast.TableReference) bool {
+	return p.IsSQLServer() && p.isOpenJSONSchemaStartAt(ref)
+}
+
+// isOpenJSONSchemaStartAt is isOpenJSONSchemaStart past its inline screen (SQL Server only).
+func (p *Parser) isOpenJSONSchemaStartAt(ref *ast.TableReference) bool {
 	return p.IsSQLServer() && ref.TableFunc != nil && strings.EqualFold(ref.TableFunc.Name, "OPENJSON") &&
 		p.isType(models.TokenTypeWith) && p.peekToken().Token.Type == models.TokenTypeLParen
 }

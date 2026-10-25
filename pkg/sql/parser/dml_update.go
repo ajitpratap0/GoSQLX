@@ -44,11 +44,15 @@ func (p *Parser) parseUpdateStatement() (ast.Statement, error) {
 
 	// Target(s). MySQL/MariaDB allow a multi-table target list with JOINs.
 	multi := p.isMySQLFamily()
-	first, err := p.parseDMLTargets(&stmt.TableName, &stmt.Alias, &stmt.DMLTargetFields, multi)
+	var first ast.TableReference
+	isParen, err := p.parseDMLTargets(&stmt.TableName, &stmt.Alias, &stmt.DMLTargetFields, multi, &first)
 	if err != nil {
 		return nil, err
 	}
 	if multi && p.isJoinKeyword() {
+		if !isParen {
+			first = ast.TableReference{Name: stmt.TableName, NameQuote: stmt.TableNameQuote, Alias: stmt.Alias, AliasQuote: stmt.AliasQuote}
+		}
 		joins, err := p.parseJoinClauses(first, nil)
 		if err != nil {
 			return nil, err

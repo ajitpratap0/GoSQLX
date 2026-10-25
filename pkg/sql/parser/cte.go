@@ -359,7 +359,8 @@ func (p *Parser) parseWithParenthesizedQuery(with *ast.WithClause) (ast.Statemen
 	sel.With = with
 
 	// The operation whose left operand is the parenthesized query is the
-	// innermost one of the left spine that was written with parentheses.
+	// outermost one of the left spine that was written with parentheses;
+	// levels below it are parenthesized inside that query.
 	for cur := stmt; ; {
 		op, ok := cur.(*ast.SetOperation)
 		if !ok || op == nil {

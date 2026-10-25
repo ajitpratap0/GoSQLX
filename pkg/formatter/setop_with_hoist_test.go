@@ -179,3 +179,49 @@ func TestSetOperationTailRender(t *testing.T) {
 		ast.ReleaseAST(tree2)
 	}
 }
+
+// TestSetOpWithHoistNested checks that a WITH clause written before a
+// parenthesized left operand that has parenthesized operands of its own is
+// written before the whole set operation, not inside the parentheses where
+// its CTEs would be hidden from the other operands.
+func TestSetOpWithHoistNested(t *testing.T) {
+	const with = "WITH c AS (SELECT a FROM t) "
+	inputs := []struct {
+		name string
+		in   string
+	}{
+		{"two levels", with + "((SELECT a FROM c UNION SELECT a FROM c) INTERSECT SELECT a FROM c) EXCEPT SELECT a FROM c"},
+		{"three levels", with + "(((SELECT a FROM c UNION SELECT a FROM c) INTERSECT SELECT a FROM c) EXCEPT SELECT a FROM c) UNION ALL SELECT a FROM c"},
+		{"inner single operand", with + "((SELECT a FROM c) UNION SELECT a FROM c) EXCEPT SELECT a FROM c"},
+	}
+	dialects := []keywords.SQLDialect{"", keywords.DialectPostgreSQL, keywords.DialectOracle, keywords.DialectSQLite}
+	for _, d := range dialects {
+		for _, tc := range inputs {
+			t.Run(string(d)+"/"+tc.name, func(t *testing.T) {
+				tree, err := parser.ParseWithDialect(tc.in, d)
+				if err != nil {
+					t.Fatalf("parse %q: %v", tc.in, err)
+				}
+				defer ast.ReleaseAST(tree)
+				opts := ast.CompactStyle()
+				opts.Dialect = string(d)
+				outputs := map[string]string{"SQL()": tree.SQL(), "FormatAST": FormatAST(tree, opts)}
+				for name, out := range outputs {
+					if !strings.HasPrefix(out, with) {
+						t.Errorf("%s: WITH clause is not in front of the set operation:\n%s", name, out)
+						continue
+					}
+					tree2, err := parser.ParseWithDialect(out, d)
+					if err != nil {
+						t.Errorf("%s: output %q does not re-parse: %v", name, out, err)
+						continue
+					}
+					if got := FormatAST(tree2, opts); got != outputs["FormatAST"] {
+						t.Errorf("%s: output %q re-renders as %q, want %q", name, out, got, outputs["FormatAST"])
+					}
+					ast.ReleaseAST(tree2)
+				}
+			})
+		}
+	}
+}

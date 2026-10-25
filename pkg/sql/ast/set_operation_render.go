@@ -124,13 +124,20 @@ func HoistLeadingWith(s *SetOperation, dialect string) (*WithClause, *SetOperati
 		spine = append(spine, op)
 		cur = op.Left
 	}
+	// Walk from the outermost level: the parser marks the outermost level
+	// whose left operand was parenthesized after the WITH clause. Levels
+	// below it are inside those parentheses (and so inside the clause's
+	// scope) and may carry parentheses of their own.
 	needs := false
-	for i := len(spine) - 1; i >= 0; i-- {
-		level := spine[i]
-		if level.LeftParenthesized && !level.LeftWithHoisted {
+	for _, level := range spine {
+		if level.LeftWithHoisted {
+			needs = true
+			break
+		}
+		if level.LeftParenthesized {
 			return nil, s // the WITH clause is scoped by the source's parentheses
 		}
-		if level.LeftParenthesized || SetOperandNeedsParens(level, false, dialect) {
+		if SetOperandNeedsParens(level, false, dialect) {
 			needs = true
 		}
 	}

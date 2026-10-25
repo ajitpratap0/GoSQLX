@@ -15,6 +15,7 @@
 package transpiler_test
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/keywords"
@@ -98,6 +99,32 @@ func TestTranspile_SetOperationsForTarget(t *testing.T) {
 			}
 			if got != tc.want {
 				t.Errorf("got  %s\nwant %s", got, tc.want)
+			}
+		})
+	}
+}
+
+// TestTranspile_NestedParenthesizedWith checks that a WITH clause written
+// before nested parenthesized set operands stays in front of the whole
+// operation in every target.
+func TestTranspile_NestedParenthesizedWith(t *testing.T) {
+	const with = "WITH c AS (SELECT a FROM t) "
+	const body = "((SELECT a FROM c UNION SELECT a FROM c) INTERSECT SELECT a FROM c) EXCEPT SELECT a FROM c"
+	pairs := [][2]keywords.SQLDialect{
+		{keywords.DialectPostgreSQL, keywords.DialectPostgreSQL},
+		{keywords.DialectPostgreSQL, keywords.DialectOracle},
+		{keywords.DialectPostgreSQL, keywords.DialectSQLite},
+		{keywords.DialectOracle, keywords.DialectPostgreSQL},
+		{keywords.DialectSQLite, keywords.DialectPostgreSQL},
+	}
+	for _, pr := range pairs {
+		t.Run(string(pr[0])+"_to_"+string(pr[1]), func(t *testing.T) {
+			got, err := transpiler.Transpile(with+body, pr[0], pr[1])
+			if err != nil {
+				t.Fatalf("Transpile: %v", err)
+			}
+			if !strings.HasPrefix(got, with) {
+				t.Errorf("WITH clause is not in front of the set operation: %s", got)
 			}
 		})
 	}

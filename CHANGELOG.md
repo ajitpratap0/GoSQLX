@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Real-world dialect corpus**: `testdata/realworld/<dialect>/` holds 2,788
+  production-style statements across PostgreSQL, MySQL, MariaDB, SQL Server,
+  Oracle, SQLite, Snowflake and ClickHouse. `TestRealWorldCorpus` runs each
+  through split, parse, format, reparse, idempotency and dropped-word checks
+  against a ratchet list (`testdata/realworld/known_failures.txt`, regenerate
+  with `-update-known-failures`): a new failure fails the test, and so does a
+  listed failure that now passes. `scripts/dialect-audit` runs the same checks
+  on any SQL file; `BenchmarkRealWorldParse` and `BenchmarkRealWorldParseFormat`
+  measure the corpus.
+
 ### Fixed
 - **`ExtractColumns` / `ExtractColumnsQualified` no longer report SELECT aliases**
   (#849): an unqualified name in `ORDER BY` or `HAVING` that matches a

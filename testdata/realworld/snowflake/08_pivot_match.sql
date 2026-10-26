@@ -1,0 +1,24 @@
+-- PIVOT, UNPIVOT, MATCH_RECOGNIZE, set-returning and semi-structured reshaping
+SELECT * FROM monthly_sales PIVOT (SUM(amount) FOR month IN ('JAN', 'FEB', 'MAR')) AS p;
+SELECT * FROM monthly_sales PIVOT (SUM(amount) FOR month IN ('JAN', 'FEB', 'MAR', 'APR')) AS p (emp_id, jan, feb, mar, apr);
+SELECT * FROM quarterly_sales PIVOT (AVG(amount) FOR quarter IN (ANY ORDER BY quarter));
+SELECT * FROM (SELECT empid, month, amount FROM monthly_sales) PIVOT (SUM(amount) FOR month IN ('JAN', 'FEB')) ORDER BY empid;
+SELECT * FROM monthly_sales UNPIVOT (sales FOR month IN (jan, feb, mar)) ORDER BY empid;
+SELECT * FROM monthly_sales UNPIVOT INCLUDE NULLS (sales FOR month IN (jan, feb)) AS u;
+SELECT * FROM stock_price MATCH_RECOGNIZE (PARTITION BY symbol ORDER BY ts MEASURES MATCH_NUMBER() AS match_num, FIRST(ts) AS start_ts, LAST(ts) AS end_ts ONE ROW PER MATCH AFTER MATCH SKIP PAST LAST ROW PATTERN (down+ up+) DEFINE down AS price < PREV(price), up AS price > PREV(price));
+SELECT * FROM events MATCH_RECOGNIZE (PARTITION BY user_id ORDER BY ts MEASURES COUNT(*) AS n ALL ROWS PER MATCH PATTERN (a b* c) DEFINE a AS action = 'view', b AS action = 'click', c AS action = 'buy') ORDER BY user_id;
+SELECT region, SUM(CASE WHEN product = 'A' THEN amount ELSE 0 END) AS a_total, SUM(CASE WHEN product = 'B' THEN amount ELSE 0 END) AS b_total FROM sales GROUP BY region;
+SELECT * FROM TABLE(SPLIT_TO_TABLE('a b c', ' '));
+SELECT s.seq, s.index, s.value FROM TABLE(SPLIT_TO_TABLE('x,y,z', ',')) s;
+SELECT t.id, s.value FROM t, LATERAL SPLIT_TO_TABLE(t.csv, ',') s;
+SELECT * FROM TABLE(FLATTEN(INPUT => ARRAY_CONSTRUCT('a', 'b'))) WHERE value::string <> 'a';
+SELECT * FROM VALUES (1, 'a'), (2, 'b') AS v (id, name);
+SELECT column1, column2 FROM (VALUES (1, 'x'), (2, 'y'));
+SELECT * FROM TABLE(my_udtf(1, 'a'));
+SELECT * FROM my_table, LATERAL (SELECT * FROM other WHERE other.k = my_table.k) l;
+SELECT OBJECT_AGG(k, v) AS obj FROM kv GROUP BY grp;
+SELECT ARRAY_AGG(OBJECT_CONSTRUCT('id', id, 'name', name)) AS arr FROM users;
+SELECT ARRAY_SORT(ARRAY_CONSTRUCT(3, 1, 2)), ARRAY_SLICE(ARRAY_CONSTRUCT(1, 2, 3, 4), 1, 3), ARRAY_DISTINCT(tags) FROM t;
+SELECT t.v:a[0]:b::string AS x, ARRAY_SIZE(t.v:a) AS n FROM t;
+SELECT PARSE_JSON(raw):meta.ts::timestamp_ntz AS ts FROM landing;
+SELECT payload:data[0].attributes."first-name"::string AS fname FROM t;

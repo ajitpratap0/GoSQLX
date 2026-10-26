@@ -456,10 +456,14 @@ func (p *Parser) parseTokens(tokens []models.TokenWithSpan) (*ast.AST, error) {
 			continue
 		}
 
+		startPos := p.currentPos
 		stmt, err := p.parseStatement()
 		if err == nil {
 			result.Statements = append(result.Statements, stmt)
 			result.StatementStarts = append(result.StatementStarts, start)
+		}
+		if p.IsSQLServer() { // batchLineError returns err unchanged elsewhere
+			_, err = p.batchLineError(startPos, err)
 		}
 		if err != nil {
 			// Clean up the AST on error
@@ -664,10 +668,14 @@ func (p *Parser) parseContextTokens(ctx context.Context, tokens []models.TokenWi
 			continue
 		}
 
+		startPos := p.currentPos
 		stmt, err := p.parseStatement()
 		if err == nil {
 			result.Statements = append(result.Statements, stmt)
 			result.StatementStarts = append(result.StatementStarts, start)
+		}
+		if p.IsSQLServer() { // batchLineError returns err unchanged elsewhere
+			_, err = p.batchLineError(startPos, err)
 		}
 		if err != nil {
 			// Clean up the AST on error

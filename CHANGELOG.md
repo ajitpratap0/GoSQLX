@@ -159,6 +159,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   exist; the limits are constants.
 
 ### Behavior changes
+- SQL Server: a line holding only `GO [n]` inside a statement is now a parse
+  error ("GO batch separator inside a statement"), matching sqlcmd, instead of
+  a column or alias named `go`. `GO 0` / `GO 1.5` alone on a line report
+  "invalid GO repeat count".
 - A raw NUL or Ctrl-Z byte inside a string literal is an error in dialects
   whose literals cannot spell it back (NUL without backslash escapes; both
   without a dialect; Ctrl-Z in ClickHouse; both in Snowflake). Formatting used

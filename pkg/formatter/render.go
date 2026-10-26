@@ -815,6 +815,7 @@ func renderMerge(m *ast.MergeStatement, opts ast.FormatOptions) string {
 	if m.SourceAlias != "" {
 		sb.WriteString(" ")
 		sb.WriteString(ast.QuoteTableAliasWith(m.SourceAlias, f.nq(m.SourceAliasQuote)))
+		sb.WriteString(ast.TableColumnAliasesSQLWith(&m.SourceTable, f.nq))
 	}
 
 	sb.WriteString(f.clauseSep())

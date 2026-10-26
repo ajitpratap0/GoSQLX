@@ -91,20 +91,20 @@ var (
 // releaseColumnConstraint returns the expressions a column constraint owns to
 // their pools and clears every field, so a reused slot never carries state
 // from an earlier statement.
-func releaseColumnConstraint(c *ColumnConstraint) {
-	PutExpression(c.Default)
-	PutExpression(c.Check)
-	PutExpression(c.Expr)
+func releaseColumnConstraint(c *ColumnConstraint, mode releaseMode) {
+	releaseExpression(c.Default, mode)
+	releaseExpression(c.Check, mode)
+	releaseExpression(c.Expr, mode)
 	*c = ColumnConstraint{}
 }
 
 // releaseTableConstraint returns the expressions a table constraint owns to
 // their pools and clears every field. The Columns backing array is kept for
 // reuse.
-func releaseTableConstraint(t *TableConstraint) {
-	PutExpression(t.Check)
+func releaseTableConstraint(t *TableConstraint, mode releaseMode) {
+	releaseExpression(t.Check, mode)
 	for i := range t.Exprs {
-		PutExpression(t.Exprs[i])
+		releaseExpression(t.Exprs[i], mode)
 		t.Exprs[i] = nil
 	}
 	cols := t.Columns[:0]

@@ -307,98 +307,170 @@ func (c *CreateTableStatement) HasColumnList() bool {
 
 // resetTableOptions releases the expressions held by opts and clears every
 // entry, keeping the backing array.
-func resetTableOptions(opts []TableOption) []TableOption {
+func resetTableOptions(opts []TableOption, mode releaseMode) []TableOption {
 	for i := range opts {
 		o := &opts[i]
 		for j, a := range o.Args {
-			PutExpression(a)
+			releaseExpression(a, mode)
 			o.Args[j] = nil
 		}
-		*o = TableOption{Args: o.Args[:0], Sub: o.Sub[:0]}
+		for j, a := range o.ValueArgs {
+			releaseExpression(a, mode)
+			o.ValueArgs[j] = nil
+		}
+		*o = TableOption{Args: o.Args[:0], Sub: o.Sub[:0], ValueArgs: o.ValueArgs[:0]}
 	}
 	return opts[:0]
 }
 
 // releaseEngineClauses releases the expressions of e.
-func releaseEngineClauses(e *TableEngineClauses) {
+func releaseEngineClauses(e *TableEngineClauses, mode releaseMode) {
 	if e == nil {
 		return
 	}
-	PutExpression(e.PartitionBy)
-	PutExpression(e.PrimaryKey)
-	PutExpression(e.OrderBy)
-	PutExpression(e.SampleBy)
+	releaseExpression(e.PartitionBy, mode)
+	releaseExpression(e.PrimaryKey, mode)
+	releaseExpression(e.OrderBy, mode)
+	releaseExpression(e.SampleBy, mode)
 	for i := range e.TTL {
 		r := &e.TTL[i]
-		PutExpression(r.Expr)
-		PutExpression(r.Where)
+		releaseExpression(r.Expr, mode)
+		releaseExpression(r.Where, mode)
 		for _, g := range r.GroupBy {
-			PutExpression(g)
+			releaseExpression(g, mode)
 		}
 		for _, s := range r.Set {
-			PutExpression(s.Value)
+			releaseExpression(s.Value, mode)
 		}
 	}
 	for _, s := range e.Settings {
-		PutExpression(s.Value)
+		releaseExpression(s.Value, mode)
 	}
 	*e = TableEngineClauses{}
 }
 
 // putExpressions releases every expression of list.
-func putExpressions(list []Expression) {
+func putExpressions(list []Expression, mode releaseMode) {
 	for _, e := range list {
-		PutExpression(e)
+		releaseExpression(e, mode)
 	}
 }
 
 // resetCreateTableExtras releases the nodes held by x and clears it.
-func resetCreateTableExtras(x *CreateTableExtras) {
-	releaseStatement(x.AsQuery, releaseAll)
+func resetCreateTableExtras(x *CreateTableExtras, mode releaseMode) {
+	releaseStatement(x.AsQuery, mode)
 	if x.Clone != nil {
-		PutExpression(x.Clone.Point)
+		releaseExpression(x.Clone.Point, mode)
 	}
 	if b := x.PartitionBound; b != nil {
-		putExpressions(b.In)
-		putExpressions(b.From)
-		putExpressions(b.To)
-		PutExpression(b.Modulus)
-		PutExpression(b.Remainder)
+		putExpressions(b.In, mode)
+		putExpressions(b.From, mode)
+		putExpressions(b.To, mode)
+		releaseExpression(b.Modulus, mode)
+		releaseExpression(b.Remainder, mode)
 	}
-	releaseEngineClauses(x.Engine)
+	releaseEngineClauses(x.Engine, mode)
 	*x = CreateTableExtras{}
 }
 
 // resetCreateIndexExtras releases the nodes held by x and clears it,
 // keeping the slices' backing arrays.
-func resetCreateIndexExtras(x *CreateIndexExtras) {
+func resetCreateIndexExtras(x *CreateIndexExtras, mode releaseMode) {
 	*x = CreateIndexExtras{
 		Include: x.Include[:0],
-		Options: resetTableOptions(x.Options),
+		Options: resetTableOptions(x.Options, mode),
 	}
 }
 
 // resetViewExtras releases the nodes held by x and clears it.
-func resetViewExtras(x *ViewExtras) {
+func resetViewExtras(x *ViewExtras, mode releaseMode) {
 	for i := range x.ColumnDefs {
 		for j := range x.ColumnDefs[i].Constraints {
-			PutExpression(x.ColumnDefs[i].Constraints[j].Default)
-			PutExpression(x.ColumnDefs[i].Constraints[j].Check)
+			releaseExpression(x.ColumnDefs[i].Constraints[j].Default, mode)
+			releaseExpression(x.ColumnDefs[i].Constraints[j].Check, mode)
 		}
 	}
-	resetTableOptions(x.EngineOptions)
-	releaseEngineClauses(x.Engine)
+	resetTableOptions(x.EngineOptions, mode)
+	releaseEngineClauses(x.Engine, mode)
 	*x = ViewExtras{}
 }
 
 // releasePartitionByExtras releases the expressions added to PartitionBy
 // beyond its column list.
-func releasePartitionByExtras(pb *PartitionBy) {
-	putExpressions(pb.Expressions)
-	PutExpression(pb.Partitions)
-	PutExpression(pb.Interval)
+func releasePartitionByExtras(pb *PartitionBy, mode releaseMode) {
+	putExpressions(pb.Expressions, mode)
+	releaseExpression(pb.Partitions, mode)
+	releaseExpression(pb.Interval, mode)
 	pb.Expressions = nil
 	pb.Partitions = nil
 	pb.Interval = nil
 	pb.Linear = false
+}
+
+// appendExprChild appends e to children unless it is nil.
+func appendExprChild(children []Node, e Expression) []Node {
+	if e != nil {
+		children = append(children, e)
+	}
+	return children
+}
+
+// appendExprChildren appends every non-nil expression of list to children.
+func appendExprChildren(children []Node, list []Expression) []Node {
+	for _, e := range list {
+		children = appendExprChild(children, e)
+	}
+	return children
+}
+
+// appendTableOptionChildren appends the options that carry expression
+// arguments (ENGINE = Distributed(a, b), CLUSTER BY (a, b)).
+func appendTableOptionChildren(children []Node, opts []TableOption) []Node {
+	for i := range opts {
+		if len(opts[i].Args) > 0 || len(opts[i].ValueArgs) > 0 {
+			children = append(children, &opts[i])
+		}
+	}
+	return children
+}
+
+// appendEngineChildren appends the expressions of the ClickHouse clauses
+// that follow ENGINE = ... in source order.
+func appendEngineChildren(children []Node, e *TableEngineClauses) []Node {
+	if e == nil {
+		return children
+	}
+	children = appendExprChild(children, e.PartitionBy)
+	children = appendExprChild(children, e.PrimaryKey)
+	children = appendExprChild(children, e.OrderBy)
+	children = appendExprChild(children, e.SampleBy)
+	for i := range e.TTL {
+		r := &e.TTL[i]
+		children = appendExprChild(children, r.Expr)
+		children = appendExprChild(children, r.Where)
+		children = appendExprChildren(children, r.GroupBy)
+		for _, s := range r.Set {
+			children = appendExprChild(children, s.Value)
+		}
+	}
+	for _, s := range e.Settings {
+		children = appendExprChild(children, s.Value)
+	}
+	return children
+}
+
+// appendChildren appends the expressions held by the extras: the CLONE
+// time-travel point, the partition bound and the ENGINE clauses.
+func (x *CreateTableExtras) appendChildren(children []Node) []Node {
+	if x.Clone != nil {
+		children = appendExprChild(children, x.Clone.Point)
+	}
+	if b := x.PartitionBound; b != nil {
+		children = appendExprChildren(children, b.In)
+		children = appendExprChildren(children, b.From)
+		children = appendExprChildren(children, b.To)
+		children = appendExprChild(children, b.Modulus)
+		children = appendExprChild(children, b.Remainder)
+	}
+	return appendEngineChildren(children, x.Engine)
 }

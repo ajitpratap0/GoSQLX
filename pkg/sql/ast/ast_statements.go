@@ -236,6 +236,9 @@ func (s SelectStatement) Children() []Node {
 	if s.With != nil {
 		children = append(children, s.With)
 	}
+	if s.Top != nil {
+		children = append(children, s.Top)
+	}
 	for _, e := range s.DistinctOnColumns {
 		children = append(children, e)
 	}
@@ -247,6 +250,13 @@ func (s SelectStatement) Children() []Node {
 	}
 	for i := range s.Joins {
 		children = append(children, &s.Joins[i])
+	}
+	if s.ArrayJoin != nil {
+		for i := range s.ArrayJoin.Elements {
+			if e := s.ArrayJoin.Elements[i].Expr; e != nil {
+				children = append(children, e)
+			}
+		}
 	}
 	if s.Sample != nil {
 		children = append(children, s.Sample)
@@ -484,7 +494,18 @@ func (c CreateTableStatement) Children() []Node {
 	if c.AsQuery != nil {
 		children = append(children, c.AsQuery)
 	}
-	return children
+	for _, pd := range c.PeriodDefinitions {
+		if pd == nil {
+			continue
+		}
+		for _, id := range []*Identifier{pd.Name, pd.StartCol, pd.EndCol} {
+			if id != nil {
+				children = append(children, id)
+			}
+		}
+	}
+	children = appendTableOptionChildren(children, c.Options)
+	return c.CreateTableExtras.appendChildren(children)
 }
 
 // DeleteStatement represents a DELETE SQL statement
@@ -816,10 +837,16 @@ type CreateMaterializedViewStatement struct {
 func (c *CreateMaterializedViewStatement) statementNode()      {}
 func (c CreateMaterializedViewStatement) TokenLiteral() string { return "CREATE MATERIALIZED VIEW" }
 func (c CreateMaterializedViewStatement) Children() []Node {
-	if c.Query != nil {
-		return []Node{c.Query}
+	var children []Node
+	for i := range c.ColumnDefs {
+		children = append(children, &c.ColumnDefs[i])
 	}
-	return nil
+	children = appendTableOptionChildren(children, c.EngineOptions)
+	children = appendEngineChildren(children, c.Engine)
+	if c.Query != nil {
+		children = append(children, c.Query)
+	}
+	return children
 }
 
 // RefreshMaterializedViewStatement represents a REFRESH MATERIALIZED VIEW statement

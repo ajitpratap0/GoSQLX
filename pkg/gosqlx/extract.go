@@ -226,6 +226,9 @@ func ExtractTablesQualified(astNode *ast.AST) []QualifiedName {
 //   - JOIN conditions
 //   - HAVING clauses
 //
+// Unqualified SELECT-list aliases in the same SELECT's ORDER BY or HAVING
+// are excluded; qualified references are always treated as columns.
+//
 // Returns a deduplicated slice of column names (without table qualifiers),
 // sorted in ascending byte order.
 //
@@ -356,7 +359,7 @@ type metadataCollector struct {
 
 func (c *metadataCollector) collect(astNode *ast.AST) {
 	for _, stmt := range astNode.Statements {
-		c.collectFromNode(stmt)
+		c.collectFromNode(stmt, nil)
 	}
 }
 
@@ -372,9 +375,14 @@ func (c *metadataCollector) addTable(name string) {
 	}
 }
 
-func (c *metadataCollector) addColumn(table, name string, want extractKind) {
+func (c *metadataCollector) addColumn(table, name string, want extractKind, aliases map[string]struct{}) {
 	if name == "" || name == "*" {
 		return
+	}
+	if table == "" && len(aliases) != 0 {
+		if _, ok := aliases[strings.ToLower(name)]; ok {
+			return
+		}
 	}
 	if want&extractColumns != 0 {
 		c.columns[name] = struct{}{}
@@ -397,15 +405,28 @@ func (c *metadataCollector) addFunction(name string) {
 	}
 }
 
-func (c *metadataCollector) collectFromNode(node ast.Node) {
+func (c *metadataCollector) collectFromNode(node ast.Node, aliases map[string]struct{}) {
 	if node == nil {
 		return
 	}
 
 	switch n := node.(type) {
 	case *ast.Identifier:
-		c.addColumn(n.Table, n.Name, c.want)
+		c.addColumn(n.Table, n.Name, c.want, aliases)
 	case *ast.SelectStatement:
+		// Each SELECT starts a new query block, independent of outer aliases.
+		aliases = nil
+		if c.want&(extractColumns|extractColumnsQualified) != 0 && (n.Having != nil || len(n.OrderBy) != 0) {
+			for _, col := range n.Columns {
+				if aliased, ok := col.(*ast.AliasedExpression); ok && aliased.Alias != "" {
+					if aliases == nil {
+						aliases = make(map[string]struct{})
+					}
+					// Fold alias names case-insensitively, like unquoted SQL identifiers.
+					aliases[strings.ToLower(aliased.Alias)] = struct{}{}
+				}
+			}
+		}
 		for _, from := range n.From {
 			c.addTable(from.Name)
 		}
@@ -413,34 +434,45 @@ func (c *metadataCollector) collectFromNode(node ast.Node) {
 			c.addTable(join.Right.Name)
 		}
 		for _, col := range n.Columns {
-			c.collectFromExpression(col, c.want)
+			c.collectFromExpression(col, c.want, nil)
 		}
-		c.collectFromExpression(n.Where, c.want)
+		c.collectFromExpression(n.Where, c.want, nil)
 		for _, gb := range n.GroupBy {
-			c.collectFromExpression(gb, c.want)
+			c.collectFromExpression(gb, c.want, nil)
 		}
-		c.collectFromExpression(n.Having, c.want)
+		c.collectFromExpression(n.Having, c.want, aliases)
 		for _, ob := range n.OrderBy {
-			c.collectFromExpression(ob.Expression, c.want)
+			c.collectFromExpression(ob.Expression, c.want, aliases)
 		}
 		if n.With != nil {
-			c.collectFromNode(n.With)
+			c.collectFromNode(n.With, nil)
 		}
+		// The generic walk also visits clause expressions. Apply aliases there
+		// too, without leaking them into SELECT, WHERE, GROUP BY or JOIN children.
+		for _, child := range node.Children() {
+			_, orderBy := child.(*ast.OrderByExpression)
+			if orderBy || (n.Having != nil && child == n.Having) {
+				c.collectFromNode(child, aliases)
+			} else {
+				c.collectFromNode(child, nil)
+			}
+		}
+		return
 	case *ast.InsertStatement:
 		c.addTable(n.TableName)
 		for _, col := range n.Columns {
-			c.collectFromExpression(col, c.want&^extractFunctions)
+			c.collectFromExpression(col, c.want&^extractFunctions, nil)
 		}
 		for _, row := range n.Values {
 			for _, val := range row {
-				c.collectFromExpression(val, c.want&extractFunctions)
+				c.collectFromExpression(val, c.want&extractFunctions, nil)
 			}
 		}
 		if n.Query != nil {
-			c.collectFromNode(n.Query)
+			c.collectFromNode(n.Query, nil)
 		}
 		if n.With != nil {
-			c.collectFromNode(n.With)
+			c.collectFromNode(n.With, nil)
 		}
 	case *ast.UpdateStatement:
 		c.addTable(n.TableName)
@@ -448,44 +480,45 @@ func (c *metadataCollector) collectFromNode(node ast.Node) {
 			c.addTable(from.Name)
 		}
 		for i := range n.Assignments {
-			c.collectFromNode(&n.Assignments[i])
+			c.collectFromNode(&n.Assignments[i], nil)
 		}
-		c.collectFromExpression(n.Where, c.want)
+		c.collectFromExpression(n.Where, c.want, nil)
 		if n.With != nil {
-			c.collectFromNode(n.With)
+			c.collectFromNode(n.With, nil)
 		}
 	case *ast.DeleteStatement:
 		c.addTable(n.TableName)
 		for _, using := range n.Using {
 			c.addTable(using.Name)
 		}
-		c.collectFromExpression(n.Where, c.want)
+		c.collectFromExpression(n.Where, c.want, nil)
 		if n.With != nil {
-			c.collectFromNode(n.With)
+			c.collectFromNode(n.With, nil)
 		}
 	case *ast.UpdateExpression:
-		c.collectFromExpression(n.Column, c.want&^extractFunctions)
-		c.collectFromExpression(n.Value, c.want)
+		c.collectFromExpression(n.Column, c.want&^extractFunctions, nil)
+		c.collectFromExpression(n.Value, c.want, nil)
 	case *ast.WithClause:
 		for _, cte := range n.CTEs {
-			c.collectFromNode(cte)
+			c.collectFromNode(cte, nil)
 		}
 	case *ast.CommonTableExpr:
-		c.collectFromNode(n.Statement)
+		c.collectFromNode(n.Statement, nil)
 	case *ast.SetOperation:
-		c.collectFromNode(n.Left)
-		c.collectFromNode(n.Right)
+		c.collectFromNode(n.Left, nil)
+		c.collectFromNode(n.Right, nil)
 	}
 
 	// Recursively collect from children
 	for _, child := range node.Children() {
-		c.collectFromNode(child)
+		c.collectFromNode(child, aliases)
 	}
 }
 
 // collectFromExpression walks an expression tree collecting the kinds in want
-// (restricted to the expression-level kinds).
-func (c *metadataCollector) collectFromExpression(expr ast.Expression, want extractKind) {
+// (restricted to the expression-level kinds). aliases applies only within the
+// current ORDER BY or HAVING expression, never across a query-block boundary.
+func (c *metadataCollector) collectFromExpression(expr ast.Expression, want extractKind, aliases map[string]struct{}) {
 	want &= extractExprKinds
 	if expr == nil || want == 0 {
 		return
@@ -493,66 +526,66 @@ func (c *metadataCollector) collectFromExpression(expr ast.Expression, want extr
 
 	switch e := expr.(type) {
 	case *ast.Identifier:
-		c.addColumn(e.Table, e.Name, want)
+		c.addColumn(e.Table, e.Name, want, aliases)
 	case *ast.BinaryExpression:
-		c.collectFromExpression(e.Left, want)
-		c.collectFromExpression(e.Right, want)
+		c.collectFromExpression(e.Left, want, aliases)
+		c.collectFromExpression(e.Right, want, aliases)
 	case *ast.FunctionCall:
 		if want&extractFunctions != 0 {
 			c.addFunction(e.Name)
 		}
 		for _, arg := range e.Arguments {
-			c.collectFromExpression(arg, want)
+			c.collectFromExpression(arg, want, aliases)
 		}
 		if e.Filter != nil {
-			c.collectFromExpression(e.Filter, want)
+			c.collectFromExpression(e.Filter, want, aliases)
 		}
 	case *ast.UnaryExpression:
-		c.collectFromExpression(e.Expr, want)
+		c.collectFromExpression(e.Expr, want, aliases)
 	case *ast.ParenthesizedExpression:
-		c.collectFromExpression(e.Expr, want)
+		c.collectFromExpression(e.Expr, want, aliases)
 	case *ast.FieldAccessExpression:
-		c.collectFromExpression(e.Expr, want)
+		c.collectFromExpression(e.Expr, want, aliases)
 	case *ast.InExpression:
-		c.collectFromExpression(e.Expr, want)
+		c.collectFromExpression(e.Expr, want, aliases)
 		for _, item := range e.List {
-			c.collectFromExpression(item, want)
+			c.collectFromExpression(item, want, aliases)
 		}
 	case *ast.BetweenExpression:
-		c.collectFromExpression(e.Expr, want)
-		c.collectFromExpression(e.Lower, want)
-		c.collectFromExpression(e.Upper, want)
+		c.collectFromExpression(e.Expr, want, aliases)
+		c.collectFromExpression(e.Lower, want, aliases)
+		c.collectFromExpression(e.Upper, want, aliases)
 	case *ast.CaseExpression:
 		if e.Value != nil {
-			c.collectFromExpression(e.Value, want)
+			c.collectFromExpression(e.Value, want, aliases)
 		}
 		for _, when := range e.WhenClauses {
-			c.collectFromExpression(when.Condition, want)
-			c.collectFromExpression(when.Result, want)
+			c.collectFromExpression(when.Condition, want, aliases)
+			c.collectFromExpression(when.Result, want, aliases)
 		}
 		if e.ElseClause != nil {
-			c.collectFromExpression(e.ElseClause, want)
+			c.collectFromExpression(e.ElseClause, want, aliases)
 		}
 	case *ast.CastExpression:
-		c.collectFromExpression(e.Expr, want)
+		c.collectFromExpression(e.Expr, want, aliases)
 	case *ast.SubstringExpression:
-		c.collectFromExpression(e.Str, want)
-		c.collectFromExpression(e.Start, want)
+		c.collectFromExpression(e.Str, want, aliases)
+		c.collectFromExpression(e.Start, want, aliases)
 		if e.Length != nil {
-			c.collectFromExpression(e.Length, want)
+			c.collectFromExpression(e.Length, want, aliases)
 		}
 	case *ast.ExtractExpression:
-		c.collectFromExpression(e.Source, want)
+		c.collectFromExpression(e.Source, want, aliases)
 	case *ast.PositionExpression:
-		c.collectFromExpression(e.Substr, want)
-		c.collectFromExpression(e.Str, want)
+		c.collectFromExpression(e.Substr, want, aliases)
+		c.collectFromExpression(e.Str, want, aliases)
 	case *ast.ListExpression:
 		for _, v := range e.Values {
-			c.collectFromExpression(v, want)
+			c.collectFromExpression(v, want, aliases)
 		}
 	case *ast.AliasedExpression:
 		// Unwrap the aliased expression and collect from inner expression
-		c.collectFromExpression(e.Expr, want)
+		c.collectFromExpression(e.Expr, want, aliases)
 	}
 }
 

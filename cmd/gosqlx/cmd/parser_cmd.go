@@ -203,8 +203,12 @@ func (p *Parser) displayAST(result *ParserResult) error {
 	}
 
 	var statements []StatementDisplay
+	stmtCount := 0 // GO separators are listed but not counted, as in analyze
 	for _, stmt := range result.AST.Statements {
 		statements = append(statements, convertStatement(stmt))
+		if _, isBatch := stmt.(*ast.BatchSeparator); !isBatch {
+			stmtCount++
+		}
 	}
 
 	display := ASTDisplay{
@@ -230,7 +234,7 @@ func (p *Parser) displayAST(result *ParserResult) error {
 	default:
 		fmt.Fprintf(p.Out, "AST Structure:\n")
 		fmt.Fprintf(p.Out, "  Type: %s\n", display.Type)
-		fmt.Fprintf(p.Out, "  Statements: %d\n", len(display.Statements))
+		fmt.Fprintf(p.Out, "  Statements: %d\n", stmtCount)
 		fmt.Fprintf(p.Out, "  Token Count: %d\n", display.TokenCount)
 		fmt.Fprintf(p.Out, "  SQL Compliance: %s\n", display.Metadata["sql_compliance"])
 		fmt.Fprintf(p.Out, "\nStatements:\n")

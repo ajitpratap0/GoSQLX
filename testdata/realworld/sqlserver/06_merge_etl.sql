@@ -1,0 +1,20 @@
+-- ETL upserts with MERGE and OUTPUT
+MERGE dbo.Customers AS tgt USING dbo.CustomersStage AS src ON tgt.Id = src.Id WHEN MATCHED THEN UPDATE SET tgt.Name = src.Name, tgt.Email = src.Email WHEN NOT MATCHED BY TARGET THEN INSERT (Id, Name, Email) VALUES (src.Id, src.Name, src.Email);
+MERGE INTO dbo.Inventory AS t USING (SELECT Sku, SUM(Qty) AS Qty FROM dbo.Receipts GROUP BY Sku) AS s ON t.Sku = s.Sku WHEN MATCHED THEN UPDATE SET t.OnHand = t.OnHand + s.Qty WHEN NOT MATCHED THEN INSERT (Sku, OnHand) VALUES (s.Sku, s.Qty);
+MERGE dbo.Target AS t USING dbo.Source AS s ON t.Id = s.Id WHEN MATCHED AND s.IsDeleted = 1 THEN DELETE WHEN MATCHED THEN UPDATE SET t.Val = s.Val WHEN NOT MATCHED BY TARGET THEN INSERT (Id, Val) VALUES (s.Id, s.Val) WHEN NOT MATCHED BY SOURCE THEN DELETE;
+MERGE dbo.Target AS t USING dbo.Source AS s ON t.Id = s.Id WHEN MATCHED THEN UPDATE SET t.Val = s.Val WHEN NOT MATCHED THEN INSERT (Id, Val) VALUES (s.Id, s.Val) OUTPUT $action, INSERTED.Id, DELETED.Val;
+MERGE dbo.Target AS t USING (VALUES (1, N'a'), (2, N'b')) AS s (Id, Val) ON t.Id = s.Id WHEN MATCHED THEN UPDATE SET Val = s.Val WHEN NOT MATCHED THEN INSERT (Id, Val) VALUES (s.Id, s.Val);
+MERGE dbo.Dim AS d USING dbo.Stg AS s ON d.BK = s.BK WHEN MATCHED AND (d.Name <> s.Name OR d.City <> s.City) THEN UPDATE SET d.Name = s.Name, d.City = s.City, d.UpdatedAt = GETUTCDATE() WHEN NOT MATCHED BY SOURCE AND d.IsCurrent = 1 THEN UPDATE SET d.IsCurrent = 0;
+INSERT INTO dbo.OrdersArchive (Id, CustomerId, Total) SELECT Id, CustomerId, Total FROM dbo.Orders WHERE CreatedAt < DATEADD(YEAR, -2, GETDATE());
+INSERT INTO dbo.Orders (CustomerId, Total) SELECT CustomerId, SUM(Amount) FROM dbo.Payments GROUP BY CustomerId;
+INSERT INTO dbo.Archive SELECT * FROM dbo.Live WHERE Id IN (SELECT Id FROM dbo.ToArchive);
+INSERT INTO dbo.Defaults DEFAULT VALUES;
+INSERT dbo.Customers (Name) VALUES (N'No INTO keyword');
+INSERT INTO dbo.Log (Msg) OUTPUT INSERTED.Id INTO @Ids (Id) VALUES (N'x');
+DELETE FROM dbo.Orders OUTPUT DELETED.Id, DELETED.Total INTO dbo.OrdersArchive (Id, Total) WHERE CreatedAt < '2020-01-01';
+UPDATE t SET t.Total = s.Total FROM dbo.Orders t JOIN (SELECT OrderId, SUM(Qty * Price) AS Total FROM dbo.Lines GROUP BY OrderId) s ON s.OrderId = t.Id;
+UPDATE dbo.Counters SET @val = Value = Value + 1 WHERE Name = N'orders';
+UPDATE dbo.Products SET Price = CASE WHEN Price < 10 THEN Price * 1.2 WHEN Price < 100 THEN Price * 1.1 ELSE Price END;
+UPDATE STATISTICS dbo.Orders;
+WITH Dups AS (SELECT *, ROW_NUMBER() OVER (PARTITION BY Email ORDER BY Id) AS rn FROM dbo.Customers) DELETE FROM Dups WHERE rn > 1;
+WITH Src AS (SELECT TOP (100) * FROM dbo.Queue WITH (ROWLOCK, READPAST, UPDLOCK) ORDER BY Id) UPDATE Src SET Status = 1 OUTPUT INSERTED.Id, INSERTED.Payload;

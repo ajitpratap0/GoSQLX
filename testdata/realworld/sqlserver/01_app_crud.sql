@@ -1,0 +1,27 @@
+-- ORM-style CRUD for an order management application (Dapper / EF Core generated shapes)
+SELECT [Id], [Name], [Email], [CreatedAt] FROM [dbo].[Customers] WHERE [Id] = 42;
+SELECT TOP (1) c.[Id], c.[Name] FROM [dbo].[Customers] AS c WHERE c.[Email] = N'jose@example.com' ORDER BY c.[CreatedAt] DESC;
+SELECT [Id], [Name] FROM dbo.Customers WITH (NOLOCK) WHERE IsActive = 1 AND Country IN (N'US', N'CA', N'MX');
+INSERT INTO [dbo].[Customers] ([Name], [Email], [CreatedAt], [IsActive]) VALUES (N'Zoë Müller', N'zoe@example.com', SYSUTCDATETIME(), 1);
+INSERT INTO dbo.Customers (Name, Email) VALUES (N'A', N'a@x.com'), (N'B', N'b@x.com'), (N'C', N'c@x.com');
+INSERT INTO [dbo].[Orders] ([CustomerId], [Total], [Status]) OUTPUT INSERTED.[Id] VALUES (42, 199.99, N'New');
+INSERT INTO dbo.AuditLog (EventType, Payload, CreatedAt) OUTPUT INSERTED.Id, INSERTED.CreatedAt VALUES (N'login', N'{"user":1}', GETUTCDATE());
+UPDATE [dbo].[Customers] SET [Name] = N'Updated', [ModifiedAt] = GETUTCDATE() WHERE [Id] = 42;
+UPDATE dbo.Orders SET Status = N'Shipped', ShippedAt = SYSDATETIME() OUTPUT DELETED.Status AS OldStatus, INSERTED.Status AS NewStatus WHERE Id = 1001;
+UPDATE o SET o.Total = o.Total * 1.1 FROM dbo.Orders AS o INNER JOIN dbo.Customers AS c ON c.Id = o.CustomerId WHERE c.Country = N'DE';
+UPDATE TOP (500) dbo.Queue SET Status = 1 WHERE Status = 0;
+DELETE FROM [dbo].[Orders] WHERE [Id] = 1001 AND [Status] = N'Cancelled';
+DELETE TOP (1000) FROM dbo.AuditLog WHERE CreatedAt < DATEADD(DAY, -90, GETUTCDATE());
+DELETE FROM dbo.Sessions OUTPUT DELETED.* WHERE ExpiresAt < GETUTCDATE();
+DELETE o FROM dbo.Orders o LEFT JOIN dbo.Customers c ON c.Id = o.CustomerId WHERE c.Id IS NULL;
+SELECT COUNT(*) FROM dbo.Orders WHERE CustomerId = 42;
+SELECT CASE WHEN EXISTS (SELECT 1 FROM dbo.Customers WHERE Email = N'x@y.com') THEN 1 ELSE 0 END;
+SELECT c.Id, c.Name, (SELECT COUNT(*) FROM dbo.Orders o WHERE o.CustomerId = c.Id) AS OrderCount FROM dbo.Customers c;
+SELECT * FROM dbo.Products WHERE Name LIKE N'%widget%' AND Price BETWEEN 10 AND 100 AND Discontinued IS NULL;
+SELECT p.Id, p.Name FROM dbo.Products p WHERE p.CategoryId IN (SELECT Id FROM dbo.Categories WHERE ParentId = 5) ORDER BY p.Name OFFSET 20 ROWS FETCH NEXT 10 ROWS ONLY;
+SELECT Id, Name FROM dbo.Products ORDER BY Id OFFSET @Skip ROWS FETCH NEXT @Take ROWS ONLY;
+SELECT SCOPE_IDENTITY();
+SELECT @@ROWCOUNT;
+SELECT @@IDENTITY AS LastId;
+SELECT TOP 10 * FROM dbo.Orders ORDER BY CreatedAt DESC;
+SELECT DISTINCT TOP (5) Country FROM dbo.Customers ORDER BY Country;

@@ -19,8 +19,10 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/ajitpratap0/GoSQLX/pkg/formatter"
+	"github.com/ajitpratap0/GoSQLX/pkg/sql/keywords"
 )
 
 func TestFormat_PreservesCommentsAndHints(t *testing.T) {
@@ -142,7 +144,7 @@ func TestFormatWithDialect(t *testing.T) {
 // TestFormat_NestedHintsFollowTheirSelect checks that a hint after a nested
 // SELECT stays with that SELECT when the renderer writes the clauses holding
 // the subqueries in a different order (Oracle START WITH before CONNECT BY),
-// (see formatter.TestMatchOccurrence for the cases that are refused).
+// (see formatter.TestOccMatcher for the cases that are refused).
 func TestFormat_NestedHintsFollowTheirSelect(t *testing.T) {
 	opts := DefaultFormatOptions()
 	opts.IndentSize = 0
@@ -177,6 +179,75 @@ func TestFormat_NestedHintsFollowTheirSelect(t *testing.T) {
 				if !strings.Contains(got, w) {
 					t.Errorf("output lacks %q:\n%s", w, got)
 				}
+			}
+		})
+	}
+}
+
+// TestFormatWithDialect_CommentsFollowStatementStarts checks that comments
+// stay with their statements when a procedure or trigger body holds ';' or
+// T-SQL statements have no ';' between them, and that the result is stable.
+func TestFormatWithDialect_CommentsFollowStatementStarts(t *testing.T) {
+	opts := DefaultFormatOptions()
+	opts.IndentSize = 0
+	opts.UppercaseKeywords = true
+	tests := []struct {
+		dialect string
+		sql     string
+		want    string
+	}{
+		{"sqlserver",
+			"-- A\nSELECT 1\nSELECT 2;\n-- B: the proc\nCREATE PROC p AS BEGIN SELECT 1; END;\n",
+			"-- A\nSELECT 1;\nSELECT 2;\n-- B: the proc\nCREATE PROC p AS BEGIN SELECT 1; END"},
+		{"mysql",
+			"-- Section one\nSELECT 1 FROM users;\n-- Section two: trigger\nCREATE TRIGGER t AFTER INSERT ON x FOR EACH ROW BEGIN SELECT 1; SELECT 2; END;\n-- Section three\nSELECT 3 FROM orders;\n",
+			"-- Section one\nSELECT 1 FROM users;\n-- Section two: trigger\nCREATE TRIGGER t AFTER INSERT ON x FOR EACH ROW BEGIN SELECT 1; SELECT 2; END;\n-- Section three\nSELECT 3 FROM orders"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.dialect, func(t *testing.T) {
+			got, err := FormatWithDialect(tc.sql, opts, keywords.SQLDialect(tc.dialect))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got != tc.want {
+				t.Fatalf("got  %q\nwant %q", got, tc.want)
+			}
+			again, err := FormatWithDialect(got, opts, keywords.SQLDialect(tc.dialect))
+			if err != nil || again != got {
+				t.Fatalf("not idempotent: %v\n%q\n%q", err, got, again)
+			}
+		})
+	}
+}
+
+// TestFormat_CommentsScaleLinearly guards against quadratic optimizer-hint
+// placement and comment lookup (seconds and gigabytes before the fix). The
+// bounds are generous so that -race and slow CI machines pass.
+func TestFormat_CommentsScaleLinearly(t *testing.T) {
+	if testing.Short() {
+		t.Skip("timing test")
+	}
+	tests := []struct {
+		name string
+		sql  string
+	}{
+		{"hints", strings.Repeat("SELECT /*+ H */ 1 UNION ALL ", 3000) + "SELECT /*+ H */ 1"},
+		{"comments", strings.Repeat("SELECT 1; -- c\n", 40000)},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			start := time.Now()
+			out, err := Format(tc.sql, DefaultFormatOptions())
+			elapsed := time.Since(start)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if strings.Count(out, "/*+ H */") != strings.Count(tc.sql, "/*+ H */") ||
+				strings.Count(out, "-- c") != strings.Count(tc.sql, "-- c") {
+				t.Fatal("comments lost")
+			}
+			if limit := 3 * time.Second; elapsed > limit {
+				t.Fatalf("took %v, want under %v", elapsed, limit)
 			}
 		})
 	}

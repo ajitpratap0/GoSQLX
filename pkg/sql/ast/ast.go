@@ -185,6 +185,13 @@ func (l LiteralValue) Children() []Node     { return nil }
 type AST struct {
 	Statements []Statement
 	Comments   []models.Comment // Comments captured during tokenization, preserved during formatting
+	// StatementStarts holds the source location of the first token of every
+	// top-level statement the parser produced: StatementStarts[i] is where
+	// Statements[i] begins (for a BatchSeparator, its GO keyword). The
+	// locations are zero when the parser was given tokens without positions
+	// (Parser.Parse). A tree built by hand may leave it nil; treat it as
+	// absent unless len(StatementStarts) == len(Statements).
+	StatementStarts []models.Location
 }
 
 // TokenLiteral implements Node. Returns an empty string - the AST root has no

@@ -436,6 +436,7 @@ func (p *Parser) parseTokens(tokens []models.TokenWithSpan) (*ast.AST, error) {
 	} else {
 		result.Statements = result.Statements[:0]
 	}
+	result.StatementStarts = result.StatementStarts[:0]
 
 	// Parse statements using Type (int) comparisons for speed
 	for p.currentPos < len(tokens) && !p.isType(models.TokenTypeEOF) {
@@ -448,14 +449,17 @@ func (p *Parser) parseTokens(tokens []models.TokenWithSpan) (*ast.AST, error) {
 			p.advance()
 			continue
 		}
+		start := p.currentToken.Start
 		if separator, ok := p.parseBatchSeparator(); ok {
 			result.Statements = append(result.Statements, separator)
+			result.StatementStarts = append(result.StatementStarts, start)
 			continue
 		}
 
 		stmt, err := p.parseStatement()
 		if err == nil {
 			result.Statements = append(result.Statements, stmt)
+			result.StatementStarts = append(result.StatementStarts, start)
 		}
 		if err != nil {
 			// Clean up the AST on error
@@ -635,6 +639,7 @@ func (p *Parser) parseContextTokens(ctx context.Context, tokens []models.TokenWi
 	} else {
 		result.Statements = result.Statements[:0]
 	}
+	result.StatementStarts = result.StatementStarts[:0]
 
 	// Parse statements using Type (int) comparisons for speed
 	for p.currentPos < len(tokens) && !p.isType(models.TokenTypeEOF) {
@@ -652,14 +657,17 @@ func (p *Parser) parseContextTokens(ctx context.Context, tokens []models.TokenWi
 			p.advance()
 			continue
 		}
+		start := p.currentToken.Start
 		if separator, ok := p.parseBatchSeparator(); ok {
 			result.Statements = append(result.Statements, separator)
+			result.StatementStarts = append(result.StatementStarts, start)
 			continue
 		}
 
 		stmt, err := p.parseStatement()
 		if err == nil {
 			result.Statements = append(result.Statements, stmt)
+			result.StatementStarts = append(result.StatementStarts, start)
 		}
 		if err != nil {
 			// Clean up the AST on error

@@ -800,6 +800,11 @@ type TableOption struct {
 	ValueKind TableOptionValueKind
 	// Args holds the expressions of a TableOptionArgs option.
 	Args []Expression
+	// ValueArgs holds the argument expressions of a parenthesized word
+	// value (ENGINE = Distributed(cluster, db, t, rand())). Value keeps the
+	// text the renderers write; ValueArgs only lets tree walkers reach the
+	// arguments, so editing it does not change the rendered SQL.
+	ValueArgs []Expression
 	// Sub holds the entries of a TableOptionList option.
 	Sub []OptionParam
 }
@@ -807,10 +812,11 @@ type TableOption struct {
 func (t *TableOption) expressionNode()     {}
 func (t TableOption) TokenLiteral() string { return t.Name }
 func (t TableOption) Children() []Node {
-	if len(t.Args) == 0 {
+	if len(t.Args) == 0 && len(t.ValueArgs) == 0 {
 		return nil
 	}
-	return nodifyExpressions(t.Args)
+	children := nodifyExpressions(t.Args)
+	return appendExprChildren(children, t.ValueArgs)
 }
 
 // IndexColumn represents a column in an index definition

@@ -449,6 +449,7 @@ func (p *Parser) parseOptionValue(opt *ast.TableOption) error {
 		opt.Value = p.currentToken.Token.Value
 		p.advance()
 		if p.isType(models.TokenTypeLParen) {
+			opt.ValueArgs = p.speculativeCallArgs()
 			args, err := p.parseTypeArgsString()
 			if err != nil {
 				return err
@@ -458,6 +459,36 @@ func (p *Parser) parseOptionValue(opt *ast.TableOption) error {
 		return nil
 	}
 	return p.expectedError("option value")
+}
+
+// speculativeCallArgs parses the "(expr, ...)" argument list at the current
+// token as expressions and rewinds, so the caller can still read the same
+// tokens as raw text. It returns nil when the list is empty or is not a list
+// of expressions (the raw text is then the only record).
+func (p *Parser) speculativeCallArgs() []ast.Expression {
+	start := p.currentPos
+	saved := p.snapshotState()
+	defer func() {
+		p.restoreState(saved)
+		p.seek(start)
+	}()
+	p.advance() // (
+	var args []ast.Expression
+	for !p.isType(models.TokenTypeRParen) {
+		e, err := p.parseExpression()
+		if err != nil {
+			return nil
+		}
+		args = append(args, e)
+		if !p.isType(models.TokenTypeComma) {
+			break
+		}
+		p.advance()
+	}
+	if !p.isType(models.TokenTypeRParen) {
+		return nil
+	}
+	return args
 }
 
 // parseOptionSpec parses the option described by spec at the current token.

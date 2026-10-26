@@ -129,11 +129,24 @@ type Identifier struct {
 	Pos   models.Location // Source position of this identifier (1-based line and column)
 	// Quoted reports that Name was written as a double-quoted (delimited)
 	// identifier. SQL() re-quotes it when Name is a reserved word ("select")
-	// so it re-parses as a name. Case alone ("Mixed") is not re-quoted, to
-	// stay consistent with aliases and column lists, which record no quoting.
-	// It is set only for ANSI double quotes, not for MySQL backticks or SQL
-	// Server brackets.
+	// so it re-parses as a name; quotes needed for letter case ("Mixed") are
+	// recorded in Quotes. It is set only for ANSI double quotes; QuoteStyle
+	// records MySQL backticks and SQL Server brackets.
 	Quoted bool
+	// Quotes records which parts of the reference (part 0 is Name, part 1
+	// the last qualifier part, ...) were delimited in the source and must
+	// stay delimited, such as a name quoted for its letter case ("CreatedAt")
+	// or a keyword ("table"); see NameQuote. Its style, when set, takes
+	// precedence over QuoteStyle. It sits next to Quoted so the struct keeps
+	// its size.
+	Quotes NameQuote
+	// QuoteStyle is the opening delimiter the source used for the quoted
+	// part(s) of the reference: '"', '`' (MySQL, MariaDB, ClickHouse) or
+	// '[' (SQL Server), and zero when no part was delimited. A reserved
+	// Name delimited in the source is re-quoted like a Quoted one, and SQL()
+	// quotes with the same delimiters, so a MySQL `from` is not turned into
+	// the string "from".
+	QuoteStyle rune
 }
 
 func (i *Identifier) expressionNode()     {}
@@ -144,6 +157,9 @@ func (i Identifier) Children() []Node     { return nil }
 type LiteralValue struct {
 	Value interface{}
 	Type  string // INTEGER, FLOAT, STRING, BOOLEAN, NULL, etc.
+	// extras holds string introducer and escaping metadata. It is private so
+	// prefix-free raw strings can safely share immutable metadata.
+	extras *LiteralExtras
 }
 
 func (l *LiteralValue) expressionNode()     {}
@@ -169,6 +185,13 @@ func (l LiteralValue) Children() []Node     { return nil }
 type AST struct {
 	Statements []Statement
 	Comments   []models.Comment // Comments captured during tokenization, preserved during formatting
+	// StatementStarts holds the source location of the first token of every
+	// top-level statement the parser produced: StatementStarts[i] is where
+	// Statements[i] begins (for a BatchSeparator, its GO keyword). The
+	// locations are zero when the parser was given tokens without positions
+	// (Parser.Parse). A tree built by hand may leave it nil; treat it as
+	// absent unless len(StatementStarts) == len(Statements).
+	StatementStarts []models.Location
 }
 
 // TokenLiteral implements Node. Returns an empty string - the AST root has no

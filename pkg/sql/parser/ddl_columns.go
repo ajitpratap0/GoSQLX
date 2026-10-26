@@ -23,6 +23,7 @@ import (
 	goerrors "github.com/ajitpratap0/GoSQLX/pkg/errors"
 	"github.com/ajitpratap0/GoSQLX/pkg/models"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
+	"github.com/ajitpratap0/GoSQLX/pkg/sql/dialect"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/keywords"
 )
 
@@ -43,7 +44,7 @@ func (p *Parser) parseColumnName() *ast.Identifier {
 		return nil
 	}
 	pos := p.currentLocation()
-	ident := &ast.Identifier{Name: val, Pos: pos}
+	ident := &ast.Identifier{Name: val, Pos: pos, Quotes: p.currentNameQuote()}
 	p.advance()
 	return ident
 }
@@ -60,37 +61,22 @@ func (p *Parser) parseColumnDef() (*ast.ColumnDef, error) {
 		)
 	}
 
-	// Parse data type (including parameterized types like VARCHAR(100), DECIMAL(10,2)).
-	// Use parseColumnName to accept keyword-based type names such as INTEGER, TEXT, REAL.
-	dataType := p.parseColumnName()
-	if dataType == nil {
-		return nil, goerrors.ExpectedTokenError(
-			"data type",
-			p.currentToken.Token.Type.String(),
-			p.currentLocation(),
-			"",
-		)
-	}
-
-	dataTypeStr := dataType.Name
-
-	// Check for type parameters. The simple form is VARCHAR(100) or
-	// DECIMAL(10,2), but ClickHouse also has nested/parameterised types like
-	// Array(Nullable(String)), Map(String, Array(UInt32)), Tuple(a UInt8, b String),
-	// FixedString(16), DateTime64(3, 'UTC'), LowCardinality(String), Decimal(38, 18),
-	// and engines like ReplicatedMergeTree('/path', '{replica}'). Use a depth-tracking
-	// token collector that round-trips the type string.
-	if p.isType(models.TokenTypeLParen) {
-		args, err := p.parseTypeArgsString()
+	// Parse the data type: a (possibly multi-word) type name with optional
+	// arguments and array suffixes; see parseColumnType. SQLite, ClickHouse and
+	// SQL Server columns may omit it.
+	dataTypeStr := ""
+	if !p.columnTypeOmitted() {
+		var err error
+		dataTypeStr, err = p.parseColumnType()
 		if err != nil {
 			return nil, err
 		}
-		dataTypeStr += args
 	}
 
 	colDef := &ast.ColumnDef{
-		Name: name.Name,
-		Type: dataTypeStr,
+		Name:      name.Name,
+		Type:      dataTypeStr,
+		NameQuote: name.Quotes,
 	}
 
 	// ClickHouse column options that may appear between the type and the
@@ -98,7 +84,7 @@ func (p *Parser) parseColumnDef() (*ast.ColumnDef, error) {
 	// ALIAS expr, EPHEMERAL expr, TTL expr. Consume permissively; they are
 	// appended to the type string for now so formatters can round-trip, and
 	// not yet modeled on the AST.
-	if p.dialect == string(keywords.DialectClickHouse) {
+	if p.dialect == string(keywords.DialectClickHouse) && dataTypeStr != "" {
 		for {
 			upper := strings.ToUpper(p.currentToken.Token.Value)
 			if upper == "CODEC" && p.peekToken().Token.Type == models.TokenTypeLParen {
@@ -129,9 +115,32 @@ func (p *Parser) parseColumnDef() (*ast.ColumnDef, error) {
 	return colDef, nil
 }
 
-// parseColumnConstraint parses a single column constraint
-// Returns (constraint, found, error)
+// parseColumnConstraint parses a single column constraint, optionally named
+// with CONSTRAINT <name>. Returns (constraint, found, error).
 func (p *Parser) parseColumnConstraint() (*ast.ColumnConstraint, bool, error) {
+	if !p.isType(models.TokenTypeConstraint) {
+		return p.parseColumnConstraintBody()
+	}
+	p.advance() // Consume CONSTRAINT
+	name := ""
+	if p.isIdentifier() || (p.isWordToken() && !p.atColumnConstraintStart()) {
+		name = p.currentToken.Token.Value
+		p.advance()
+	}
+	constraint, ok, err := p.parseColumnConstraintBody()
+	if err != nil {
+		return nil, false, err
+	}
+	if !ok {
+		return nil, false, p.expectedError("constraint after CONSTRAINT name")
+	}
+	constraint.Name = name
+	return constraint, true, nil
+}
+
+// parseColumnConstraintBody parses the constraint itself, without a leading
+// CONSTRAINT <name>.
+func (p *Parser) parseColumnConstraintBody() (*ast.ColumnConstraint, bool, error) {
 	constraint := &ast.ColumnConstraint{}
 
 	// PRIMARY KEY
@@ -142,17 +151,27 @@ func (p *Parser) parseColumnConstraint() (*ast.ColumnConstraint, bool, error) {
 		}
 		p.advance() // Consume KEY
 		constraint.Type = "PRIMARY KEY"
+		constraint.Keyword = p.parseClusterKeyword()
 		return constraint, true, nil
 	}
 
-	// NOT NULL
+	// NOT NULL, NOT DEFERRABLE, NOT FOR REPLICATION
 	if p.isType(models.TokenTypeNot) {
 		p.advance() // Consume NOT
-		if !p.isType(models.TokenTypeNull) {
+		switch {
+		case p.isType(models.TokenTypeNull):
+			p.advance() // Consume NULL
+			constraint.Type = "NOT NULL"
+		case p.isUnquotedWord("DEFERRABLE") && p.dialectAllows(dialect.PostgreSQL, dialect.SQLite, dialect.Oracle, dialect.Redshift):
+			p.advance() // Consume DEFERRABLE
+			constraint.Type = "NOT DEFERRABLE"
+		case p.isType(models.TokenTypeFor) && p.peekValueIs(1, "REPLICATION") && p.dialectAllows(dialect.SQLServer):
+			p.advance() // Consume FOR
+			p.advance() // Consume REPLICATION
+			constraint.Type = "NOT FOR REPLICATION"
+		default:
 			return nil, false, p.expectedError("NULL after NOT")
 		}
-		p.advance() // Consume NULL
-		constraint.Type = "NOT NULL"
 		return constraint, true, nil
 	}
 
@@ -167,6 +186,7 @@ func (p *Parser) parseColumnConstraint() (*ast.ColumnConstraint, bool, error) {
 	if p.isType(models.TokenTypeUnique) {
 		p.advance() // Consume UNIQUE
 		constraint.Type = "UNIQUE"
+		constraint.Keyword = p.parseClusterKeyword()
 		return constraint, true, nil
 	}
 
@@ -212,14 +232,15 @@ func (p *Parser) parseColumnConstraint() (*ast.ColumnConstraint, bool, error) {
 		p.advance() // Consume REFERENCES
 		constraint.Type = "REFERENCES"
 
-		// Parse referenced table name (supports double-quoted identifiers)
+		// Parse referenced table name (supports quoted and schema-qualified names)
 		if !p.isIdentifier() {
 			return nil, false, p.expectedError("table name after REFERENCES")
 		}
-		refDef := &ast.ReferenceDefinition{
-			Table: p.currentToken.Token.Value,
+		refTable, refTableQuote, err := p.parseQualifiedNameQuoted()
+		if err != nil {
+			return nil, false, err
 		}
-		p.advance()
+		refDef := &ast.ReferenceDefinition{Table: refTable, TableQuote: refTableQuote}
 
 		// Parse optional column list
 		if p.isType(models.TokenTypeLParen) {
@@ -228,6 +249,7 @@ func (p *Parser) parseColumnConstraint() (*ast.ColumnConstraint, bool, error) {
 				if !p.isIdentifier() {
 					return nil, false, p.expectedError("column name in REFERENCES")
 				}
+				refDef.ColumnQuotes = nameQuoteList(refDef.ColumnQuotes, len(refDef.Columns), p.currentNameQuote())
 				refDef.Columns = append(refDef.Columns, p.currentToken.Token.Value)
 				p.advance()
 
@@ -251,42 +273,27 @@ func (p *Parser) parseColumnConstraint() (*ast.ColumnConstraint, bool, error) {
 
 	// AUTO_INCREMENT (MySQL)
 	if p.isType(models.TokenTypeAutoIncrement) {
-		p.advance() // Consume AUTO_INCREMENT
+		// Keep the spelling: SQLite and Snowflake write AUTOINCREMENT, which
+		// is not valid in MySQL, and MySQL AUTO_INCREMENT is not valid there.
+		if equalsUpper(p.currentToken.Token.Value, "AUTOINCREMENT") {
+			constraint.Keyword = "AUTOINCREMENT"
+		}
+		p.advance() // Consume AUTO_INCREMENT / AUTOINCREMENT
 		constraint.Type = "AUTO_INCREMENT"
 		constraint.AutoIncrement = true
+		if p.IsSnowflake() {
+			args, err := p.parseIdentityOptions()
+			if err != nil {
+				return nil, false, err
+			}
+			constraint.Args = args
+		}
 		return constraint, true, nil
 	}
 
-	// GENERATED ALWAYS AS ROW START / ROW END (MariaDB system-versioned columns)
-	// Syntax: GENERATED ALWAYS AS ROW START | ROW END
-	if strings.EqualFold(p.currentToken.Token.Value, "GENERATED") {
-		p.advance() // Consume GENERATED
-		// Optional ALWAYS
-		if strings.EqualFold(p.currentToken.Token.Value, "ALWAYS") {
-			p.advance() // Consume ALWAYS
-		}
-		// Expect AS
-		if !p.isType(models.TokenTypeAs) {
-			return nil, false, p.expectedError("AS after GENERATED [ALWAYS]")
-		}
-		p.advance() // Consume AS
-		// Expect ROW
-		if !p.isType(models.TokenTypeRow) {
-			return nil, false, p.expectedError("ROW after GENERATED [ALWAYS] AS")
-		}
-		p.advance() // Consume ROW
-		// Expect START or END
-		rowRole := strings.ToUpper(p.currentToken.Token.Value)
-		if rowRole != "START" && rowRole != "END" {
-			return nil, false, p.expectedError("START or END after GENERATED [ALWAYS] AS ROW")
-		}
-		p.advance() // Consume START or END
-		constraint.Type = "GENERATED ALWAYS AS ROW " + rowRole
-		return constraint, true, nil
-	}
-
-	// No constraint found
-	return nil, false, nil
+	// Dialect constraints (GENERATED, COMMENT, COLLATE, ON UPDATE, IDENTITY,
+	// DEFERRABLE, ClickHouse column clauses, ...); see ddl_column_ext.go.
+	return p.parseColumnConstraintExt(constraint)
 }
 
 // parseReferentialActions parses ON DELETE and ON UPDATE actions
@@ -338,141 +345,22 @@ func (p *Parser) parseReferentialAction() string {
 	return ""
 }
 
-// parseTableConstraint parses a table constraint (PRIMARY KEY, FOREIGN KEY, UNIQUE, CHECK)
-func (p *Parser) parseTableConstraint() (*ast.TableConstraint, error) {
-	constraint := &ast.TableConstraint{}
-
-	// Check for optional CONSTRAINT keyword (may already be consumed by caller)
-	if p.isType(models.TokenTypeConstraint) {
-		p.advance() // Consume CONSTRAINT
-	}
-
-	// Check for optional constraint name (identifier that isn't a constraint type keyword)
-	// Constraint name comes before the constraint type (PRIMARY, FOREIGN, UNIQUE, CHECK).
-	// A double-quoted name is accepted too: SQL Server keeps "x y" as a
-	// DOUBLE_QUOTED_STRING token, and the renderer writes such names quoted.
-	if p.isIdentifier() &&
-		!p.isAnyType(models.TokenTypePrimary, models.TokenTypeForeign, models.TokenTypeUnique, models.TokenTypeCheck) {
-		constraint.Name = p.currentToken.Token.Value
-		p.advance()
-	}
-
-	// PRIMARY KEY (column_list)
-	if p.isType(models.TokenTypePrimary) {
-		p.advance() // Consume PRIMARY
-		if !p.isType(models.TokenTypeKey) {
-			return nil, p.expectedError("KEY after PRIMARY")
-		}
-		p.advance() // Consume KEY
-		constraint.Type = "PRIMARY KEY"
-
-		// Parse column list
-		columns, err := p.parseConstraintColumnList()
-		if err != nil {
-			return nil, err
-		}
-		constraint.Columns = columns
-		return constraint, nil
-	}
-
-	// FOREIGN KEY (column_list) REFERENCES table(column_list)
-	if p.isType(models.TokenTypeForeign) {
-		p.advance() // Consume FOREIGN
-		if !p.isType(models.TokenTypeKey) {
-			return nil, p.expectedError("KEY after FOREIGN")
-		}
-		p.advance() // Consume KEY
-		constraint.Type = "FOREIGN KEY"
-
-		// Parse column list
-		columns, err := p.parseConstraintColumnList()
-		if err != nil {
-			return nil, err
-		}
-		constraint.Columns = columns
-
-		// Expect REFERENCES
-		if !p.isType(models.TokenTypeReferences) {
-			return nil, p.expectedError("REFERENCES after FOREIGN KEY columns")
-		}
-		p.advance() // Consume REFERENCES
-
-		// Parse referenced table (supports double-quoted identifiers)
-		if !p.isIdentifier() {
-			return nil, p.expectedError("table name after REFERENCES")
-		}
-		refDef := &ast.ReferenceDefinition{
-			Table: p.currentToken.Token.Value,
-		}
-		p.advance()
-
-		// Parse optional referenced column list
-		if p.isType(models.TokenTypeLParen) {
-			refColumns, err := p.parseConstraintColumnList()
-			if err != nil {
-				return nil, err
-			}
-			refDef.Columns = refColumns
-		}
-
-		// Parse optional ON DELETE/UPDATE
-		refDef.OnDelete, refDef.OnUpdate = p.parseReferentialActions()
-		constraint.References = refDef
-		return constraint, nil
-	}
-
-	// UNIQUE (column_list)
-	if p.isType(models.TokenTypeUnique) {
-		p.advance() // Consume UNIQUE
-		constraint.Type = "UNIQUE"
-
-		// Parse column list
-		columns, err := p.parseConstraintColumnList()
-		if err != nil {
-			return nil, err
-		}
-		constraint.Columns = columns
-		return constraint, nil
-	}
-
-	// CHECK (expression)
-	if p.isType(models.TokenTypeCheck) {
-		p.advance() // Consume CHECK
-		constraint.Type = "CHECK"
-
-		if !p.isType(models.TokenTypeLParen) {
-			return nil, p.expectedError("( after CHECK")
-		}
-		p.advance() // Consume (
-
-		expr, err := p.parseExpression()
-		if err != nil {
-			return nil, err
-		}
-		constraint.Check = expr
-
-		if !p.isType(models.TokenTypeRParen) {
-			return nil, p.expectedError(") after CHECK expression")
-		}
-		p.advance() // Consume )
-		return constraint, nil
-	}
-
-	return nil, p.expectedError("constraint name or constraint type (PRIMARY KEY, FOREIGN KEY, UNIQUE, CHECK)")
-}
-
-// parseConstraintColumnList parses a parenthesized list of column names
-func (p *Parser) parseConstraintColumnList() ([]string, error) {
+// parseConstraintColumnListQuoted parses a parenthesized list of column
+// names and also returns how each was delimited (nil when none keeps its
+// delimiters; see ast.NameQuote).
+func (p *Parser) parseConstraintColumnListQuoted() ([]string, []ast.NameQuote, error) {
 	if !p.isType(models.TokenTypeLParen) {
-		return nil, p.expectedError("( for column list")
+		return nil, nil, p.expectedError("( for column list")
 	}
 	p.advance() // Consume (
 
 	var columns []string
+	var quotes []ast.NameQuote
 	for {
 		if !p.isIdentifier() {
-			return nil, p.expectedError("column name")
+			return nil, nil, p.expectedError("column name")
 		}
+		quotes = nameQuoteList(quotes, len(columns), p.currentNameQuote())
 		columns = append(columns, p.currentToken.Token.Value)
 		p.advance()
 
@@ -484,11 +372,11 @@ func (p *Parser) parseConstraintColumnList() ([]string, error) {
 	}
 
 	if !p.isType(models.TokenTypeRParen) {
-		return nil, p.expectedError(") after column list")
+		return nil, nil, p.expectedError(") after column list")
 	}
 	p.advance() // Consume )
 
-	return columns, nil
+	return columns, quotes, nil
 }
 
 // parseTypeArgsString consumes a balanced parenthesised type-argument list
@@ -523,7 +411,8 @@ func (p *Parser) parseTypeArgsString() (string, error) {
 			if depth == 0 {
 				return buf.String(), nil
 			}
-			prevWasIdent = false
+			// A word after ")" is separated from it: "sum(b) GROUP BY a".
+			prevWasIdent = true
 			continue
 		case models.TokenTypeComma:
 			buf.WriteString(", ")
@@ -532,31 +421,166 @@ func (p *Parser) parseTypeArgsString() (string, error) {
 			continue
 		}
 
-		// Render leaf token. Quote string literals; everything else is rendered
-		// by its raw value (numbers, identifiers, keywords like Nullable / Array).
-		val := tok.Value
-		if val == "" {
-			return "", p.expectedError("type argument")
+		if err := p.writeRawLeaf(&buf, tok, prevWasIdent); err != nil {
+			return "", err
 		}
+		prevWasIdent = true
 
-		// Insert a space when two adjacent leaf tokens both look like identifiers
-		// or numbers — this preserves "name Type" pairs in named tuple elements.
-		if prevWasIdent {
-			buf.WriteByte(' ')
+		p.advance()
+	}
+}
+
+// writeRawLeaf writes one token of a verbatim text capture: string literals
+// and delimited names keep their delimiters, everything else is written by
+// its value. Two adjacent words are separated by a space (afterWord).
+func (p *Parser) writeRawLeaf(buf *strings.Builder, tok models.Token, afterWord bool) error {
+	// Render leaf token. Quote string literals; everything else is rendered
+	// by its raw value (numbers, identifiers, keywords like Nullable / Array).
+	val := tok.Value
+	if val == "" && !isQuotedTokenType(tok) {
+		return p.expectedError("type argument")
+	}
+
+	// Insert a space when two adjacent leaf tokens both look like identifiers
+	// or numbers — this preserves "name Type" pairs in named tuple elements.
+	if afterWord && !p.rawLiteralAdjacentToCharset(tok) {
+		buf.WriteByte(' ')
+	}
+
+	switch {
+	case tok.Quote == 'q' && tok.Type == models.TokenTypeSingleQuotedString:
+		// A normal doubled-quote literal has the same value and also passes
+		// the raw clause's conservative safety validation.
+		writeDelimitedToken(buf, val, '\'')
+		return nil
+	case isQuotedTokenType(tok):
+		p.writeTokenSource(buf, &p.currentToken)
+	default:
+		buf.WriteString(val)
+	}
+	return nil
+}
+
+// A MySQL charset introducer forms one lexical unit with the following
+// string when the two tokens touched in the source (_utf8mb4'text').
+func (p *Parser) rawLiteralAdjacentToCharset(tok models.Token) bool {
+	if p.currentPos == 0 || !p.dialectAllows(dialect.MySQL, dialect.MariaDB) || !isQuotedTokenType(tok) {
+		return false
+	}
+	prev := p.tokens[p.currentPos-1]
+	return prev.End.Line != 0 && prev.End == p.currentToken.Start &&
+		prev.Token.Type == models.TokenTypeIdentifier && prev.Token.Quote == 0 &&
+		strings.HasPrefix(prev.Token.Value, "_")
+}
+
+// writeDelimitedToken writes val delimited with quote (' " ` or [), doubling
+// any closing delimiter inside it so the text reads back as one token.
+func writeDelimitedToken(buf *strings.Builder, val string, quote rune) {
+	closer := quote
+	if quote == '[' {
+		closer = ']'
+	}
+	buf.WriteRune(quote)
+	buf.WriteString(strings.ReplaceAll(val, string(closer), string(closer)+string(closer)))
+	buf.WriteRune(closer)
+}
+
+// isQuotedTokenType reports whether tok is a string literal or a delimited
+// identifier, whose empty value is still a token.
+func isQuotedTokenType(tok models.Token) bool {
+	switch tok.Type {
+	case models.TokenTypeString, models.TokenTypeSingleQuotedString, models.TokenTypeDoubleQuotedString,
+		models.TokenTypeNationalStringLiteral, models.TokenTypeEscapedStringLiteral,
+		models.TokenTypeUnicodeStringLiteral, models.TokenTypeHexStringLiteral,
+		models.TokenTypeByteStringLiteral, models.TokenTypeDollarQuotedString,
+		models.TokenTypeTripleSingleQuotedString, models.TokenTypeTripleDoubleQuotedString:
+		return true
+	}
+	return tok.Quote != 0
+}
+
+// isClauseArgument reports whether the current tokens start the clause words
+// that follow the first argument of a JSON_TABLE (COLUMNS ( ...) or XMLTABLE
+// (PASSING ... or COLUMNS ...) call named funcName.
+func (p *Parser) isClauseArgument(funcName string) bool {
+	switch {
+	case equalsUpper(funcName, "JSON_TABLE"):
+		return p.isUnquotedWord("COLUMNS") && p.peekToken().Token.Type == models.TokenTypeLParen &&
+			p.dialectAllows(dialect.MySQL, dialect.MariaDB, dialect.Oracle)
+	case equalsUpper(funcName, "XMLTABLE"):
+		return (p.isUnquotedWord("PASSING") || p.isUnquotedWord("COLUMNS")) &&
+			p.dialectAllows(dialect.Oracle, dialect.PostgreSQL)
+	}
+	return false
+}
+
+// parseClauseArgument keeps the clause words after head, up to the ")" that
+// closes the call, as text. For JSON_TABLE that is COLUMNS and its
+// parenthesized list; for XMLTABLE it is PASSING / COLUMNS and everything
+// after them.
+func (p *Parser) parseClauseArgument(funcName string, head ast.Expression) (*ast.ClauseArgument, error) {
+	pos := p.currentLocation()
+	var clause string
+	if equalsUpper(funcName, "JSON_TABLE") {
+		p.advance() // Consume COLUMNS
+		cols, err := p.parseTypeArgsString()
+		if err != nil {
+			return nil, err
 		}
+		clause = "COLUMNS " + cols
+	} else {
+		var err error
+		if clause, err = p.parseRawUntilClose(); err != nil {
+			return nil, err
+		}
+	}
+	if !ast.IsPlainRawText(clause) {
+		return nil, goerrors.UnsupportedFeatureError(
+			funcName+" clause with backslashes or unusual characters",
+			pos,
+			"",
+		)
+	}
+	return &ast.ClauseArgument{Head: head, Clause: clause, Pos: pos}, nil
+}
 
+// parseRawUntilClose consumes tokens up to, but not including, the ")" that
+// closes the enclosing call and returns them as text, as parseTypeArgsString
+// does for a parenthesized list.
+func (p *Parser) parseRawUntilClose() (string, error) {
+	var buf strings.Builder
+	depth := 0
+	prevWasWord := false
+	for {
+		tok := p.currentToken.Token
 		switch tok.Type {
-		case models.TokenTypeString, models.TokenTypeSingleQuotedString,
-			models.TokenTypeDoubleQuotedString:
-			buf.WriteByte('\'')
-			buf.WriteString(val)
-			buf.WriteByte('\'')
-			prevWasIdent = false
-		default:
-			buf.WriteString(val)
-			prevWasIdent = true
+		case models.TokenTypeEOF:
+			return "", p.expectedError(") to close the call")
+		case models.TokenTypeLParen:
+			buf.WriteByte('(')
+			depth++
+			prevWasWord = false
+			p.advance()
+			continue
+		case models.TokenTypeRParen:
+			if depth == 0 {
+				return buf.String(), nil
+			}
+			buf.WriteByte(')')
+			depth--
+			prevWasWord = true
+			p.advance()
+			continue
+		case models.TokenTypeComma:
+			buf.WriteString(", ")
+			prevWasWord = false
+			p.advance()
+			continue
 		}
-
+		if err := p.writeRawLeaf(&buf, tok, prevWasWord); err != nil {
+			return "", err
+		}
+		prevWasWord = true
 		p.advance()
 	}
 }

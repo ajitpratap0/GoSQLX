@@ -478,9 +478,9 @@ func TestFormat_UnsupportedRawSQLStaysCommented_PR632(t *testing.T) {
 		}
 	}
 
-	// The same through the parser: the raw text of an unsupported Snowflake
-	// statement keeps a string literal's line break (without its quotes), and
-	// must not turn into a live statement after formatting.
+	// The same through the parser: a Snowflake CREATE STAGE is kept verbatim
+	// with its string literal (line break included) quoted, so the text in
+	// the literal never turns into a live statement after formatting.
 	const sql = "CREATE STAGE s COMMENT = 'a\nDROP TABLE x'"
 	tree, err := gosqlx.ParseWithDialect(sql, keywords.DialectSnowflake)
 	if err != nil {
@@ -489,11 +489,14 @@ func TestFormat_UnsupportedRawSQLStaysCommented_PR632(t *testing.T) {
 	defer ast.ReleaseAST(tree)
 	out := formatter.FormatAST(tree, ast.ReadableStyle())
 	tree2, err := gosqlx.ParseWithDialect(out, keywords.DialectSnowflake)
-	if err == nil {
-		n := len(tree2.Statements)
-		ast.ReleaseAST(tree2)
-		if n != 0 {
-			t.Fatalf("formatted unsupported statement re-parses to %d live statements: %q", n, out)
-		}
+	if err != nil {
+		t.Fatalf("re-parse %q: %v", out, err)
+	}
+	defer ast.ReleaseAST(tree2)
+	if len(tree2.Statements) != 1 {
+		t.Fatalf("formatted statement re-parses to %d statements: %q", len(tree2.Statements), out)
+	}
+	if _, ok := tree2.Statements[0].(*ast.UtilityStatement); !ok {
+		t.Fatalf("re-parsed statement is %T, want *ast.UtilityStatement: %q", tree2.Statements[0], out)
 	}
 }

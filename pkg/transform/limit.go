@@ -37,6 +37,10 @@ func SetLimit(n int) Rule {
 			return err
 		}
 		sel.Limit = &n
+		if sel.Extras != nil {
+			sel.Extras.LimitExpr = nil
+			sel.Extras.LimitAll = false
+		}
 		return nil
 	})
 }
@@ -58,6 +62,9 @@ func SetOffset(n int) Rule {
 			return err
 		}
 		sel.Offset = &n
+		if sel.Extras != nil {
+			sel.Extras.OffsetExpr = nil
+		}
 		return nil
 	})
 }
@@ -73,6 +80,11 @@ func RemoveLimit() Rule {
 			return err
 		}
 		sel.Limit = nil
+		if sel.Extras != nil {
+			sel.Extras.LimitExpr = nil
+			sel.Extras.LimitAll = false
+			sel.Extras.LimitWithTies = false
+		}
 		return nil
 	})
 }
@@ -88,6 +100,10 @@ func RemoveOffset() Rule {
 			return err
 		}
 		sel.Offset = nil
+		if sel.Extras != nil {
+			sel.Extras.OffsetExpr = nil
+			sel.Extras.OffsetRows = false
+		}
 		return nil
 	})
 }

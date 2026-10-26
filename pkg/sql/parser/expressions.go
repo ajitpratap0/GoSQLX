@@ -22,7 +22,6 @@
 package parser
 
 import (
-	"fmt"
 	"strings"
 
 	goerrors "github.com/ajitpratap0/GoSQLX/pkg/errors"
@@ -55,8 +54,8 @@ func (p *Parser) parseExpression() (ast.Expression, error) {
 		)
 	}
 
-	// Start by parsing AND expressions (higher precedence)
-	left, err := p.parseAndExpression()
+	// Start by parsing XOR/AND expressions (higher precedence)
+	left, err := p.parseXorExpression()
 	if err != nil {
 		return nil, err
 	}
@@ -68,28 +67,69 @@ func (p *Parser) parseExpression() (ast.Expression, error) {
 	// spelling so SQL() and the formatter write || back.
 	for p.isType(models.TokenTypeOr) || (p.pipesAsOr && p.isType(models.TokenTypeStringConcat)) {
 		opPos := p.currentLocation()
-		operator := p.currentToken.Token.Value
+		// The operator is stored as the canonical upper-case keyword whatever
+		// the source spelling.
 		pipes := p.currentToken.Token.Type == models.TokenTypeStringConcat
-		if pipes {
-			operator = "OR"
-		}
 		p.advance() // Consume OR / ||
 
-		right, err := p.parseAndExpression()
+		right, err := p.parseXorExpression()
 		if err != nil {
 			return nil, err
 		}
 
 		left = &ast.BinaryExpression{
 			Left:     left,
-			Operator: operator,
+			Operator: "OR",
 			Right:    right,
 			PipesOr:  pipes,
 			Pos:      opPos,
 		}
 	}
 
+	// ClickHouse conditional operator: cond ? then : else (right-associative).
+	if p.isType(models.TokenTypeQuestion) && p.IsClickHouse() {
+		return p.parseTernaryTail(left)
+	}
+
+	// MySQL / MariaDB user-variable assignment: @a := expr (right-associative,
+	// the loosest operator).
+	if p.isMySQLFamily() && (p.isType(models.TokenTypeAssignment) ||
+		p.isType(models.TokenTypeColon) && p.peekTypeAt(1) == models.TokenTypeEq && p.nextAdjacent(1)) {
+		opPos := p.currentLocation()
+		if !p.isType(models.TokenTypeAssignment) {
+			p.advance() // Consume : of a split ":="
+		}
+		p.advance() // Consume := or =
+		right, err := p.parseExpression()
+		if err != nil {
+			return nil, err
+		}
+		return &ast.AssignmentExpression{Target: left, Value: right, Pos: opPos}, nil
+	}
+
 	return left, nil
+}
+
+// parseTernaryTail parses the "? then : else" tail of the ClickHouse
+// conditional operator after its condition. The current token is the ?.
+func (p *Parser) parseTernaryTail(cond ast.Expression) (ast.Expression, error) {
+	qPos := p.currentLocation()
+	p.advance() // Consume ?
+
+	then, err := p.parseExpression()
+	if err != nil {
+		return nil, err
+	}
+	if !p.isType(models.TokenTypeColon) {
+		return nil, p.expectedError(": in conditional expression")
+	}
+	p.advance() // Consume :
+
+	els, err := p.parseExpression()
+	if err != nil {
+		return nil, err
+	}
+	return &ast.TernaryExpression{Cond: cond, Then: then, Else: els, Pos: qPos}, nil
 }
 
 // enterRecursion increments the recursion depth counter and returns a
@@ -130,9 +170,10 @@ func (p *Parser) parseAndExpression() (ast.Expression, error) {
 	}
 
 	// Handle AND operators (middle precedence, left-associative)
-	for p.isType(models.TokenTypeAnd) {
+	// (MySQL and MariaDB also read && as AND.) The operator is stored as the
+	// canonical upper-case keyword whatever the source spelling.
+	for p.isLogicalAnd() {
 		opPos := p.currentLocation()
-		operator := p.currentToken.Token.Value
 		p.advance() // Consume AND
 
 		right, err := p.parseComparisonExpression()
@@ -142,7 +183,7 @@ func (p *Parser) parseAndExpression() (ast.Expression, error) {
 
 		left = &ast.BinaryExpression{
 			Left:     left,
-			Operator: operator,
+			Operator: "AND",
 			Right:    right,
 			Pos:      opPos,
 		}
@@ -160,7 +201,12 @@ func (p *Parser) parseStringConcatExpression() (ast.Expression, error) {
 	if err != nil {
 		return nil, err
 	}
+	return p.parseStringConcatTail(left)
+}
 
+// parseStringConcatTail continues a string-concatenation expression after its
+// left operand.
+func (p *Parser) parseStringConcatTail(left ast.Expression) (ast.Expression, error) {
 	// Handle || (string concatenation) operator (left-associative)
 	for !p.pipesAsOr && p.isType(models.TokenTypeStringConcat) {
 		opPos := p.currentLocation()
@@ -190,14 +236,68 @@ func (p *Parser) parseAdditiveExpression() (ast.Expression, error) {
 	if err != nil {
 		return nil, err
 	}
+	return p.parseAdditiveTail(left)
+}
 
+// parseAdditiveTail continues an additive expression after its left operand.
+func (p *Parser) parseAdditiveTail(left ast.Expression) (ast.Expression, error) {
 	// Handle + and - operators (left-associative)
-	for p.isType(models.TokenTypePlus) || p.isType(models.TokenTypeMinus) {
+	// (SQL Server treats the bitwise &, | like + and -.)
+	for p.isType(models.TokenTypePlus) || p.isType(models.TokenTypeMinus) || p.sqlServerBitwise() {
 		opPos := p.currentLocation()
 		operator := p.currentToken.Token.Value
 		p.advance() // Consume operator
 
 		right, err := p.parseMultiplicativeExpression()
+		if err != nil {
+			return nil, err
+		}
+
+		left = &ast.BinaryExpression{
+			Left:       left,
+			Operator:   operator,
+			Right:      right,
+			BitwiseXor: operator == "^", // only SQL Server reaches here with ^
+			Pos:        opPos,
+		}
+	}
+
+	return left, nil
+}
+
+// parseMultiplicativeExpression parses expressions with *, /, and % operators
+func (p *Parser) parseMultiplicativeExpression() (ast.Expression, error) {
+	// Parse the left side using the power/XOR expression (higher precedence)
+	left, err := p.parsePowerExpression()
+	if err != nil {
+		return nil, err
+	}
+	return p.parseMultiplicativeTail(left)
+}
+
+// parseMultiplicativeTail continues a multiplicative expression after its left
+// operand.
+func (p *Parser) parseMultiplicativeTail(left ast.Expression) (ast.Expression, error) {
+	// Handle *, /, and % operators (left-associative)
+	// Note: TokenTypeAsterisk is used for both * (SELECT) and multiplication
+	// We check context: after an expression, asterisk means multiplication
+	// MySQL and MariaDB also have the DIV and MOD keyword operators.
+	for {
+		wordOp, isWord := "", false
+		if !(p.isType(models.TokenTypeAsterisk) || p.isType(models.TokenTypeMul) ||
+			p.isType(models.TokenTypeDiv) || p.isType(models.TokenTypeMod)) {
+			if wordOp, isWord = p.mysqlWordMulOperator(); !isWord {
+				break
+			}
+		}
+		opPos := p.currentLocation()
+		operator := p.currentToken.Token.Value
+		if isWord {
+			operator = wordOp
+		}
+		p.advance() // Consume operator
+
+		right, err := p.parsePowerExpression()
 		if err != nil {
 			return nil, err
 		}
@@ -213,36 +313,40 @@ func (p *Parser) parseAdditiveExpression() (ast.Expression, error) {
 	return left, nil
 }
 
-// parseMultiplicativeExpression parses expressions with *, /, and % operators
-func (p *Parser) parseMultiplicativeExpression() (ast.Expression, error) {
-	// Parse the left side using JSON operator expression (higher precedence)
-	left, err := p.parseJSONExpression()
-	if err != nil {
-		return nil, err
+// caretOperator reports whether the current token is the ^ operator at a
+// precedence tighter than * and /: exponentiation in PostgreSQL and bitwise
+// XOR in MySQL and MariaDB. SQL Server's ^ is a bitwise operator at the
+// additive level (see sqlServerBitwise); the other dialects have no ^.
+func (p *Parser) caretOperator() bool {
+	if !p.isType(models.TokenTypeCaret) {
+		return false
 	}
+	return p.dialect == "" || p.dialect == string(keywords.DialectGeneric) ||
+		p.IsPostgreSQL() || p.isMySQLFamily()
+}
 
-	// Handle *, /, and % operators (left-associative)
-	// Note: TokenTypeAsterisk is used for both * (SELECT) and multiplication
-	// We check context: after an expression, asterisk means multiplication
-	for p.isType(models.TokenTypeAsterisk) || p.isType(models.TokenTypeMul) ||
-		p.isType(models.TokenTypeDiv) || p.isType(models.TokenTypeMod) {
+// parsePowerExpression parses the ^ operator (left-associative), which binds
+// tighter than *, / and %.
+func (p *Parser) parsePowerExpression() (ast.Expression, error) {
+	left, err := p.parseJSONExpression()
+	if err != nil || !p.caretOperator() {
+		return left, err
+	}
+	return p.parsePowerTail(left)
+}
+
+// parsePowerTail continues a power expression after its left operand, with the
+// current token at ^.
+func (p *Parser) parsePowerTail(left ast.Expression) (ast.Expression, error) {
+	for p.caretOperator() {
 		opPos := p.currentLocation()
-		operator := p.currentToken.Token.Value
-		p.advance() // Consume operator
-
+		p.advance() // Consume ^
 		right, err := p.parseJSONExpression()
 		if err != nil {
 			return nil, err
 		}
-
-		left = &ast.BinaryExpression{
-			Left:     left,
-			Operator: operator,
-			Right:    right,
-			Pos:      opPos,
-		}
+		left = &ast.BinaryExpression{Left: left, Operator: "^", Right: right, BitwiseXor: p.isMySQLFamily(), Pos: opPos}
 	}
-
 	return left, nil
 }
 
@@ -322,71 +426,14 @@ func (p *Parser) parseJSONExpression() (ast.Expression, error) {
 		}
 	}
 
+	// Postfix AT TIME ZONE and COLLATE bind tighter than the arithmetic
+	// operators. Both start on an identifier or COLLATE token, which no
+	// other construct puts directly after an operand.
+	if t := p.currentToken.Token.Type; t == models.TokenTypeCollate || t == models.TokenTypeIdentifier {
+		return p.parsePostfixOperators(left)
+	}
+
 	return left, nil
-}
-
-// parseDataType parses a SQL data type for CAST or :: expressions
-// Handles: simple types (INTEGER, TEXT), parameterized types (VARCHAR(100), NUMERIC(10,2))
-func (p *Parser) parseDataType() (string, error) {
-	// Data type can be an identifier or a keyword like INT, VARCHAR, etc.
-	if !p.isIdentifier() && !p.isDataTypeKeyword() {
-		return "", p.expectedError("data type")
-	}
-
-	// Use strings.Builder for efficient string concatenation
-	var sb strings.Builder
-	sb.WriteString(p.currentToken.Token.Value)
-	p.advance() // Consume type name
-
-	// Check for type parameters (e.g., VARCHAR(100), DECIMAL(10,2))
-	if p.isType(models.TokenTypeLParen) {
-		p.advance() // Consume (
-		sb.WriteByte('(')
-
-		paramCount := 0
-		for !p.isType(models.TokenTypeRParen) {
-			if paramCount > 0 {
-				if !p.isType(models.TokenTypeComma) {
-					return "", p.expectedError(", or )")
-				}
-				sb.WriteString(p.currentToken.Token.Value)
-				p.advance() // Consume comma
-			}
-
-			// Parse parameter (should be a number or identifier)
-			// Use token type constants for consistency
-			if !p.isType(models.TokenTypeNumber) && !p.isType(models.TokenTypeIdentifier) && !p.isNumericLiteral() {
-				return "", goerrors.InvalidSyntaxError(
-					fmt.Sprintf("expected numeric type parameter, got '%s'", p.currentToken.Token.Value),
-					p.currentLocation(),
-					"",
-				).WithHint("Use TYPE(precision[, scale]) syntax")
-			}
-
-			sb.WriteString(p.currentToken.Token.Value)
-			p.advance()
-			paramCount++
-		}
-
-		sb.WriteByte(')')
-
-		if !p.isType(models.TokenTypeRParen) {
-			return "", p.expectedError(")")
-		}
-		p.advance() // Consume )
-	}
-
-	// Check for array type suffix (e.g., INTEGER[], TEXT[])
-	if p.isType(models.TokenTypeLBracket) {
-		p.advance() // Consume [
-		if !p.isType(models.TokenTypeRBracket) {
-			return "", p.expectedError("]")
-		}
-		p.advance() // Consume ]
-		sb.WriteString("[]")
-	}
-
-	return sb.String(), nil
 }
 
 // isNumericLiteral checks if current token is a numeric literal (handles INT/NUMBER token types)
@@ -426,10 +473,11 @@ func (p *Parser) isJSONOperator() bool {
 		models.TokenTypeAtArrow,       // @>
 		models.TokenTypeArrowAt,       // <@
 		models.TokenTypeHashMinus,     // #-
-		models.TokenTypeQuestion,      // ?
 		models.TokenTypeQuestionPipe,  // ?|
 		models.TokenTypeQuestionAnd:   // ?&
 		return true
+	case models.TokenTypeQuestion: // ? (the conditional operator in ClickHouse)
+		return !p.IsClickHouse()
 	}
 	return false
 }

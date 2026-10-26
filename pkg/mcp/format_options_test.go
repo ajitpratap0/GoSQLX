@@ -48,9 +48,14 @@ func TestFormatSQLInternal_Options(t *testing.T) {
 		want      string
 	}{
 		{
-			name: "default keeps formatter casing",
+			name: "default upper-cases AND and OR",
 			sql:  fmtProbeSQL, indent: 2,
-			want: "SELECT a, b\nFROM t\nWHERE x = 1 and y IN (SELECT z FROM u WHERE w > 2) or c IS NOT NULL\nORDER BY a",
+			want: "SELECT a, b\nFROM t\nWHERE x = 1 AND y IN (SELECT z FROM u WHERE w > 2) OR c IS NOT NULL\nORDER BY a",
+		},
+		{
+			name: "default keeps the case of LIKE",
+			sql:  "select a from t where name like 'x%' and id = 1", indent: 2,
+			want: "SELECT a\nFROM t\nWHERE name like 'x%' AND id = 1",
 		},
 		{
 			name: "uppercase_keywords upper-cases every keyword",
@@ -188,7 +193,8 @@ func TestHandleFormatSQL_OptionsChangeOutput(t *testing.T) {
 		return formattedSQL(t, sc)
 	}
 	base := call(map[string]any{"sql": fmtProbeSQL})
-	if upper := call(map[string]any{"sql": fmtProbeSQL, "uppercase_keywords": true}); upper == base {
+	likeSQL := "select a from t where name like 'x%'"
+	if upper := call(map[string]any{"sql": likeSQL, "uppercase_keywords": true}); upper == call(map[string]any{"sql": likeSQL}) {
 		t.Error("uppercase_keywords:true did not change the output")
 	}
 	if one := call(map[string]any{"sql": fmtProbeSQL, "indent_size": 0}); one == base {

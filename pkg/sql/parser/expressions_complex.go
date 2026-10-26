@@ -24,6 +24,7 @@ import (
 	goerrors "github.com/ajitpratap0/GoSQLX/pkg/errors"
 	"github.com/ajitpratap0/GoSQLX/pkg/models"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
+	"github.com/ajitpratap0/GoSQLX/pkg/sql/keywords"
 )
 
 // parseCaseExpression parses a CASE expression (both simple and searched forms)
@@ -162,63 +163,31 @@ func (p *Parser) parseCastLike(try bool) (*ast.CastExpression, error) {
 		return nil, err
 	}
 
+	// ClickHouse CAST(expr, 'Type'): the target type is a string argument.
+	if !try && p.isType(models.TokenTypeComma) && p.dialect == string(keywords.DialectClickHouse) {
+		return p.parseCastTypeString(expr)
+	}
+
 	// Expect AS keyword
 	if !p.isType(models.TokenTypeAs) {
 		return nil, p.expectedError("AS")
 	}
 	p.advance() // Consume AS
 
-	// Parse the target data type
-	// The type can be:
-	// - Simple type: VARCHAR, INT, DECIMAL, etc.
-	// - Type with precision: VARCHAR(100), DECIMAL(10,2), etc.
-	// - Quoted user-defined type: "my type", as :: accepts and SQL()
-	//   renders a type name that is not a plain word
-	if !p.isIdentifier() {
-		return nil, p.expectedError("data type")
+	// Parse the target data type. The type can be a simple type (VARCHAR),
+	// a type with precision (DECIMAL(10,2)), a multi-word type (DOUBLE
+	// PRECISION, MySQL SIGNED INTEGER, CHAR(10) CHARACTER SET utf8mb4), an
+	// array type (text[]) or a quoted user-defined type ("my type").
+	dataType, err := p.parseDataTypeHint("Use CAST(expr AS TYPE(precision[, scale]))")
+	if err != nil {
+		return nil, err
 	}
 
-	dataType := p.currentToken.Token.Value
-	p.advance() // Consume type name
-
-	// Check for type parameters (e.g., VARCHAR(100), DECIMAL(10,2))
-	if p.isType(models.TokenTypeLParen) {
-		p.advance() // Consume (
-
-		// Build the full type string including parameters
-		typeParams := "("
-		paramCount := 0
-
-		for !p.isType(models.TokenTypeRParen) {
-			if paramCount > 0 {
-				if !p.isType(models.TokenTypeComma) {
-					return nil, p.expectedError(", or )")
-				}
-				typeParams += p.currentToken.Token.Value
-				p.advance() // Consume comma
-			}
-
-			// Parse parameter (should be a number)
-			if !p.isNumericLiteral() && !p.isType(models.TokenTypeIdentifier) {
-				return nil, goerrors.InvalidSyntaxError(
-					"expected numeric type parameter",
-					p.currentLocation(),
-					"",
-				).WithHint("Use CAST(expr AS TYPE(precision[, scale]))")
-			}
-
-			typeParams += p.currentToken.Token.Value
-			p.advance()
-			paramCount++
-		}
-
-		typeParams += ")"
-		dataType += typeParams
-
-		if !p.isType(models.TokenTypeRParen) {
-			return nil, p.expectedError(")")
-		}
-		p.advance() // Consume )
+	// Multi-word types and array suffixes: DOUBLE PRECISION,
+	// TIMESTAMP WITH TIME ZONE, SIGNED INTEGER, int[], text[][].
+	dataType, err = p.parseCastTypeSuffix(dataType)
+	if err != nil {
+		return nil, err
 	}
 
 	// Expect closing parenthesis of CAST
@@ -246,8 +215,11 @@ func (p *Parser) parseCastLike(try bool) (*ast.CastExpression, error) {
 //	INTERVAL '1' DAY                (qualifier "DAY")
 //	INTERVAL '1-2' YEAR TO MONTH    (qualifier "YEAR TO MONTH")
 //	INTERVAL '1-2' YEAR_MONTH       (MySQL unit as qualifier)
-//	INTERVAL 30 DAY                 (MySQL; unit kept in Value)
-func (p *Parser) parseIntervalExpression() (*ast.IntervalExpression, error) {
+//	INTERVAL 30 DAY                 (MySQL; ValueExpr 30, Unit DAY)
+//	INTERVAL n DAY, INTERVAL -1 HOUR (MySQL, MariaDB, ClickHouse)
+//	INTERVAL(5, 1, 10)              (MySQL/MariaDB function; a FunctionCall)
+func (p *Parser) parseIntervalExpression() (ast.Expression, error) {
+	intervalPos := p.currentLocation()
 	// Consume INTERVAL keyword
 	p.advance()
 
@@ -259,21 +231,85 @@ func (p *Parser) parseIntervalExpression() (*ast.IntervalExpression, error) {
 		return &ast.IntervalExpression{Value: value, Qualifier: p.parseIntervalQualifier()}, nil
 	}
 
-	// MySQL style: INTERVAL <number> <unit>
-	if p.isNumericLiteral() {
-		numStr := p.currentToken.Token.Value
-		p.advance()
-		// Expect a unit keyword (DAY, HOUR, MINUTE, SECOND, MONTH, YEAR, WEEK, etc.)
-		unit := strings.ToUpper(p.currentToken.Token.Value)
-		p.advance()
-		return &ast.IntervalExpression{Value: numStr + " " + unit}, nil
+	if !p.canStartIntervalValue() {
+		return nil, goerrors.InvalidSyntaxError(
+			"expected string literal or number after INTERVAL keyword",
+			p.currentLocation(),
+			"",
+		).WithHint("Use INTERVAL '1 day' or INTERVAL 1 DAY syntax")
 	}
 
+	// MySQL/MariaDB INTERVAL(N, N1, N2, ...) returns the index of the last
+	// Ni below N; INTERVAL (expr) DAY is still an interval.
+	isCall := p.isType(models.TokenTypeLParen) &&
+		(p.dialect == string(keywords.DialectMySQL) || p.dialect == string(keywords.DialectMariaDB))
+
+	// Unquoted value: INTERVAL <expr> <unit>
+	value, err := p.parseUnaryOperand()
+	if err != nil {
+		return nil, err
+	}
+	if unit := p.intervalUnit(); unit != "" {
+		p.advance() // Consume the unit
+		legacy := unit
+		if lit, ok := value.(*ast.LiteralValue); ok && lit.Type != "string" {
+			legacy = fmt.Sprint(lit.Value) + " " + unit
+		} else if sq, ok := value.(interface{ SQL() string }); ok {
+			legacy = sq.SQL() + " " + unit
+		}
+		return &ast.IntervalExpression{Value: legacy, ValueExpr: value, Unit: unit}, nil
+	}
+	if isCall {
+		fc := &ast.FunctionCall{Name: "INTERVAL", Pos: intervalPos}
+		switch v := value.(type) {
+		case *ast.TupleExpression:
+			fc.Arguments = append(fc.Arguments, v.Expressions...)
+		case *ast.ParenthesizedExpression:
+			fc.Arguments = append(fc.Arguments, v.Expr)
+		default:
+			return nil, p.expectedError("interval unit")
+		}
+		return fc, nil
+	}
 	return nil, goerrors.InvalidSyntaxError(
-		"expected string literal or number after INTERVAL keyword",
+		"expected interval unit (DAY, HOUR, ...) after INTERVAL value",
 		p.currentLocation(),
 		"",
 	).WithHint("Use INTERVAL '1 day' or INTERVAL 1 DAY syntax")
+}
+
+// canStartIntervalValue reports whether the current token can begin the
+// unquoted value of INTERVAL <expr> <unit>.
+func (p *Parser) canStartIntervalValue() bool {
+	switch p.currentToken.Token.Type {
+	case models.TokenTypeNumber, models.TokenTypeIdentifier, models.TokenTypeDoubleQuotedString,
+		models.TokenTypeLParen, models.TokenTypeMinus, models.TokenTypePlus,
+		models.TokenTypePlaceholder:
+		return true
+	}
+	return false
+}
+
+// intervalUnit returns the upper-cased unit when the current token is an
+// unquoted INTERVAL unit (DAY, YEAR_MONTH, or a plural such as DAYS), and ""
+// otherwise. It does not consume the token.
+func (p *Parser) intervalUnit() string {
+	tok := p.currentToken.Token
+	if tok.Quote != 0 || (tok.Type != models.TokenTypeIdentifier && tok.Type != models.TokenTypeKeyword) {
+		return ""
+	}
+	u := strings.ToUpper(tok.Value)
+	if isUnquotedIntervalUnit(u) || (len(u) > 1 && u[len(u)-1] == 'S' && isUnquotedIntervalUnit(u[:len(u)-1])) {
+		return u
+	}
+	return ""
+}
+
+// isUnquotedIntervalUnit reports whether u (upper-case) is a unit of the
+// unquoted INTERVAL <expr> <unit> form: any leading interval field, plus the
+// ClickHouse NANOSECOND unit, which is not an ANSI interval qualifier.
+func isUnquotedIntervalUnit(u string) bool {
+	return intervalLeadingField(u) || u == "NANOSECOND"
 }
 
 // parseIntervalQualifier parses the optional interval qualifier that follows
@@ -352,7 +388,14 @@ func (p *Parser) parseArrayConstructor() (*ast.ArrayConstructorExpression, error
 		// Parse comma-separated list of expressions (can be empty)
 		if !p.isType(models.TokenTypeRBracket) {
 			for {
-				elem, err := p.parseExpression()
+				var elem ast.Expression
+				var err error
+				if p.isType(models.TokenTypeLBracket) {
+					// Nested row of a multi-dimensional array: ARRAY[[1, 2], [3, 4]]
+					elem, err = p.parseNestedBracketArray()
+				} else {
+					elem, err = p.parseExpression()
+				}
 				if err != nil {
 					return nil, err
 				}
@@ -391,11 +434,12 @@ func (p *Parser) parseArrayConstructor() (*ast.ArrayConstructorExpression, error
 			return nil, err
 		}
 
-		selectStmt, ok := subquery.(*ast.SelectStatement)
-		if !ok {
-			return nil, p.expectedError("SELECT statement in ARRAY subquery")
+		if selectStmt, ok := subquery.(*ast.SelectStatement); ok {
+			arrayExpr.Subquery = selectStmt
+		} else {
+			// ARRAY(SELECT 1 UNION SELECT 2)
+			arrayExpr.Query = subquery
 		}
-		arrayExpr.Subquery = selectStmt
 
 		// Expect closing parenthesis
 		if !p.isType(models.TokenTypeRParen) {
@@ -415,10 +459,17 @@ func (p *Parser) parseBracketArrayLiteral() (*ast.ArrayConstructorExpression, er
 	p.advance() // Consume [
 
 	arrayExpr := ast.GetArrayConstructor()
+	arrayExpr.Bracket = true
 
 	if !p.isType(models.TokenTypeRBracket) {
 		for {
-			elem, err := p.parseExpression()
+			var elem ast.Expression
+			var err error
+			if p.isType(models.TokenTypeLBracket) {
+				elem, err = p.parseNestedBracketArray()
+			} else {
+				elem, err = p.parseExpression()
+			}
 			if err != nil {
 				return nil, err
 			}
@@ -453,7 +504,12 @@ func (p *Parser) parseBracketArrayLiteral() (*ast.ArrayConstructorExpression, er
 // The field is a date/time part keyword (YEAR, MONTH, DAY, HOUR, MINUTE,
 // SECOND, DOW, DOY, EPOCH, QUARTER, WEEK, etc.). It is captured as a
 // plain string rather than an enum to accommodate dialect extensions.
-func (p *Parser) parseExtractExpression() (*ast.ExtractExpression, error) {
+func (p *Parser) parseExtractExpression() (ast.Expression, error) {
+	// ClickHouse extract(haystack, pattern) is the regular-expression
+	// function, not EXTRACT(field FROM source).
+	if p.dialect == string(keywords.DialectClickHouse) && p.tokenAt(3).Token.Type != models.TokenTypeFrom {
+		return p.parseKeywordFunctionCall()
+	}
 	p.advance() // Consume EXTRACT
 
 	if !p.isType(models.TokenTypeLParen) {

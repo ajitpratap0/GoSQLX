@@ -30,19 +30,14 @@ import (
 // rendering gap. For these the CLI must refuse to format (return an error)
 // rather than emit changed SQL; once the gap is fixed they simply pass.
 var corpusFormatKnownGaps = map[string]string{
-	"corpus/orm/gorm_joins.sql":      "follow-up: a name quoted only for case (\"Company\") renders bare; the AST does not record quoting, so the CLI refuses",
-	"mssql/13_cross_apply.sql":       "follow-up: CROSS APPLY rendered as CROSS APPLY JOIN, TOP lost in derived table",
-	"mssql/14_outer_apply.sql":       "follow-up: OUTER APPLY rendered as OUTER APPLY JOIN, TOP lost in derived table",
-	"mysql/29_full_text_search.sql":  "follow-up: MATCH ... AGAINST rendered as AGAINST AGAINST(...)",
-	"oracle/08_connect_by_path.sql":  "follow-up: START WITH / CONNECT BY not rendered",
-	"oracle/19_regexp_functions.sql": "follow-up: string literal backslashes doubled for a dialect that keeps them literal",
+	"realworld/mysql/05_dialect_specific.sql": "DESCRIBE has no renderer, so the CLI refuses the file rather than rewrite it (see TestFormatSQL_RefusesDescribe)",
 }
 
 // corpusDialect maps a testdata path to the dialect its SQL is written in.
 func corpusDialect(rel string) string {
 	p := "/" + rel
 	switch {
-	case strings.Contains(p, "/mssql/"):
+	case strings.Contains(p, "/mssql/"), strings.Contains(p, "/sqlserver/"):
 		return "sqlserver"
 	case strings.Contains(p, "/mysql/"):
 		return "mysql"

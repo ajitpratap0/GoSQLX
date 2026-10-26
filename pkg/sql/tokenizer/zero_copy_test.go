@@ -74,7 +74,6 @@ var zeroCopyInvalidInputs = []struct {
 	sql     string
 	dialect keywords.SQLDialect
 }{
-	{"SELECT 1.", keywords.DialectPostgreSQL},
 	{"SELECT 1e", keywords.DialectPostgreSQL},
 	{"SELECT 'x", keywords.DialectPostgreSQL},
 	{"/* open", keywords.DialectPostgreSQL},
@@ -286,6 +285,29 @@ func TestCompoundKeywordValue(t *testing.T) {
 				t.Errorf("%q: got {%v %q}, want {%v %q}", tc.in, tok.Type, tok.Value, tc.typ, tc.want)
 			}
 		}
+	}
+}
+
+// TestCompoundKeywordValue_NoJoinAllocation checks that a compound keyword
+// written with a single space allocates nothing for its Value: only inputs
+// whose separator must be normalized pay for the joined string.
+func TestCompoundKeywordValue_NoJoinAllocation(t *testing.T) {
+	if testing.CoverMode() != "" || raceEnabled {
+		t.Skip("allocation counts are not stable under coverage or race instrumentation")
+	}
+	tkz := GetTokenizer()
+	defer PutTokenizer(tkz)
+	allocs := func(sql string) float64 {
+		return testing.AllocsPerRun(50, func() {
+			if _, err := tkz.TokenizeString(sql); err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
+	single := allocs("SELECT a FROM t GROUP BY a ORDER BY a")
+	spread := allocs("SELECT a FROM t GROUP  BY a ORDER  BY a")
+	if single != spread-2 {
+		t.Errorf("allocs: single-space compounds %v, double-space %v; want exactly the 2 joined Values fewer", single, spread)
 	}
 }
 

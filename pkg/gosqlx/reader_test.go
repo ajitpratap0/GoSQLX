@@ -305,3 +305,29 @@ func TestSplitSQLStatements(t *testing.T) {
 		})
 	}
 }
+
+// TestParseReaderMultiple_SkipsTrailingComment guards the common script shape
+// "stmt; -- note": the comment after the last ';' is not a statement.
+func TestParseReaderMultiple_SkipsTrailingComment(t *testing.T) {
+	trees, err := ParseReaderMultiple(context.Background(),
+		strings.NewReader("SELECT 1; -- one\nSELECT 2;\n/* done */\n-- bye\n"))
+	if err != nil {
+		t.Fatalf("ParseReaderMultiple: %v", err)
+	}
+	if len(trees) != 2 {
+		t.Fatalf("got %d trees, want 2", len(trees))
+	}
+}
+
+// TestParseReaderMultiple_BatchScript checks the splitter's GO handling end
+// to end through the reader.
+func TestParseReaderMultiple_BatchScript(t *testing.T) {
+	src := "SELECT 1\nGO\nSELECT 2\nGO\n"
+	trees, err := ParseReaderMultiple(context.Background(), strings.NewReader(src), WithDialect("sqlserver"))
+	if err != nil {
+		t.Fatalf("ParseReaderMultiple: %v", err)
+	}
+	if len(trees) != 2 {
+		t.Fatalf("got %d trees, want 2", len(trees))
+	}
+}

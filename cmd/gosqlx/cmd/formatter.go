@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/ajitpratap0/GoSQLX/cmd/gosqlx/internal/config"
+	"github.com/ajitpratap0/GoSQLX/internal/batch"
 	pkgformatter "github.com/ajitpratap0/GoSQLX/pkg/formatter"
 	"github.com/ajitpratap0/GoSQLX/pkg/models"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
@@ -208,8 +209,25 @@ func (f *Formatter) formatFile(filename string) FileFormatterResult {
 	return result
 }
 
-// formatSQL formats a SQL string
+// utf8BOM is the byte order mark some editors put at the start of a file.
+const utf8BOM = "\uFEFF"
+
+// formatSQL formats a SQL string. A leading UTF-8 byte order mark is not SQL:
+// it is set aside and written back in front of the result, so formatting a
+// file in place does not strip it.
 func (f *Formatter) formatSQL(sql string) (string, error) {
+	if strings.HasPrefix(sql, utf8BOM) {
+		out, err := f.formatSQLText(strings.TrimPrefix(sql, utf8BOM))
+		if err != nil {
+			return "", err
+		}
+		return utf8BOM + out, nil
+	}
+	return f.formatSQLText(sql)
+}
+
+// formatSQLText formats SQL text without a byte order mark.
+func (f *Formatter) formatSQLText(sql string) (string, error) {
 	// Acquire a tokenizer for the configured dialect (pooled for the default)
 	tkz, releaseTkz, err := tokenizerForDialect(f.Opts.Dialect)
 	if err != nil {
@@ -226,8 +244,12 @@ func (f *Formatter) formatSQL(sql string) (string, error) {
 	if len(tokens) == 0 {
 		return "", nil
 	}
-
-	// Convert tokens for parser using centralized converter
+	if !hasStatementTokens(tokens) {
+		// Whitespace or comments only: there is nothing to format, and the
+		// text is returned untouched rather than reported as a syntax error.
+		return sql, nil
+	}
+	comments := tkz.Comments
 
 	// Parse to AST with proper error handling for memory management
 	p := parserForDialect(f.Opts.Dialect)
@@ -242,7 +264,7 @@ func (f *Formatter) formatSQL(sql string) (string, error) {
 		ast.ReleaseAST(parsedAST)
 	}()
 
-	if err := checkFormattable(parsedAST, tokens); err != nil {
+	if err := checkFormattable(parsedAST, tokens, f.Opts.Dialect); err != nil {
 		return "", err
 	}
 
@@ -256,11 +278,18 @@ func (f *Formatter) formatSQL(sql string) (string, error) {
 		Dialect:      f.Opts.Dialect,
 	}
 
-	// Create formatter and format the AST
+	// Create formatter and format the AST. Comments are put back around the
+	// statements they belonged to; one that cannot be put back (an optimizer
+	// hint away from its statement's first keyword) refuses the whole file.
 	formatter := NewSQLFormatter(formatterOpts)
-	formatted, err := formatter.Format(parsedAST)
+	var formatted string
+	if len(comments) == 0 {
+		formatted, err = formatter.Format(parsedAST)
+	} else {
+		formatted, err = formatter.FormatWithComments(parsedAST, tokens, comments)
+	}
 	if err != nil {
-		return "", fmt.Errorf("render: %w", err)
+		return "", fmt.Errorf("render: %w (input left unchanged)", err)
 	}
 
 	// Refuse output that fails verifyFormattedSQL, so format, format -i and
@@ -283,8 +312,41 @@ func (f *Formatter) formatSQL(sql string) (string, error) {
 	if err := verifyFormattedSQL(parsedAST, tokens, verifyText, f.Opts.Dialect); err != nil {
 		return "", err
 	}
+	// Comments are not part of the AST, so verify them on the real output.
+	if err := verifyComments(comments, formatted, f.Opts.Dialect); err != nil {
+		return "", err
+	}
 
 	return formatted, nil
+}
+
+// verifyComments requires the formatted output to contain exactly the
+// comments of the input, so format -i can never delete or invent one.
+func verifyComments(input []models.Comment, formatted, dialect string) error {
+	tkz, release, err := tokenizerForDialect(dialect)
+	if err != nil {
+		return fmt.Errorf("tokenizer setup failed: %w", err)
+	}
+	defer release()
+	if _, err := tkz.TokenizeString(formatted); err != nil {
+		return fmt.Errorf("formatted output does not re-tokenize (formatter bug; input left unchanged): %w", err)
+	}
+	pool := make(map[string]int, len(input))
+	for _, c := range tkz.Comments {
+		pool[c.Text]++
+	}
+	for _, c := range input {
+		if pool[c.Text] == 0 {
+			return fmt.Errorf("formatted output loses the comment %q (formatter bug; input left unchanged)", c.Text)
+		}
+		pool[c.Text]--
+	}
+	for text, n := range pool {
+		if n > 0 {
+			return fmt.Errorf("formatted output adds the comment %q (formatter bug; input left unchanged)", text)
+		}
+	}
+	return nil
 }
 
 // verifyFormattedSQL re-parses formatted with the same dialect and checks
@@ -355,14 +417,17 @@ func checkQuotedTokens(input, output []models.TokenWithSpan, dialect string) err
 	}
 	defer release()
 
+	input = mergeAdjacentStrings(input, dialect)
+	output = mergeAdjacentStrings(output, dialect)
+
 	pool := make(map[string]int)
 	for _, t := range output {
 		if isStringLiteralToken(t.Token) || bw.isQuotedIdent(t.Token) {
 			pool[t.Token.Value]++
 		}
 	}
-	for _, t := range input {
-		if !isStringLiteralToken(t.Token) {
+	for i, t := range input {
+		if !isStringLiteralToken(t.Token) || isStringAlias(input, i, dialect) {
 			continue
 		}
 		if pool[t.Token.Value] == 0 {
@@ -370,8 +435,8 @@ func checkQuotedTokens(input, output []models.TokenWithSpan, dialect string) err
 		}
 		pool[t.Token.Value]--
 	}
-	for _, t := range input {
-		if !bw.isQuotedIdent(t.Token) {
+	for i, t := range input {
+		if !bw.isQuotedIdent(t.Token) && !isStringAlias(input, i, dialect) {
 			continue
 		}
 		v := t.Token.Value
@@ -384,6 +449,64 @@ func checkQuotedTokens(input, output []models.TokenWithSpan, dialect string) err
 		}
 	}
 	return nil
+}
+
+// isStringAlias reports whether toks[i] is a string literal that names a
+// column, as in "SELECT a AS 'x'" (MySQL, MariaDB, SQLite). The parser reads
+// it as the alias x, the same as the delimited name, so the formatter writes
+// it as a name rather than as a string.
+func isStringAlias(toks []models.TokenWithSpan, i int, dialect string) bool {
+	switch strings.ToLower(dialect) {
+	case "mysql", "mariadb", "sqlite":
+	default:
+		return false
+	}
+	t := toks[i].Token
+	if i == 0 || (t.Type != models.TokenTypeString && t.Type != models.TokenTypeSingleQuotedString) {
+		return false
+	}
+	return toks[i-1].Token.Type == models.TokenTypeAs
+}
+
+// mergeAdjacentStrings returns toks with each run of adjacent single-quoted
+// string tokens merged into one token, for the dialects whose parser reads
+// 'a' 'b' as the literal 'ab' (MySQL, MariaDB, PostgreSQL). The formatter
+// writes the merged literal, which means the same. Other dialects, and toks
+// without such a run, are returned as they are.
+func mergeAdjacentStrings(toks []models.TokenWithSpan, dialect string) []models.TokenWithSpan {
+	switch strings.ToLower(dialect) {
+	case "mysql", "mariadb", "postgresql", "postgres":
+	default:
+		return toks
+	}
+	plain := func(t models.Token) bool {
+		return t.Type == models.TokenTypeString || t.Type == models.TokenTypeSingleQuotedString
+	}
+	var out []models.TokenWithSpan
+	for i := 0; i < len(toks); i++ {
+		if !plain(toks[i].Token) || i+1 >= len(toks) || !plain(toks[i+1].Token) {
+			if out != nil {
+				out = append(out, toks[i])
+			}
+			continue
+		}
+		if out == nil {
+			out = append(make([]models.TokenWithSpan, 0, len(toks)), toks[:i]...)
+		}
+		merged := toks[i]
+		var sb strings.Builder
+		sb.WriteString(merged.Token.Value)
+		for i+1 < len(toks) && plain(toks[i+1].Token) {
+			i++
+			sb.WriteString(toks[i].Token.Value)
+		}
+		merged.Token.Value = sb.String()
+		out = append(out, merged)
+	}
+	if out == nil {
+		return toks
+	}
+	return out
 }
 
 // checkMySQLDoubleQuotes requires MySQL/MariaDB output to keep exactly the
@@ -621,33 +744,49 @@ func FormatterOptionsFromConfig(cfg *config.Config, flagsChanged map[string]bool
 // checkFormattable refuses parse results the CLI cannot rewrite faithfully, so
 // format, format -i and format -o leave such input unchanged.
 //
-// DescribeStatement keeps only a name: it drops EXPLAIN options, the explained
-// query and DESCRIBE object kinds, and "EXPLAIN VERBOSE|ANALYZE <stmt>" parses
-// as a DescribeStatement followed by <stmt>, which would rewrite a
-// non-executing EXPLAIN into the executable statement. UnsupportedStatement is
-// rendered as a comment. Both are refused by type. As a general guard, a parse
-// with more statements than semicolon-separated segments in the input means
-// the parser split a statement, which re-parsing the output cannot detect.
-func checkFormattable(tree *ast.AST, tokens []models.TokenWithSpan) error {
+// DescribeStatement keeps only a name and drops DESCRIBE object kinds
+// (EXPLAIN <stmt> is an ExplainStatement, which round-trips).
+// UnsupportedStatement is rendered as a comment. Both are refused by type. As a general guard, a parse
+// with more statements than the input can hold means the parser split a
+// statement, which re-parsing the output cannot detect. The input holds at
+// most one statement per semicolon-separated segment; T-SQL statements may
+// also end without ';', so for SQL Server the bound also counts GO lines and
+// the words a statement can start with (see tsqlStatementBound).
+func checkFormattable(tree *ast.AST, tokens []models.TokenWithSpan, dialect ...string) error {
 	for _, stmt := range tree.Statements {
 		switch stmt.(type) {
 		case *ast.DescribeStatement, *ast.UnsupportedStatement:
 			return fmt.Errorf("unsupported statement type: %T (input left unchanged)", stmt)
 		}
 	}
-	if got, segs := len(tree.Statements), statementSegments(tokens); got > segs {
-		return fmt.Errorf("input parses as %d statements but has %d semicolon-separated statements (input left unchanged)", got, segs)
+	bound, unit := 0, "semicolon-separated"
+	if len(dialect) > 0 && isSQLServerName(dialect[0]) {
+		bound, unit = tsqlStatementBound(tokens), "possible T-SQL"
+	} else {
+		bound = statementSegments(tokens)
+	}
+	if got := len(tree.Statements); got > bound {
+		return fmt.Errorf("input parses as %d statements but has %d %s statements (input left unchanged)", got, bound, unit)
 	}
 	return nil
 }
 
+func isSQLServerName(d string) bool {
+	switch strings.ToLower(d) {
+	case "sqlserver", "mssql", "tsql":
+		return true
+	}
+	return false
+}
+
 // statementSegments counts the non-empty runs of tokens between semicolons,
-// ignoring EOF, i.e. the most statements the input can legitimately hold.
+// ignoring EOF, i.e. the most statements the input can legitimately hold
+// outside SQL Server.
 func statementSegments(tokens []models.TokenWithSpan) int {
 	segs := 0
 	inSeg := false
-	for _, tok := range tokens {
-		switch tok.Token.Type {
+	for i := range tokens {
+		switch tokens[i].Token.Type {
 		case models.TokenTypeSemicolon:
 			inSeg = false
 		case models.TokenTypeEOF:
@@ -659,4 +798,74 @@ func statementSegments(tokens []models.TokenWithSpan) int {
 		}
 	}
 	return segs
+}
+
+// tsqlStartWords are the words a T-SQL statement can start with when it
+// follows another one without ';'. It must cover every word the SQL Server
+// parser starts a statement at (its implicit statement starts and the
+// statement keywords); a missing word makes the guard refuse valid input,
+// never accept a split statement.
+var tsqlStartWords = map[string]bool{
+	"SELECT": true, "INSERT": true, "UPDATE": true, "DELETE": true, "MERGE": true,
+	"WITH": true, "CREATE": true, "ALTER": true, "DROP": true, "TRUNCATE": true,
+	"DECLARE": true, "SET": true, "EXEC": true, "EXECUTE": true, "IF": true,
+	"ELSE": true, "WHILE": true, "BEGIN": true, "END": true, "PRINT": true,
+	"THROW": true, "RAISERROR": true, "WAITFOR": true, "RETURN": true, "USE": true,
+	"DBCC": true, "COMMIT": true, "ROLLBACK": true, "SAVE": true, "GRANT": true,
+	"REVOKE": true, "DENY": true, "GOTO": true, "BREAK": true, "CONTINUE": true,
+	"OPEN": true, "CLOSE": true, "FETCH": true, "DEALLOCATE": true, "BULK": true,
+	"BACKUP": true, "RESTORE": true, "CHECKPOINT": true, "KILL": true,
+	"RECONFIGURE": true, "SHUTDOWN": true, "REVERT": true,
+	"ENABLE": true, "DISABLE": true, "VALUES": true, "EXPLAIN": true, "SHOW": true,
+	"DESCRIBE": true, "CALL": true, "REPLACE": true,
+}
+
+// tsqlStatementBound returns the most statements a SQL Server script can
+// hold: one per run of tokens between semicolons and GO lines, one per GO
+// line (a retained BatchSeparator is itself an AST statement), and one more
+// per word inside a run that can start a statement (tsqlStartWords), since
+// T-SQL statements need no ';' between them.
+func tsqlStatementBound(tokens []models.TokenWithSpan) int {
+	bound := 0
+	inSeg := false
+	for i := 0; i < len(tokens); i++ {
+		if next, ok := batch.End(tokens, i); ok {
+			bound++
+			inSeg = false
+			i = next - 1
+			continue
+		}
+		tok := &tokens[i]
+		switch tok.Token.Type {
+		case models.TokenTypeSemicolon:
+			inSeg = false
+		case models.TokenTypeEOF:
+		default:
+			if !inSeg {
+				bound++
+				inSeg = true
+			} else if tsqlMayStartStatement(tokens, i) {
+				bound++
+			}
+		}
+	}
+	return bound
+}
+
+// tsqlMayStartStatement reports whether tokens[i] is an unquoted word in
+// tsqlStartWords that is not part of a qualified name.
+func tsqlMayStartStatement(tokens []models.TokenWithSpan, i int) bool {
+	tok := &tokens[i].Token
+	if tok.Quote != 0 || tok.Value == "" || len(tok.Value) > len("RECONFIGURE") {
+		return false
+	}
+	switch tok.Type {
+	case models.TokenTypeString, models.TokenTypeSingleQuotedString, models.TokenTypeDoubleQuotedString,
+		models.TokenTypeNumber, models.TokenTypePlaceholder:
+		return false
+	}
+	if i > 0 && tokens[i-1].Token.Type == models.TokenTypePeriod {
+		return false
+	}
+	return tsqlStartWords[strings.ToUpper(tok.Value)]
 }

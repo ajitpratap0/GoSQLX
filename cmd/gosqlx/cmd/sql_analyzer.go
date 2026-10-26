@@ -507,6 +507,9 @@ func (a *SQLAnalyzer) buildQueryInfo(astObj *ast.AST, sql string) QueryInfo {
 
 	for _, stmt := range astObj.Statements {
 		switch stmt.(type) {
+		case *ast.BatchSeparator:
+			// A GO line is a client directive, not a statement.
+			continue
 		case *ast.SelectStatement:
 			stmtTypes = append(stmtTypes, "SELECT")
 		case *ast.InsertStatement:
@@ -535,7 +538,7 @@ func (a *SQLAnalyzer) buildQueryInfo(astObj *ast.AST, sql string) QueryInfo {
 	return QueryInfo{
 		Size:           size,
 		Lines:          lines,
-		StatementCount: len(astObj.Statements),
+		StatementCount: len(stmtTypes),
 		StatementTypes: stmtTypes,
 	}
 }

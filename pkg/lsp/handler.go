@@ -1272,6 +1272,11 @@ func (h *Handler) handleDocumentSymbol(params json.RawMessage) ([]DocumentSymbol
 	// at the whole file.
 	starts := computeStatementStarts(parsed.Statements, lines)
 	for i, stmt := range parsed.Statements {
+		if _, ok := stmt.(*ast.BatchSeparator); ok {
+			// A GO line is a client directive, not an outline entry; its
+			// position still bounds the statement before it (see starts).
+			continue
+		}
 		symbol := h.extractStatementSymbol(stmt, i, lines, content, starts)
 		if symbol != nil {
 			symbols = append(symbols, *symbol)
@@ -1543,6 +1548,8 @@ func statementStartLocation(stmt ast.Statement) models.Location {
 	case *ast.DropSequenceStatement:
 		return s.Pos
 	case *ast.AlterSequenceStatement:
+		return s.Pos
+	case *ast.BatchSeparator:
 		return s.Pos
 	}
 	// Statement has no declared Pos; fall back to first child position.

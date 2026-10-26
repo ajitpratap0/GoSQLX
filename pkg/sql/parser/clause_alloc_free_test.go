@@ -15,8 +15,6 @@
 package parser
 
 import (
-	"fmt"
-	"strconv"
 	"strings"
 	"testing"
 
@@ -46,60 +44,43 @@ func parseSelectWithDialect(t *testing.T, sql string, dialect keywords.SQLDialec
 	return stmt, tree
 }
 
-// TestParseLeadingInt_MatchesSscanf pins parseLeadingInt against
-// fmt.Sscanf("%d"), the implementation it replaces. Leading whitespace is
-// excluded on purpose: Number tokens never carry it.
-func TestParseLeadingInt_MatchesSscanf(t *testing.T) {
-	inputs := []string{
-		"10", "-5", "+5", "10.5", "", "abc",
-		"99999999999999999999", "9223372036854775807", "9223372036854775808",
-		"-9223372036854775808", "1e5", "0x10", "007", "1_000", "5abc", "-", "+-5",
-	}
-	for _, in := range inputs {
-		t.Run(fmt.Sprintf("%q", in), func(t *testing.T) {
-			var wantInt int
-			_, _ = fmt.Sscanf(in, "%d", &wantInt)
-			if got := int(parseLeadingInt(in, strconv.IntSize)); got != wantInt {
-				t.Errorf("int: parseLeadingInt = %d, Sscanf = %d", got, wantInt)
-			}
-			var want64 int64
-			_, _ = fmt.Sscanf(in, "%d", &want64)
-			if got := parseLeadingInt(in, 64); got != want64 {
-				t.Errorf("int64: parseLeadingInt = %d, Sscanf = %d", got, want64)
-			}
-		})
-	}
-
-	if raceEnabled {
-		return
-	}
-	if n := testing.AllocsPerRun(1000, func() { _ = parseLeadingInt("20", strconv.IntSize) }); n != 0 {
-		t.Errorf("parseLeadingInt allocs = %v, want 0", n)
-	}
-}
-
-// TestParseLimitOffsetFetch_LenientNumeric pins the lenient numeric handling
-// of LIMIT, OFFSET and FETCH end to end.
+// TestParseLimitOffsetFetch_LenientNumeric pins the numeric handling of
+// LIMIT, OFFSET and FETCH end to end: a plain integer fills the *int field,
+// and anything else (decimals, exponents, values that overflow int) is kept
+// verbatim as an expression rather than truncated, so formatting never
+// changes the row count.
 func TestParseLimitOffsetFetch_LenientNumeric(t *testing.T) {
 	intp := func(v int) *int { return &v }
 	i64p := func(v int64) *int64 { return &v }
 
 	tests := []struct {
-		name      string
-		sql       string
-		dialect   keywords.SQLDialect
-		wantLimit *int
-		wantOff   *int
-		wantFetch *int64
+		name          string
+		sql           string
+		dialect       keywords.SQLDialect
+		wantLimit     *int
+		wantOff       *int
+		wantLimitExpr string
+		wantOffExpr   string
+		wantFetch     *int64
+		wantFetchExpr string
 	}{
-		{"limit offset", "SELECT id FROM t LIMIT 10 OFFSET 20", keywords.DialectPostgreSQL, intp(10), intp(20), nil},
-		{"decimal literals", "SELECT id FROM t LIMIT 10.5 OFFSET 2.75", keywords.DialectPostgreSQL, intp(10), intp(2), nil},
-		{"exponent literal", "SELECT id FROM t LIMIT 1e2", keywords.DialectPostgreSQL, intp(1), nil, nil},
-		{"overflow limit", "SELECT id FROM t LIMIT 99999999999999999999", keywords.DialectPostgreSQL, intp(0), nil, nil},
-		{"mysql offset,count", "SELECT id FROM t LIMIT 2.5, 7.9", keywords.DialectMySQL, intp(7), intp(2), nil},
-		{"fetch first", "SELECT id FROM t FETCH FIRST 5 ROWS ONLY", keywords.DialectPostgreSQL, nil, nil, i64p(5)},
-		{"fetch decimal", "SELECT id FROM t OFFSET 20 ROWS FETCH NEXT 5.5 ROWS ONLY", keywords.DialectPostgreSQL, nil, nil, i64p(5)},
-		{"fetch overflow", "SELECT id FROM t FETCH FIRST 99999999999999999999 ROWS ONLY", keywords.DialectPostgreSQL, nil, nil, i64p(0)},
+		{name: "limit offset", sql: "SELECT id FROM t LIMIT 10 OFFSET 20", dialect: keywords.DialectPostgreSQL, wantLimit: intp(10), wantOff: intp(20)},
+		{name: "decimal literals", sql: "SELECT id FROM t LIMIT 10.5 OFFSET 2.75", dialect: keywords.DialectPostgreSQL, wantLimitExpr: "10.5", wantOffExpr: "2.75"},
+		{name: "exponent literal", sql: "SELECT id FROM t LIMIT 1e2", dialect: keywords.DialectPostgreSQL, wantLimitExpr: "1e2"},
+		{name: "overflow limit", sql: "SELECT id FROM t LIMIT 99999999999999999999", dialect: keywords.DialectPostgreSQL, wantLimitExpr: "99999999999999999999"},
+		{name: "mysql offset,count", sql: "SELECT id FROM t LIMIT 2.5, 7.9", dialect: keywords.DialectMySQL, wantLimitExpr: "7.9", wantOffExpr: "2.5"},
+		{name: "fetch first", sql: "SELECT id FROM t FETCH FIRST 5 ROWS ONLY", dialect: keywords.DialectPostgreSQL, wantFetch: i64p(5)},
+		{name: "fetch decimal", sql: "SELECT id FROM t OFFSET 20 ROWS FETCH NEXT 5.5 ROWS ONLY", dialect: keywords.DialectPostgreSQL, wantOff: intp(20), wantFetchExpr: "5.5"},
+		{name: "fetch overflow", sql: "SELECT id FROM t FETCH FIRST 99999999999999999999 ROWS ONLY", dialect: keywords.DialectPostgreSQL, wantFetchExpr: "99999999999999999999"},
+	}
+	exprText := func(e ast.Expression) string {
+		if e == nil {
+			return ""
+		}
+		if s, ok := e.(interface{ SQL() string }); ok {
+			return s.SQL()
+		}
+		return e.TokenLiteral()
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -116,15 +97,26 @@ func TestParseLimitOffsetFetch_LenientNumeric(t *testing.T) {
 				}
 			}
 			cmpInt("Limit", stmt.Limit, tt.wantLimit)
-			if tt.wantFetch == nil {
-				cmpInt("Offset", stmt.Offset, tt.wantOff)
+			cmpInt("Offset", stmt.Offset, tt.wantOff)
+			if got := exprText(stmt.DialectExtras().LimitExpr); got != tt.wantLimitExpr {
+				t.Errorf("LimitExpr = %q, want %q", got, tt.wantLimitExpr)
+			}
+			if got := exprText(stmt.DialectExtras().OffsetExpr); got != tt.wantOffExpr {
+				t.Errorf("OffsetExpr = %q, want %q", got, tt.wantOffExpr)
+			}
+			if tt.wantFetch == nil && tt.wantFetchExpr == "" {
 				return
 			}
-			if stmt.Fetch == nil || stmt.Fetch.FetchValue == nil {
-				t.Fatalf("expected FetchValue %d, got Fetch=%+v", *tt.wantFetch, stmt.Fetch)
+			if stmt.Fetch == nil {
+				t.Fatalf("expected a FETCH clause")
 			}
-			if *stmt.Fetch.FetchValue != *tt.wantFetch {
-				t.Errorf("FetchValue = %d, want %d", *stmt.Fetch.FetchValue, *tt.wantFetch)
+			if tt.wantFetch != nil {
+				if stmt.Fetch.FetchValue == nil || *stmt.Fetch.FetchValue != *tt.wantFetch {
+					t.Errorf("FetchValue = %v, want %d", stmt.Fetch.FetchValue, *tt.wantFetch)
+				}
+			}
+			if got := exprText(stmt.Fetch.FetchExpr); got != tt.wantFetchExpr {
+				t.Errorf("FetchExpr = %q, want %q", got, tt.wantFetchExpr)
 			}
 		})
 	}

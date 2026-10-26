@@ -143,8 +143,8 @@ func TestExampleErrorCases(t *testing.T) {
 			query: `SELECT * FROM users WHERE name = 'unterminated;`,
 		},
 		{
-			name:  "invalid Unicode escape sequence",
-			query: `SELECT * FROM users WHERE name = '\u123';`, // Invalid Unicode escape
+			name:  "incomplete escape sequence",
+			query: `SELECT * FROM users WHERE name = 'abc\`, // Backslash at end of input
 		},
 	}
 

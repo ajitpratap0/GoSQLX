@@ -29,6 +29,7 @@ import (
 	"github.com/ajitpratap0/GoSQLX/pkg/linter"
 	"github.com/ajitpratap0/GoSQLX/pkg/linter/rules"
 	"github.com/ajitpratap0/GoSQLX/pkg/linter/rules/keywords"
+	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
 	sqlkeywords "github.com/ajitpratap0/GoSQLX/pkg/sql/keywords"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/security"
 )
@@ -78,7 +79,7 @@ func validateSQLInternal(sql, dialect string) (map[string]any, error) {
 // formatSQLInternal formats a SQL string using the provided options.
 //
 // gosqlx.Format always emits clause keywords (SELECT, FROM, WHERE, ...) in
-// upper case and leaves the case of other keywords (and, in, case, ...) to the
+// upper case and leaves the case of other keywords (like, case, ...) to the
 // AST, so its UppercaseKeywords option alone changes nothing visible. When
 // uppercaseKeywords is true the remaining keywords are therefore upper-cased
 // here (data type names are left alone); when false the output is
@@ -239,11 +240,14 @@ func parseSQLInternal(sql string) (map[string]any, error) {
 
 	stmtTypes := make([]string, 0, len(tree.Statements))
 	for _, stmt := range tree.Statements {
+		if _, ok := stmt.(*ast.BatchSeparator); ok {
+			continue // a GO line is a client directive, not a statement
+		}
 		stmtTypes = append(stmtTypes, fmt.Sprintf("%T", stmt))
 	}
 
 	return map[string]any{
-		"statement_count": len(tree.Statements),
+		"statement_count": len(stmtTypes),
 		"statement_types": stmtTypes,
 	}, nil
 }

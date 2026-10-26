@@ -37,7 +37,7 @@ func TestLiteralValue_SQL_Table(t *testing.T) {
 		{"string", &LiteralValue{Value: "paid", Type: "string"}, `'paid'`},
 		{"string quote", &LiteralValue{Value: "it's", Type: "string"}, `'it''s'`},
 		{"string escapes", &LiteralValue{Value: "a\\b\n\r\x1a", Type: "STRING"}, `'a\\b\n\r\Z'`},
-		{"string NUL dropped", &LiteralValue{Value: "a\x00b", Type: "string"}, `'ab'`},
+		{"string NUL escaped", &LiteralValue{Value: "a\x00b", Type: "string"}, `'a\0b'`},
 		{"string non-ASCII", &LiteralValue{Value: "héllo", Type: "string"}, `'héllo'`},
 		{"string invalid UTF-8", &LiteralValue{Value: "\xff", Type: "string"}, "'\xef\xbf\xbd'"},
 		{"string non-string value", &LiteralValue{Value: 42, Type: "string"}, `'42'`},

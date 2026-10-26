@@ -36,7 +36,6 @@ package transpiler
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/ajitpratap0/GoSQLX/pkg/formatter"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
@@ -54,6 +53,12 @@ type RewriteRule func(stmt ast.Statement) error
 // If from == to, the SQL is parsed and reformatted with no rewrites applied.
 // If no rules are registered for the pair, the SQL is returned normalised
 // (parsed and reformatted without dialect-specific changes).
+// SQL Server GO batch scopes cannot be represented in other dialects and
+// return an error rather than dropping boundaries or repeat counts.
+// Operators and literals whose meaning depends on the dialect (^ as power or
+// XOR, PostgreSQL prefix operators, SQL Server money literals, Snowflake
+// object constants) are rewritten for the target or return an error; see
+// retargetOperators.
 func Transpile(sql string, from, to keywords.SQLDialect) (string, error) {
 	// Use ParseWithDialect so the tokenizer and parser understand dialect-
 	// specific syntax (e.g. MySQL backtick identifiers, PG ILIKE, etc.).
@@ -64,6 +69,13 @@ func Transpile(sql string, from, to keywords.SQLDialect) (string, error) {
 	// The tree is pooled on return: rewrite rules must not retain node
 	// references beyond this call.
 	defer ast.ReleaseAST(tree)
+	if to != keywords.DialectSQLServer {
+		for _, stmt := range tree.Statements {
+			if _, ok := stmt.(*ast.BatchSeparator); ok {
+				return "", fmt.Errorf("rewrite: SQL Server GO batch scopes are not supported in %s", to)
+			}
+		}
+	}
 
 	// Apply rules for this dialect pair.
 	rules := rulesFor(from, to)
@@ -73,12 +85,24 @@ func Transpile(sql string, from, to keywords.SQLDialect) (string, error) {
 				return "", fmt.Errorf("rewrite: %w", err)
 			}
 		}
+		if err := retargetOperators(stmt, from, to); err != nil {
+			return "", fmt.Errorf("rewrite: %w", err)
+		}
+		requoteIdentifiers(stmt, from, to)
 	}
 
-	// Format each statement and join with ";\n".
-	parts := make([]string, 0, len(tree.Statements))
+	// Re-render string literals for the target dialect (escaping and
+	// introducers); see retargetStringLiterals.
 	for _, stmt := range tree.Statements {
-		parts = append(parts, formatter.FormatStatement(stmt, ast.CompactStyle()))
+		if err := retargetStringLiterals(stmt, to); err != nil {
+			return "", fmt.Errorf("rewrite: %w", err)
+		}
 	}
-	return strings.Join(parts, ";\n"), nil
+
+	// Format the whole tree so client batch separators retain their scope. The
+	// target decides dialect-specific spellings such as MINUS versus EXCEPT
+	// and set-operation grouping.
+	style := ast.CompactStyle()
+	style.Dialect = string(to)
+	return formatter.FormatAST(tree, style), nil
 }

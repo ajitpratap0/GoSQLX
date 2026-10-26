@@ -4,6 +4,42 @@
 
 This matrix documents the comprehensive SQL feature support in GoSQLX across different SQL dialects and standards. The testing was conducted using the comprehensive integration test suite with 700+ test cases covering real-world SQL patterns.
 
+### Real-world dialect audit (October 2026, unreleased)
+
+The real-world corpus contains 2,788 statements. Every statement passes
+split → dialect-aware parse → format → reparse → format idempotency, plus a
+check for dropped SQL words. `testdata/realworld/known_failures.txt` lists no
+failures.
+These results describe this corpus; they do not establish complete dialect
+coverage or database execution equivalence. Some routine and utility statements
+retain their text rather than receiving a complete semantic AST.
+
+| Dialect | Passing statements | Known failures | Pass rate |
+| --- | ---: | ---: | ---: |
+| PostgreSQL | 300 / 300 | 0 | 100% |
+| MySQL | 405 / 405 | 0 | 100% |
+| MariaDB | 374 / 374 | 0 | 100% |
+| SQL Server | 276 / 276 | 0 | 100% |
+| Oracle | 368 / 368 | 0 | 100% |
+| SQLite | 348 / 348 | 0 | 100% |
+| Snowflake | 325 / 325 | 0 | 100% |
+| ClickHouse | 392 / 392 | 0 | 100% |
+
+Reproduce the ratchet and per-dialect summaries from the repository root:
+
+```sh
+go test ./pkg/gosqlx -run '^TestRealWorldCorpus$' -count=1
+for dir in testdata/realworld/*/; do
+  go run ./scripts/dialect-audit -dialect "$(basename "$dir")" "$dir"*.sql
+done
+```
+
+SQL Server batch boundaries also have whole-script round-trip tests: the AST
+retains each `GO` as a `BatchSeparator`, including its optional repeat count,
+and both library and CLI rendering keep it on a separate line. The splitter
+removes client directives when returning individual SQL statements, so the
+statement-by-statement corpus totals above do not count GO directives.
+
 ### Feature Highlights
 
 #### Snowflake and ClickHouse

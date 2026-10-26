@@ -83,15 +83,43 @@ func FormatAST(a *ast.AST, opts ast.FormatOptions) string {
 		return ""
 	}
 	parts := make([]string, 0, len(a.Statements))
+	hasBatch := false
 	for _, stmt := range a.Statements {
-		parts = append(parts, FormatStatement(stmt, opts))
+		part := FormatStatement(stmt, opts)
+		// Renderers that keep a statement as written (UtilityStatement and
+		// the stmtSQL fallback) do not add the ";" themselves; without it the
+		// next statement would be read back as part of their text.
+		_, isBatch := stmt.(*ast.BatchSeparator)
+		hasBatch = hasBatch || isBatch
+		if opts.AddSemicolon && !isBatch && part != "" && !strings.HasSuffix(part, ";") {
+			part += ";"
+		}
+		parts = append(parts, part)
 	}
 	sep := ";\n"
 	if opts.AddSemicolon {
-		// Each statement already ends with ";"
+		// Each statement now ends with ";"
 		sep = "\n"
 	}
-	result := strings.Join(parts, sep)
+	var result string
+	if !hasBatch {
+		result = strings.Join(parts, sep)
+	} else {
+		var joined strings.Builder
+		for i, part := range parts {
+			if i > 0 {
+				_, prevBatch := a.Statements[i-1].(*ast.BatchSeparator)
+				_, curBatch := a.Statements[i].(*ast.BatchSeparator)
+				if prevBatch || curBatch {
+					joined.WriteByte('\n')
+				} else {
+					joined.WriteString(sep)
+				}
+			}
+			joined.WriteString(part)
+		}
+		result = joined.String()
+	}
 
 	// Emit preserved comments
 	if len(a.Comments) > 0 {
@@ -166,6 +194,8 @@ func FormatStatement(s ast.Statement, opts ast.FormatOptions) string {
 		return renderShow(v, opts)
 	case *ast.DescribeStatement:
 		return renderDescribe(v, opts)
+	case *ast.ExplainStatement:
+		return renderExplain(v, opts)
 	case *ast.UnsupportedStatement:
 		return renderUnsupported(v, opts)
 	default:
@@ -210,6 +240,9 @@ func renderSelect(s *ast.SelectStatement, opts ast.FormatOptions) string {
 
 	f := newNodeFormatter(opts)
 	sb := f.sb
+	// Most rendered SELECTs are under 128 bytes; one up-front allocation
+	// replaces the builder's 8-16-32-64-128 growth steps.
+	sb.Grow(128)
 
 	if s.With != nil {
 		sb.WriteString(renderWith(s.With, f))
@@ -229,23 +262,15 @@ func renderSelect(s *ast.SelectStatement, opts ast.FormatOptions) string {
 		sb.WriteString(" ")
 	}
 
-	// Render TOP clause (SQL Server). Emitted between SELECT [DISTINCT] and columns.
-	if s.Top != nil {
-		sb.WriteString(f.kw("TOP"))
-		sb.WriteString(" ")
-		sb.WriteString(FormatExpression(s.Top.Count, opts))
-		if s.Top.IsPercent {
-			sb.WriteString(" ")
-			sb.WriteString(f.kw("PERCENT"))
-		}
-		if s.Top.WithTies {
-			sb.WriteString(" ")
-			sb.WriteString(f.kw("WITH TIES"))
-		}
-		sb.WriteString(" ")
-	}
+	// MySQL select modifiers and TOP, between SELECT [DISTINCT] and columns.
+	writeSelectPrologue(sb, s, f)
 
 	sb.WriteString(exprListSQL(s.Columns))
+
+	if into := selectExtras(s).Into; into != nil && !into.Trailing {
+		sb.WriteString(" ")
+		sb.WriteString(selectIntoSQL(into, f))
+	}
 
 	if len(s.From) > 0 {
 		sb.WriteString(f.clauseSep())
@@ -264,9 +289,21 @@ func renderSelect(s *ast.SelectStatement, opts ast.FormatOptions) string {
 		sb.WriteString(joinSQL(&j, f))
 	}
 
+	if s.ArrayJoin != nil {
+		sb.WriteString(f.clauseSep())
+		sb.WriteString(arrayJoinSQL(s.ArrayJoin, f))
+	}
+
 	if s.Sample != nil {
 		sb.WriteString(f.clauseSep())
 		sb.WriteString(sampleSQL(s.Sample, f))
+	}
+
+	if s.PrewhereClause != nil {
+		sb.WriteString(f.clauseSep())
+		sb.WriteString(f.kw("PREWHERE"))
+		sb.WriteString(" ")
+		sb.WriteString(FormatExpression(s.PrewhereClause, opts))
 	}
 
 	if s.Where != nil {
@@ -276,11 +313,9 @@ func renderSelect(s *ast.SelectStatement, opts ast.FormatOptions) string {
 		sb.WriteString(FormatExpression(s.Where, opts))
 	}
 
-	if len(s.GroupBy) > 0 {
+	if gb := groupBySQL(s, f); gb != "" {
 		sb.WriteString(f.clauseSep())
-		sb.WriteString(f.kw("GROUP BY"))
-		sb.WriteString(" ")
-		sb.WriteString(exprListSQL(s.GroupBy))
+		sb.WriteString(gb)
 	}
 
 	if s.Having != nil {
@@ -290,52 +325,52 @@ func renderSelect(s *ast.SelectStatement, opts ast.FormatOptions) string {
 		sb.WriteString(FormatExpression(s.Having, opts))
 	}
 
+	// QUALIFY, START WITH, CONNECT BY
+	writeHierarchical(sb, s, f)
+
 	if len(s.Windows) > 0 {
 		sb.WriteString(f.clauseSep())
 		sb.WriteString(f.kw("WINDOW"))
 		sb.WriteString(" ")
 		wins := make([]string, len(s.Windows))
 		for i := range s.Windows {
-			wins[i] = ast.QuoteName(s.Windows[i].Name) + " AS (" + windowSpecSQL(&s.Windows[i]) + ")"
+			wins[i] = ast.QuoteNameWith(s.Windows[i].Name, f.nq(s.Windows[i].NameQuote)) + " AS (" + windowSpecSQL(&s.Windows[i]) + ")"
 		}
 		sb.WriteString(strings.Join(wins, ", "))
 	}
 
 	if len(s.OrderBy) > 0 {
 		sb.WriteString(f.clauseSep())
-		sb.WriteString(f.kw("ORDER BY"))
+		if s.DialectExtras().OrderSiblings {
+			sb.WriteString(f.kw("ORDER SIBLINGS BY"))
+		} else {
+			sb.WriteString(f.kw("ORDER BY"))
+		}
 		sb.WriteString(" ")
 		sb.WriteString(orderBySQL(s.OrderBy))
 	}
-
-	if s.Limit != nil {
-		sb.WriteString(f.clauseSep())
-		fmt.Fprintf(sb, "%s %d", f.kw("LIMIT"), *s.Limit)
+	if interp := selectExtras(s).Interpolate; interp != nil {
+		sb.WriteString(interpolateSQL(interp, f))
 	}
 
-	if s.Offset != nil {
-		sb.WriteString(f.clauseSep())
-		fmt.Fprintf(sb, "%s %d", f.kw("OFFSET"), *s.Offset)
-	}
+	// LIMIT BY, LIMIT, OFFSET
+	writeLimitOffsetClauses(sb, s, f)
 
 	if s.Fetch != nil {
 		sb.WriteString(fetchSQL(s.Fetch, f))
+	}
+
+	if into := selectExtras(s).Into; into != nil && into.Trailing {
+		sb.WriteString(f.clauseSep())
+		sb.WriteString(selectIntoSQL(into, f))
 	}
 
 	if s.For != nil {
 		sb.WriteString(forSQL(s.For))
 	}
 
-	if len(s.Settings) > 0 {
-		sb.WriteString(f.clauseSep())
-		sb.WriteString(f.kw("SETTINGS"))
-		sb.WriteString(" ")
-		parts := make([]string, len(s.Settings))
-		for i := range s.Settings {
-			parts[i] = s.Settings[i].SQL()
-		}
-		sb.WriteString(strings.Join(parts, ", "))
-	}
+	// FOR JSON/XML, SETTINGS, OPTION (...), FORMAT
+	writeSelectEpilogue(sb, s, f)
 
 	if opts.AddSemicolon {
 		sb.WriteString(";")
@@ -349,53 +384,19 @@ func renderSelect(s *ast.SelectStatement, opts ast.FormatOptions) string {
 // shallow copy of the statement. This keeps the rendering code simple —
 // each clause renderer only handles its own field.
 func normalizeSelectForDialect(s *ast.SelectStatement, dialect string) {
-	switch dialect {
-	case "sqlserver":
-		if s.Top == nil && s.Limit != nil {
-			if s.Offset != nil || len(s.OrderBy) > 0 {
-				// SQL Server 2012+ OFFSET/FETCH syntax (requires ORDER BY in practice,
-				// but we emit it faithfully and let the database validate).
-				fetchVal := int64(*s.Limit)
-				s.Fetch = &ast.FetchClause{
-					FetchValue: &fetchVal,
-					FetchType:  "NEXT",
-				}
-				offsetVal := int64(0)
-				if s.Offset != nil {
-					offsetVal = int64(*s.Offset)
-				}
-				s.Fetch.OffsetValue = &offsetVal
-				s.Limit = nil
-				s.Offset = nil
-			} else {
-				// Simple TOP N
-				s.Top = &ast.TopClause{
-					Count: &ast.LiteralValue{Value: *s.Limit, Type: "int"},
-				}
-				s.Limit = nil
-			}
-		}
-
-	case "oracle":
-		if s.Fetch == nil && s.Limit != nil {
-			fetchVal := int64(*s.Limit)
-			s.Fetch = &ast.FetchClause{
-				FetchValue: &fetchVal,
-				FetchType:  "FIRST",
-			}
-			if s.Offset != nil {
-				offsetVal := int64(*s.Offset)
-				s.Fetch.OffsetValue = &offsetVal
-				s.Offset = nil
-			}
-			s.Limit = nil
-		}
-	}
+	normalizeLimitForDialect(s, dialect)
 }
 
 func renderInsert(i *ast.InsertStatement, opts ast.FormatOptions) string {
 	if i == nil {
 		return ""
+	}
+	if i.DialectExtras().MultiTable != nil {
+		// Oracle INSERT ALL / FIRST: rendered on one line by the AST.
+		if opts.AddSemicolon {
+			return i.SQL() + ";"
+		}
+		return i.SQL()
 	}
 	f := newNodeFormatter(opts)
 	sb := f.sb
@@ -405,9 +406,7 @@ func renderInsert(i *ast.InsertStatement, opts ast.FormatOptions) string {
 		sb.WriteString(f.clauseSep())
 	}
 
-	sb.WriteString(f.kw("INSERT INTO"))
-	sb.WriteString(" ")
-	sb.WriteString(ast.QuoteQualifiedName(i.TableName))
+	writeInsertHead(sb, f, i)
 
 	// MySQL INSERT ... SET form: Columns[k] = Values[0][k].
 	setForm := i.SetSyntax && i.Query == nil && len(i.Columns) > 0 &&
@@ -419,11 +418,9 @@ func renderInsert(i *ast.InsertStatement, opts ast.FormatOptions) string {
 		sb.WriteString(")")
 	}
 
-	if len(i.Output) > 0 && !setForm {
-		sb.WriteString(f.clauseSep())
-		sb.WriteString(f.kw("OUTPUT"))
-		sb.WriteString(" ")
-		sb.WriteString(exprListSQL(i.Output))
+	if !setForm {
+		writeDMLOutput(sb, f, i.Output, i.DialectExtras().OutputInto)
+		writeInsertBeforeSource(sb, f, i)
 	}
 
 	if setForm {
@@ -455,6 +452,7 @@ func renderInsert(i *ast.InsertStatement, opts ast.FormatOptions) string {
 		sb.WriteString(f.clauseSep())
 		sb.WriteString(f.kw("DEFAULT VALUES"))
 	}
+	writeInsertAfterSource(sb, f, i)
 
 	if i.OnConflict != nil {
 		sb.WriteString(onConflictSQL(i.OnConflict))
@@ -471,12 +469,7 @@ func renderInsert(i *ast.InsertStatement, opts ast.FormatOptions) string {
 		sb.WriteString(strings.Join(upds, ", "))
 	}
 
-	if len(i.Returning) > 0 {
-		sb.WriteString(f.clauseSep())
-		sb.WriteString(f.kw("RETURNING"))
-		sb.WriteString(" ")
-		sb.WriteString(exprListSQL(i.Returning))
-	}
+	writeInsertTail(sb, f, i)
 
 	if opts.AddSemicolon {
 		sb.WriteString(";")
@@ -497,12 +490,14 @@ func renderUpdate(u *ast.UpdateStatement, opts ast.FormatOptions) string {
 		sb.WriteString(f.clauseSep())
 	}
 
+	x := u.DialectExtras()
 	sb.WriteString(f.kw("UPDATE"))
 	sb.WriteString(" ")
-	sb.WriteString(ast.QuoteQualifiedName(u.TableName))
-	if u.Alias != "" {
-		sb.WriteString(" ")
-		sb.WriteString(ast.QuoteTableAlias(u.Alias))
+	writeDMLModifiers(sb, f, x.Modifiers)
+	writeDMLTop(sb, f, x.Top)
+	writeDMLTargets(sb, f, x, u.TableName, u.TableNameQuote, u.Alias, u.AliasQuote)
+	if len(u.From) == 0 {
+		writeDMLJoins(sb, f, x.Joins)
 	}
 
 	sb.WriteString(f.clauseSep())
@@ -513,6 +508,7 @@ func renderUpdate(u *ast.UpdateStatement, opts ast.FormatOptions) string {
 		upds[i] = ast.ColumnRefSQL(upd.Column) + " = " + exprSQL(upd.Value)
 	}
 	sb.WriteString(strings.Join(upds, ", "))
+	writeDMLOutput(sb, f, x.Output, x.OutputInto)
 
 	if len(u.From) > 0 {
 		sb.WriteString(f.clauseSep())
@@ -523,6 +519,7 @@ func renderUpdate(u *ast.UpdateStatement, opts ast.FormatOptions) string {
 			froms[i] = tableRefSQL(&u.From[i], f)
 		}
 		sb.WriteString(strings.Join(froms, ", "))
+		writeDMLJoins(sb, f, x.Joins)
 	}
 
 	if u.Where != nil {
@@ -531,13 +528,8 @@ func renderUpdate(u *ast.UpdateStatement, opts ast.FormatOptions) string {
 		sb.WriteString(" ")
 		sb.WriteString(FormatExpression(u.Where, opts))
 	}
-
-	if len(u.Returning) > 0 {
-		sb.WriteString(f.clauseSep())
-		sb.WriteString(f.kw("RETURNING"))
-		sb.WriteString(" ")
-		sb.WriteString(exprListSQL(u.Returning))
-	}
+	writeDMLOrderLimit(sb, f, x)
+	writeReturning(sb, f, u.Returning, x.ReturningInto)
 
 	if opts.AddSemicolon {
 		sb.WriteString(";")
@@ -558,12 +550,33 @@ func renderDelete(d *ast.DeleteStatement, opts ast.FormatOptions) string {
 		sb.WriteString(f.clauseSep())
 	}
 
-	sb.WriteString(f.kw("DELETE FROM"))
+	x := d.DialectExtras()
+	sb.WriteString(f.kw("DELETE"))
 	sb.WriteString(" ")
-	sb.WriteString(ast.QuoteQualifiedName(d.TableName))
-	if d.Alias != "" {
+	writeDMLModifiers(sb, f, x.Modifiers)
+	writeDMLTop(sb, f, x.Top)
+	if len(d.From) == 0 {
+		sb.WriteString(f.kw("FROM"))
 		sb.WriteString(" ")
-		sb.WriteString(ast.QuoteTableAlias(d.Alias))
+	}
+	writeDMLTargets(sb, f, x, d.TableName, d.TableNameQuote, d.Alias, d.AliasQuote)
+	if d.BeforeSystemTime != nil {
+		sb.WriteString(" ")
+		sb.WriteString(f.kw("BEFORE SYSTEM_TIME"))
+		sb.WriteString(" ")
+		sb.WriteString(exprSQL(d.BeforeSystemTime))
+	}
+	writeDMLOutput(sb, f, x.Output, x.OutputInto)
+
+	if len(d.From) > 0 {
+		sb.WriteString(f.clauseSep())
+		sb.WriteString(f.kw("FROM"))
+		sb.WriteString(" ")
+		froms := make([]string, len(d.From))
+		for i := range d.From {
+			froms[i] = tableRefSQL(&d.From[i], f)
+		}
+		sb.WriteString(strings.Join(froms, ", "))
 	}
 
 	if len(d.Using) > 0 {
@@ -576,6 +589,7 @@ func renderDelete(d *ast.DeleteStatement, opts ast.FormatOptions) string {
 		}
 		sb.WriteString(strings.Join(usings, ", "))
 	}
+	writeDMLJoins(sb, f, x.Joins)
 
 	if d.Where != nil {
 		sb.WriteString(f.clauseSep())
@@ -583,13 +597,8 @@ func renderDelete(d *ast.DeleteStatement, opts ast.FormatOptions) string {
 		sb.WriteString(" ")
 		sb.WriteString(FormatExpression(d.Where, opts))
 	}
-
-	if len(d.Returning) > 0 {
-		sb.WriteString(f.clauseSep())
-		sb.WriteString(f.kw("RETURNING"))
-		sb.WriteString(" ")
-		sb.WriteString(exprListSQL(d.Returning))
-	}
+	writeDMLOrderLimit(sb, f, x)
+	writeReturning(sb, f, d.Returning, x.ReturningInto)
 
 	if opts.AddSemicolon {
 		sb.WriteString(";")
@@ -599,92 +608,26 @@ func renderDelete(d *ast.DeleteStatement, opts ast.FormatOptions) string {
 }
 
 func renderCreateTable(c *ast.CreateTableStatement, opts ast.FormatOptions) string {
-	if c == nil {
-		return ""
-	}
-	f := newNodeFormatter(opts)
-	sb := f.sb
-
-	sb.WriteString(f.kw("CREATE"))
-	sb.WriteString(" ")
-	if c.Temporary {
-		sb.WriteString(f.kw("TEMPORARY"))
-		sb.WriteString(" ")
-	}
-	sb.WriteString(f.kw("TABLE"))
-	sb.WriteString(" ")
-	if c.IfNotExists {
-		sb.WriteString(f.kw("IF NOT EXISTS"))
-		sb.WriteString(" ")
-	}
-	sb.WriteString(ast.QuoteQualifiedName(c.Name))
-
-	if opts.NewlinePerClause {
-		sb.WriteString(" (\n")
-		f.depth++
-		parts := make([]string, 0, len(c.Columns)+len(c.Constraints))
-		for _, col := range c.Columns {
-			col := col
-			parts = append(parts, f.indentStr()+columnDefSQL(&col))
-		}
-		for _, con := range c.Constraints {
-			con := con
-			parts = append(parts, f.indentStr()+tableConstraintSQL(&con))
-		}
-		sb.WriteString(strings.Join(parts, ",\n"))
-		f.depth--
-		sb.WriteString("\n")
-		sb.WriteString(f.indentStr())
-		sb.WriteString(")")
-	} else {
-		sb.WriteString(" (")
-		parts := make([]string, 0, len(c.Columns)+len(c.Constraints))
-		for _, col := range c.Columns {
-			col := col
-			parts = append(parts, columnDefSQL(&col))
-		}
-		for _, con := range c.Constraints {
-			con := con
-			parts = append(parts, tableConstraintSQL(&con))
-		}
-		sb.WriteString(strings.Join(parts, ", "))
-		sb.WriteString(")")
-	}
-
-	if len(c.Inherits) > 0 {
-		sb.WriteString(" ")
-		sb.WriteString(f.kw("INHERITS"))
-		sb.WriteString(" (")
-		sb.WriteString(quoteQualifiedNames(c.Inherits))
-		sb.WriteString(")")
-	}
-
-	if c.PartitionBy != nil {
-		sb.WriteString(" ")
-		sb.WriteString(f.kw("PARTITION BY"))
-		// An unknown method is left out: "PARTITION BY  (cols)" does not parse.
-		fmt.Fprintf(sb, " %s (%s)", ast.PartitionByText(c.PartitionBy.Type), quoteColumnNames(c.PartitionBy.Columns))
-	}
-
-	for _, opt := range c.Options {
-		// Only known option names (ENGINE, CHARSET) are written.
-		if ast.TableOptionNameText(opt.Name) == "" {
-			continue
-		}
-		fmt.Fprintf(sb, " %s=%s", opt.Name, ast.QuoteTableOptionValue(opt.Value))
-	}
-
-	if opts.AddSemicolon {
-		sb.WriteString(";")
-	}
-
-	return f.result()
+	return renderCreateTableStmt(c, opts)
 }
 
 func renderSetOperation(s *ast.SetOperation, opts ast.FormatOptions) string {
 	if s == nil {
 		return ""
 	}
+	// A WITH clause that scopes over the whole operation but would end up
+	// inside the parentheses of a left operand is written before the chain.
+	if with, body := ast.HoistLeadingWith(s, opts.Dialect); with != nil {
+		f := newNodeFormatter(opts)
+		f.sb.WriteString(renderWith(with, f))
+		f.sb.WriteString(f.clauseSep())
+		f.sb.WriteString(renderSetOperationBody(body, opts))
+		return f.result()
+	}
+	return renderSetOperationBody(s, opts)
+}
+
+func renderSetOperationBody(s *ast.SetOperation, opts ast.FormatOptions) string {
 	f := newNodeFormatter(opts)
 	sb := f.sb
 	inner := nestedOpts(opts)
@@ -700,7 +643,7 @@ func renderSetOperation(s *ast.SetOperation, opts ast.FormatOptions) string {
 	spine := []*ast.SetOperation{s}
 	for {
 		last := spine[len(spine)-1]
-		if last.LeftParenthesized {
+		if ast.SetOperandNeedsParens(last, false, opts.Dialect) {
 			// A parenthesized left operand is rendered whole, in parentheses.
 			break
 		}
@@ -712,7 +655,7 @@ func renderSetOperation(s *ast.SetOperation, opts ast.FormatOptions) string {
 	}
 
 	if innermost := spine[len(spine)-1]; innermost.Left != nil {
-		if innermost.LeftParenthesized {
+		if ast.SetOperandNeedsParens(innermost, false, opts.Dialect) {
 			sb.WriteString("(")
 			sb.WriteString(FormatStatement(innermost.Left, inner))
 			sb.WriteString(")")
@@ -726,23 +669,34 @@ func renderSetOperation(s *ast.SetOperation, opts ast.FormatOptions) string {
 		// The operator is UNION, EXCEPT or INTERSECT; anything else can only
 		// come from a hand-built AST and is written as UNION followed by the
 		// double-quoted text, which fails to parse (see ast.SetOperatorSQL).
-		op, known := ast.SetOperatorSQL(level.Operator)
+		op, known := ast.SetOperationKeyword(level, opts.Dialect)
 		if known {
 			op = f.kw(op)
-		}
-		if level.All {
-			op += " " + f.kw("ALL")
 		}
 		sb.WriteString(op)
 		sb.WriteString(f.clauseSep())
 		if level.Right != nil {
-			if rightSetOp, ok := level.Right.(*ast.SetOperation); level.RightParenthesized || (ok && rightSetOp != nil) {
+			if ast.SetOperandNeedsParens(level, true, opts.Dialect) {
 				sb.WriteString("(")
 				sb.WriteString(FormatStatement(level.Right, inner))
 				sb.WriteString(")")
 			} else {
 				sb.WriteString(FormatStatement(level.Right, inner))
 			}
+		}
+	}
+	if t := s.Tail; t != nil {
+		// ORDER BY / LIMIT / OFFSET / FETCH of the whole operation.
+		view := t.Select()
+		if len(view.OrderBy) > 0 {
+			sb.WriteString(f.clauseSep())
+			sb.WriteString(f.kw("ORDER BY"))
+			sb.WriteString(" ")
+			sb.WriteString(orderBySQL(view.OrderBy))
+		}
+		writeLimitOffsetClauses(sb, view, f)
+		if view.Fetch != nil {
+			sb.WriteString(fetchSQL(view.Fetch, f))
 		}
 	}
 	if opts.AddSemicolon {
@@ -789,169 +743,15 @@ func renderAlterTable(a *ast.AlterTableStatement, opts ast.FormatOptions) string
 }
 
 func renderCreateIndex(c *ast.CreateIndexStatement, opts ast.FormatOptions) string {
-	if c == nil {
-		return ""
-	}
-	f := newNodeFormatter(opts)
-	sb := f.sb
-
-	sb.WriteString(f.kw("CREATE"))
-	sb.WriteString(" ")
-	if c.Unique {
-		sb.WriteString(f.kw("UNIQUE"))
-		sb.WriteString(" ")
-	}
-	sb.WriteString(f.kw("INDEX"))
-	sb.WriteString(" ")
-	if c.IfNotExists {
-		sb.WriteString(f.kw("IF NOT EXISTS"))
-		sb.WriteString(" ")
-	}
-	sb.WriteString(ast.QuoteQualifiedName(c.Name))
-	sb.WriteString(" ")
-	sb.WriteString(f.kw("ON"))
-	sb.WriteString(" ")
-	sb.WriteString(ast.QuoteQualifiedName(c.Table))
-
-	if c.Using != "" {
-		sb.WriteString(" ")
-		sb.WriteString(f.kw("USING"))
-		sb.WriteString(" ")
-		sb.WriteString(ast.QuoteColumnName(c.Using))
-	}
-
-	sb.WriteString(" (")
-	cols := make([]string, len(c.Columns))
-	for i, col := range c.Columns {
-		s := ast.QuoteColumnName(col.Column)
-		if col.Collate != "" {
-			s += " " + f.kw("COLLATE") + " " + ast.QuoteColumnName(col.Collate)
-		}
-		if dir := ast.SortDirectionText(col.Direction); dir != "" {
-			s += " " + f.kw(dir)
-		}
-		if col.NullsLast {
-			s += " " + f.kw("NULLS LAST")
-		}
-		cols[i] = s
-	}
-	sb.WriteString(strings.Join(cols, ", "))
-	sb.WriteString(")")
-
-	if c.Where != nil {
-		sb.WriteString(f.clauseSep())
-		sb.WriteString(f.kw("WHERE"))
-		sb.WriteString(" ")
-		sb.WriteString(FormatExpression(c.Where, opts))
-	}
-
-	if opts.AddSemicolon {
-		sb.WriteString(";")
-	}
-
-	return f.result()
+	return renderCreateIndexStmt(c, opts)
 }
 
 func renderCreateView(c *ast.CreateViewStatement, opts ast.FormatOptions) string {
-	if c == nil {
-		return ""
-	}
-	f := newNodeFormatter(opts)
-	sb := f.sb
-
-	sb.WriteString(f.kw("CREATE"))
-	sb.WriteString(" ")
-	if c.OrReplace {
-		sb.WriteString(f.kw("OR REPLACE"))
-		sb.WriteString(" ")
-	}
-	if c.Temporary {
-		sb.WriteString(f.kw("TEMPORARY"))
-		sb.WriteString(" ")
-	}
-	sb.WriteString(f.kw("VIEW"))
-	sb.WriteString(" ")
-	if c.IfNotExists {
-		sb.WriteString(f.kw("IF NOT EXISTS"))
-		sb.WriteString(" ")
-	}
-	sb.WriteString(ast.QuoteQualifiedName(c.Name))
-
-	if len(c.Columns) > 0 {
-		sb.WriteString(" (")
-		sb.WriteString(quoteNames(c.Columns))
-		sb.WriteString(")")
-	}
-
-	sb.WriteString(" ")
-	sb.WriteString(f.kw("AS"))
-	sb.WriteString(f.clauseSep())
-	sb.WriteString(FormatStatement(c.Query, nestedOpts(opts)))
-
-	// WithOption is CHECK OPTION, CASCADED or LOCAL CHECK OPTION, written
-	// after WITH; anything else can only come from a hand-built AST and is
-	// dropped rather than written raw.
-	if ast.ViewWithOptionText(c.WithOption) != "" {
-		sb.WriteString(f.clauseSep())
-		sb.WriteString(f.kw("WITH"))
-		sb.WriteString(" ")
-		sb.WriteString(f.kw(c.WithOption))
-	}
-
-	if opts.AddSemicolon {
-		sb.WriteString(";")
-	}
-
-	return f.result()
+	return renderCreateViewStmt(c, opts)
 }
 
 func renderCreateMaterializedView(c *ast.CreateMaterializedViewStatement, opts ast.FormatOptions) string {
-	if c == nil {
-		return ""
-	}
-	f := newNodeFormatter(opts)
-	sb := f.sb
-
-	sb.WriteString(f.kw("CREATE MATERIALIZED VIEW"))
-	sb.WriteString(" ")
-	if c.IfNotExists {
-		sb.WriteString(f.kw("IF NOT EXISTS"))
-		sb.WriteString(" ")
-	}
-	sb.WriteString(ast.QuoteQualifiedName(c.Name))
-
-	if len(c.Columns) > 0 {
-		sb.WriteString(" (")
-		sb.WriteString(quoteNames(c.Columns))
-		sb.WriteString(")")
-	}
-
-	if c.Tablespace != "" {
-		sb.WriteString(" ")
-		sb.WriteString(f.kw("TABLESPACE"))
-		sb.WriteString(" ")
-		sb.WriteString(ast.QuoteColumnName(c.Tablespace))
-	}
-
-	sb.WriteString(" ")
-	sb.WriteString(f.kw("AS"))
-	sb.WriteString(f.clauseSep())
-	sb.WriteString(FormatStatement(c.Query, nestedOpts(opts)))
-
-	if c.WithData != nil {
-		sb.WriteString(f.clauseSep())
-		if *c.WithData {
-			sb.WriteString(f.kw("WITH DATA"))
-		} else {
-			sb.WriteString(f.kw("WITH NO DATA"))
-		}
-	}
-
-	if opts.AddSemicolon {
-		sb.WriteString(";")
-	}
-
-	return f.result()
+	return renderCreateMaterializedViewStmt(c, opts)
 }
 
 func renderRefreshMaterializedView(r *ast.RefreshMaterializedViewStatement, opts ast.FormatOptions) string {
@@ -986,66 +786,11 @@ func renderRefreshMaterializedView(r *ast.RefreshMaterializedViewStatement, opts
 }
 
 func renderDrop(d *ast.DropStatement, opts ast.FormatOptions) string {
-	if d == nil {
-		return ""
-	}
-	f := newNodeFormatter(opts)
-	sb := f.sb
-
-	sb.WriteString(f.kw("DROP"))
-	sb.WriteString(" ")
-	// An unknown object type is left out: "DROP  name" does not parse.
-	sb.WriteString(f.kw(ast.DropObjectTypeText(d.ObjectType)))
-	sb.WriteString(" ")
-	if d.IfExists {
-		sb.WriteString(f.kw("IF EXISTS"))
-		sb.WriteString(" ")
-	}
-	sb.WriteString(quoteQualifiedNames(d.Names))
-
-	if c := ast.CascadeText(d.CascadeType); c != "" {
-		sb.WriteString(" ")
-		sb.WriteString(f.kw(c))
-	}
-
-	if opts.AddSemicolon {
-		sb.WriteString(";")
-	}
-
-	return f.result()
+	return renderDropStmt(d, opts)
 }
 
 func renderTruncate(t *ast.TruncateStatement, opts ast.FormatOptions) string {
-	if t == nil {
-		return ""
-	}
-	f := newNodeFormatter(opts)
-	sb := f.sb
-
-	sb.WriteString(f.kw("TRUNCATE"))
-	sb.WriteString(" ")
-	sb.WriteString(f.kw("TABLE"))
-	sb.WriteString(" ")
-	sb.WriteString(quoteQualifiedNames(t.Tables))
-
-	if t.RestartIdentity {
-		sb.WriteString(" ")
-		sb.WriteString(f.kw("RESTART IDENTITY"))
-	} else if t.ContinueIdentity {
-		sb.WriteString(" ")
-		sb.WriteString(f.kw("CONTINUE IDENTITY"))
-	}
-
-	if c := ast.CascadeText(t.CascadeType); c != "" {
-		sb.WriteString(" ")
-		sb.WriteString(f.kw(c))
-	}
-
-	if opts.AddSemicolon {
-		sb.WriteString(";")
-	}
-
-	return f.result()
+	return renderTruncateStmt(t, opts)
 }
 
 func renderMerge(m *ast.MergeStatement, opts ast.FormatOptions) string {
@@ -1060,7 +805,7 @@ func renderMerge(m *ast.MergeStatement, opts ast.FormatOptions) string {
 	sb.WriteString(tableRefSQL(&m.TargetTable, f))
 	if m.TargetAlias != "" {
 		sb.WriteString(" ")
-		sb.WriteString(ast.QuoteTableAlias(m.TargetAlias))
+		sb.WriteString(ast.QuoteTableAliasWith(m.TargetAlias, f.nq(m.TargetAliasQuote)))
 	}
 
 	sb.WriteString(f.clauseSep())
@@ -1069,7 +814,8 @@ func renderMerge(m *ast.MergeStatement, opts ast.FormatOptions) string {
 	sb.WriteString(tableRefSQL(&m.SourceTable, f))
 	if m.SourceAlias != "" {
 		sb.WriteString(" ")
-		sb.WriteString(ast.QuoteTableAlias(m.SourceAlias))
+		sb.WriteString(ast.QuoteTableAliasWith(m.SourceAlias, f.nq(m.SourceAliasQuote)))
+		sb.WriteString(ast.TableColumnAliasesSQLWith(&m.SourceTable, f.nq))
 	}
 
 	sb.WriteString(f.clauseSep())
@@ -1088,6 +834,8 @@ func renderMerge(m *ast.MergeStatement, opts ast.FormatOptions) string {
 			sb.WriteString(f.kw("NOT MATCHED"))
 		case "NOT_MATCHED_BY_SOURCE":
 			sb.WriteString(f.kw("NOT MATCHED BY SOURCE"))
+		case "NOT_MATCHED_BY_TARGET":
+			sb.WriteString(f.kw("NOT MATCHED BY TARGET"))
 		default:
 			// An unknown kind is left out: "WHEN  THEN" does not parse.
 			sb.WriteString(f.kw(ast.MergeWhenText(when.Type)))
@@ -1111,7 +859,7 @@ func renderMerge(m *ast.MergeStatement, opts ast.FormatOptions) string {
 				sb.WriteString(" ")
 				sets := make([]string, len(when.Action.SetClauses))
 				for i, sc := range when.Action.SetClauses {
-					sets[i] = ast.QuoteQualifiedName(sc.Column) + " = " + exprSQL(sc.Value)
+					sets[i] = ast.QuoteQualifiedNameWith(sc.Column, f.nq(sc.ColumnQuote)) + " = " + exprSQL(sc.Value)
 				}
 				sb.WriteString(strings.Join(sets, ", "))
 			case "DELETE":
@@ -1124,7 +872,7 @@ func renderMerge(m *ast.MergeStatement, opts ast.FormatOptions) string {
 				} else {
 					if len(when.Action.Columns) > 0 {
 						sb.WriteString(" (")
-						sb.WriteString(quoteColumnNames(when.Action.Columns))
+						sb.WriteString(f.quoteColumnNamesWith(when.Action.Columns, when.Action.ColumnQuotes))
 						sb.WriteString(")")
 					}
 					if len(when.Action.Values) > 0 {
@@ -1139,9 +887,13 @@ func renderMerge(m *ast.MergeStatement, opts ast.FormatOptions) string {
 						sb.WriteString(")")
 					}
 				}
+			default:
+				sb.WriteString(f.kw(ast.MergeActionText(when.Action.ActionType)))
 			}
+			writeMergeActionWhere(sb, f, when.Action)
 		}
 	}
+	writeMergeTail(sb, f, m)
 
 	if opts.AddSemicolon {
 		sb.WriteString(";")
@@ -1219,11 +971,21 @@ func renderIn(i *ast.InExpression, opts ast.FormatOptions) string {
 
 	sb.WriteString(FormatExpression(i.Expr, opts))
 	sb.WriteString(" ")
+	if i.Global {
+		sb.WriteString(f.kw("GLOBAL"))
+		sb.WriteString(" ")
+	}
 	if i.Not {
 		sb.WriteString(f.kw("NOT"))
 		sb.WriteString(" ")
 	}
 	sb.WriteString(f.kw("IN"))
+	if i.Bare && i.Subquery == nil {
+		// SQLite "a IN tbl": no parentheses around the table reference.
+		sb.WriteString(" ")
+		sb.WriteString(exprListSQL(i.List))
+		return f.result()
+	}
 	sb.WriteString(" (")
 	if i.Subquery != nil {
 		sb.WriteString(FormatStatement(i.Subquery, nestedOpts(opts)))
@@ -1293,14 +1055,7 @@ func renderWith(w *ast.WithClause, f *nodeFormatter) string {
 	}
 	ctes := make([]string, len(w.CTEs))
 	for i, cte := range w.CTEs {
-		s := ast.QuoteName(cte.Name) + " "
-		if len(cte.Columns) > 0 {
-			s += "(" + quoteNames(cte.Columns) + ") "
-		}
-		s += f.kw("AS") + " ("
-		s += FormatStatement(cte.Statement, nestedOpts(f.opts))
-		s += ")"
-		ctes[i] = s
+		ctes[i] = cteSQL(cte, f)
 	}
 	sb.WriteString(strings.Join(ctes, ", "))
 	return sb.String()
@@ -1342,7 +1097,9 @@ func orderBySQL(orders []ast.OrderByExpression) string {
 	parts := make([]string, len(orders))
 	for i, o := range orders {
 		s := exprSQL(o.Expression)
-		if !o.Ascending {
+		if op := ast.OrderUsingOperatorText(o.UsingOperator); op != "" {
+			s += " USING " + op
+		} else if !o.Ascending {
 			s += " DESC"
 		}
 		if o.NullsFirst != nil {
@@ -1373,6 +1130,21 @@ func orderBySQL(orders []ast.OrderByExpression) string {
 // so PIVOT/UNPIVOT/FOR/IN/AS/LATERAL keywords honor the caller's case policy.
 func tableRefSQL(t *ast.TableReference, f *nodeFormatter) string {
 	var sb strings.Builder
+	if g := ast.TableRefJoinGroup(t); g != nil {
+		sb.WriteString("(")
+		for i := range g.Tables {
+			if i > 0 {
+				sb.WriteString(", ")
+			}
+			sb.WriteString(tableRefSQL(&g.Tables[i], f))
+		}
+		for i := range g.Joins {
+			sb.WriteString(" ")
+			sb.WriteString(joinSQL(&g.Joins[i], f))
+		}
+		sb.WriteString(")")
+		return sb.String()
+	}
 	if t.Lateral {
 		sb.WriteString(f.kw("LATERAL"))
 		sb.WriteString(" ")
@@ -1391,23 +1163,28 @@ func tableRefSQL(t *ast.TableReference, f *nodeFormatter) string {
 		sb.WriteString("(")
 		sb.WriteString(stmtSQL(t.SetSubquery))
 		sb.WriteString(")")
+	} else if t.DialectModifiers().Values != nil {
+		sb.WriteString("(")
+		sb.WriteString(f.kw("VALUES"))
+		sb.WriteString(strings.TrimPrefix(t.DialectModifiers().Values.SQL(), "VALUES"))
+		sb.WriteString(")")
 	} else {
-		sb.WriteString(ast.QuoteQualifiedName(t.Name))
-	}
-	if t.Alias != "" && t.Pivot == nil && t.Unpivot == nil {
-		sb.WriteString(" ")
-		sb.WriteString(ast.QuoteTableAlias(t.Alias))
-		if t.ColumnAliases != nil && len(t.ColumnAliases.Names) > 0 && t.TableFunc != nil {
-			sb.WriteString("(")
-			for i, c := range t.ColumnAliases.Names {
-				if i > 0 {
-					sb.WriteString(", ")
-				}
-				sb.WriteString(ast.QuoteColumnName(c))
-			}
-			sb.WriteString(")")
+		if t.Only {
+			sb.WriteString(f.kw("ONLY"))
+			sb.WriteString(" ")
 		}
+		sb.WriteString(ast.QuoteQualifiedNameWith(t.Name, f.nq(t.NameQuote)))
+		sb.WriteString(ast.TableRefNameSuffixSQL(t))
 	}
+	sb.WriteString(ast.TableRefPreAliasSQL(t, f.kw))
+	if t.Alias != "" && !ast.TableAliasFollowsClause(t) {
+		sb.WriteString(" ")
+		sb.WriteString(ast.QuoteTableAliasWith(t.Alias, f.nq(t.AliasQuote)))
+		sb.WriteString(ast.TableColumnAliasesSQLWith(t, f.nq))
+	} else {
+		sb.WriteString(ast.TableRefSourceAliasSQLWith(t, f.nq))
+	}
+	sb.WriteString(ast.TableRefPostAliasSQL(t, f.kw))
 	// SQL Server table hints follow the alias and precede PIVOT/UNPIVOT (#604).
 	if len(t.TableHints) > 0 {
 		sb.WriteString(" ")
@@ -1417,101 +1194,25 @@ func tableRefSQL(t *ast.TableReference, f *nodeFormatter) string {
 			if i > 0 {
 				sb.WriteString(", ")
 			}
-			// Bare-word hints honor the keyword case policy; anything else
+			// Hint keywords honor the keyword case policy; anything else
 			// (only possible in a hand-built AST) is double-quoted.
-			if q := ast.QuoteTableHint(h); q != h {
-				sb.WriteString(q)
-			} else {
-				sb.WriteString(f.kw(h))
-			}
+			sb.WriteString(ast.TableHintSQL(h, f.kw))
 		}
 		sb.WriteString(")")
 	}
-	if t.Pivot != nil {
-		sb.WriteString(" ")
-		sb.WriteString(f.kw("PIVOT"))
-		sb.WriteString(" (")
-		sb.WriteString(exprSQL(t.Pivot.AggregateFunction))
-		writePivotAggregateAlias(&sb, f, t.Pivot.AggregateAlias)
-		for _, a := range t.Pivot.ExtraAggregates {
-			sb.WriteString(", ")
-			sb.WriteString(exprSQL(a.Function))
-			writePivotAggregateAlias(&sb, f, a.Alias)
-		}
-		sb.WriteString(" ")
-		sb.WriteString(f.kw("FOR"))
-		sb.WriteString(" ")
-		sb.WriteString(ast.QuotePivotColumn(t.Pivot.PivotColumn))
-		sb.WriteString(" ")
-		sb.WriteString(f.kw("IN"))
-		sb.WriteString(" (")
-		writePivotItems(&sb, t.Pivot.InValues)
-		sb.WriteString("))")
-	}
-	if t.Unpivot != nil {
-		sb.WriteString(" ")
-		sb.WriteString(f.kw("UNPIVOT"))
-		if nh := ast.UnpivotNullHandling(t.Unpivot.NullHandling); nh != "" {
-			sb.WriteString(" ")
-			sb.WriteString(f.kw(nh))
-		}
-		sb.WriteString(" (")
-		if len(t.Unpivot.ValueColumns) > 0 {
-			sb.WriteString("(")
-			for i, c := range t.Unpivot.ValueColumns {
-				if i > 0 {
-					sb.WriteString(", ")
-				}
-				sb.WriteString(ast.QuoteUnpivotValueColumn(c))
-			}
-			sb.WriteString(")")
-		} else {
-			sb.WriteString(ast.QuoteUnpivotValueColumn(t.Unpivot.ValueColumn))
-		}
-		sb.WriteString(" ")
-		sb.WriteString(f.kw("FOR"))
-		sb.WriteString(" ")
-		sb.WriteString(ast.QuotePivotColumn(t.Unpivot.NameColumn))
-		sb.WriteString(" ")
-		sb.WriteString(f.kw("IN"))
-		sb.WriteString(" (")
-		writePivotItems(&sb, t.Unpivot.InColumns)
-		sb.WriteString("))")
-	}
-	if t.Alias != "" && (t.Pivot != nil || t.Unpivot != nil) {
+	sb.WriteString(ast.PivotSQL(t.Pivot, f.kw))
+	sb.WriteString(ast.UnpivotSQL(t.Unpivot, f.kw))
+	sb.WriteString(ast.MatchRecognizeSQL(t.MatchRecognize, f.kw))
+	if t.Alias != "" && ast.TableAliasFollowsClause(t) {
 		// PIVOT/UNPIVOT aliases conventionally use AS to avoid ambiguity
 		// with the closing paren of the clause.
 		sb.WriteString(" ")
 		sb.WriteString(f.kw("AS"))
 		sb.WriteString(" ")
-		sb.WriteString(ast.QuoteTableAlias(t.Alias))
+		sb.WriteString(ast.QuoteTableAliasWith(t.Alias, f.nq(t.AliasQuote)))
+		sb.WriteString(ast.TableColumnAliasesSQLWith(t, f.nq))
 	}
 	return sb.String()
-}
-
-// writePivotAggregateAlias writes " AS alias" for a PIVOT aggregate alias,
-// preserving source delimiters or quoting it like a table alias; an empty
-// alias writes nothing.
-func writePivotAggregateAlias(sb *strings.Builder, f *nodeFormatter, alias string) {
-	if alias == "" {
-		return
-	}
-	sb.WriteString(" ")
-	sb.WriteString(f.kw("AS"))
-	sb.WriteString(" ")
-	sb.WriteString(ast.QuotePivotAggregateAlias(alias))
-}
-
-// writePivotItems writes PIVOT IN values or UNPIVOT IN columns separated by
-// ", ", each in its stored source form when well formed and double-quoted
-// otherwise (see ast.QuotePivotItem).
-func writePivotItems(sb *strings.Builder, items []string) {
-	for i, item := range items {
-		if i > 0 {
-			sb.WriteString(", ")
-		}
-		sb.WriteString(ast.QuotePivotItem(item))
-	}
 }
 
 // sampleSQL renders a ClickHouse SAMPLE clause.
@@ -1544,14 +1245,22 @@ func sampleSQL(s *ast.SampleClause, f *nodeFormatter) string {
 // joinSQL renders a JOIN clause.
 func joinSQL(j *ast.JoinClause, f *nodeFormatter) string {
 	var sb strings.Builder
-	// An unknown join type is dropped, leaving a plain JOIN.
-	if t := ast.JoinTypeText(j.Type); t != "" {
-		sb.WriteString(f.kw(t))
-		sb.WriteString(" ")
+	if j.Comma {
+		sb.WriteString(", ")
+		sb.WriteString(tableRefSQL(&j.Right, f))
+		return sb.String()
 	}
-	sb.WriteString(f.kw("JOIN"))
+	// An unknown join type is dropped, leaving a plain JOIN.
+	sb.WriteString(joinKeywordsSQL(j, f))
 	sb.WriteString(" ")
 	sb.WriteString(tableRefSQL(&j.Right, f))
+	if j.MatchCondition != nil {
+		sb.WriteString(" ")
+		sb.WriteString(f.kw("MATCH_CONDITION"))
+		sb.WriteString(" (")
+		sb.WriteString(exprSQL(j.MatchCondition))
+		sb.WriteString(")")
+	}
 	if len(j.Using) > 0 {
 		sb.WriteString(" ")
 		sb.WriteString(f.kw("USING"))
@@ -1578,7 +1287,7 @@ func joinSQL(j *ast.JoinClause, f *nodeFormatter) string {
 func windowSpecSQL(w *ast.WindowSpec) string {
 	var parts []string
 	if w.BaseWindow != "" {
-		parts = append(parts, ast.QuoteName(w.BaseWindow))
+		parts = append(parts, ast.QuoteNameWith(w.BaseWindow, w.BaseWindowQuote))
 	}
 	if len(w.PartitionBy) > 0 {
 		parts = append(parts, "PARTITION BY "+exprListSQL(w.PartitionBy))
@@ -1627,13 +1336,16 @@ func fetchSQL(fc *ast.FetchClause, f *nodeFormatter) string {
 	fmt.Fprintf(&sb, " %s %s", f.kw("FETCH"), f.kw(fetchType))
 	if fc.FetchValue != nil {
 		fmt.Fprintf(&sb, " %d", *fc.FetchValue)
+	} else if fc.FetchExpr != nil {
+		sb.WriteString(" ")
+		sb.WriteString(exprSQL(fc.FetchExpr))
 	}
 	if fc.IsPercent {
 		sb.WriteString(" ")
 		sb.WriteString(f.kw("PERCENT"))
 	}
 	sb.WriteString(" ")
-	sb.WriteString(f.kw("ROWS"))
+	sb.WriteString(f.kw(ast.FetchRowsKeyword(fc)))
 	if fc.WithTies {
 		sb.WriteString(" ")
 		sb.WriteString(f.kw("WITH TIES"))
@@ -1647,6 +1359,17 @@ func fetchSQL(fc *ast.FetchClause, f *nodeFormatter) string {
 // forSQL renders a FOR UPDATE/SHARE clause.
 func forSQL(f *ast.ForClause) string {
 	var sb strings.Builder
+	if f.LockInShareMode {
+		sb.WriteString(" LOCK IN SHARE MODE")
+		if f.NoWait {
+			sb.WriteString(" NOWAIT")
+		}
+		if f.Wait != nil {
+			sb.WriteString(" WAIT ")
+			sb.WriteString(exprSQL(f.Wait))
+		}
+		return sb.String()
+	}
 	sb.WriteString(" FOR ")
 	sb.WriteString(ast.LockTypeText(f.LockType))
 	if len(f.Tables) > 0 {
@@ -1659,6 +1382,10 @@ func forSQL(f *ast.ForClause) string {
 	if f.SkipLocked {
 		sb.WriteString(" SKIP LOCKED")
 	}
+	if f.Wait != nil {
+		sb.WriteString(" WAIT ")
+		sb.WriteString(exprSQL(f.Wait))
+	}
 	return sb.String()
 }
 
@@ -1670,6 +1397,10 @@ func onConflictSQL(oc *ast.OnConflict) string {
 		sb.WriteString(" (")
 		sb.WriteString(ast.ColumnRefListSQL(oc.Target))
 		sb.WriteString(")")
+	}
+	if oc.TargetWhere != nil {
+		sb.WriteString(" WHERE ")
+		sb.WriteString(exprSQL(oc.TargetWhere))
 	}
 	if oc.Constraint != "" {
 		sb.WriteString(" ON CONSTRAINT ")
@@ -1688,100 +1419,6 @@ func onConflictSQL(oc *ast.OnConflict) string {
 			sb.WriteString(" WHERE ")
 			sb.WriteString(exprSQL(oc.Action.Where))
 		}
-	}
-	return sb.String()
-}
-
-// columnDefSQL renders a column definition.
-func columnDefSQL(c *ast.ColumnDef) string {
-	var sb strings.Builder
-	sb.WriteString(ast.QuoteColumnName(c.Name))
-	sb.WriteString(" ")
-	sb.WriteString(ast.QuoteDataType(c.Type))
-	for _, con := range c.Constraints {
-		con := con
-		sb.WriteString(" ")
-		sb.WriteString(columnConstraintSQL(&con))
-	}
-	return sb.String()
-}
-
-// columnConstraintSQL renders a column constraint.
-func columnConstraintSQL(c *ast.ColumnConstraint) string {
-	switch c.Type {
-	case "NOT NULL", "UNIQUE", "PRIMARY KEY":
-		return c.Type
-	case "DEFAULT":
-		return "DEFAULT " + exprSQL(c.Default)
-	case "REFERENCES":
-		if c.References != nil {
-			return referenceSQL(c.References)
-		}
-		return "REFERENCES"
-	case "CHECK":
-		return "CHECK (" + exprSQL(c.Check) + ")"
-	default:
-		if c.AutoIncrement {
-			return "AUTO_INCREMENT"
-		}
-		// An unknown constraint kind is dropped.
-		return ast.ColumnConstraintText(c.Type)
-	}
-}
-
-// tableConstraintSQL renders a table-level constraint.
-func tableConstraintSQL(tc *ast.TableConstraint) string {
-	var sb strings.Builder
-	if tc.Name != "" {
-		sb.WriteString("CONSTRAINT ")
-		sb.WriteString(ast.QuoteConstraintName(tc.Name))
-		sb.WriteString(" ")
-	}
-	switch tc.Type {
-	case "PRIMARY KEY":
-		sb.WriteString("PRIMARY KEY (")
-		sb.WriteString(quoteColumnNames(tc.Columns))
-		sb.WriteString(")")
-	case "UNIQUE":
-		sb.WriteString("UNIQUE (")
-		sb.WriteString(quoteColumnNames(tc.Columns))
-		sb.WriteString(")")
-	case "FOREIGN KEY":
-		sb.WriteString("FOREIGN KEY (")
-		sb.WriteString(quoteColumnNames(tc.Columns))
-		sb.WriteString(") ")
-		if tc.References != nil {
-			sb.WriteString(referenceSQL(tc.References))
-		}
-	case "CHECK":
-		sb.WriteString("CHECK (")
-		sb.WriteString(exprSQL(tc.Check))
-		sb.WriteString(")")
-	default:
-		// The parser only stores the kinds above; any other kind can only
-		// come from a hand-built AST and is dropped, leaving a constraint
-		// without a kind, which does not parse.
-	}
-	return sb.String()
-}
-
-// referenceSQL renders a REFERENCES clause.
-func referenceSQL(r *ast.ReferenceDefinition) string {
-	var sb strings.Builder
-	sb.WriteString("REFERENCES ")
-	sb.WriteString(ast.QuoteQualifiedName(r.Table))
-	if len(r.Columns) > 0 {
-		sb.WriteString(" (")
-		sb.WriteString(quoteColumnNames(r.Columns))
-		sb.WriteString(")")
-	}
-	if a := ast.ReferentialActionText(r.OnDelete); a != "" {
-		sb.WriteString(" ON DELETE ")
-		sb.WriteString(a)
-	}
-	if a := ast.ReferentialActionText(r.OnUpdate); a != "" {
-		sb.WriteString(" ON UPDATE ")
-		sb.WriteString(a)
 	}
 	return sb.String()
 }

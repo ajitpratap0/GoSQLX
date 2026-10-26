@@ -20,28 +20,49 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
 )
 
-// TestFormatSQL_RefusesExplainAndDescribe guards against gosqlx format turning
-// a non-executing EXPLAIN into an executable statement. The parser splits
-// "EXPLAIN VERBOSE|ANALYZE <stmt>" into a DescribeStatement plus <stmt>, and
-// DescribeStatement drops EXPLAIN options and object kinds, so the CLI must
-// refuse it instead of writing "DESCRIBE VERBOSE; DELETE FROM users".
-func TestFormatSQL_RefusesExplainAndDescribe(t *testing.T) {
+// TestFormatSQL_PreservesExplain checks that EXPLAIN <stmt> formats as one
+// statement that keeps EXPLAIN and its options, so a non-executing EXPLAIN is
+// never rewritten into the executable statement.
+func TestFormatSQL_PreservesExplain(t *testing.T) {
+	tests := []struct {
+		dialect string
+		in      string
+		want    string // compact, upper-cased output
+	}{
+		{"", "EXPLAIN VERBOSE DELETE FROM users", "EXPLAIN VERBOSE DELETE FROM users"},
+		{"postgresql", "EXPLAIN VERBOSE DELETE FROM users;\n", "EXPLAIN VERBOSE DELETE FROM users"},
+		{"", "explain verbose update accounts set balance = 0", "EXPLAIN VERBOSE UPDATE accounts SET balance = 0"},
+		{"", "EXPLAIN VERBOSE INSERT INTO t (a) VALUES (1)", "EXPLAIN VERBOSE INSERT INTO t (a) VALUES (1)"},
+		{"", "EXPLAIN ANALYZE DELETE FROM users", "EXPLAIN ANALYZE DELETE FROM users"},
+		{"mysql", "EXPLAIN ANALYZE SELECT * FROM users", "EXPLAIN ANALYZE SELECT * FROM users"},
+		{"", "EXPLAIN SELECT 1", "EXPLAIN SELECT 1"},
+	}
+	for _, tc := range tests {
+		out, err := formatWith(tc.in, CLIFormatterOptions{Compact: true, Uppercase: true, Dialect: tc.dialect})
+		if err != nil {
+			t.Fatalf("formatSQL(%q): %v", tc.in, err)
+		}
+		if got := strings.TrimSuffix(strings.TrimSpace(out), ";"); got != tc.want {
+			t.Errorf("formatSQL(%q) = %q, want %q", tc.in, got, tc.want)
+		}
+	}
+}
+
+// TestFormatSQL_RefusesDescribe guards statements the formatter cannot
+// rewrite faithfully: DESCRIBE drops object kinds, and EXPLAIN of a statement
+// the parser does not wrap would otherwise be split in two.
+func TestFormatSQL_RefusesDescribe(t *testing.T) {
 	tests := []struct {
 		name    string
 		dialect string
 		in      string
 	}{
-		{name: "explain verbose delete", in: "EXPLAIN VERBOSE DELETE FROM users"},
-		{name: "explain verbose delete postgresql", dialect: "postgresql", in: "EXPLAIN VERBOSE DELETE FROM users;\n"},
-		{name: "explain verbose update", in: "EXPLAIN VERBOSE UPDATE accounts SET balance = 0"},
 		{name: "explain verbose drop", in: "EXPLAIN VERBOSE DROP TABLE users"},
 		{name: "explain verbose truncate", in: "EXPLAIN VERBOSE TRUNCATE TABLE users"},
-		{name: "explain verbose insert", in: "EXPLAIN VERBOSE INSERT INTO t (a) VALUES (1)"},
-		{name: "explain analyze delete", in: "EXPLAIN ANALYZE DELETE FROM users"},
-		{name: "mysql explain analyze select", dialect: "mysql", in: "EXPLAIN ANALYZE SELECT * FROM users"},
-		{name: "explain select", in: "EXPLAIN SELECT 1"},
 		{name: "describe table", in: "DESCRIBE users"},
 		{name: "snowflake describe table kind", dialect: "snowflake", in: "DESCRIBE TABLE users"},
 	}
@@ -64,10 +85,10 @@ func TestFormatSQL_RefusesExplainAndDescribe(t *testing.T) {
 	}
 }
 
-// TestFormat_InPlaceLeavesExplainUnchanged checks the end-to-end format -i
+// TestFormat_InPlaceLeavesDescribeUnchanged checks the end-to-end format -i
 // path: the file must be left untouched and counted as failed.
-func TestFormat_InPlaceLeavesExplainUnchanged(t *testing.T) {
-	const original = "EXPLAIN VERBOSE DELETE FROM users;\n"
+func TestFormat_InPlaceLeavesDescribeUnchanged(t *testing.T) {
+	const original = "DESCRIBE users;\n"
 	path := filepath.Join(t.TempDir(), "r.sql")
 	if err := os.WriteFile(path, []byte(original), 0600); err != nil {
 		t.Fatal(err)
@@ -127,5 +148,77 @@ func TestFormatSQL_UnsupportedStatementMessage(t *testing.T) {
 	_, err := formatWith("DESCRIBE users", CLIFormatterOptions{Compact: true})
 	if err == nil || !strings.Contains(err.Error(), "DescribeStatement") {
 		t.Fatalf("want an error naming DescribeStatement, got %v", err)
+	}
+}
+
+// TestTSQLStatementBound covers the SQL Server form of the separator guard:
+// statements may end without ';', so the bound also counts GO lines and the
+// words a T-SQL statement can start with.
+func TestTSQLStatementBound(t *testing.T) {
+	tests := []struct {
+		in   string
+		want int
+	}{
+		{"SELECT 1", 1},
+		{"SELECT 1;", 1},
+		{"SELECT 1\nGO\nSELECT 2", 3},
+		{"SELECT 1\nGO 2\nSELECT 2 PRINT 'x'", 4},
+		{"UPDATE t SET a = 1 WHERE b = 2", 2}, // SET may start a statement
+		{"SELECT a, b FROM t WHERE c = 1", 1},
+		{"SELECT t.select FROM t", 1}, // a qualified name part is not a start
+		{"SELECT [select] FROM t", 1}, // nor is a quoted name
+	}
+	for _, tc := range tests {
+		tkz, release, err := tokenizerForDialect("sqlserver")
+		if err != nil {
+			t.Fatal(err)
+		}
+		tokens, err := tkz.TokenizeString(tc.in)
+		if err != nil {
+			release()
+			t.Fatalf("tokenize %q: %v", tc.in, err)
+		}
+		got := tsqlStatementBound(tokens)
+		release()
+		if got != tc.want {
+			t.Errorf("tsqlStatementBound(%q) = %d, want %d", tc.in, got, tc.want)
+		}
+	}
+}
+
+// TestCheckFormattable_SQLServerGuard checks that the statement-count guard
+// runs for SQL Server: a tree with more statements than the input can hold
+// (the parser split a statement) is refused, a legitimate one is not.
+func TestCheckFormattable_SQLServerGuard(t *testing.T) {
+	tkz, release, err := tokenizerForDialect("sqlserver")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer release()
+	tokens, err := tkz.TokenizeString("SELECT a b")
+	if err != nil {
+		t.Fatal(err)
+	}
+	split := &ast.AST{Statements: []ast.Statement{&ast.SelectStatement{}, &ast.SelectStatement{}}}
+	if err := checkFormattable(split, tokens, "sqlserver"); err == nil {
+		t.Error("a statement split in two was accepted")
+	}
+	whole := &ast.AST{Statements: []ast.Statement{&ast.SelectStatement{}}}
+	if err := checkFormattable(whole, tokens, "sqlserver"); err != nil {
+		t.Errorf("one statement refused: %v", err)
+	}
+	for _, sql := range []string{
+		"SELECT 1\nGO\nSELECT 2\nGO 3",
+		"SET NOCOUNT ON\nSELECT 1\nUPDATE t SET a = 1\nCOMMIT",
+		"IF @a = 1 SELECT 1 ELSE SELECT 2",
+	} {
+		out, err := formatWith(sql, CLIFormatterOptions{Compact: true, Dialect: "sqlserver"})
+		if err != nil {
+			t.Errorf("format %q: %v", sql, err)
+			continue
+		}
+		if out == "" {
+			t.Errorf("format %q: empty output", sql)
+		}
 	}
 }

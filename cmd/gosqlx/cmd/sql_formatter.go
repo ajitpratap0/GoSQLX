@@ -96,6 +96,7 @@ func (f *SQLFormatter) FormatWithComments(astObj *ast.AST, tokens []models.Token
 	}
 	layout := f.layout()
 	layout.Batches = pkgformatter.BatchPositions(astObj)
+	layout.Starts = pkgformatter.StatementPositions(astObj)
 	return pkgformatter.JoinWithComments(stmts, tokens, comments, layout)
 }
 

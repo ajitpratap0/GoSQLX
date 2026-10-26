@@ -88,16 +88,14 @@ func TestParser_UtilityStatementEndsAtNextStatement(t *testing.T) {
 			"IF @x = 1 SELECT 1 ELSE SELECT 2", []string{util}},
 		{"grant keeps select privilege", keywords.DialectSQLServer,
 			"GRANT SELECT, INSERT ON t TO u", []string{util}},
-		// Other dialects need a semicolon: a SELECT after a SET without one is
-		// part of the SET, as before.
+		// Other dialects need a semicolon (a SELECT after a SET without one
+		// is an error, see TestParser_UtilityStatementDoesNotSwallowNextLine).
 		{"mysql set subquery", keywords.DialectMySQL, "SET @x = (SELECT MAX(id) FROM t)", []string{set}},
 		{"mysql set global", keywords.DialectMySQL, "SET GLOBAL max_connections = 100", []string{set}},
 		{"mysql set then select with semicolon", keywords.DialectMySQL,
 			"SET @x = 1; SELECT @x", []string{set, sel}},
 		{"mysql set names", keywords.DialectMySQL, "SET NAMES utf8mb4", []string{set}},
 		{"mysql grant select", keywords.DialectMySQL, "GRANT SELECT, INSERT ON db.* TO 'u'@'h'", []string{util}},
-		{"mysql does not split without semicolon", keywords.DialectMySQL,
-			"SET @x = 1 SELECT @x", []string{set}},
 		{"postgres set search_path", keywords.DialectPostgreSQL,
 			"SET search_path TO public, other", []string{set}},
 		{"postgres begin then commit", keywords.DialectPostgreSQL, "BEGIN; COMMIT", []string{tx, tx}},

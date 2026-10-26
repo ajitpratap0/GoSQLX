@@ -106,9 +106,11 @@ func TestParser_BeginEndDialectGating(t *testing.T) {
 		sql     string
 		want    string // %T, or "error"
 	}{
-		{keywords.DialectSQLServer, "BEGIN TRY SELECT 1 / 0", "*ast.UtilityStatement"},
-		{keywords.DialectSQLServer, "END CATCH", "*ast.UtilityStatement"},
-		{keywords.DialectSQLServer, "END", "*ast.UtilityStatement"},
+		{keywords.DialectSQLServer, "BEGIN TRY SELECT 1 / 0 END TRY", "*ast.UtilityStatement"},
+		// A T-SQL block must close, and an END must close a block.
+		{keywords.DialectSQLServer, "BEGIN TRY SELECT 1 / 0", "error"},
+		{keywords.DialectSQLServer, "END CATCH", "error"},
+		{keywords.DialectSQLServer, "END", "error"},
 		{keywords.DialectOracle, "BEGIN NULL; END", "*ast.UtilityStatement"}, // one PL/SQL block
 		{keywords.DialectOracle, "BEGIN dbms_stats.gather_schema_stats('APP')", "*ast.UtilityStatement"},
 		{keywords.DialectPostgreSQL, "END", "*ast.TransactionStatement"},

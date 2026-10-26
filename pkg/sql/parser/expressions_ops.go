@@ -587,28 +587,37 @@ func (p *Parser) parseEscapeClause() (ast.Expression, error) {
 	return esc, nil
 }
 
-// combinedComparison reports a comparison operator the tokenizer splits into
-// several tokens that sits at the current token: MySQL's null-safe <=> (the
-// tokens <= and >) and the == spelling of equality. It returns the operator
-// text and the number of tokens, or n == 0.
+// combinedComparison reports a comparison operator the tokenizer may split
+// into several tokens that sits at the current token: the null-safe <=> of
+// MySQL and MariaDB (the tokens <= and >) and the == spelling of equality of
+// SQLite and ClickHouse. Other dialects have neither (PostgreSQL's <=> is
+// pgvector's distance operator, see bitwiseOperator). It returns the
+// operator text and the number of tokens, or n == 0.
 func (p *Parser) combinedComparison() (op string, n int) {
 	switch p.currentToken.Token.Type {
 	case models.TokenTypeLtEq:
-		if !p.IsPostgreSQL() && p.peekTypeAt(1) == models.TokenTypeGt && p.nextAdjacent(1) {
+		if p.isMySQLFamily() && p.peekTypeAt(1) == models.TokenTypeGt && p.nextAdjacent(1) {
 			return "<=>", 2
 		}
 	case models.TokenTypeEq:
-		if p.peekTypeAt(1) == models.TokenTypeEq && p.nextAdjacent(1) {
+		if p.hasDoubleEq() && p.peekTypeAt(1) == models.TokenTypeEq && p.nextAdjacent(1) {
 			return "==", 2
 		}
 	case models.TokenTypeSpaceship:
-		if !p.IsPostgreSQL() {
+		if p.isMySQLFamily() {
 			return "<=>", 1
 		}
 	case models.TokenTypeDoubleEq:
-		return "==", 1
+		if p.hasDoubleEq() {
+			return "==", 1
+		}
 	}
 	return "", 0
+}
+
+// hasDoubleEq reports whether the dialect spells equality == as well as =.
+func (p *Parser) hasDoubleEq() bool {
+	return p.IsSQLite() || p.IsClickHouse()
 }
 
 // postfixNullTest handles the PostgreSQL and SQLite postfix ISNULL / NOTNULL

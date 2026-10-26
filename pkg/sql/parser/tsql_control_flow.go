@@ -25,6 +25,7 @@
 package parser
 
 import (
+	goerrors "github.com/ajitpratap0/GoSQLX/pkg/errors"
 	"github.com/ajitpratap0/GoSQLX/pkg/models"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
 )
@@ -47,6 +48,9 @@ func (p *Parser) parseTSQLConditional(kind string) (ast.Statement, bool, error) 
 	end, ok := p.tsqlConditionalEnd(start, kind == "IF")
 	if !ok {
 		p.restoreState(saved)
+		if err := p.tsqlConditionalShapeError(start, kind); err != nil {
+			return nil, true, err
+		}
 		p.seek(start)
 		return p.parseVerbatimArgs(kind)
 	}
@@ -162,4 +166,79 @@ func (p *Parser) snapshotState() parserState {
 func (p *Parser) restoreState(s parserState) {
 	p.depth, p.implicitEnd = s.depth, s.implicitEnd
 	p.dmlReturning, p.inConnectBy = s.dmlReturning, s.inConnectBy
+}
+
+// unmatchedEndError reports an END at the current token that closes no
+// BEGIN ... END block.
+func (p *Parser) unmatchedEndError() error {
+	return goerrors.InvalidSyntaxError("END without a matching BEGIN", p.currentLocation(), "")
+}
+
+// tsqlConditionalShapeError checks an IF / WHILE statement starting at
+// token index start that tsqlConditionalEnd could not delimit and is kept
+// verbatim: its condition must be followed by a statement, and an ELSE by
+// another. The statement runs to the first top-level ';', the end of the
+// input or a GO line.
+func (p *Parser) tsqlConditionalShapeError(start int, kind string) error {
+	depth := 0
+	body := false
+	for i := start + 1; i < len(p.tokens); i++ {
+		switch p.tokens[i].Token.Type {
+		case models.TokenTypeLParen:
+			depth++
+			continue
+		case models.TokenTypeRParen:
+			depth--
+			continue
+		case models.TokenTypeSemicolon, models.TokenTypeEOF:
+			if depth <= 0 {
+				return p.tsqlMissingBody(body, i, kind)
+			}
+			continue
+		}
+		if depth != 0 {
+			continue
+		}
+		if _, ok := p.batchSeparatorEnd(i); ok {
+			return p.tsqlMissingBody(body, i, kind)
+		}
+		switch w := p.utilityWord(i); {
+		case w == "ELSE":
+			if !body {
+				p.seek(i)
+				return p.expectedError("statement after " + kind + " condition")
+			}
+			if next := p.utilityWord(i + 1); next == "ELSE" || next == "END" || p.tsqlBatchEndAt(i+1) {
+				p.seek(i + 1)
+				return p.expectedError("statement after ELSE")
+			}
+		case i > start+1 && w != "END" && (implicitStartWords[w] || tsqlMoreStatementWords[w]):
+			body = true
+		}
+	}
+	return p.tsqlMissingBody(body, len(p.tokens), kind)
+}
+
+// tsqlMissingBody returns the error for an IF / WHILE condition that runs
+// into token index i without a statement after it.
+func (p *Parser) tsqlMissingBody(body bool, i int, kind string) error {
+	if body {
+		return nil
+	}
+	p.seek(i)
+	return p.expectedError("statement after " + kind + " condition")
+}
+
+// tsqlBatchEndAt reports whether the token at index i ends the statement:
+// a ';', the end of the input or a GO line.
+func (p *Parser) tsqlBatchEndAt(i int) bool {
+	if i >= len(p.tokens) {
+		return true
+	}
+	switch p.tokens[i].Token.Type {
+	case models.TokenTypeSemicolon, models.TokenTypeEOF:
+		return true
+	}
+	_, ok := p.batchSeparatorEnd(i)
+	return ok
 }

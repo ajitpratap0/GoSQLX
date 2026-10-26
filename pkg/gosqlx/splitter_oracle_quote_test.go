@@ -16,7 +16,9 @@ package gosqlx
 
 import (
 	"reflect"
+	"strings"
 	"testing"
+	"time"
 )
 
 // TestSplitStatements_OracleAlternativeQuoting checks that the body of an
@@ -46,5 +48,56 @@ func TestSplitStatements_OracleAlternativeQuoting(t *testing.T) {
 				t.Errorf("SplitStatements(%q, %q)\n got: %q\nwant: %q", tc.sql, tc.dialect, got, tc.want)
 			}
 		})
+	}
+}
+
+// TestSplitStatements_OracleQuoteUnterminatedLinear guards against quadratic
+// behaviour on unterminated q-quotes (each used to rescan to end of input).
+func TestSplitStatements_OracleQuoteUnterminatedLinear(t *testing.T) {
+	if testing.Short() {
+		t.Skip("timing test")
+	}
+	for name, src := range map[string]string{
+		"bare":   strings.Repeat("q'(a';", 40000),
+		"select": strings.Repeat("SELECT q'(a' FROM dual;\n", 40000),
+	} {
+		start := time.Now()
+		SplitStatements(src, "oracle")
+		if d := time.Since(start); d > time.Second {
+			t.Errorf("%s: took %v, want < 1s", name, d)
+		}
+	}
+}
+
+// TestSplitStatements_OracleQuoteMemoDoesNotHideLiterals checks that a failed
+// search for one closer does not suppress later valid literals with another.
+func TestSplitStatements_OracleQuoteMemoDoesNotHideLiterals(t *testing.T) {
+	got := SplitStatements("SELECT q'(a' FROM t; SELECT q'[x;y]' FROM dual; SELECT 1", "oracle")
+	want := []string{"SELECT q'(a' FROM t", " SELECT q'[x;y]' FROM dual", " SELECT 1"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("got %q, want %q", got, want)
+	}
+	// Terminated literal first, unterminated of the same closer afterwards.
+	got = SplitStatements("SELECT q'(a;b)' FROM dual; SELECT q'(c' FROM dual; SELECT 2", "oracle")
+	if len(got) < 2 || got[0] != "SELECT q'(a;b)' FROM dual" {
+		t.Errorf("terminated literal split wrongly: %q", got)
+	}
+}
+
+// TestSplitStatements_DelimiterLength covers the MySQL DELIMITER length cap.
+func TestSplitStatements_DelimiterLength(t *testing.T) {
+	got := SplitStatements("DELIMITER //\nSELECT 1; SELECT 2//\nDELIMITER ;\nSELECT 3;", "mysql")
+	want := []string{"SELECT 1; SELECT 2", "SELECT 3"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("normal DELIMITER: got %q, want %q", got, want)
+	}
+	if testing.Short() {
+		return
+	}
+	src := "DELIMITER " + strings.Repeat("(", 250000) + "x\n" + strings.Repeat("(", 750000)
+	start := time.Now()
+	SplitStatements(src, "mysql")
+	if d := time.Since(start); d > time.Second {
+		t.Errorf("huge delimiter took %v, want < 1s", d)
 	}
 }

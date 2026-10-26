@@ -16,13 +16,15 @@
 // starts the next statement. T-SQL does not need ';' between statements, so
 // "SET NOCOUNT ON SELECT * FROM t" is two statements; without this the
 // SELECT would be swallowed into the text of the SET and never be parsed,
-// linted or scanned.
+// linted or scanned. Other dialects separate statements with ';', but a
+// statement on the next line must not vanish into the text of one without
+// it either: it ends the verbatim statement there and is reported (see
+// lineEndPolicy).
 
 package parser
 
 import (
 	"github.com/ajitpratap0/GoSQLX/pkg/models"
-	"github.com/ajitpratap0/GoSQLX/pkg/sql/keywords"
 )
 
 // implicitEndLeaders lists the SQL Server utility statements that end at the
@@ -32,9 +34,10 @@ import (
 // the next statement. Statements that own a nested body have policies of
 // their own (see implicitEndPolicy and parseTSQLConditional), as do GRANT /
 // REVOKE / DENY, whose permission lists contain SELECT, INSERT and the like;
-// BULK INSERT runs to the next ';'.
+// BULK INSERT runs to the next ';'. Transaction statements end with their
+// grammar (see transactionEnd).
 var implicitEndLeaders = map[string]bool{
-	"SET": true, "USE": true, "COMMIT": true, "ROLLBACK": true, "SAVE": true,
+	"SET": true, "USE": true,
 	"PRINT": true, "EXEC": true, "EXECUTE": true, "THROW": true, "RAISERROR": true,
 	"WAITFOR": true, "DBCC": true, "DECLARE": true, "RETURN": true,
 }
@@ -75,11 +78,23 @@ const (
 	// SELECT, INSERT, EXECUTE and the like. It ends at the next
 	// statement-starting word once its TO / FROM principal list began.
 	implicitGrant
-	// implicitTxn: a transaction statement outside SQL Server (BEGIN,
-	// START TRANSACTION, COMMIT, ...). Its options never contain a
-	// statement keyword, so a statement-starting word at the start of a
-	// line begins the next statement.
-	implicitTxn
+	// implicitLine: outside SQL Server, a utility statement with a closed
+	// argument list (SET, USE, CALL, COPY, VACUUM, ...). A word that starts
+	// a statement at the start of a line ends it; since these dialects
+	// separate statements with ';', the next statement is an error unless
+	// it is a transaction statement (see lineStatementEnd).
+	implicitLine
+	// implicitLineGrant: GRANT / REVOKE outside SQL Server, which ends like
+	// implicitLine once its TO / FROM principal list began.
+	implicitLineGrant
+	// implicitLineDDL: outside SQL Server, a CREATE / ALTER / DROP of an
+	// object whose definition holds no statement (a role, a sequence, an
+	// extension, ...), which ends like implicitLine at the words of
+	// startsNewLineDDL.
+	implicitLineDDL
+	// implicitLineSchema: CREATE SCHEMA outside SQL Server, like
+	// implicitLineDDL except that its schema elements belong to it.
+	implicitLineSchema
 )
 
 // tsqlRoutineObjects are the objects whose CREATE / ALTER body runs to the
@@ -89,14 +104,10 @@ var tsqlRoutineObjects = map[string]bool{
 }
 
 // implicitEndPolicy returns the implicitPolicy of the statement starting at
-// token index start. Outside SQL Server only transaction statements end
-// without a ';'.
+// token index start.
 func (p *Parser) implicitEndPolicy(start int) implicitPolicy {
 	if !p.IsSQLServer() {
-		if p.isTransactionStartAt(start) {
-			return implicitTxn
-		}
-		return implicitNone
+		return p.lineEndPolicy(start)
 	}
 	word := p.utilityWord(start)
 	switch word {
@@ -104,7 +115,7 @@ func (p *Parser) implicitEndPolicy(start int) implicitPolicy {
 		if p.beginIsBlock(p.utilityWord(start + 1)) {
 			return implicitAfterBlock
 		}
-		return implicitLeader
+		return implicitNone
 	case "IF", "WHILE":
 		return implicitAfterBlock
 	case "CREATE", "ALTER", "DROP":
@@ -138,8 +149,28 @@ func (p *Parser) implicitEndAt(i, start int, policy implicitPolicy, blk *blockSc
 		return p.startsNewStatement(i, start)
 	case implicitGrant:
 		return grantee && p.startsNewStatement(i, start)
-	case implicitTxn:
-		return p.startsLine(i) && p.startsNewStatement(i, start)
+	case implicitLine:
+		if p.startsNewLineStatement(i, start) {
+			return true
+		}
+		// SET and USE take a value or a name and nothing that looks
+		// like a statement, so one also follows them on the same line.
+		switch p.utilityWord(start) {
+		case "SET", "USE":
+			// Not SET itself (MySQL's SET CHARACTER SET utf8) nor a
+			// transaction word (Oracle's SET TRANSACTION USE ROLLBACK
+			// SEGMENT s).
+			w := p.utilityWord(i)
+			_, statement := lineStatementWords[w]
+			return statement && w != "SET" && !p.startsLine(i) && p.startsNewStatementAnywhere(i)
+		}
+		return false
+	case implicitLineGrant:
+		return grantee && p.startsNewLineStatement(i, start)
+	case implicitLineDDL:
+		return p.startsNewLineDDL(i, start, false)
+	case implicitLineSchema:
+		return p.startsNewLineDDL(i, start, true)
 	case implicitDDL:
 		return p.startsNewDDLStatement(i, start, false)
 	case implicitSchema:
@@ -212,6 +243,14 @@ func (p *Parser) startsNewStatement(i, start int) bool {
 	if word == "" || !implicitStartWords[word] {
 		return false
 	}
+	return p.startsStatementInContext(i, word)
+}
+
+// startsStatementInContext reports whether word, a statement-starting word
+// at token index i of a utility statement, begins the next statement given
+// the tokens around it: t.update, UNION SELECT, CURSOR FOR SELECT, DROP
+// TABLE IF EXISTS and WITH NOWAIT continue the current one.
+func (p *Parser) startsStatementInContext(i int, word string) bool {
 	prev := &p.tokens[i-1]
 	switch prev.Token.Type {
 	case models.TokenTypePeriod, models.TokenTypeEq, models.TokenTypeAssignment:
@@ -251,7 +290,7 @@ func (p *Parser) startsNewStatement(i, start int) bool {
 		switch next {
 		case "":
 			return false
-		case "XMLNAMESPACES":
+		case "XMLNAMESPACES", "RECURSIVE":
 			return true
 		}
 		if i+2 >= len(p.tokens) {
@@ -274,18 +313,24 @@ func (p *Parser) markImplicitEnd(end int) {
 }
 
 // isTransactionStartAt reports whether the token at index i begins a
-// transaction statement in a dialect other than SQL Server.
+// transaction statement of the parser's dialect.
 func (p *Parser) isTransactionStartAt(i int) bool {
+	m := p.alterMask()
 	switch p.utilityWord(i) {
-	case "COMMIT", "ROLLBACK", "SAVEPOINT", "RELEASE", "ABORT":
+	case "COMMIT", "ROLLBACK":
 		return true
+	case "SAVEPOINT":
+		return m&txnSavepoint != 0
+	case "RELEASE":
+		return m&(txnSavepoint&^dialectOracle) != 0
+	case "ABORT":
+		return m&txnEndAbort != 0
+	case "END":
+		return m&(txnEndAbort|dialectSQLite) != 0
 	case "START":
-		return p.utilityWord(i+1) == "TRANSACTION"
+		return m&txnStartTxn != 0 && p.utilityWord(i+1) == "TRANSACTION"
 	case "BEGIN":
 		return !p.beginIsBlock(p.utilityWord(i + 1))
-	case "END":
-		return p.dialect == string(keywords.DialectPostgreSQL) ||
-			p.dialect == string(keywords.DialectSQLite) || p.dialect == ""
 	}
 	return false
 }
@@ -298,4 +343,210 @@ func (p *Parser) startsLine(i int) bool {
 	}
 	cur := p.tokens[i].Start.Line
 	return cur != 0 && p.tokens[i-1].End.Line < cur
+}
+
+// lineEndLeaders lists the utility statements outside SQL Server whose
+// arguments never hold a statement, so that a statement-starting word at
+// the start of a line follows them rather than belongs to them.
+// Statements with a nested query or body (PREPARE ... AS, DECLARE ... CURSOR
+// FOR, CREATE FUNCTION, LOAD DATA ... SET) run to the next ';'.
+var lineEndLeaders = map[string]bool{
+	"SET": true, "USE": true, "CALL": true, "COPY": true, "VACUUM": true,
+	"ANALYZE": true, "LOCK": true, "UNLOCK": true, "DO": true, "KILL": true,
+	"FLUSH": true, "OPTIMIZE": true, "CHECK": true, "REPAIR": true,
+	"CHECKSUM": true, "LISTEN": true, "NOTIFY": true, "UNLISTEN": true,
+	"DEALLOCATE": true, "RENAME": true, "REINDEX": true, "CLUSTER": true,
+	"CHECKPOINT": true, "DISCARD": true, "RESET": true, "XA": true,
+	"BACKUP": true, "PURGE": true, "UNDROP": true, "EXCHANGE": true,
+	"SYSTEM": true, "ATTACH": true, "DETACH": true, "HANDLER": true,
+	"INSTALL": true, "UNINSTALL": true, "COMMENT": true, "SHOW": true,
+	"TABLE": true, "EXISTS": true, "EXECUTE": true, "PUT": true, "GET": true,
+	"LIST": true, "REMOVE": true, "LS": true, "FLASHBACK": true,
+}
+
+// lineClosedObjects lists the objects of CREATE / ALTER statements kept
+// verbatim whose definition holds no statement (unlike a function, view,
+// trigger, event, rule or task).
+var lineClosedObjects = map[string]bool{
+	"DATABASE": true, "EXTENSION": true, "TYPE": true, "DOMAIN": true,
+	"ROLE": true, "USER": true, "SEQUENCE": true, "SYNONYM": true,
+	"TABLESPACE": true, "COLLATION": true, "CONVERSION": true, "SERVER": true,
+	"PUBLICATION": true, "SUBSCRIPTION": true, "STAGE": true, "WAREHOUSE": true,
+	"TAG": true, "LOGIN": true, "DIRECTORY": true, "PROFILE": true,
+	"QUOTA": true, "SETTINGS": true, "NETWORK": true, "INTEGRATION": true,
+	"SHARE": true, "SECRET": true, "RESOURCE": true, "CATALOG": true,
+	"CONTEXT": true, "LIBRARY": true, "CERTIFICATE": true, "CREDENTIAL": true,
+	"FILE": true, "POLICY": true, "ROW": true, "STATISTICS": true,
+	"ACCESS": true, "TEXT": true, "FOREIGN": true, "NAMED": true,
+	"MASKING": true, "INDEX": true, "SESSION": true, "SYSTEM": true,
+	"ACCOUNT": true, "PLUGGABLE": true, "STREAM": true, "SCHEMA": true,
+}
+
+// lineEndPolicy is implicitEndPolicy outside SQL Server.
+func (p *Parser) lineEndPolicy(start int) implicitPolicy {
+	switch word := p.utilityWord(start); word {
+	case "GRANT", "REVOKE":
+		return implicitLineGrant
+	case "DROP":
+		return implicitLineDDL
+	case "CREATE", "ALTER":
+		obj := start + 1
+		if word == "CREATE" {
+			for n := 0; n < 6 && createModifierWords[p.utilityWord(obj)]; n++ {
+				obj++
+			}
+		}
+		switch w := p.utilityWord(obj); {
+		case w == "SCHEMA" && word == "CREATE":
+			return implicitLineSchema
+		case lineClosedObjects[w]:
+			return implicitLineDDL
+		}
+		return implicitNone
+	default:
+		if lineEndLeaders[word] {
+			return implicitLine
+		}
+	}
+	return implicitNone
+}
+
+// lineStatementWords lists, per word, the dialects other than SQL Server in
+// which it begins a statement. Transaction words are decided by
+// isTransactionStartAt.
+var lineStatementWords = map[string]alterDialects{
+	"SELECT": dialectAll, "INSERT": dialectAll, "UPDATE": dialectAll,
+	"DELETE": dialectAll, "MERGE": dialectAll, "WITH": dialectAll,
+	"CREATE": dialectAll, "ALTER": dialectAll, "DROP": dialectAll,
+	"TRUNCATE": dialectAll, "VALUES": dialectAll, "EXPLAIN": dialectAll,
+	"SET": dialectAll, "GRANT": dialectAll, "REVOKE": dialectAll,
+	"CALL": dialectAll, "SHOW": dialectAll, "DESCRIBE": dialectAll,
+	"COMMENT": dialectAll, "PREPARE": dialectAll, "EXECUTE": dialectAll,
+	"DEALLOCATE": dialectAll, "DECLARE": dialectAll, "ANALYZE": dialectAll,
+	"USE":     dialectMySQLFamily | dialectSnowflake | dialectClickHouse | dialectBigQuery,
+	"TABLE":   txnPostgres | dialectMySQLFamily,
+	"COPY":    txnPostgres | dialectSnowflake,
+	"VACUUM":  txnPostgres | dialectSQLite,
+	"LOCK":    txnPostgres | dialectMySQLFamily | dialectOracle,
+	"UNLOCK":  dialectMySQLFamily,
+	"DO":      txnPostgres | dialectMySQLFamily,
+	"REFRESH": txnPostgres,
+	"REINDEX": txnPostgres | dialectSQLite, "CLUSTER": txnPostgres,
+	"CHECKPOINT": txnPostgres, "DISCARD": txnPostgres, "RESET": txnPostgres,
+	"LISTEN": txnPostgres, "NOTIFY": txnPostgres, "UNLISTEN": txnPostgres,
+	"REPLACE":  dialectMySQLFamily | dialectSQLite,
+	"PRAGMA":   dialectSQLite,
+	"ATTACH":   dialectSQLite | dialectClickHouse,
+	"DETACH":   dialectSQLite | dialectClickHouse,
+	"OPTIMIZE": dialectMySQLFamily | dialectClickHouse,
+	"KILL":     dialectMySQLFamily | dialectClickHouse,
+	"FLUSH":    dialectMySQLFamily, "RENAME": dialectMySQLFamily | dialectClickHouse,
+	"SYSTEM": dialectClickHouse, "UNDROP": dialectSnowflake,
+	"PUT": dialectSnowflake, "GET": dialectSnowflake, "LIST": dialectSnowflake,
+	"REMOVE": dialectSnowflake,
+}
+
+// startsNewLineStatement reports whether the token at index i, at the top
+// level of a utility statement that began at start, begins the next
+// statement outside SQL Server: a statement-starting word of the dialect
+// at the start of a line.
+func (p *Parser) startsNewLineStatement(i, start int) bool {
+	if i <= start || !p.startsLine(i) {
+		return false
+	}
+	return p.startsNewStatementAnywhere(i)
+}
+
+// startsNewStatementAnywhere is startsNewLineStatement without the
+// requirement that the word starts a line.
+func (p *Parser) startsNewStatementAnywhere(i int) bool {
+	word := p.utilityWord(i)
+	if word == "" {
+		return false
+	}
+	if m, ok := lineStatementWords[word]; ok {
+		if m&p.alterMask() == 0 {
+			return false
+		}
+		switch word {
+		case "REPLACE", "INSERT", "TRUNCATE":
+			// REPLACE(s, a, b), MySQL's INSERT(s, pos, n, t) and
+			// TRUNCATE(x, d) are functions.
+			if i+1 < len(p.tokens) && p.tokens[i+1].Token.Type == models.TokenTypeLParen {
+				return false
+			}
+		case "COMMENT":
+			return p.utilityWord(i+1) == "ON"
+		case "TABLE":
+			return p.isIdentifierAt(i + 1)
+		}
+	} else if !p.isTransactionStartAt(i) {
+		return false
+	}
+	return p.startsStatementInContext(i, word)
+}
+
+// lineDDLObjects are the words after CREATE / ALTER / DROP that make it the
+// start of a new statement inside the text of a DDL statement outside SQL
+// Server; any other word (ALTER DOMAIN d DROP CONSTRAINT c) continues it.
+var lineDDLObjects = map[string]bool{
+	"TABLE": true, "VIEW": true, "INDEX": true, "SCHEMA": true, "DATABASE": true,
+	"USER": true, "ROLE": true, "SEQUENCE": true, "TYPE": true, "FUNCTION": true,
+	"PROCEDURE": true, "TRIGGER": true, "EXTENSION": true, "MATERIALIZED": true,
+	"UNIQUE": true, "OR": true, "TEMP": true, "TEMPORARY": true, "DOMAIN": true,
+	"POLICY": true, "TABLESPACE": true, "WAREHOUSE": true, "STAGE": true,
+	"STREAM": true, "TASK": true, "PIPE": true, "EVENT": true, "SERVER": true,
+	"PUBLICATION": true, "SUBSCRIPTION": true, "UNLOGGED": true, "FOREIGN": true,
+	"EXTERNAL": true, "SYNONYM": true, "PACKAGE": true, "DICTIONARY": true,
+	"COLLATION": true, "AGGREGATE": true, "OPERATOR": true, "LOGIN": true,
+}
+
+// lineDDLEndWords are the words, besides CREATE / ALTER / DROP and the
+// transaction statements, that end a DDL statement kept verbatim outside
+// SQL Server. Words that are also options of such statements (SET, RESET,
+// RENAME, OWNER) are not among them.
+var lineDDLEndWords = map[string]bool{
+	"SELECT": true, "INSERT": true, "UPDATE": true, "DELETE": true,
+	"MERGE": true, "WITH": true, "TRUNCATE": true, "GRANT": true,
+	"REVOKE": true, "COMMENT": true, "CALL": true, "COPY": true,
+	"EXPLAIN": true, "SHOW": true, "USE": true, "VACUUM": true,
+	"ANALYZE": true,
+}
+
+// startsNewLineDDL is startsNewLineStatement for the text of a DDL
+// statement kept verbatim. schema is set for CREATE SCHEMA, whose schema
+// elements continue it.
+func (p *Parser) startsNewLineDDL(i, start int, schema bool) bool {
+	if !p.startsNewLineStatement(i, start) {
+		return false
+	}
+	switch word := p.utilityWord(i); word {
+	case "CREATE", "ALTER", "DROP":
+		obj := p.utilityWord(i + 1)
+		if schema && word == "CREATE" {
+			switch obj {
+			case "TABLE", "VIEW", "INDEX", "SEQUENCE", "TRIGGER", "UNIQUE":
+				return false
+			}
+		}
+		return lineDDLObjects[obj]
+	case "GRANT":
+		return !schema
+	default:
+		return lineDDLEndWords[word] || p.isTransactionStartAt(i)
+	}
+}
+
+// lineStatementEnd handles a utility statement outside SQL Server that
+// lineEndPolicy ended before token index i, where the next statement starts
+// without a ';' between them. Like any statement there, it is an error
+// unless the next one is a transaction statement on its own line (see
+// implicitStartAt), which is then marked as starting a statement.
+func (p *Parser) lineStatementEnd(i int) error {
+	if p.implicitStartAt(i) {
+		p.markImplicitEnd(i)
+		return nil
+	}
+	p.seek(i)
+	return p.expectedError("semicolon or end of statement")
 }

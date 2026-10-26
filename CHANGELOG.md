@@ -12,37 +12,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (`[]ast.PivotAggregate`), `ast.UnpivotClause.NullHandling`,
   `ast.UnpivotClause.ValueColumns` and `ast.UnpivotNullHandling`; rendered by
   `SQL()` and `pkg/formatter`.
-- **Dialect audit corpus**: 2,788 production-style statements across PostgreSQL,
-  MySQL, MariaDB, SQL Server, Oracle, SQLite, Snowflake and ClickHouse now pass
-  split, parse, format, reparse, idempotency and dropped-word checks, with zero
-  known failures. `scripts/dialect-audit` runs the same checks on SQL files.
+- **Real-world dialect corpus**: `testdata/realworld/<dialect>/` holds 2,788
+  production-style statements across PostgreSQL, MySQL, MariaDB, SQL Server,
+  Oracle, SQLite, Snowflake and ClickHouse. `TestRealWorldCorpus` runs each
+  through split, parse, format, reparse, idempotency and dropped-word checks
+  against a ratchet list (`testdata/realworld/known_failures.txt`, regenerate
+  with `-update-known-failures`): a new failure fails the test, and so does a
+  listed failure that now passes. `scripts/dialect-audit` runs the same checks
+  on any SQL file; `BenchmarkRealWorldParse` and `BenchmarkRealWorldParseFormat`
+  measure the corpus.
+- **Dialect coverage**: every statement of the real-world corpus now parses,
+  formats, re-parses identically and keeps all its words; `known_failures.txt`
+  is empty (1,327 failures before).
 - **AST representation**: `ExplainStatement` retains the explained statement;
   `BatchSeparator` retains SQL Server `GO` and its optional `RepeatCount` without
   expanding repeated batches. `SQL()` and `FormatAST` keep GO on its own line.
   Callers enumerating `AST.Statements` or recovery results must account for
   batch-separator nodes.
-- **Literal and identifier metadata**: `LiteralValue.Prefix` and `RawBackslash`
-  retain string introducers and escape rules. `Identifier.QuoteStyle`,
+- **Literal and identifier metadata**: string literals retain their introducer
+  (`N`, `X`, `B`, `_utf8mb4`, ...) and escape rules (`LiteralValue.DialectExtras()`,
+  `EnsureExtras()`, `SetRawBackslash()`). `Identifier.QuoteStyle`,
   `Identifier.Quotes` and the statement/table/column `NameQuote` fields retain
   identifier delimiters through rendering.
 
 ### Changed
-- **AST field layout**: unreleased dialect fields move under optional SELECT/INSERT/function/binary `Extras`, table `Modifiers.Values`, and literal metadata accessors (`DialectExtras`, `EnsureExtras`, `SetRawBackslash`) to reduce common parse allocations.
-- **Strict default string escapes**: without a dialect, unknown backslash
-  escapes now return an error instead of silently rewriting the value. Select
-  the source dialect explicitly when parsing dialect-specific strings.
-- **SELECT extension fields**: rare dialect clauses now live under the optional
-  `SelectStatement.Extras` pointer (`SelectExtras`), including SELECT modifiers,
-  INTO, LIMIT BY, ROWS EXAMINED, INTERPOLATE, query hints and output formats.
-  These fields were introduced on this unreleased branch; reads must allow
-  `Extras == nil`, and writes must allocate it first.
-- **UPDATE / DELETE extension fields**: modifiers, TOP, ONLY, extra targets,
-  joins, OUTPUT, ORDER BY / LIMIT and RETURNING INTO live under the optional
-  `UpdateStatement.Extras` / `DeleteStatement.Extras` pointer
-  (`DMLTargetFields`); `EnsureExtras()` allocates it. `TableNameQuote` and
-  `AliasQuote` stay on the statement. A plain UPDATE / DELETE has `Extras == nil`,
-  which shrinks the statements from 352 B to 160 / 176 B. These fields were
-  introduced on this unreleased branch.
+- **Dialect extension fields**: the new dialect-specific clauses live behind
+  optional pointers so that common statements do not carry them:
+  `SelectStatement.Extras` (`SelectExtras`: SELECT modifiers, INTO, LIMIT BY,
+  ROWS EXAMINED, INTERPOLATE, query hints, output formats),
+  `InsertStatement.Extras`, `UpdateStatement.Extras` / `DeleteStatement.Extras`
+  (`DMLTargetFields`: modifiers, TOP, ONLY, extra targets, joins, OUTPUT,
+  ORDER BY / LIMIT, RETURNING INTO), `FunctionCall.Extras`,
+  `BinaryExpression.Extras` and `TableReference.Modifiers` (including derived
+  `VALUES`). Read them through `DialectExtras()` / `DialectModifiers()`, which
+  return a shared read-only empty value when the pointer is nil, and call
+  `EnsureExtras()` / `EnsureModifiers()` before writing.
 - **Transpilation**: string literals and quoted identifiers are rendered using
   the target dialect's escape rules and delimiters. Unrepresentable literals
   return an error rather than changing their value. SQL Server GO scripts
@@ -151,6 +155,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   error ("GO batch separator inside a statement"), matching sqlcmd, instead of
   a column or alias named `go`. `GO 0` / `GO 1.5` alone on a line report
   "invalid GO repeat count".
+- A raw NUL or Ctrl-Z byte inside a string literal is an error in dialects
+  whose literals cannot spell it back (NUL without backslash escapes; both
+  without a dialect; Ctrl-Z in ClickHouse; both in Snowflake). Formatting used
+  to drop or rewrite it, changing the value.
 - Statement counts (`gosqlx analyze`, the MCP `parse_sql` tool and the C
   binding's `statement_count` / statement types) exclude GO separators.
 - PIVOT / UNPIVOT `IN` lists now require commas between entries and an alias

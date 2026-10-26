@@ -72,7 +72,7 @@ func (a AST) SQL() string {
 	first := true
 	previousBatch := false
 	for _, stmt := range a.Statements {
-		if _, ok := stmt.(interface{ SQL() string }); !ok {
+		if stmt == nil {
 			continue
 		}
 		_, isBatch := stmt.(*BatchSeparator)
@@ -1846,6 +1846,8 @@ func (m *MergeStatement) SQL() string {
 	if m.SourceAlias != "" {
 		sb.WriteString(" ")
 		writeTableAliasQ(sb, m.SourceAlias, m.SourceAliasQuote)
+		// The alias moved off SourceTable, so its column list renders here.
+		sb.WriteString(TableColumnAliasesSQL(&m.SourceTable))
 	}
 	sb.WriteString(" ON ")
 	sb.WriteString(exprSQL(m.OnCondition))
@@ -2052,6 +2054,11 @@ func writeStmt(buf *bytes.Buffer, s Statement) {
 		buf.WriteString(sq.SQL())
 		return
 	}
+	// Statements such as CREATE SEQUENCE render through ToSQL only.
+	if tq, ok := s.(interface{ ToSQL() string }); ok {
+		buf.WriteString(tq.ToSQL())
+		return
+	}
 	buf.WriteString(s.TokenLiteral())
 }
 
@@ -2073,6 +2080,9 @@ func stmtSQL(s Statement) string {
 	}
 	if sq, ok := s.(interface{ SQL() string }); ok {
 		return sq.SQL()
+	}
+	if tq, ok := s.(interface{ ToSQL() string }); ok {
+		return tq.ToSQL()
 	}
 	return s.TokenLiteral()
 }

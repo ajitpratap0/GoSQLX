@@ -685,6 +685,14 @@ func GetCreateTableStatement() *CreateTableStatement {
 // PutCreateTableStatement returns a CreateTableStatement to the pool.
 // It recursively releases any nested expressions (column defaults, check constraints, etc.).
 func PutCreateTableStatement(stmt *CreateTableStatement) {
+	releaseCreateTableStatement(stmt, releaseAll)
+}
+
+// releaseCreateTableStatement implements PutCreateTableStatement. Under
+// releaseDrawn (ReleaseAST, issue #556) only the drawn node types are
+// returned and the statement itself, which the parser allocates with a plain
+// composite literal, is left to the GC.
+func releaseCreateTableStatement(stmt *CreateTableStatement, mode releaseMode) {
 	if stmt == nil {
 		return
 	}
@@ -692,7 +700,7 @@ func PutCreateTableStatement(stmt *CreateTableStatement) {
 	// Release expressions embedded in column definitions
 	for i := range stmt.Columns {
 		for j := range stmt.Columns[i].Constraints {
-			releaseColumnConstraint(&stmt.Columns[i].Constraints[j])
+			releaseColumnConstraint(&stmt.Columns[i].Constraints[j], mode)
 		}
 		stmt.Columns[i].Constraints = stmt.Columns[i].Constraints[:0]
 		stmt.Columns[i].Name = ""
@@ -703,18 +711,18 @@ func PutCreateTableStatement(stmt *CreateTableStatement) {
 
 	// Release expressions in table constraints
 	for i := range stmt.Constraints {
-		releaseTableConstraint(&stmt.Constraints[i])
+		releaseTableConstraint(&stmt.Constraints[i], mode)
 	}
 	stmt.Constraints = stmt.Constraints[:0]
 
 	// Release expressions in PartitionBy
 	if stmt.PartitionBy != nil {
 		for i, expr := range stmt.PartitionBy.Boundary {
-			PutExpression(expr)
+			releaseExpression(expr, mode)
 			stmt.PartitionBy.Boundary[i] = nil
 		}
 		stmt.PartitionBy.Boundary = stmt.PartitionBy.Boundary[:0]
-		releasePartitionByExtras(stmt.PartitionBy)
+		releasePartitionByExtras(stmt.PartitionBy, mode)
 		stmt.PartitionBy.Columns = stmt.PartitionBy.Columns[:0]
 		stmt.PartitionBy.Type = ""
 		stmt.PartitionBy = nil
@@ -723,14 +731,14 @@ func PutCreateTableStatement(stmt *CreateTableStatement) {
 	// Release expressions in PartitionDefinitions
 	for i := range stmt.Partitions {
 		for j, expr := range stmt.Partitions[i].Values {
-			PutExpression(expr)
+			releaseExpression(expr, mode)
 			stmt.Partitions[i].Values[j] = nil
 		}
-		PutExpression(stmt.Partitions[i].LessThan)
-		PutExpression(stmt.Partitions[i].From)
-		PutExpression(stmt.Partitions[i].To)
+		releaseExpression(stmt.Partitions[i].LessThan, mode)
+		releaseExpression(stmt.Partitions[i].From, mode)
+		releaseExpression(stmt.Partitions[i].To, mode)
 		for j, expr := range stmt.Partitions[i].InValues {
-			PutExpression(expr)
+			releaseExpression(expr, mode)
 			stmt.Partitions[i].InValues[j] = nil
 		}
 		stmt.Partitions[i].Values = stmt.Partitions[i].Values[:0]
@@ -747,8 +755,8 @@ func PutCreateTableStatement(stmt *CreateTableStatement) {
 
 	stmt.Inherits = stmt.Inherits[:0]
 
-	stmt.Options = resetTableOptions(stmt.Options)
-	resetCreateTableExtras(&stmt.CreateTableExtras)
+	stmt.Options = resetTableOptions(stmt.Options, mode)
+	resetCreateTableExtras(&stmt.CreateTableExtras, mode)
 
 	// Reset scalar fields
 	stmt.IfNotExists = false
@@ -759,7 +767,9 @@ func PutCreateTableStatement(stmt *CreateTableStatement) {
 	stmt.PeriodDefinitions = nil
 	stmt.NameQuote = 0
 
-	createTableStmtPool.Put(stmt)
+	if mode == releaseAll {
+		createTableStmtPool.Put(stmt)
+	}
 }
 
 // GetAlterTableStatement gets an AlterTableStatement from the pool.
@@ -780,14 +790,14 @@ func PutAlterTableStatement(stmt *AlterTableStatement) {
 		// Release nested ColumnDef expressions
 		if stmt.Actions[i].ColumnDef != nil {
 			for j := range stmt.Actions[i].ColumnDef.Constraints {
-				releaseColumnConstraint(&stmt.Actions[i].ColumnDef.Constraints[j])
+				releaseColumnConstraint(&stmt.Actions[i].ColumnDef.Constraints[j], releaseAll)
 			}
 			stmt.Actions[i].ColumnDef.Constraints = stmt.Actions[i].ColumnDef.Constraints[:0]
 			stmt.Actions[i].ColumnDef = nil
 		}
 		// Release nested TableConstraint expressions
 		if stmt.Actions[i].Constraint != nil {
-			releaseTableConstraint(stmt.Actions[i].Constraint)
+			releaseTableConstraint(stmt.Actions[i].Constraint, releaseAll)
 			stmt.Actions[i].Constraint = nil
 		}
 		stmt.Actions[i].Type = ""

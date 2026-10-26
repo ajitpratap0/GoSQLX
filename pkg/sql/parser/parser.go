@@ -436,6 +436,7 @@ func (p *Parser) parseTokens(tokens []models.TokenWithSpan) (*ast.AST, error) {
 	} else {
 		result.Statements = result.Statements[:0]
 	}
+	result.StatementStarts = result.StatementStarts[:0]
 
 	// Parse statements using Type (int) comparisons for speed
 	for p.currentPos < len(tokens) && !p.isType(models.TokenTypeEOF) {
@@ -448,8 +449,10 @@ func (p *Parser) parseTokens(tokens []models.TokenWithSpan) (*ast.AST, error) {
 			p.advance()
 			continue
 		}
+		start := p.currentToken.Start
 		if separator, ok := p.parseBatchSeparator(); ok {
 			result.Statements = append(result.Statements, separator)
+			result.StatementStarts = append(result.StatementStarts, start)
 			continue
 		}
 
@@ -457,6 +460,7 @@ func (p *Parser) parseTokens(tokens []models.TokenWithSpan) (*ast.AST, error) {
 		stmt, err := p.parseStatement()
 		if err == nil {
 			result.Statements = append(result.Statements, stmt)
+			result.StatementStarts = append(result.StatementStarts, start)
 		}
 		if p.IsSQLServer() { // batchLineError returns err unchanged elsewhere
 			_, err = p.batchLineError(start, err)
@@ -639,6 +643,7 @@ func (p *Parser) parseContextTokens(ctx context.Context, tokens []models.TokenWi
 	} else {
 		result.Statements = result.Statements[:0]
 	}
+	result.StatementStarts = result.StatementStarts[:0]
 
 	// Parse statements using Type (int) comparisons for speed
 	for p.currentPos < len(tokens) && !p.isType(models.TokenTypeEOF) {
@@ -656,8 +661,10 @@ func (p *Parser) parseContextTokens(ctx context.Context, tokens []models.TokenWi
 			p.advance()
 			continue
 		}
+		start := p.currentToken.Start
 		if separator, ok := p.parseBatchSeparator(); ok {
 			result.Statements = append(result.Statements, separator)
+			result.StatementStarts = append(result.StatementStarts, start)
 			continue
 		}
 
@@ -665,6 +672,7 @@ func (p *Parser) parseContextTokens(ctx context.Context, tokens []models.TokenWi
 		stmt, err := p.parseStatement()
 		if err == nil {
 			result.Statements = append(result.Statements, stmt)
+			result.StatementStarts = append(result.StatementStarts, start)
 		}
 		if p.IsSQLServer() { // batchLineError returns err unchanged elsewhere
 			_, err = p.batchLineError(start, err)

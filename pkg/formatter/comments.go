@@ -51,6 +51,14 @@ type CommentLayout struct {
 	// splits the source at exactly the parser's batch boundaries. When it is
 	// nil, GO lines are recognized from the tokens.
 	Batches []models.Location
+	// Starts holds the source position of the first token of every statement
+	// the parser produced, one per rendered statement and in the same order
+	// (GO separators included), as StatementStarts returns them. When it is
+	// set, the source is cut into statements at exactly these positions, so a
+	// ';' inside a statement (a procedure or trigger body) does not split it
+	// and statements without a ';' between them (T-SQL) are told apart. When
+	// it is nil, statements are found by splitting the tokens at ';'.
+	Starts []models.Location
 }
 
 // JoinWithComments joins already-rendered statements and puts the comments of
@@ -58,8 +66,9 @@ type CommentLayout struct {
 //
 // stmts holds the rendered text of every statement in source order, tokens the
 // token stream of the source (EOF is ignored) and comments the comments the
-// tokenizer captured from it. Statements are matched to the source by
-// splitting tokens at ';'.
+// tokenizer captured from it. Statements are matched to the source at the
+// parser's statement start positions (layout.Starts) when they are given, and
+// otherwise by splitting tokens at ';'.
 //
 // Where a comment goes:
 //
@@ -80,9 +89,11 @@ type CommentLayout struct {
 //     with ErrUnplaceableComment. An executable comment followed by ';' on its
 //     own is a statement of its own and is kept verbatim with its ';'.
 //
-// When the statements cannot be matched to the source (stmts and the
-// semicolon-separated runs of tokens differ in number) every comment is put
-// in front of the first statement, under the same restriction on hints.
+// When the statements cannot be matched to the source (stmts and the runs of
+// tokens differ in number, or a run does not begin at its layout.Starts
+// position) every comment is put in front of the first statement, under the
+// same restriction on hints. A comment is never attached to a statement it
+// was not written next to.
 //
 // No comment is ever dropped: the comments of the result are those of the
 // input.
@@ -97,7 +108,8 @@ func JoinWithComments(stmts []string, tokens []models.TokenWithSpan, comments []
 			nStmt++
 		}
 	}
-	if nStmt != len(stmts) || len(stmts) == 0 || !batchesAgree(items, stmts, layout.Dialect) {
+	if nStmt != len(stmts) || len(stmts) == 0 || !batchesAgree(items, stmts, layout.Dialect) ||
+		!startsAgree(items, layout.Starts) {
 		return joinHoisted(stmts, comments, layout)
 	}
 
@@ -108,11 +120,12 @@ func JoinWithComments(stmts []string, tokens []models.TokenWithSpan, comments []
 		hints    []placedHint
 	}
 	att := make([]attach, len(items))
+	occs := make([]map[string]*hintOccs, len(items)) // per item, built on demand
 	var tail []string
 	for ci := range comments {
 		c := comments[ci]
 		sig := isSignificantComment(c.Text)
-		idx, role := locateComment(items, tokens, c)
+		idx, role := locateComment(items, c)
 		switch role {
 		case roleLeading:
 			if sig && !items[idx].empty && isExecutable(c.Text) {
@@ -130,7 +143,10 @@ func JoinWithComments(stmts []string, tokens []models.TokenWithSpan, comments []
 			it := items[idx]
 			if sig {
 				if isHint(c.Text) {
-					if h, ok := it.hintSlot(tokens, c); ok {
+					if occs[idx] == nil {
+						occs[idx] = map[string]*hintOccs{}
+					}
+					if h, ok := it.hintSlot(tokens, c, occs[idx]); ok {
 						att[idx].hints = append(att[idx].hints, h)
 						continue
 					}
@@ -308,17 +324,51 @@ func batchesAgree(items []item, stmts []string, dialect string) bool {
 	return true
 }
 
-// splitItems splits tokens at ';' and, in SQL Server, around GO lines: those
-// at layout.Batches, or those batch.End recognizes when it is nil.
+// startsAgree reports whether, when the parser's statement starts are known,
+// every statement item begins at its start, one for one.
+func startsAgree(items []item, starts []models.Location) bool {
+	if starts == nil {
+		return true
+	}
+	j := 0
+	for _, it := range items {
+		if it.empty {
+			continue
+		}
+		if j >= len(starts) || it.start != starts[j] {
+			return false
+		}
+		j++
+	}
+	return j == len(starts)
+}
+
+// splitItems splits tokens into statements and, in SQL Server, GO lines: those
+// at layout.Batches, or those batch.End recognizes when it is nil. Statements
+// begin at layout.Starts when it is set (see splitAtStarts) and are otherwise
+// cut at every ';'.
 func splitItems(tokens []models.TokenWithSpan, layout CommentLayout) []item {
 	var items []item
 	sqlServer := isSQLServerDialect(layout.Dialect)
-	nextBatch := 0
+	byStarts := layout.Starts != nil
+	nextBatch, nextStart := 0, 0
 	cur := item{first: -1, term: -1}
+	// pending holds the ';' tokens seen in cur since its last other token
+	// (byStarts only): the first ends the statement unless another of its
+	// tokens follows, the others are stray empty statements.
+	var pending []int
 	flush := func() {
 		if cur.first >= 0 {
+			if len(pending) > 0 {
+				cur.term = pending[0]
+				cur.end = tokens[pending[0]].End
+			}
 			items = append(items, cur)
+			for _, k := range pending[min(1, len(pending)):] {
+				items = append(items, item{first: k, last: k - 1, term: k, empty: true, start: tokens[k].Start, end: tokens[k].End})
+			}
 		}
+		pending = pending[:0]
 		cur = item{first: -1, term: -1}
 	}
 	for i := 0; i < len(tokens); i++ {
@@ -337,30 +387,42 @@ func splitItems(tokens []models.TokenWithSpan, layout CommentLayout) []item {
 			}
 			if ok {
 				flush()
+				if byStarts && nextStart < len(layout.Starts) && t.Start == layout.Starts[nextStart] {
+					nextStart++
+				}
 				items = append(items, item{first: i, last: end - 1, term: -1, batch: true, start: t.Start, end: tokens[end-1].End})
 				i = end - 1
 				continue
 			}
 		}
-		switch t.Token.Type {
-		case models.TokenTypeEOF:
+		if t.Token.Type == models.TokenTypeEOF {
 			continue
-		case models.TokenTypeSemicolon:
-			if cur.first < 0 {
-				items = append(items, item{first: i, last: i - 1, term: i, empty: true, start: t.Start, end: t.End})
-				continue
-			}
-			cur.term = i
-			cur.end = t.End
-			flush()
-		default:
-			if cur.first < 0 {
-				cur.first = i
-				cur.start = t.Start
-			}
-			cur.last = i
-			cur.end = t.End
 		}
+		if byStarts && nextStart < len(layout.Starts) && t.Start == layout.Starts[nextStart] {
+			nextStart++
+			flush()
+			cur.first, cur.start = i, t.Start
+		}
+		if t.Token.Type == models.TokenTypeSemicolon {
+			switch {
+			case cur.first < 0:
+				items = append(items, item{first: i, last: i - 1, term: i, empty: true, start: t.Start, end: t.End})
+			case byStarts:
+				pending = append(pending, i)
+			default:
+				cur.term = i
+				cur.end = t.End
+				flush()
+			}
+			continue
+		}
+		if cur.first < 0 {
+			cur.first = i
+			cur.start = t.Start
+		}
+		pending = pending[:0]
+		cur.last = i
+		cur.end = t.End
 	}
 	flush()
 	return items
@@ -384,35 +446,51 @@ type placedHint struct {
 	sigs []string
 }
 
+// hintOccs lists the occurrences of one hint keyword in a source statement:
+// their token indexes and context signatures (occurrenceSig), in source
+// order. It is computed once per statement and keyword and shared by every
+// hint on that keyword.
+type hintOccs struct {
+	idx  []int
+	sigs []string
+}
+
 // hintSlot reports whether c lies directly after a keyword that can carry a
 // hint (SELECT, INSERT, UPDATE, DELETE, MERGE, REPLACE) of the statement, and
 // where that keyword is among the statement's occurrences of the same word.
-func (it item) hintSlot(tokens []models.TokenWithSpan, c models.Comment) (placedHint, bool) {
+// cache holds the occurrences of each keyword in the statement, filled on
+// first use.
+func (it item) hintSlot(tokens []models.TokenWithSpan, c models.Comment, cache map[string]*hintOccs) (placedHint, bool) {
 	if it.empty || it.first < 0 || it.first == it.last {
 		return placedHint{}, false
 	}
-	for j := it.first; j < it.last; j++ {
-		kw, ok := hintKeyword(tokens[j].Token)
-		if !ok || before(c.Start, tokens[j].End) {
-			continue
-		}
-		if !before(c.Start, tokens[j+1].Start) {
-			continue
-		}
-		h := placedHint{text: c.Text, keyword: kw}
+	// j is the last token of the statement that starts before the comment;
+	// the comment must lie between it and the next token.
+	n := sort.Search(it.last-it.first+1, func(k int) bool {
+		return before(c.Start, tokens[it.first+k].Start)
+	})
+	j := it.first + n - 1
+	if j < it.first || j >= it.last || before(c.Start, tokens[j].End) || !before(c.Start, tokens[j+1].Start) {
+		return placedHint{}, false
+	}
+	kw, ok := hintKeyword(tokens[j].Token)
+	if !ok {
+		return placedHint{}, false
+	}
+	occ := cache[kw]
+	if occ == nil {
+		occ = &hintOccs{}
 		span := tokens[it.first : it.last+1]
 		for k := it.first; k <= it.last; k++ {
 			if w, isWord := wordToken(tokens[k].Token); isWord && strings.EqualFold(w, kw) {
-				if k < j {
-					h.ordinal++
-				}
-				h.total++
-				h.sigs = append(h.sigs, occurrenceSig(span, k-it.first))
+				occ.idx = append(occ.idx, k)
+				occ.sigs = append(occ.sigs, occurrenceSig(span, k-it.first))
 			}
 		}
-		return h, true
+		cache[kw] = occ
 	}
-	return placedHint{}, false
+	ordinal := sort.SearchInts(occ.idx, j)
+	return placedHint{text: c.Text, keyword: kw, ordinal: ordinal, total: len(occ.idx), sigs: occ.sigs}, true
 }
 
 // occurrenceSig returns a signature of the context of the keyword at
@@ -529,11 +607,15 @@ const (
 )
 
 // locateComment finds the item a comment belongs to and its role there.
-func locateComment(items []item, tokens []models.TokenWithSpan, c models.Comment) (int, commentRole) {
+// Items are in source order and do not overlap, so the item is found by
+// binary search: the first one that ends after the comment starts.
+func locateComment(items []item, c models.Comment) (int, commentRole) {
 	if len(items) == 0 {
 		return 0, roleTail
 	}
-	for i, it := range items {
+	i := sort.Search(len(items), func(i int) bool { return before(c.Start, items[i].end) })
+	if i < len(items) {
+		it := items[i]
 		if before(c.Start, it.start) {
 			// Between the previous item and this one (or before the first).
 			if i > 0 && !it.empty && c.Start.Line == items[i-1].end.Line &&
@@ -542,9 +624,7 @@ func locateComment(items []item, tokens []models.TokenWithSpan, c models.Comment
 			}
 			return i, roleLeading
 		}
-		if before(c.Start, it.end) {
-			return i, roleInner
-		}
+		return i, roleInner
 	}
 	last := items[len(items)-1]
 	if c.Start.Line == last.end.Line {
@@ -594,8 +674,9 @@ func insertHints(stmt string, hints []placedHint, dialect ...string) (string, er
 		at   int // byte offset just after the keyword
 		text string
 	}
-	var ins []insertion
+	ins := make([]insertion, 0, len(hints))
 	words := map[string][]wordOcc{} // upper-case word -> occurrences in stmt
+	matchers := map[string]*occMatcher{}
 	scanned := false
 	for _, h := range hints {
 		if h.ordinal == 0 && h.total >= 1 {
@@ -620,73 +701,109 @@ func insertHints(stmt string, hints []placedHint, dialect ...string) (string, er
 		if len(occs) != h.total || h.ordinal >= len(occs) {
 			return "", fmt.Errorf("%w: %s (rendered statement does not keep the %s it follows)", ErrUnplaceableComment, abbreviate(h.text), h.keyword)
 		}
-		at, ok := matchOccurrence(h, occs)
+		m := matchers[h.keyword]
+		if m == nil || !m.covers(h.sigs) {
+			m = newOccMatcher(h.sigs, occs)
+			matchers[h.keyword] = m
+		}
+		at, ok := m.match(h, occs)
 		if !ok {
 			return "", fmt.Errorf("%w: %s (rendered statement reorders the %s it follows)", ErrUnplaceableComment, abbreviate(h.text), h.keyword)
 		}
 		ins = append(ins, insertion{at, h.text})
 	}
-	// Insert from the end so earlier offsets stay valid; hints at one offset
+	// Write the statement once with every hint in place; hints at one offset
 	// keep their source order.
-	sort.SliceStable(ins, func(a, b int) bool { return ins[a].at > ins[b].at })
-	for i := 0; i < len(ins); {
-		j := i
-		var group []string
-		for j < len(ins) && ins[j].at == ins[i].at {
-			group = append(group, ins[j].text)
-			j++
-		}
-		stmt = stmt[:ins[i].at] + " " + strings.Join(group, " ") + stmt[ins[i].at:]
-		i = j
+	sort.SliceStable(ins, func(a, b int) bool { return ins[a].at < ins[b].at })
+	var sb strings.Builder
+	n := len(stmt)
+	for _, in := range ins {
+		n += len(in.text) + 1
 	}
-	return stmt, nil
+	sb.Grow(n)
+	prev := 0
+	for _, in := range ins {
+		sb.WriteString(stmt[prev:in.at])
+		sb.WriteByte(' ')
+		sb.WriteString(in.text)
+		prev = in.at
+	}
+	sb.WriteString(stmt[prev:])
+	return sb.String(), nil
 }
 
-// matchOccurrence returns the end offset of the rendered occurrence of the
-// keyword that h followed in the source. When the rendered occurrences have
-// the same context signatures in the same order as the source ones, that is
-// the one with the same ordinal. When the renderer wrote them in another
-// order, it is the one whose signature matches, provided that signature is
-// unique on both sides; otherwise the keyword cannot be identified and ok is
-// false.
-func matchOccurrence(h placedHint, occs []wordOcc) (at int, ok bool) {
+// occMatcher finds, for the hints on one keyword of one statement, the
+// rendered occurrence of the keyword each hint followed in the source. When
+// the rendered occurrences have the same context signatures in the same order
+// as the source ones, that is the one with the same ordinal. When the renderer
+// wrote them in another order, it is the one whose signature matches,
+// provided that signature is unique on both sides; otherwise the keyword
+// cannot be identified. The signatures are compared once per statement and
+// keyword, not once per hint.
+type occMatcher struct {
+	sigs []string // the source signatures it was built for
+	same bool     // the rendered occurrences have the same signatures in order
+	// For a reordered statement: how often each signature occurs in the
+	// source, and how often and (when once) where in the rendered statement.
+	inSource map[string]int
+	rendered map[string]int
+	at       map[string]int
+}
+
+func newOccMatcher(sigs []string, occs []wordOcc) *occMatcher {
+	m := &occMatcher{sigs: sigs}
+	if sigs == nil || len(sigs) != len(occs) {
+		return m
+	}
+	m.same = true
+	for i := range occs {
+		if occs[i].sig != sigs[i] {
+			m.same = false
+			break
+		}
+	}
+	if m.same {
+		return m
+	}
+	m.inSource = make(map[string]int, len(sigs))
+	for _, s := range sigs {
+		m.inSource[s]++
+	}
+	m.rendered = make(map[string]int, len(occs))
+	m.at = make(map[string]int, len(occs))
+	for _, o := range occs {
+		m.rendered[o.sig]++
+		m.at[o.sig] = o.end
+	}
+	return m
+}
+
+// covers reports whether m was built for exactly sigs (the same shared
+// slice, as every hint on a keyword of one statement carries).
+func (m *occMatcher) covers(sigs []string) bool {
+	if len(sigs) != len(m.sigs) {
+		return false
+	}
+	return len(sigs) == 0 || &sigs[0] == &m.sigs[0]
+}
+
+// match returns the end offset of the rendered occurrence that h followed,
+// for a hint whose sigs m covers; ok is false when it cannot be identified.
+func (m *occMatcher) match(h placedHint, occs []wordOcc) (at int, ok bool) {
 	if h.sigs == nil {
 		return occs[h.ordinal].end, true
 	}
 	if len(h.sigs) != len(occs) {
 		return 0, false
 	}
-	same := true
-	for i := range occs {
-		if occs[i].sig != h.sigs[i] {
-			same = false
-			break
-		}
-	}
-	if same {
+	if m.same {
 		return occs[h.ordinal].end, true
 	}
-	// Reordered (the context of the outer keywords changes with the order
-	// of the clauses they head): the hinted occurrence must be the only one
-	// with its signature in the source and in the rendered statement.
 	want := h.sigs[h.ordinal]
-	inSource := 0
-	for _, s := range h.sigs {
-		if s == want {
-			inSource++
-		}
-	}
-	at, found := -1, 0
-	for i := range occs {
-		if occs[i].sig == want {
-			at = occs[i].end
-			found++
-		}
-	}
-	if inSource != 1 || found != 1 {
+	if m.inSource[want] != 1 || m.rendered[want] != 1 {
 		return 0, false
 	}
-	return at, true
+	return m.at[want], true
 }
 
 // leadingWordEnd returns the end offset of the first word of stmt when it is
@@ -769,4 +886,15 @@ func BatchPositions(tree *ast.AST) []models.Location {
 		}
 	}
 	return out
+}
+
+// StatementPositions returns the source start position of every statement of
+// tree (ast.AST.StatementStarts) for CommentLayout.Starts, or nil when the
+// tree does not carry one per statement (it was built by hand or from tokens
+// without positions), in which case the comment layer splits at ';'.
+func StatementPositions(tree *ast.AST) []models.Location {
+	if tree == nil || len(tree.StatementStarts) != len(tree.Statements) {
+		return nil
+	}
+	return tree.StatementStarts
 }

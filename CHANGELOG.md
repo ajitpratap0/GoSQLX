@@ -64,6 +64,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   in dialects without them.
 
 ### Fixed
+- **AST walkers** (`ast.Inspect`, `Walk`, the security scanner, linter and
+  table extraction) reach SELECT `TOP` and ClickHouse `ARRAY JOIN`, the
+  ENGINE/ORDER BY/PARTITION BY/TTL/SETTINGS clauses of `CREATE TABLE` and
+  `CREATE MATERIALIZED VIEW`, Snowflake `CLONE ... AT`, and PostgreSQL
+  partition bounds. `AST.SQL()` no longer drops `CREATE`/`ALTER`/`DROP
+  SEQUENCE` statements, and MERGE keeps the source's column alias list
+  (`USING (VALUES ...) AS s (id, val)`).
 - PostgreSQL `@` (absolute value) is always written as `@ x`; `@a`, `@t.a` and
   `@abs(a)` re-parsed as placeholders. `@` directly followed by operator
   characters (`@-@`, `@-5`) is now rejected, as PostgreSQL lexes it as one
@@ -136,8 +143,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   formatting no longer drop comments either. New `formatter.JoinWithComments`,
   `gosqlx.FormatWithDialect` and `gosqlx.WithComments()`.
 - **CLI**: `lint` exits 1 on syntax errors and `--auto-fix` judges the fixed
-  text; `format --no-uppercase` lower-cases keywords (it used to upper-case
-  them); `postgres`, `pg`, `mssql`, `tsql` and `sqlite3` are accepted by every
+  text; `format --no-uppercase` lower-cases clause keywords (it used to upper-case
+  them; operators such as `AND`, `IN`, `IS NULL`, `DESC` and function names
+  are still written in upper case); `postgres`, `pg`, `mssql`, `tsql` and `sqlite3` are accepted by every
   `--dialect` flag; errors are printed once and usage only for flag and
   argument errors; `validate --quiet` exits silently; `validate` names stdin
   `<stdin>`, validates `GO`/`DELIMITER` scripts and files over the token
@@ -159,8 +167,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   whose literals cannot spell it back (NUL without backslash escapes; both
   without a dialect; Ctrl-Z in ClickHouse; both in Snowflake). Formatting used
   to drop or rewrite it, changing the value.
-- Statement counts (`gosqlx analyze`, the MCP `parse_sql` tool and the C
-  binding's `statement_count` / statement types) exclude GO separators.
+- Statement counts (`gosqlx analyze`, `gosqlx parse`, the MCP `parse_sql`
+  tool and the C binding's `statement_count` / statement types) exclude GO
+  separators.
+- `fingerprint.Normalize` and `Fingerprint` keep identifier quoting
+  (`SELECT "A" FROM "T"` used to normalize to `SELECT A FROM T`), so
+  fingerprints of queries with quoted identifiers differ from earlier
+  releases. Re-compute stored fingerprints after upgrading.
+- Outside SQL Server, a utility statement (`SET`, `USE`, `GRANT`, `COPY`,
+  `CALL`, ...) followed on the next line by another statement without `;` is
+  an error; only a transaction statement on its own line is accepted without
+  a separator. Statements whose body may hold other statements (`CREATE
+  FUNCTION`/`TRIGGER`/`RULE`, `PREPARE ... AS`, `DECLARE ... CURSOR`) still
+  run to the next `;`, as does a second statement on the same line as a
+  `GRANT` or `COPY`.
+- Transaction statements are checked against each dialect's grammar
+  (`BEGIN banana` is rejected); `<=>` is accepted only in MySQL, MariaDB and
+  PostgreSQL (pgvector), `==` only in SQLite and ClickHouse; an unbalanced
+  SQL Server `BEGIN ... END` block, or an `IF`/`WHILE` without a body, is an
+  error.
 - PIVOT / UNPIVOT `IN` lists now require commas between entries and an alias
   after `AS` in every PIVOT dialect. Where bare aliases are supported,
   `IN (a b)` is one entry (`a AS b`); otherwise a missing comma is rejected.

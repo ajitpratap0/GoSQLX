@@ -19,6 +19,7 @@ import (
 	"sort"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/ajitpratap0/GoSQLX/pkg/models"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
@@ -246,11 +247,11 @@ func TestInsertHints_RefusesWhenKeywordMoved(t *testing.T) {
 	}
 }
 
-// TestMatchOccurrence checks how a nested hint finds its keyword in the
+// TestOccMatcher checks how a nested hint finds its keyword in the
 // rendered statement: by ordinal when the occurrences keep their order, by
 // signature when the renderer reordered them, and not at all when the
 // occurrences cannot be told apart or were rendered differently.
-func TestMatchOccurrence(t *testing.T) {
+func TestOccMatcher(t *testing.T) {
 	occ := func(sigs ...string) []wordOcc {
 		out := make([]wordOcc, len(sigs))
 		for i, s := range sigs {
@@ -277,9 +278,9 @@ func TestMatchOccurrence(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			h := placedHint{text: "/*+ h */", keyword: "SELECT", ordinal: tc.ordinal, total: len(tc.occs), sigs: tc.sigs}
-			got, ok := matchOccurrence(h, tc.occs)
+			got, ok := newOccMatcher(h.sigs, tc.occs).match(h, tc.occs)
 			if ok != tc.ok || (ok && got != tc.want) {
-				t.Fatalf("matchOccurrence = %d, %v; want %d, %v", got, ok, tc.want, tc.ok)
+				t.Fatalf("match = %d, %v; want %d, %v", got, ok, tc.want, tc.ok)
 			}
 		})
 	}
@@ -325,6 +326,154 @@ func TestJoinWithComments_FollowsParserBatches(t *testing.T) {
 			}
 			if got != tc.want {
 				t.Errorf("got  %q\nwant %q", got, tc.want)
+			}
+		})
+	}
+}
+
+// renderJoinDialect is renderJoin in a dialect, with the parser's statement
+// starts and GO positions in the layout, as the formatting entry points pass
+// them.
+func renderJoinDialect(t *testing.T, sql string, dialect keywords.SQLDialect, layout CommentLayout) (string, error) {
+	t.Helper()
+	tkz := tokenizer.GetTokenizer()
+	defer tokenizer.PutTokenizer(tkz)
+	tkz.SetDialect(dialect)
+	tokens, err := tkz.TokenizeString(sql)
+	if err != nil {
+		t.Fatalf("tokenize %q: %v", sql, err)
+	}
+	p := parser.GetParser()
+	defer parser.PutParser(p)
+	p.ApplyOptions(parser.WithDialect(string(dialect)))
+	tree, err := p.ParseFromModelTokens(tokens)
+	if err != nil {
+		t.Fatalf("parse %q: %v", sql, err)
+	}
+	defer ast.ReleaseAST(tree)
+
+	style := ast.CompactStyle()
+	style.AddSemicolon = false
+	style.Dialect = string(dialect)
+	stmts := make([]string, len(tree.Statements))
+	for i, s := range tree.Statements {
+		stmts[i] = FormatStatement(s, style)
+	}
+	layout.Dialect = string(dialect)
+	layout.Batches = BatchPositions(tree)
+	layout.Starts = StatementPositions(tree)
+	return JoinWithComments(stmts, tokens, tkz.Comments, layout)
+}
+
+// TestJoinWithComments_FollowsParserStatementStarts checks that comments stay
+// with their statements when a statement holds ';' (a procedure or trigger
+// body) or statements are not separated by ';' (T-SQL): the source is cut at
+// the parser's statement starts, not at every ';'.
+func TestJoinWithComments_FollowsParserStatementStarts(t *testing.T) {
+	layout := CommentLayout{Terminator: ";", Gap: "\n"}
+	tests := []struct {
+		name    string
+		dialect keywords.SQLDialect
+		sql     string
+		want    string
+	}{
+		{"t-sql without ';' before a procedure body", keywords.DialectSQLServer,
+			"-- A\nSELECT 1\nSELECT 2;\n-- B: the proc\nCREATE PROC p AS BEGIN SELECT 1; END;\n",
+			"-- A\nSELECT 1;\nSELECT 2;\n-- B: the proc\nCREATE PROC p AS BEGIN SELECT 1; END"},
+		{"trigger body", keywords.DialectMySQL,
+			"-- Section one\nSELECT 1 FROM users;\n-- Section two: trigger\nCREATE TRIGGER t AFTER INSERT ON x FOR EACH ROW BEGIN SELECT 1; SELECT 2; END;\n-- Section three\nSELECT 3 FROM orders;\n",
+			"-- Section one\nSELECT 1 FROM users;\n-- Section two: trigger\nCREATE TRIGGER t AFTER INSERT ON x FOR EACH ROW BEGIN SELECT 1; SELECT 2; END;\n-- Section three\nSELECT 3 FROM orders"},
+		{"comment inside a body moves above its statement", keywords.DialectMySQL,
+			"SELECT 0;\nCREATE TRIGGER t AFTER INSERT ON x FOR EACH ROW BEGIN SELECT 1; -- inner\nSELECT 2; END; -- after\nSELECT 3",
+			"SELECT 0;\n-- inner\nCREATE TRIGGER t AFTER INSERT ON x FOR EACH ROW BEGIN SELECT 1; SELECT 2; END; -- after\nSELECT 3"},
+		// As without starts: a comment after a stray ';' leads the next
+		// statement.
+		{"stray semicolons stay empty statements", keywords.DialectPostgreSQL,
+			"SELECT 1;; -- one\n;\n-- two\nSELECT 2",
+			"SELECT 1;\n-- one\n-- two\nSELECT 2"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := renderJoinDialect(t, tc.sql, tc.dialect, layout)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got != tc.want {
+				t.Errorf("got  %q\nwant %q", got, tc.want)
+			}
+		})
+	}
+}
+
+// TestJoinWithComments_StartsDisagree checks that statement starts that do
+// not line up with the source fall back to hoisting every comment instead of
+// attaching one to the wrong statement.
+func TestJoinWithComments_StartsDisagree(t *testing.T) {
+	tkz := tokenizer.GetTokenizer()
+	defer tokenizer.PutTokenizer(tkz)
+	tokens, err := tkz.TokenizeString("select 1; -- one\nselect 2;\n-- two\nselect 3")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var starts []models.Location
+	for _, tok := range tokens {
+		if strings.EqualFold(tok.Token.Value, "select") {
+			starts = append(starts, tok.Start)
+		}
+	}
+	stmts := []string{"SELECT 1", "SELECT 2", "SELECT 3"}
+	tests := []struct {
+		name   string
+		starts []models.Location
+		want   string
+	}{
+		{"agree", starts, "SELECT 1; -- one\nSELECT 2;\n-- two\nSELECT 3"},
+		{"one missing", starts[:2], "-- one\n-- two\nSELECT 1;\nSELECT 2;\nSELECT 3"},
+		{"shifted", []models.Location{starts[0], {Line: starts[1].Line, Column: starts[1].Column + 1}, starts[2]}, "-- one\n-- two\nSELECT 1;\nSELECT 2;\nSELECT 3"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := JoinWithComments(stmts, tokens, tkz.Comments, CommentLayout{Terminator: ";", Gap: "\n", Starts: tc.starts})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got != tc.want {
+				t.Errorf("got  %q\nwant %q", got, tc.want)
+			}
+		})
+	}
+}
+
+// TestJoinWithComments_ScalesLinearly guards against the quadratic hint
+// placement and comment lookup: thousands of hints in one statement and
+// thousands of commented statements must format quickly. The bounds are
+// generous so that the race detector and slow CI machines pass; the
+// quadratic versions took seconds.
+func TestJoinWithComments_ScalesLinearly(t *testing.T) {
+	if testing.Short() {
+		t.Skip("timing test")
+	}
+	tests := []struct {
+		name string
+		sql  string
+		hint int // hints expected in the output
+	}{
+		{"hints", strings.Repeat("SELECT /*+ H */ 1 UNION ALL ", 3000) + "SELECT /*+ H */ 1", 3001},
+		{"comments", strings.Repeat("SELECT 1; -- c\n", 20000), 0},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			start := time.Now()
+			got, err := renderJoinDialect(t, tc.sql, keywords.DialectPostgreSQL, CommentLayout{Terminator: ";", Gap: "\n"})
+			elapsed := time.Since(start)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if n := strings.Count(got, "SELECT /*+ H */ 1"); n != tc.hint {
+				t.Errorf("%d hints in place, want %d", n, tc.hint)
+			}
+			if limit := 3 * time.Second; elapsed > limit {
+				t.Errorf("took %v, want under %v", elapsed, limit)
 			}
 		})
 	}

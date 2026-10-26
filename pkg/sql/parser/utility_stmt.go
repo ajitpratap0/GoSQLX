@@ -94,9 +94,6 @@ func (p *Parser) parseUtilityStatement() (stmt ast.Statement, ok bool, err error
 	case "COMMIT", "ROLLBACK", "SAVEPOINT":
 		return p.parseTransactionStatement(word)
 	case "ABORT":
-		if p.dialect != string(keywords.DialectPostgreSQL) && p.dialect != "" {
-			return nil, false, nil
-		}
 		return p.parseTransactionStatement("ROLLBACK")
 	case "RELEASE":
 		return p.parseTransactionStatement("RELEASE SAVEPOINT")
@@ -106,15 +103,14 @@ func (p *Parser) parseUtilityStatement() (stmt ast.Statement, ok bool, err error
 		}
 		return p.parseTransactionStatement("SAVEPOINT")
 	case "END":
-		switch p.dialect {
-		case string(keywords.DialectPostgreSQL), string(keywords.DialectSQLite), "":
-			// END [WORK | TRANSACTION] commits the current transaction.
-			return p.parseTransactionStatement("END")
-		case string(keywords.DialectSQLServer):
-			// END, END TRY, END CATCH close a T-SQL block.
-			return p.parseVerbatimStatement("END")
+		if p.IsSQLServer() {
+			// END, END TRY, END CATCH close a T-SQL block that did not
+			// open here.
+			return nil, true, p.unmatchedEndError()
 		}
-		return nil, false, nil
+		// END [WORK | TRANSACTION] commits the current transaction
+		// (PostgreSQL, SQLite).
+		return p.parseTransactionStatement("END")
 	case "SET":
 		return p.parseSetStatement()
 	case "USE":
@@ -240,16 +236,19 @@ func (p *Parser) scanStatementEnd(blocks bool) (end int, open bool, err error) {
 	start := p.currentPos
 	policy := p.implicitEndPolicy(start)
 	blk := p.newBlockScan()
-	cases := 0       // open CASE expressions of an implicitLeader statement
-	grantee := false // an implicitGrant statement reached TO / FROM
+	cases := 0       // open CASE expressions outside any block
+	grantee := false // a GRANT / REVOKE / DENY statement reached TO / FROM
 	i := start
 	for ; i < len(p.tokens); i++ {
 		if i > start {
 			if _, ok := p.batchSeparatorEnd(i); ok {
+				if err := p.unclosedBlockError(i, policy, blocks, &blk); err != nil {
+					return 0, false, err
+				}
 				return i, false, nil
 			}
 		}
-		if policy == implicitGrant && depth == 0 {
+		if (policy == implicitGrant || policy == implicitLineGrant) && depth == 0 {
 			if w := p.utilityWord(i); w == "TO" || w == "FROM" {
 				grantee = true
 			}
@@ -272,8 +271,26 @@ func (p *Parser) scanStatementEnd(blocks bool) (end int, open bool, err error) {
 		}
 		if policy != implicitNone && depth == 0 && blk.depth == 0 && i > start &&
 			p.implicitEndAt(i, start, policy, &blk, grantee) {
+			if policy >= implicitLine {
+				return i, false, p.lineStatementEnd(i)
+			}
 			p.markImplicitEnd(i)
 			return i, false, nil
+		}
+		if policy == implicitAfterBlock && blocks && depth == 0 && blk.depth == 0 && i > start {
+			// An END that closes no block of a T-SQL BEGIN / IF / WHILE
+			// (BEGIN SELECT 1 END END); a CASE outside any block may
+			// also end with END.
+			switch p.utilityWord(i) {
+			case "CASE":
+				cases++
+			case "END":
+				if cases == 0 && (i == 0 || p.tokens[i-1].Token.Type != models.TokenTypePeriod) {
+					p.seek(i)
+					return 0, false, p.unmatchedEndError()
+				}
+				cases--
+			}
 		}
 		switch p.tokens[i].Token.Type {
 		case models.TokenTypeLParen:
@@ -293,17 +310,33 @@ func (p *Parser) scanStatementEnd(blocks bool) (end int, open bool, err error) {
 				p.seek(i)
 				return 0, false, p.expectedError(")")
 			}
+			if err := p.unclosedBlockError(i, policy, blocks, &blk); err != nil {
+				return 0, false, err
+			}
 			return i, blk.depth > 0, nil
 		}
-		if blocks && (i > start || policy != implicitTxn) {
-			// A transaction's BEGIN opens no block (MySQL BEGIN\nUPDATE ...).
+		if blocks {
 			i = blk.token(p, i)
 		}
 	}
 	if depth != 0 {
 		return 0, false, goerrors.IncompleteStatementError(p.currentLocation(), "")
 	}
+	if err := p.unclosedBlockError(i, policy, blocks, &blk); err != nil {
+		return 0, false, err
+	}
 	return i, blk.depth > 0, nil
+}
+
+// unclosedBlockError returns an error when a T-SQL BEGIN / IF / WHILE
+// statement (policy implicitAfterBlock) reaches the end of its batch at
+// token index i with a BEGIN ... END block still open.
+func (p *Parser) unclosedBlockError(i int, policy implicitPolicy, blocks bool, blk *blockScan) error {
+	if policy != implicitAfterBlock || !blocks || blk.depth == 0 {
+		return nil
+	}
+	p.seek(i)
+	return p.expectedError("END")
 }
 
 // consumeUtilityText consumes the rest of the statement and returns its text.
@@ -366,53 +399,20 @@ func (p *Parser) parseVerbatimStatement(kind string) (ast.Statement, bool, error
 
 // parseTransactionStatement parses BEGIN / START TRANSACTION / COMMIT /
 // ROLLBACK / SAVEPOINT / RELEASE / END, recording the savepoint name where
-// the statement has one.
+// the statement has one. The options are checked against the dialect's
+// grammar (see transactionEnd); ok is false when the statement does not
+// exist in the dialect.
 func (p *Parser) parseTransactionStatement(action string) (ast.Statement, bool, error) {
 	stmt := &ast.TransactionStatement{Action: action, Pos: p.currentLocation()}
 	start := p.currentPos
-	end, err := p.utilityStatementEnd()
-	if err != nil {
+	end, savepoint, ok, err := p.transactionEnd(start)
+	if !ok || err != nil {
+		return nil, ok, err
+	}
+	if err := p.transactionTailError(end); err != nil {
 		return nil, true, err
 	}
-	savepointExpected := false // ROLLBACK ... TO [SAVEPOINT] name
-	switch action {
-	case "SAVEPOINT":
-		// SAVEPOINT name | SAVE TRAN[SACTION] name
-		i := start + 1
-		if w := p.utilityWord(i); w == "TRAN" || w == "TRANSACTION" {
-			i++
-		}
-		if i < end {
-			stmt.Savepoint = p.tokens[i].Token.Value
-		}
-	case "RELEASE SAVEPOINT":
-		i := start + 1
-		if p.utilityWord(i) == "SAVEPOINT" {
-			i++
-		}
-		if i < end {
-			stmt.Savepoint = p.tokens[i].Token.Value
-		}
-	case "ROLLBACK":
-		for i := start + 1; i < end; i++ {
-			if p.utilityWord(i) != "TO" {
-				continue
-			}
-			savepointExpected = true
-			i++
-			if p.utilityWord(i) == "SAVEPOINT" {
-				i++
-			}
-			if i < end {
-				stmt.Savepoint = p.tokens[i].Token.Value
-			}
-			break
-		}
-	}
-	if stmt.Savepoint == "" && (action == "SAVEPOINT" || action == "RELEASE SAVEPOINT" || savepointExpected) {
-		p.seek(end)
-		return nil, true, p.expectedError("savepoint name")
-	}
+	stmt.Savepoint = savepoint
 	stmt.Text = p.renderTokenRange(start, end)
 	p.seek(end)
 	return stmt, true, nil

@@ -562,8 +562,13 @@ func goLine(src string, i, j int) (ls, le int, ok bool) {
 	return ls, le, true
 }
 
+// maxDelimiterLen caps the MySQL DELIMITER token length. Real delimiters are
+// a few bytes (";", "//", "$$"); a longer token is treated as plain text.
+const maxDelimiterLen = 32
+
 // delimiterLine recognises the mysql client's "DELIMITER <token>" directive
-// at src[i:j] and returns the new delimiter ("" for the default ';').
+// at src[i:j] and returns the new delimiter ("" for the default ';'). Tokens
+// longer than maxDelimiterLen are not recognised.
 func delimiterLine(src string, i, j int) (ls, le int, delim string, ok bool) {
 	ls, ok = lineStartOK(src, i)
 	if !ok || j >= len(src) || (src[j] != ' ' && src[j] != '\t') {
@@ -578,6 +583,11 @@ func delimiterLine(src string, i, j int) (ls, le int, delim string, ok bool) {
 		return 0, 0, "", false
 	}
 	tok := src[k:e]
+	if len(tok) > maxDelimiterLen {
+		// Not a plausible delimiter: leave the line as ordinary text. A huge
+		// delimiter would make the per-byte prefix match quadratic.
+		return 0, 0, "", false
+	}
 	le, ok = afterLine(src, skipBlanks(src, e))
 	if !ok {
 		// Trailing text after the token: ignore it like the client does.

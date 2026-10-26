@@ -25,6 +25,7 @@ import (
 	"sync/atomic"
 
 	"github.com/ajitpratap0/GoSQLX/pkg/metrics"
+	"github.com/ajitpratap0/GoSQLX/pkg/models"
 )
 
 // poolLeakCount counts expressions that exceeded PutExpression's iterative
@@ -183,11 +184,13 @@ var (
 	// AST node pools
 	astPool = sync.Pool{
 		New: func() interface{} {
-			return &AST{
-				// Covers the parser's 1-2 statement estimate so a fresh AST
-				// needs no second allocation; ReleaseAST keeps any grown capacity.
-				Statements: make([]Statement, 0, 2),
-			}
+			// One allocation holds the AST and backing arrays covering the
+			// parser's 1-2 statement estimate, so a fresh AST needs no further
+			// allocation; ReleaseAST keeps any grown capacity.
+			b := &astBlock{}
+			b.ast.Statements = b.stmts[:0]
+			b.ast.StatementStarts = b.starts[:0]
+			return &b.ast
 		},
 	}
 
@@ -431,6 +434,14 @@ var (
 // the pool never pins a large backing array nor makes later Puts pay for it.
 const maxPooledWorkQueueCap = 1024
 
+// astBlock lays out a pooled AST together with the initial backing arrays of
+// its Statements and StatementStarts slices.
+type astBlock struct {
+	ast    AST
+	stmts  [2]Statement
+	starts [2]models.Location
+}
+
 // maxPooledComments is the largest AST.Comments capacity ReleaseAST keeps
 // (64 KiB of models.Comment); larger slices are dropped.
 const maxPooledComments = 1024
@@ -549,6 +560,7 @@ func ReleaseAST(ast *AST) {
 
 	// Reset slice but keep capacity
 	ast.Statements = ast.Statements[:0]
+	ast.StatementStarts = ast.StatementStarts[:0]
 
 	// Reset comments but keep capacity; clear drops the Text strings so the
 	// pooled AST does not retain them (clear on nil is a no-op). A slice
@@ -588,7 +600,7 @@ func ReleaseStatements(stmts []Statement) {
 // releaseStatement returns a single Statement to its pool.
 // This is the central dispatch used by both ReleaseAST and ReleaseStatements
 // (mode releaseDrawn) and by PutCreateView/MaterializedViewStatement
-// (mode releaseAll). Only Select/Insert/Update/Delete honour mode; every other
+// (mode releaseAll). Only Select/Insert/Update/Delete/Merge/Replace/CreateTable honour mode; every other
 // pooled statement is always Put.
 func releaseStatement(stmt Statement, mode releaseMode) {
 	if stmt == nil {
@@ -604,7 +616,7 @@ func releaseStatement(stmt Statement, mode releaseMode) {
 	case *DeleteStatement:
 		releaseDeleteStatement(s, mode)
 	case *CreateTableStatement:
-		PutCreateTableStatement(s)
+		releaseCreateTableStatement(s, mode)
 	case *AlterTableStatement:
 		PutAlterTableStatement(s)
 	case *CreateIndexStatement:
@@ -675,7 +687,7 @@ func PutCreateIndexStatement(stmt *CreateIndexStatement) {
 		stmt.Columns[i] = IndexColumn{}
 	}
 	stmt.Columns = stmt.Columns[:0]
-	resetCreateIndexExtras(&stmt.CreateIndexExtras)
+	resetCreateIndexExtras(&stmt.CreateIndexExtras, releaseAll)
 
 	stmt.Where = nil
 	stmt.Unique = false
@@ -713,7 +725,7 @@ func PutCreateViewStatement(stmt *CreateViewStatement) {
 	stmt.Columns = stmt.Columns[:0]
 	stmt.Query = nil
 	stmt.WithOption = ""
-	resetViewExtras(&stmt.ViewExtras)
+	resetViewExtras(&stmt.ViewExtras, releaseAll)
 	stmt.NameQuote = 0
 	stmt.ColumnQuotes = nil
 
@@ -744,7 +756,7 @@ func PutCreateMaterializedViewStatement(stmt *CreateMaterializedViewStatement) {
 	stmt.WithData = nil
 	stmt.Tablespace = ""
 	stmt.OrReplace = false
-	resetViewExtras(&stmt.ViewExtras)
+	resetViewExtras(&stmt.ViewExtras, releaseAll)
 	stmt.NameQuote = 0
 	stmt.ColumnQuotes = nil
 

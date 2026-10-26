@@ -371,7 +371,7 @@ func TestParser_UnclosedBlocksBoundedWork(t *testing.T) {
 		dialect keywords.SQLDialect
 		sql     string
 	}{
-		{keywords.DialectSQLServer, "CREATE PROCEDURE p AS " + strings.Repeat("BEGIN SELECT 1; ", 2000)},
+		{keywords.DialectSQLServer, strings.Repeat("CREATE PROCEDURE p AS BEGIN SELECT 1; ", 2000)},
 		{keywords.DialectOracle, strings.Repeat("BEGIN NULL; ", 2000)},
 	}
 	for _, tc := range tests {

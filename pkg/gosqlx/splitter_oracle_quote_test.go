@@ -57,15 +57,33 @@ func TestSplitStatements_OracleQuoteUnterminatedLinear(t *testing.T) {
 	if testing.Short() {
 		t.Skip("timing test")
 	}
-	for name, src := range map[string]string{
-		"bare":   strings.Repeat("q'(a';", 40000),
-		"select": strings.Repeat("SELECT q'(a' FROM dual;\n", 40000),
-	} {
-		start := time.Now()
-		SplitStatements(src, "oracle")
-		if d := time.Since(start); d > time.Second {
-			t.Errorf("%s: took %v, want < 1s", name, d)
+	assertSplitLinear(t, "bare", func(n int) string { return strings.Repeat("q'(a';", n) }, "oracle", 10000)
+	assertSplitLinear(t, "select", func(n int) string { return strings.Repeat("SELECT q'(a' FROM dual;\n", n) }, "oracle", 10000)
+}
+
+// assertSplitLinear fails when splitting gen(4n) takes much more than four
+// times as long as gen(n): linear work grows about 4x, quadratic work 16x. A
+// ratio, unlike a wall-clock bound, holds on slow or race-instrumented CI
+// runners. Each size is timed three times and the fastest run counts.
+func assertSplitLinear(t *testing.T, name string, gen func(n int) string, dialect string, n int) {
+	t.Helper()
+	measure := func(src string) time.Duration {
+		best := time.Duration(1<<63 - 1)
+		for i := 0; i < 3; i++ {
+			start := time.Now()
+			SplitStatements(src, dialect)
+			if d := time.Since(start); d < best {
+				best = d
+			}
 		}
+		return best
+	}
+	small, large := measure(gen(n)), measure(gen(4*n))
+	if large < 20*time.Millisecond {
+		return // too fast to be quadratic at this size, and too fast to time reliably
+	}
+	if ratio := float64(large) / float64(small); ratio > 10 {
+		t.Errorf("%s: %v for n=%d but %v for 4n (%.1fx), want roughly linear growth", name, small, n, large, ratio)
 	}
 }
 
@@ -94,10 +112,7 @@ func TestSplitStatements_DelimiterLength(t *testing.T) {
 	if testing.Short() {
 		return
 	}
-	src := "DELIMITER " + strings.Repeat("(", 250000) + "x\n" + strings.Repeat("(", 750000)
-	start := time.Now()
-	SplitStatements(src, "mysql")
-	if d := time.Since(start); d > time.Second {
-		t.Errorf("huge delimiter took %v, want < 1s", d)
-	}
+	assertSplitLinear(t, "huge delimiter", func(n int) string {
+		return "DELIMITER " + strings.Repeat("(", n) + "x\n" + strings.Repeat("(", 3*n)
+	}, "mysql", 60000)
 }

@@ -324,8 +324,8 @@ func putExpressionBounded(expr Expression, depth int, mode releaseMode, maxWork,
 			if e.Right != nil {
 				workQueue = append(workQueue, e.Right)
 			}
-			if e.Escape != nil {
-				workQueue = append(workQueue, e.Escape)
+			if e.DialectExtras().Escape != nil {
+				workQueue = append(workQueue, e.DialectExtras().Escape)
 			}
 			if mode == releaseAll {
 				// CustomOp is not pooled; the reset drops it for the GC.
@@ -356,8 +356,11 @@ func putExpressionBounded(expr Expression, depth int, mode releaseMode, maxWork,
 			workQueue = appendOrderByExprs(workQueue, e.OrderBy)
 			workQueue = appendOrderByExprs(workQueue, e.WithinGroup)
 			workQueue = appendWindowSpecExprs(workQueue, e.Over)
-			if e.Keep != nil {
-				workQueue = appendOrderByExprs(workQueue, e.Keep.OrderBy)
+			if sep := e.DialectExtras().Separator; sep != nil {
+				workQueue = append(workQueue, sep)
+			}
+			if e.DialectExtras().Keep != nil {
+				workQueue = appendOrderByExprs(workQueue, e.DialectExtras().Keep.OrderBy)
 			}
 			if mode == releaseAll {
 				// Keep Arguments/Parameters capacity; OrderBy, WithinGroup and

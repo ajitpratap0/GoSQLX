@@ -238,7 +238,9 @@ func (p *Parser) parseFunctionCall(funcName string) (*ast.FunctionCall, error) {
 		Arguments: arguments,
 		Distinct:  distinct,
 		OrderBy:   orderByExprs,
-		Separator: separator,
+	}
+	if separator != nil {
+		funcCall.EnsureExtras().Separator = separator
 	}
 
 	// ClickHouse parametric aggregates: funcName(params)(args).
@@ -258,7 +260,7 @@ func (p *Parser) parseFunctionCall(funcName string) (*ast.FunctionCall, error) {
 		if err != nil {
 			return nil, err
 		}
-		funcCall.Keep = keep
+		funcCall.EnsureExtras().Keep = keep
 	}
 
 	// Check for IGNORE NULLS / RESPECT NULLS (SQL:2016 null treatment).

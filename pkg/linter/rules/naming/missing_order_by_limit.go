@@ -51,7 +51,7 @@ func (r *MissingOrderByLimitRule) Check(ctx *linter.Context) ([]linter.Violation
 			if !ok {
 				return true
 			}
-			hasLimit := sel.Limit != nil || sel.LimitExpr != nil || sel.Fetch != nil
+			hasLimit := sel.Limit != nil || sel.DialectExtras().LimitExpr != nil || sel.Fetch != nil
 			if !hasLimit {
 				return true
 			}

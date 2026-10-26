@@ -385,13 +385,16 @@ func (p *Parser) parsePatternMatch(left ast.Expression, operator string, not, al
 			return nil, suffixNone, err
 		}
 	}
-	return &ast.BinaryExpression{
+	node := &ast.BinaryExpression{
 		Left:     left,
 		Operator: operator,
 		Right:    pattern,
 		Not:      not,
-		Escape:   escape,
-	}, suffixPredicate, nil
+	}
+	if escape != nil {
+		node.EnsureExtras().Escape = escape
+	}
+	return node, suffixPredicate, nil
 }
 
 // parseInTail parses the right side of IN once left (and any NOT / GLOBAL)

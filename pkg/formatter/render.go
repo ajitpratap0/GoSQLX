@@ -341,7 +341,7 @@ func renderSelect(s *ast.SelectStatement, opts ast.FormatOptions) string {
 
 	if len(s.OrderBy) > 0 {
 		sb.WriteString(f.clauseSep())
-		if s.OrderSiblings {
+		if s.DialectExtras().OrderSiblings {
 			sb.WriteString(f.kw("ORDER SIBLINGS BY"))
 		} else {
 			sb.WriteString(f.kw("ORDER BY"))
@@ -391,7 +391,7 @@ func renderInsert(i *ast.InsertStatement, opts ast.FormatOptions) string {
 	if i == nil {
 		return ""
 	}
-	if i.MultiTable != nil {
+	if i.DialectExtras().MultiTable != nil {
 		// Oracle INSERT ALL / FIRST: rendered on one line by the AST.
 		if opts.AddSemicolon {
 			return i.SQL() + ";"
@@ -419,7 +419,7 @@ func renderInsert(i *ast.InsertStatement, opts ast.FormatOptions) string {
 	}
 
 	if !setForm {
-		writeDMLOutput(sb, f, i.Output, i.OutputInto)
+		writeDMLOutput(sb, f, i.Output, i.DialectExtras().OutputInto)
 		writeInsertBeforeSource(sb, f, i)
 	}
 
@@ -490,7 +490,7 @@ func renderUpdate(u *ast.UpdateStatement, opts ast.FormatOptions) string {
 		sb.WriteString(f.clauseSep())
 	}
 
-	x := dmlExtras(u.Extras)
+	x := u.DialectExtras()
 	sb.WriteString(f.kw("UPDATE"))
 	sb.WriteString(" ")
 	writeDMLModifiers(sb, f, x.Modifiers)
@@ -550,7 +550,7 @@ func renderDelete(d *ast.DeleteStatement, opts ast.FormatOptions) string {
 		sb.WriteString(f.clauseSep())
 	}
 
-	x := dmlExtras(d.Extras)
+	x := d.DialectExtras()
 	sb.WriteString(f.kw("DELETE"))
 	sb.WriteString(" ")
 	writeDMLModifiers(sb, f, x.Modifiers)
@@ -1162,10 +1162,10 @@ func tableRefSQL(t *ast.TableReference, f *nodeFormatter) string {
 		sb.WriteString("(")
 		sb.WriteString(stmtSQL(t.SetSubquery))
 		sb.WriteString(")")
-	} else if t.Values != nil {
+	} else if t.DialectModifiers().Values != nil {
 		sb.WriteString("(")
 		sb.WriteString(f.kw("VALUES"))
-		sb.WriteString(strings.TrimPrefix(t.Values.SQL(), "VALUES"))
+		sb.WriteString(strings.TrimPrefix(t.DialectModifiers().Values.SQL(), "VALUES"))
 		sb.WriteString(")")
 	} else {
 		if t.Only {

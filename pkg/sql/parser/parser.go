@@ -123,6 +123,7 @@ func (p *Parser) resetDialectState() {
 	p.dialectTyped = dialect.Unknown
 	p.capabilitiesCache = dialect.Unknown.Capabilities()
 	p.capabilitiesSet = true
+	p.rawStringLiterals = false // Unknown.StringEscape() is StringEscapeStrict.
 	p.refreshPipesMode()
 }
 
@@ -268,6 +269,7 @@ func WithDialect(newDialect string) ParserOption {
 		p.dialectTyped = dialect.Parse(newDialect)
 		p.capabilitiesCache = p.dialectTyped.Capabilities()
 		p.capabilitiesSet = true
+		p.rawStringLiterals = p.dialectTyped.StringEscape() == dialect.StringEscapeNone
 		p.refreshPipesMode()
 	}
 }
@@ -360,6 +362,9 @@ type Parser struct {
 	// Capabilities.PipesAsLogicalOr (MySQL, MariaDB) and pipesAsConcat is
 	// unset. Derived by refreshPipesMode; never set it directly.
 	pipesAsOr bool
+	// rawStringLiterals caches the dialect's string escape mode for each
+	// literal, avoiding repeated dialect dispatch on the expression path.
+	rawStringLiterals bool
 	// implicitEnd is one more than the token index at which a T-SQL utility
 	// statement ended without a ';' because the next statement began there
 	// (0: none). See utility_implicit_end.go.

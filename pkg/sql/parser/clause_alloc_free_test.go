@@ -98,10 +98,10 @@ func TestParseLimitOffsetFetch_LenientNumeric(t *testing.T) {
 			}
 			cmpInt("Limit", stmt.Limit, tt.wantLimit)
 			cmpInt("Offset", stmt.Offset, tt.wantOff)
-			if got := exprText(stmt.LimitExpr); got != tt.wantLimitExpr {
+			if got := exprText(stmt.DialectExtras().LimitExpr); got != tt.wantLimitExpr {
 				t.Errorf("LimitExpr = %q, want %q", got, tt.wantLimitExpr)
 			}
-			if got := exprText(stmt.OffsetExpr); got != tt.wantOffExpr {
+			if got := exprText(stmt.DialectExtras().OffsetExpr); got != tt.wantOffExpr {
 				t.Errorf("OffsetExpr = %q, want %q", got, tt.wantOffExpr)
 			}
 			if tt.wantFetch == nil && tt.wantFetchExpr == "" {

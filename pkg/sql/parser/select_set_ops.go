@@ -42,6 +42,10 @@ func (p *Parser) parseSelectWithSetOperations() (ast.Statement, error) {
 	if err != nil {
 		return nil, err
 	}
+	if p.setOperatorPrecedence() == 0 {
+		// An unparenthesized SELECT has already consumed its query tail.
+		return leftStmt, nil
+	}
 	return p.parseSetOperationChain(leftStmt, false)
 }
 
@@ -58,9 +62,13 @@ func (p *Parser) parseSelectWithSetOperations() (ast.Statement, error) {
 // When the last operand was parenthesized, a following ORDER BY / LIMIT /
 // OFFSET / FETCH is attached by attachParenthesizedQueryTail.
 func (p *Parser) parseSetOperationChain(left ast.Statement, leftParens bool) (ast.Statement, error) {
-	stmt, lastParen, err := p.parseSetOperationsFrom(left, leftParens, 1)
-	if err != nil {
-		return nil, err
+	stmt, lastParen := left, leftParens
+	if p.setOperatorPrecedence() != 0 {
+		var err error
+		stmt, lastParen, err = p.parseSetOperationsFrom(left, leftParens, 1)
+		if err != nil {
+			return nil, err
+		}
 	}
 	if lastParen && p.isQueryTailStart() {
 		if err := p.attachParenthesizedQueryTail(stmt); err != nil {

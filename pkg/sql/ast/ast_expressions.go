@@ -149,8 +149,8 @@ type FunctionCall struct {
 	WithinGroup   []OrderByExpression // ORDER BY clause for ordered-set aggregates (PERCENTILE_CONT, etc.)
 	NullTreatment string              // "IGNORE NULLS" or "RESPECT NULLS" on window functions (Snowflake, Oracle, BigQuery, SQL:2016)
 	Pos           models.Location     // Source position of the function name (1-based line and column)
-	Separator     *LiteralValue       // MySQL/MariaDB GROUP_CONCAT(... SEPARATOR 'str'); nil when absent
-	Keep          *KeepClause         // Oracle KEEP (DENSE_RANK FIRST|LAST ORDER BY ...); nil when absent
+	// Extras holds the optional SEPARATOR and KEEP clauses.
+	Extras *FunctionExtras
 }
 
 func (f *FunctionCall) expressionNode()     {}
@@ -545,9 +545,8 @@ type BinaryExpression struct {
 	// transpiler rewrites it for the target.
 	BitwiseXor bool
 	CustomOp   *CustomBinaryOperator // For PostgreSQL custom operators
-	// Escape is the ESCAPE character expression of a LIKE / ILIKE /
-	// SIMILAR TO pattern match (a LIKE 'x!%' ESCAPE '!'); nil when absent.
-	Escape Expression
+	// Extras holds the optional pattern ESCAPE clause.
+	Extras *BinaryExtras
 	Pos    models.Location // Source position of the operator (1-based line and column)
 }
 
@@ -568,8 +567,8 @@ func (b BinaryExpression) Children() []Node {
 	if b.Right != nil {
 		nodes = append(nodes, b.Right)
 	}
-	if b.Escape != nil {
-		nodes = append(nodes, b.Escape)
+	if b.DialectExtras().Escape != nil {
+		nodes = append(nodes, b.DialectExtras().Escape)
 	}
 	return nodes
 }

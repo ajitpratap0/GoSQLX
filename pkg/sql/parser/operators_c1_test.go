@@ -74,8 +74,8 @@ func c1Shape(e ast.Expression) string {
 			return "(" + op + " " + c1Shape(n.Left) + ")"
 		}
 		s := "(" + op + " " + c1Shape(n.Left) + " " + c1Shape(n.Right)
-		if n.Escape != nil {
-			s += " ESCAPE " + c1Shape(n.Escape)
+		if n.DialectExtras().Escape != nil {
+			s += " ESCAPE " + c1Shape(n.DialectExtras().Escape)
 		}
 		return s + ")"
 	case *ast.AssignmentExpression:

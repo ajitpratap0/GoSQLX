@@ -101,7 +101,7 @@ func (p *Parser) parseFromTableReference() (ast.TableReference, error) {
 		if err != nil {
 			return tableRef, err
 		}
-		tableRef = ast.TableReference{Lateral: isLateral, Values: values}
+		tableRef = ast.TableReference{Lateral: isLateral, Modifiers: &ast.TableModifiers{Values: values}}
 	} else if p.isClickHouseKeywordTableFunction() {
 		// ClickHouse table function named by a keyword token: url(...),
 		// merge(...), values(...), null(...).
@@ -261,7 +261,7 @@ func (p *Parser) setDerivedQuery(ref *ast.TableReference, q ast.Statement) error
 	case *ast.SetOperation:
 		ref.SetSubquery = s
 	case *ast.Values:
-		ref.Values = s
+		ref.EnsureModifiers().Values = s
 	default:
 		return p.expectedError("SELECT statement in derived table")
 	}

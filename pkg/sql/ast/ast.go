@@ -157,17 +157,9 @@ func (i Identifier) Children() []Node     { return nil }
 type LiteralValue struct {
 	Value interface{}
 	Type  string // INTEGER, FLOAT, STRING, BOOLEAN, NULL, etc.
-	// Prefix is the introducer written before a string literal's opening
-	// quote, as it appeared in the source: N for a national string, X or B for
-	// a hex or bit string, or a MySQL character-set introducer such as
-	// _utf8mb4. Empty for a plain string. Only meaningful when Type is STRING.
-	Prefix string
-	// RawBackslash is set when the literal came from a dialect in which a
-	// backslash inside a string is an ordinary character (PostgreSQL standard
-	// strings, Oracle, SQLite, SQL Server). Such a literal is written back
-	// without doubling backslashes or turning line breaks into escapes.
-	// Only meaningful when Type is STRING.
-	RawBackslash bool
+	// extras holds string introducer and escaping metadata. It is private so
+	// prefix-free raw strings can safely share immutable metadata.
+	extras *LiteralExtras
 }
 
 func (l *LiteralValue) expressionNode()     {}

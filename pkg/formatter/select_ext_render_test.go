@@ -168,26 +168,26 @@ func selectFieldSamples() map[string]func(*ast.SelectStatement) {
 		},
 		"GroupByModifiers": func(s *ast.SelectStatement) {
 			s.GroupBy = []ast.Expression{ident("g")}
-			s.GroupByModifiers = ast.GroupByModifiers{WithRollup: true}
+			s.EnsureExtras().GroupByModifiers = ast.GroupByModifiers{WithRollup: true}
 		},
 		"OrderSiblings": func(s *ast.SelectStatement) {
 			s.OrderBy = []ast.OrderByExpression{{Expression: ident("o"), Ascending: true}}
-			s.OrderSiblings = true
+			s.EnsureExtras().OrderSiblings = true
 		},
 		"Interpolate": func(s *ast.SelectStatement) {
 			s.OrderBy = []ast.OrderByExpression{{Expression: ident("o"), Ascending: true}}
 			s.EnsureExtras().Interpolate = &ast.InterpolateClause{Items: []ast.InterpolateItem{{Column: "c"}}}
 		},
-		"LimitExpr":  func(s *ast.SelectStatement) { s.LimitExpr = &ast.Identifier{Name: "$1"} },
-		"OffsetExpr": func(s *ast.SelectStatement) { s.OffsetExpr = &ast.Identifier{Name: "$2"} },
-		"LimitAll":   func(s *ast.SelectStatement) { s.LimitAll = true },
+		"LimitExpr":  func(s *ast.SelectStatement) { s.EnsureExtras().LimitExpr = &ast.Identifier{Name: "$1"} },
+		"OffsetExpr": func(s *ast.SelectStatement) { s.EnsureExtras().OffsetExpr = &ast.Identifier{Name: "$2"} },
+		"LimitAll":   func(s *ast.SelectStatement) { s.EnsureExtras().LimitAll = true },
 		"OffsetRows": func(s *ast.SelectStatement) {
 			s.Offset = n(8)
-			s.OffsetRows = true
+			s.EnsureExtras().OffsetRows = true
 		},
 		"LimitWithTies": func(s *ast.SelectStatement) {
 			s.Limit = n(7)
-			s.LimitWithTies = true
+			s.EnsureExtras().LimitWithTies = true
 		},
 		"RowsExamined": func(s *ast.SelectStatement) {
 			s.Limit = n(7)

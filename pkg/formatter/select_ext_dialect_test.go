@@ -33,25 +33,25 @@ func TestNormalizeLimitForDialect(t *testing.T) {
 		mod     func(s *ast.SelectStatement)
 		want    string
 	}{
-		{"sqlserver limit expr to top", "sqlserver", func(s *ast.SelectStatement) { s.LimitExpr = ph("@n") }, "SELECT TOP (@n) a FROM t"},
+		{"sqlserver limit expr to top", "sqlserver", func(s *ast.SelectStatement) { s.EnsureExtras().LimitExpr = ph("@n") }, "SELECT TOP (@n) a FROM t"},
 		{"sqlserver limit int to top", "sqlserver", func(s *ast.SelectStatement) { s.Limit = intp(5) }, "SELECT TOP 5 a FROM t"},
 		{"sqlserver limit expr offset expr", "sqlserver", func(s *ast.SelectStatement) {
 			s.OrderBy = order
-			s.LimitExpr = ph("@n")
-			s.OffsetExpr = ph("@s")
+			s.EnsureExtras().LimitExpr = ph("@n")
+			s.EnsureExtras().OffsetExpr = ph("@s")
 		}, "SELECT a FROM t ORDER BY a OFFSET @s ROWS FETCH NEXT @n ROWS ONLY"},
 		{"sqlserver limit int offset int", "sqlserver", func(s *ast.SelectStatement) {
 			s.OrderBy = order
 			s.Limit = intp(10)
 			s.Offset = intp(20)
 		}, "SELECT a FROM t ORDER BY a OFFSET 20 ROWS FETCH NEXT 10 ROWS ONLY"},
-		{"sqlserver limit all dropped", "sqlserver", func(s *ast.SelectStatement) { s.LimitAll = true }, "SELECT a FROM t"},
-		{"oracle limit expr", "oracle", func(s *ast.SelectStatement) { s.LimitExpr = ph(":n") }, "SELECT a FROM t FETCH FIRST :n ROWS ONLY"},
+		{"sqlserver limit all dropped", "sqlserver", func(s *ast.SelectStatement) { s.EnsureExtras().LimitAll = true }, "SELECT a FROM t"},
+		{"oracle limit expr", "oracle", func(s *ast.SelectStatement) { s.EnsureExtras().LimitExpr = ph(":n") }, "SELECT a FROM t FETCH FIRST :n ROWS ONLY"},
 		{"oracle limit with offset expr", "oracle", func(s *ast.SelectStatement) {
-			s.LimitExpr = ph(":n")
-			s.OffsetExpr = ph(":o")
+			s.EnsureExtras().LimitExpr = ph(":n")
+			s.EnsureExtras().OffsetExpr = ph(":o")
 		}, "SELECT a FROM t OFFSET :o ROWS FETCH FIRST :n ROWS ONLY"},
-		{"postgres untouched", "postgresql", func(s *ast.SelectStatement) { s.LimitExpr = ph("$1") }, "SELECT a FROM t LIMIT $1"},
+		{"postgres untouched", "postgresql", func(s *ast.SelectStatement) { s.EnsureExtras().LimitExpr = ph("$1") }, "SELECT a FROM t LIMIT $1"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -63,7 +63,7 @@ func TestNormalizeLimitForDialect(t *testing.T) {
 			if got != tc.want {
 				t.Errorf("got:  %s\nwant: %s", got, tc.want)
 			}
-			if s.LimitExpr == nil && s.Limit == nil && !s.LimitAll && tc.dialect != "postgresql" {
+			if s.DialectExtras().LimitExpr == nil && s.Limit == nil && !s.DialectExtras().LimitAll && tc.dialect != "postgresql" {
 				t.Errorf("FormatStatement mutated the input statement")
 			}
 		})

@@ -138,24 +138,24 @@ func writeReturning(buf *bytes.Buffer, returning, into []Expression) {
 // statement, including the ClickHouse FUNCTION target.
 func (i *InsertStatement) writeInsertHead(buf *bytes.Buffer) {
 	buf.WriteString("INSERT ")
-	writeDMLModifiers(buf, i.Modifiers)
+	writeDMLModifiers(buf, i.DialectExtras().Modifiers)
 	buf.WriteString("INTO ")
-	if i.TableFunction != nil {
+	if i.DialectExtras().TableFunction != nil {
 		buf.WriteString("FUNCTION ")
-		i.TableFunction.writeSQL(buf)
+		i.DialectExtras().TableFunction.writeSQL(buf)
 		return
 	}
-	writeQualifiedNameQ(buf, i.TableName, i.TableNameQuote)
+	writeQualifiedNameQ(buf, i.TableName, i.DialectExtras().TableNameQuote)
 }
 
 // writeInsertBeforeSource writes the clauses between the column list and the
 // row source: ClickHouse SETTINGS and PostgreSQL OVERRIDING ... VALUE.
 func (i *InsertStatement) writeInsertBeforeSource(buf *bytes.Buffer) {
-	if len(i.Settings) > 0 {
+	if len(i.DialectExtras().Settings) > 0 {
 		buf.WriteString(" SETTINGS ")
-		writeQuerySettings(buf, i.Settings)
+		writeQuerySettings(buf, i.DialectExtras().Settings)
 	}
-	if t := OverridingText(i.Overriding); t != "" {
+	if t := OverridingText(i.DialectExtras().Overriding); t != "" {
 		buf.WriteString(" OVERRIDING ")
 		buf.WriteString(t)
 		buf.WriteString(" VALUE")
@@ -164,29 +164,29 @@ func (i *InsertStatement) writeInsertBeforeSource(buf *bytes.Buffer) {
 
 // writeInsertRowAlias writes the MySQL row alias " AS name [(cols)]".
 func (i *InsertStatement) writeInsertRowAlias(buf *bytes.Buffer) {
-	if i.RowAlias == "" {
+	if i.DialectExtras().RowAlias == "" {
 		return
 	}
 	buf.WriteString(" AS ")
-	writeTableAlias(buf, i.RowAlias)
-	if len(i.RowAliasColumns) > 0 {
+	writeTableAlias(buf, i.DialectExtras().RowAlias)
+	if len(i.DialectExtras().RowAliasColumns) > 0 {
 		buf.WriteString(" (")
-		writeColumnNameList(buf, i.RowAliasColumns)
+		writeColumnNameList(buf, i.DialectExtras().RowAliasColumns)
 		buf.WriteByte(')')
 	}
 }
 
 // writeInsertFormat writes the ClickHouse " FORMAT name" suffix.
 func (i *InsertStatement) writeInsertFormat(buf *bytes.Buffer) {
-	if i.DataFormat != "" {
+	if i.DialectExtras().DataFormat != "" {
 		buf.WriteString(" FORMAT ")
-		writeSafeIdentifier(buf, i.DataFormat)
+		writeSafeIdentifier(buf, i.DialectExtras().DataFormat)
 	}
 }
 
 // writeMultiTableInsert writes an Oracle INSERT ALL / INSERT FIRST statement.
 func (i *InsertStatement) writeMultiTableInsert(buf *bytes.Buffer) {
-	m := i.MultiTable
+	m := i.DialectExtras().MultiTable
 	if m.First {
 		buf.WriteString("INSERT FIRST")
 	} else {

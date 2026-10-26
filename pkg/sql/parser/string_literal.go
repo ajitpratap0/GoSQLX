@@ -25,11 +25,11 @@ import (
 // ordinary character, so the formatter writes the text back under the same
 // rules instead of doubling every backslash on each pass.
 func (p *Parser) newStringLiteral(value string) *ast.LiteralValue {
-	return &ast.LiteralValue{
-		Value:        value,
-		Type:         "string",
-		RawBackslash: p.dialectTyped.StringEscape() == dialect.StringEscapeNone,
+	lit := &ast.LiteralValue{Value: value, Type: "string"}
+	if p.rawStringLiterals {
+		lit.SetRawBackslash(true)
 	}
+	return lit
 }
 
 // mayStartPrefixedString is an inlinable screen for parsePrefixedStringLiteral:
@@ -56,7 +56,7 @@ var prefixedStringTypes = newTokenTypeSet(models.TokenTypeNationalStringLiteral,
 // ok is false, with nothing consumed, when the current token starts no such
 // literal.
 //
-// The introducer is kept in ast.LiteralValue.Prefix so the formatter writes it
+// The introducer is kept in ast.LiteralExtras.Prefix so the formatter writes it
 // back: dropping X or N would change the value's type, and E and q keep the
 // quoting the author chose. The tokenizer has already decoded the text.
 func (p *Parser) parsePrefixedStringLiteral() (expr ast.Expression, ok bool) {
@@ -65,23 +65,23 @@ func (p *Parser) parsePrefixedStringLiteral() (expr ast.Expression, ok bool) {
 	case models.TokenTypeNationalStringLiteral:
 		p.advance()
 		lit := p.newStringLiteral(tok.Value)
-		lit.Prefix = "N"
+		lit.EnsureExtras().Prefix = "N"
 		return lit, true
 	case models.TokenTypeHexStringLiteral:
 		p.advance()
 		lit := p.newStringLiteral(tok.Value)
-		lit.Prefix = "X"
+		lit.EnsureExtras().Prefix = "X"
 		return lit, true
 	case models.TokenTypeByteStringLiteral:
 		p.advance()
 		lit := p.newStringLiteral(tok.Value)
-		lit.Prefix = "B"
+		lit.EnsureExtras().Prefix = "B"
 		return lit, true
 	case models.TokenTypeEscapedStringLiteral:
 		p.advance()
 		lit := p.newStringLiteral(tok.Value)
-		lit.Prefix = "E"
-		lit.RawBackslash = false // an E-string is written with escapes
+		lit.EnsureExtras().Prefix = "E"
+		lit.SetRawBackslash(false) // an E-string is written with escapes
 		return lit, true
 	case models.TokenTypeSingleQuotedString:
 		// Oracle q'[text]': the tokenizer marks it with Quote 'q'.
@@ -90,7 +90,7 @@ func (p *Parser) parsePrefixedStringLiteral() (expr ast.Expression, ok bool) {
 		}
 		p.advance()
 		lit := p.newStringLiteral(tok.Value)
-		lit.Prefix = "q"
+		lit.EnsureExtras().Prefix = "q"
 		return lit, true
 	case models.TokenTypeIdentifier:
 		// _charset'text': an underscore word directly followed by a string.
@@ -106,7 +106,7 @@ func (p *Parser) parsePrefixedStringLiteral() (expr ast.Expression, ok bool) {
 		str := p.currentToken.Token.Value
 		p.advance() // string
 		lit := p.newStringLiteral(str)
-		lit.Prefix = tok.Value
+		lit.EnsureExtras().Prefix = tok.Value
 		return lit, true
 	}
 	return nil, false

@@ -46,7 +46,7 @@ func TestReleaseASTReachesValuesAndSetOperations(t *testing.T) {
 		}},
 		{"VALUES derived table", func() (Statement, *TupleExpression) {
 			tup := newTuple()
-			sel := &SelectStatement{From: []TableReference{{Values: &Values{Rows: [][]Expression{{tup}}}, Alias: "v"}}}
+			sel := &SelectStatement{From: []TableReference{{Modifiers: &TableModifiers{Values: &Values{Rows: [][]Expression{{tup}}}}, Alias: "v"}}}
 			return sel, tup
 		}},
 	}

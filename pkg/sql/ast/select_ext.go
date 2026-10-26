@@ -47,6 +47,14 @@ type GroupByModifiers struct {
 // Code that sets one of these clauses must allocate Extras first; code that
 // reads them must allow Extras to be nil.
 type SelectExtras struct {
+	GroupByModifiers GroupByModifiers // GROUP BY ALL, WITH ROLLUP / CUBE / TOTALS
+	OrderSiblings    bool             // Oracle ORDER SIBLINGS BY
+	LimitExpr        Expression       // LIMIT value that is not a plain integer ($1, ?, -1, 1 + 1); Limit wins when both are set
+	OffsetExpr       Expression       // OFFSET value that is not a plain integer; Offset wins when both are set
+	LimitAll         bool             // PostgreSQL LIMIT ALL
+	OffsetRows       bool             // OFFSET n ROW / ROWS
+	LimitWithTies    bool             // ClickHouse LIMIT n WITH TIES
+
 	SelectModifiers []string           // MySQL/MariaDB HIGH_PRIORITY, STRAIGHT_JOIN, SQL_CALC_FOUND_ROWS, ... after SELECT [DISTINCT]
 	Into            *SelectInto        // SELECT ... INTO table / variables / OUTFILE
 	Interpolate     *InterpolateClause // ClickHouse ORDER BY ... WITH FILL INTERPOLATE (col AS expr, ...)
@@ -351,12 +359,12 @@ func FormatNameText(name string) string {
 // HasLimit reports whether the statement has a LIMIT value in any form
 // (integer, expression or ALL).
 func (s *SelectStatement) HasLimit() bool {
-	return s != nil && (s.Limit != nil || s.LimitExpr != nil || s.LimitAll)
+	return s != nil && (s.Limit != nil || s.DialectExtras().LimitExpr != nil || s.DialectExtras().LimitAll)
 }
 
 // HasOffset reports whether the statement has an OFFSET value in any form.
 func (s *SelectStatement) HasOffset() bool {
-	return s != nil && (s.Offset != nil || s.OffsetExpr != nil)
+	return s != nil && (s.Offset != nil || s.DialectExtras().OffsetExpr != nil)
 }
 
 // appendSelectExtChildren appends the expression children of the clauses
@@ -372,11 +380,11 @@ func (s *SelectStatement) appendSelectExtChildren(children []Node) []Node {
 	if x.LimitBy != nil {
 		children = append(children, x.LimitBy)
 	}
-	if s.LimitExpr != nil {
-		children = append(children, s.LimitExpr)
+	if s.DialectExtras().LimitExpr != nil {
+		children = append(children, s.DialectExtras().LimitExpr)
 	}
-	if s.OffsetExpr != nil {
-		children = append(children, s.OffsetExpr)
+	if s.DialectExtras().OffsetExpr != nil {
+		children = append(children, s.DialectExtras().OffsetExpr)
 	}
 	if x.RowsExamined != nil {
 		children = append(children, x.RowsExamined)
@@ -401,15 +409,6 @@ func (s *SelectStatement) appendSelectExtChildren(children []Node) []Node {
 // releaseSelectExt releases and clears the fields declared for the clauses
 // in this file; releaseSelectStatement calls it.
 func releaseSelectExt(stmt *SelectStatement, mode releaseMode) {
-	stmt.GroupByModifiers = GroupByModifiers{}
-	stmt.OrderSiblings = false
-	releaseExpression(stmt.LimitExpr, mode)
-	stmt.LimitExpr = nil
-	releaseExpression(stmt.OffsetExpr, mode)
-	stmt.OffsetExpr = nil
-	stmt.LimitAll = false
-	stmt.OffsetRows = false
-	stmt.LimitWithTies = false
 	if x := stmt.Extras; x != nil {
 		releaseSelectExtras(x, mode)
 		stmt.Extras = nil
@@ -418,6 +417,8 @@ func releaseSelectExt(stmt *SelectStatement, mode releaseMode) {
 
 // releaseSelectExtras releases the expressions held by x.
 func releaseSelectExtras(x *SelectExtras, mode releaseMode) {
+	releaseExpression(x.LimitExpr, mode)
+	releaseExpression(x.OffsetExpr, mode)
 	releaseExpression(x.RowsExamined, mode)
 	if x.Into != nil {
 		for _, t := range x.Into.Targets {
@@ -572,7 +573,7 @@ func writeIntoFileOptions(buf *bytes.Buffer, clause string, opts []IntoFileOptio
 
 // writeGroupBy writes the GROUP BY clause including its modifiers.
 func writeGroupBy(buf *bytes.Buffer, s *SelectStatement) {
-	m := s.GroupByModifiers
+	m := s.DialectExtras().GroupByModifiers
 	if len(s.GroupBy) == 0 && !m.All {
 		return
 	}
@@ -598,8 +599,8 @@ func writeLimitValue(buf *bytes.Buffer, s *SelectStatement) {
 	switch {
 	case s.Limit != nil:
 		writeInt(buf, int64(*s.Limit))
-	case s.LimitExpr != nil:
-		writeExpr(buf, s.LimitExpr)
+	case s.DialectExtras().LimitExpr != nil:
+		writeExpr(buf, s.DialectExtras().LimitExpr)
 	default:
 		buf.WriteString("ALL")
 	}
@@ -611,7 +612,7 @@ func writeOffsetValue(buf *bytes.Buffer, s *SelectStatement) {
 		writeInt(buf, int64(*s.Offset))
 		return
 	}
-	writeExpr(buf, s.OffsetExpr)
+	writeExpr(buf, s.DialectExtras().OffsetExpr)
 }
 
 // writeLimitOffset writes the LIMIT BY, LIMIT and OFFSET clauses. OFFSET
@@ -631,14 +632,14 @@ func writeLimitOffset(buf *bytes.Buffer, s *SelectStatement) {
 	if s.HasLimit() {
 		buf.WriteString(" LIMIT ")
 		writeLimitValue(buf, s)
-		if s.LimitWithTies {
+		if s.DialectExtras().LimitWithTies {
 			buf.WriteString(" WITH TIES")
 		}
 	}
 	if s.HasOffset() {
 		buf.WriteString(" OFFSET ")
 		writeOffsetValue(buf, s)
-		if s.OffsetRows || s.Fetch != nil {
+		if s.DialectExtras().OffsetRows || s.Fetch != nil {
 			buf.WriteByte(' ')
 			buf.WriteString(OffsetRowsKeyword(s))
 		}

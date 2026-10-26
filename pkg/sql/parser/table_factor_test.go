@@ -294,14 +294,14 @@ func TestTableFactorModifiers(t *testing.T) {
 			}
 		}},
 		{"values derived table", keywords.DialectPostgreSQL, "SELECT * FROM (VALUES (1, 'a'), (2, 'b')) AS v(id, name)", func(t *testing.T, ref *ast.TableReference) {
-			if ref.Values == nil || len(ref.Values.Rows) != 2 || ref.Alias != "v" ||
+			if ref.DialectModifiers().Values == nil || len(ref.DialectModifiers().Values.Rows) != 2 || ref.Alias != "v" ||
 				ref.ColumnAliases == nil || !reflect.DeepEqual(ref.ColumnAliases.Names, []string{"id", "name"}) {
 				t.Errorf("got %+v", ref)
 			}
 		}},
 		{"mysql values row", keywords.DialectMySQL, "SELECT * FROM (VALUES ROW(1, 2), ROW(3, 4)) AS v(a, b)", func(t *testing.T, ref *ast.TableReference) {
-			if ref.Values == nil || !ref.Values.RowConstructor || len(ref.Values.Rows) != 2 {
-				t.Errorf("got %+v", ref.Values)
+			if ref.DialectModifiers().Values == nil || !ref.DialectModifiers().Values.RowConstructor || len(ref.DialectModifiers().Values.Rows) != 2 {
+				t.Errorf("got %+v", ref.DialectModifiers().Values)
 			}
 		}},
 		{"derived table column aliases", keywords.DialectPostgreSQL, "SELECT * FROM (SELECT 1 AS x) AS s(y)", func(t *testing.T, ref *ast.TableReference) {
@@ -480,7 +480,7 @@ func TestPivotExtensions(t *testing.T) {
 
 func TestSnowflakeFromValuesAndStagePath(t *testing.T) {
 	ref := firstFrom(t, parseOne(t, keywords.DialectSnowflake, "SELECT * FROM VALUES (1, 'a'), (2, 'b') AS v (id, name)"))
-	if ref.Values == nil || len(ref.Values.Rows) != 2 || ref.Alias != "v" {
+	if ref.DialectModifiers().Values == nil || len(ref.DialectModifiers().Values.Rows) != 2 || ref.Alias != "v" {
 		t.Errorf("got %+v", ref)
 	}
 	ref = firstFrom(t, parseOne(t, keywords.DialectSnowflake, "SELECT $1 FROM @my_stage/2024/data.csv (FILE_FORMAT => 'f') t"))

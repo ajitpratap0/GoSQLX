@@ -209,14 +209,14 @@ type TableReference struct {
 	// The three flags are kept together so they share one word of padding;
 	// TableReference is copied by value on the parser hot path.
 	WithOrdinality bool
+	// Only is the PostgreSQL ONLY modifier (FROM ONLY parent): the table's
+	// inheritance children are excluded.
+	Only bool
 	// NameQuote and AliasQuote record the parts of Name and Alias the
 	// source delimited and that must stay delimited (see NameQuote). They
 	// share the flags' word of padding.
 	NameQuote  NameQuote
 	AliasQuote NameQuote
-	// Only is the PostgreSQL ONLY modifier (FROM ONLY parent): the table's
-	// inheritance children are excluded. It also shares the flags' word.
-	Only       bool
 	TableHints []string // SQL Server table hints: WITH (NOLOCK), WITH (ROWLOCK, UPDLOCK), etc.
 	// TableFunc is a function-call table reference such as
 	// Snowflake LATERAL FLATTEN(input => col), TABLE(my_func(1,2)),
@@ -255,9 +255,6 @@ type TableReference struct {
 	// pointer because TableReference is copied by value on the parser hot
 	// path.
 	Modifiers *TableModifiers
-	// Values is a derived table whose body is a VALUES table constructor:
-	// FROM (VALUES (1, 'a'), (2, 'b')) AS v(id, name).
-	Values *Values
 }
 
 // ColumnAliasList is the column alias list that follows a table alias, as
@@ -319,8 +316,8 @@ func (t TableReference) Children() []Node {
 			nodes = append(nodes, m.PartitionFor)
 		}
 	}
-	if t.Values != nil {
-		nodes = append(nodes, t.Values)
+	if t.DialectModifiers().Values != nil {
+		nodes = append(nodes, t.DialectModifiers().Values)
 	}
 	if g := t.Modifiers; g != nil && g.Group != nil {
 		nodes = append(nodes, g.Group)

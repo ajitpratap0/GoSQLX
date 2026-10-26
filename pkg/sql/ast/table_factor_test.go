@@ -32,6 +32,7 @@ func TestReleaseTableReference_ClearsTableFactorModifiers(t *testing.T) {
 		Final:         true,
 		ColumnAliases: &ColumnAliasList{Names: []string{"a"}, Types: []string{"int"}},
 		Modifiers: &TableModifiers{
+			Values: &Values{Rows: [][]Expression{{num("3")}}},
 			TableSample: &TableSampleClause{
 				Keyword: "TABLESAMPLE", Method: "SYSTEM", Args: []Expression{num("1")},
 				SeedKeyword: "REPEATABLE", Seed: num("2"),
@@ -39,7 +40,7 @@ func TestReleaseTableReference_ClearsTableFactorModifiers(t *testing.T) {
 			Flashback: &FlashbackClause{Versions: true, Kind: "SCN", Start: num("1"), End: num("2")},
 			DBLink:    "l", Partitions: []string{"p"}, IndexedBy: "i",
 		},
-		Values: &Values{Rows: [][]Expression{{num("3")}}},
+
 		ForSystemTime: &ForSystemTimeClause{
 			Type: SystemTimeContainedIn, Start: num("4"), End: num("5"),
 		},

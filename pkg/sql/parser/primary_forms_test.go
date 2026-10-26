@@ -192,7 +192,7 @@ func TestPrimary_StringLiterals(t *testing.T) {
 		if !ok {
 			t.Fatalf("expected *ast.LiteralValue")
 		}
-		if lit.Value != "abc" || lit.Type != "string" || lit.Prefix != "N" {
+		if lit.Value != "abc" || lit.Type != "string" || lit.DialectExtras().Prefix != "N" {
 			t.Errorf("got %#v, want N'abc'", lit)
 		}
 	})
@@ -295,13 +295,13 @@ func TestPrimary_GroupConcatSeparator(t *testing.T) {
 					t.Fatalf("got args=%d distinct=%v orderBy=%d", len(fc.Arguments), fc.Distinct, len(fc.OrderBy))
 				}
 				if tt.sep == "<none>" {
-					if fc.Separator != nil {
-						t.Errorf("Separator = %#v, want nil", fc.Separator)
+					if fc.DialectExtras().Separator != nil {
+						t.Errorf("Separator = %#v, want nil", fc.DialectExtras().Separator)
 					}
 					return
 				}
-				if lit := fc.Separator; lit == nil || lit.Value != tt.sep {
-					t.Errorf("Separator = %#v, want %q", fc.Separator, tt.sep)
+				if lit := fc.DialectExtras().Separator; lit == nil || lit.Value != tt.sep {
+					t.Errorf("Separator = %#v, want %q", fc.DialectExtras().Separator, tt.sep)
 				}
 			})
 		}
@@ -404,8 +404,8 @@ func TestPrimary_KeepClause(t *testing.T) {
 	} {
 		t.Run(tt.sql, func(t *testing.T) {
 			fc := asFunctionCall(t, parseFirstColumn(t, keywords.DialectOracle, tt.sql))
-			if fc.Keep == nil || fc.Keep.Last != tt.last || len(fc.Keep.OrderBy) == 0 {
-				t.Fatalf("Keep = %#v", fc.Keep)
+			if fc.DialectExtras().Keep == nil || fc.DialectExtras().Keep.Last != tt.last || len(fc.DialectExtras().Keep.OrderBy) == 0 {
+				t.Fatalf("Keep = %#v", fc.DialectExtras().Keep)
 			}
 			if (fc.Over != nil) != tt.over {
 				t.Errorf("Over = %v, want set=%v", fc.Over, tt.over)

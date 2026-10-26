@@ -487,11 +487,11 @@ func TestParseOracleLogErrors(t *testing.T) {
 	}
 	defer ast.ReleaseAST(tree)
 	ins, ok := tree.Statements[0].(*ast.InsertStatement)
-	if !ok || ins.LogErrors == nil {
+	if !ok || ins.DialectExtras().LogErrors == nil {
 		t.Fatalf("statement = %#v, want an INSERT with LOG ERRORS", tree.Statements[0])
 	}
-	if ins.LogErrors.Into != "e" || ins.LogErrors.RejectLimit != "5" {
-		t.Errorf("LogErrors = %+v", ins.LogErrors)
+	if ins.DialectExtras().LogErrors.Into != "e" || ins.DialectExtras().LogErrors.RejectLimit != "5" {
+		t.Errorf("LogErrors = %+v", ins.DialectExtras().LogErrors)
 	}
 }
 

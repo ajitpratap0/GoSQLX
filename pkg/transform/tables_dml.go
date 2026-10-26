@@ -73,18 +73,6 @@ func replaceTableInDMLTargets(d *ast.DMLTargetFields, old, new string) {
 	}
 }
 
-// noDMLTargets is the read-only stand-in dmlTargets returns for a statement
-// without Extras. Nothing may write to its fields.
-var noDMLTargets ast.DMLTargetFields
-
-// dmlTargets returns x, or a read-only empty DMLTargetFields when it is nil.
-func dmlTargets(x *ast.DMLTargetFields) *ast.DMLTargetFields {
-	if x != nil {
-		return x
-	}
-	return &noDMLTargets
-}
-
 func renameTableName(name *string, quote *ast.NameQuote, old, new string) {
 	if strings.EqualFold(*name, old) {
 		*name = new
@@ -97,9 +85,9 @@ func renameTableName(name *string, quote *ast.NameQuote, old, new string) {
 func addAliasToUpdate(s *ast.UpdateStatement, tableName, alias string) error {
 	refs := dmlAliasTargets{tableName: tableName, alias: alias}
 	refs.name(&s.TableName, &s.Alias, &s.AliasQuote)
-	refs.list(dmlTargets(s.Extras).Tables)
+	refs.list(s.DialectExtras().Tables)
 	refs.list(s.From)
-	refs.joins(dmlTargets(s.Extras).Joins)
+	refs.joins(s.DialectExtras().Joins)
 	if err := refs.check(); err != nil {
 		return err
 	}
@@ -130,10 +118,10 @@ func addAliasToDelete(s *ast.DeleteStatement, tableName, alias string) error {
 		refs.list(s.From)
 	} else {
 		refs.name(&s.TableName, &s.Alias, &s.AliasQuote)
-		refs.list(dmlTargets(s.Extras).Tables)
+		refs.list(s.DialectExtras().Tables)
 	}
 	refs.list(s.Using)
-	refs.joins(dmlTargets(s.Extras).Joins)
+	refs.joins(s.DialectExtras().Joins)
 	if err := refs.check(); err != nil {
 		return err
 	}
@@ -167,7 +155,7 @@ func deleteTargetsReferenceSources(s *ast.DeleteStatement) bool {
 		if strings.EqualFold(s.TableName, eff) {
 			return true
 		}
-		for _, t := range dmlTargets(s.Extras).Tables {
+		for _, t := range s.DialectExtras().Tables {
 			if strings.EqualFold(t.Name, eff) {
 				return true
 			}
@@ -206,7 +194,7 @@ func renameDeleteTargets(s *ast.DeleteStatement, names []string, alias string) {
 		s.TableNameQuote = replacedNameQuote(s.TableNameQuote)
 		s.AliasQuote = 0
 	}
-	tables := dmlTargets(s.Extras).Tables
+	tables := s.DialectExtras().Tables
 	for i := range tables {
 		if matches(tables[i].Name) {
 			tables[i].Name = alias

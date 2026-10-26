@@ -214,8 +214,8 @@ func TestPrefixedLiteralsRoundTrip(t *testing.T) {
 				t.Fatal(err)
 			}
 			lit := selectedLiteral(t, tree)
-			if lit.Prefix != tt.prefix || lit.Value != tt.value {
-				t.Fatalf("got prefix %q value %q, want %q %q", lit.Prefix, lit.Value, tt.prefix, tt.value)
+			if lit.DialectExtras().Prefix != tt.prefix || lit.Value != tt.value {
+				t.Fatalf("got prefix %q value %q, want %q %q", lit.DialectExtras().Prefix, lit.Value, tt.prefix, tt.value)
 			}
 			f1 := gosqlx.FormatAST(tree)
 			if !strings.Contains(f1, tt.want) {
@@ -226,8 +226,8 @@ func TestPrefixedLiteralsRoundTrip(t *testing.T) {
 				t.Fatalf("reparse %q: %v", f1, err)
 			}
 			lit2 := selectedLiteral(t, tree2)
-			if !strings.EqualFold(lit2.Prefix, lit.Prefix) || lit2.Value != lit.Value {
-				t.Errorf("reparse: prefix %q value %q, want %q %q", lit2.Prefix, lit2.Value, lit.Prefix, lit.Value)
+			if !strings.EqualFold(lit2.DialectExtras().Prefix, lit.DialectExtras().Prefix) || lit2.Value != lit.Value {
+				t.Errorf("reparse: prefix %q value %q, want %q %q", lit2.DialectExtras().Prefix, lit2.Value, lit.DialectExtras().Prefix, lit.Value)
 			}
 			if f2 := gosqlx.FormatAST(tree2); f2 != f1 {
 				t.Errorf("not idempotent: %q then %q", f1, f2)

@@ -1,6 +1,7 @@
 # Real-world corpus statements that GoSQLX does not yet handle.
 # Format: <dialect>/<file>#<statement index> <failing stage>
 # Stages: parse, reparse, idempotent, drop (formatter lost words), panic.
+# Indexes shift when statements are added to or removed from a file: regenerate then.
 # Regenerate: go test ./pkg/gosqlx -run TestRealWorldCorpus -update-known-failures
 clickhouse/01_app_crud.sql#10 parse
 clickhouse/01_app_crud.sql#11 parse

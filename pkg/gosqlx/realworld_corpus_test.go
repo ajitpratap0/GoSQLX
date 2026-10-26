@@ -46,10 +46,6 @@ func TestRealWorldCorpus(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read %s: %v", realworldRoot, err)
 	}
-	// After every statement has been parsed, formatted and re-parsed, the
-	// shared read-only stand-ins returned by the DialectExtras/DialectModifiers
-	// accessors must still be empty: a write through one would leak into every
-	// AST that lacks its own extras.
 	known := loadKnownFailures(t)
 	seen := map[string]bool{}
 	var current []string // "key stage" for every failing statement
@@ -143,6 +139,7 @@ func writeKnownFailures(t *testing.T, lines []string) {
 	header := "# Real-world corpus statements that GoSQLX does not yet handle.\n" +
 		"# Format: <dialect>/<file>#<statement index> <failing stage>\n" +
 		"# Stages: parse, reparse, idempotent, drop (formatter lost words), panic.\n" +
+		"# Indexes shift when statements are added to or removed from a file: regenerate then.\n" +
 		"# Regenerate: go test ./pkg/gosqlx -run TestRealWorldCorpus -update-known-failures\n"
 	data := header + strings.Join(lines, "\n") + "\n"
 	if err := os.WriteFile(filepath.Join(realworldRoot, "known_failures.txt"), []byte(data), 0o644); err != nil {
@@ -173,8 +170,15 @@ func loadKnownFailures(t *testing.T) map[string]string {
 			line = line[:i]
 		}
 		fields := strings.Fields(line)
-		if len(fields) != 2 {
+		if len(fields) == 0 {
 			continue
+		}
+		if len(fields) != 2 {
+			t.Errorf("known_failures.txt: malformed entry %q (want \"file.sql#N stage\")", sc.Text())
+			continue
+		}
+		if _, dup := known[fields[0]]; dup {
+			t.Errorf("known_failures.txt: duplicate entry %s", fields[0])
 		}
 		known[fields[0]] = fields[1]
 	}
@@ -195,8 +199,8 @@ func onlyComments(s string) bool {
 
 func compact(s string) string {
 	s = strings.Join(strings.Fields(s), " ")
-	if len(s) > 240 {
-		s = s[:240] + "…"
+	if r := []rune(s); len(r) > 240 {
+		s = string(r[:240]) + "…"
 	}
 	return s
 }

@@ -136,8 +136,8 @@ func stripComments(s string) string {
 
 func oneLine(s string) string {
 	s = strings.Join(strings.Fields(s), " ")
-	if len(s) > 300 {
-		s = s[:300] + "…"
+	if r := []rune(s); len(r) > 300 {
+		s = string(r[:300]) + "…"
 	}
 	return s
 }

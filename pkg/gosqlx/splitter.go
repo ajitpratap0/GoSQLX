@@ -170,6 +170,9 @@ func splitCore(src string, p dialectProfile) (out []string, open bool) {
 	var st procState
 	st.init(p)
 	delim := ""
+	// qMiss memoises failed Oracle q-quote searches so unterminated literals
+	// cost O(n) in total instead of O(n) each (see oracleQuoteEnd).
+	var qMiss [256]int
 
 	i := 0
 	if strings.HasPrefix(src, "\xef\xbb\xbf") {
@@ -345,7 +348,7 @@ func splitCore(src string, p dialectProfile) (out []string, open bool) {
 			if p.oracle && j < len(src) && src[j] == '\'' {
 				// Oracle alternative quoting q'[...]' / nq'[...]': the body can
 				// hold quotes and semicolons.
-				if end, ok := oracleQuoteEnd(src, word, j); ok {
+				if end, ok := oracleQuoteEnd(src, word, j, &qMiss); ok {
 					i = end
 					continue
 				}
@@ -447,7 +450,14 @@ func isDollarTagCont(c byte) bool {
 // character after the apostrophe; ( [ { < pair with ) ] } >, any other
 // non-blank character closes itself. The result is the index just past the
 // closing apostrophe.
-func oracleQuoteEnd(src, word string, quote int) (int, bool) {
+//
+// miss remembers, per closing byte, the first start offset whose search for
+// "<closer>'" reached the end of input without a match. Any later search for
+// the same closer starts at or after that offset and must fail too, so it
+// returns at once; an unterminated literal therefore costs one scan in total
+// rather than one per occurrence. A failed literal is not a literal: the
+// caller treats q as an ordinary word, exactly as before.
+func oracleQuoteEnd(src, word string, quote int, miss *[256]int) (int, bool) {
 	if !equalFoldASCII(word, "q") && !equalFoldASCII(word, "nq") {
 		return 0, false
 	}
@@ -469,10 +479,15 @@ func oracleQuoteEnd(src, word string, quote int) (int, bool) {
 	case '<':
 		closer = '>'
 	}
-	for k := quote + 2; k+1 < len(src); k++ {
+	from := quote + 2
+	if m := miss[closer]; m != 0 && from >= m {
+		return 0, false
+	}
+	for k := from; k+1 < len(src); k++ {
 		if src[k] == closer && src[k+1] == '\'' {
 			return k + 2, true
 		}
 	}
+	miss[closer] = from
 	return 0, false
 }

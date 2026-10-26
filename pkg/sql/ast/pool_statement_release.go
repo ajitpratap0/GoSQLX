@@ -212,7 +212,11 @@ func releaseUpdateStatement(stmt *UpdateStatement, mode releaseMode) {
 	stmt.TableName = ""
 	stmt.Alias = ""
 	stmt.Pos = models.Location{}
-	releaseDMLTargetFields(&stmt.DMLTargetFields, mode)
+	stmt.TableNameQuote, stmt.AliasQuote = 0, 0
+	if stmt.Extras != nil {
+		releaseDMLTargetFields(stmt.Extras, mode)
+		stmt.Extras = nil
+	}
 
 	// Return to pool
 	if mode == releaseAll {
@@ -288,7 +292,11 @@ func releaseDeleteStatement(stmt *DeleteStatement, mode releaseMode) {
 		releaseTableReference(&stmt.From[i], mode)
 	}
 	stmt.From = nil
-	releaseDMLTargetFields(&stmt.DMLTargetFields, mode)
+	stmt.TableNameQuote, stmt.AliasQuote = 0, 0
+	if stmt.Extras != nil {
+		releaseDMLTargetFields(stmt.Extras, mode)
+		stmt.Extras = nil
+	}
 
 	// Return to pool
 	if mode == releaseAll {

@@ -490,13 +490,14 @@ func renderUpdate(u *ast.UpdateStatement, opts ast.FormatOptions) string {
 		sb.WriteString(f.clauseSep())
 	}
 
+	x := dmlExtras(u.Extras)
 	sb.WriteString(f.kw("UPDATE"))
 	sb.WriteString(" ")
-	writeDMLModifiers(sb, f, u.Modifiers)
-	writeDMLTop(sb, f, u.Top)
-	writeDMLTargets(sb, f, &u.DMLTargetFields, u.TableName, u.Alias)
+	writeDMLModifiers(sb, f, x.Modifiers)
+	writeDMLTop(sb, f, x.Top)
+	writeDMLTargets(sb, f, x, u.TableName, u.TableNameQuote, u.Alias, u.AliasQuote)
 	if len(u.From) == 0 {
-		writeDMLJoins(sb, f, u.Joins)
+		writeDMLJoins(sb, f, x.Joins)
 	}
 
 	sb.WriteString(f.clauseSep())
@@ -507,7 +508,7 @@ func renderUpdate(u *ast.UpdateStatement, opts ast.FormatOptions) string {
 		upds[i] = ast.ColumnRefSQL(upd.Column) + " = " + exprSQL(upd.Value)
 	}
 	sb.WriteString(strings.Join(upds, ", "))
-	writeDMLOutput(sb, f, u.Output, u.OutputInto)
+	writeDMLOutput(sb, f, x.Output, x.OutputInto)
 
 	if len(u.From) > 0 {
 		sb.WriteString(f.clauseSep())
@@ -518,7 +519,7 @@ func renderUpdate(u *ast.UpdateStatement, opts ast.FormatOptions) string {
 			froms[i] = tableRefSQL(&u.From[i], f)
 		}
 		sb.WriteString(strings.Join(froms, ", "))
-		writeDMLJoins(sb, f, u.Joins)
+		writeDMLJoins(sb, f, x.Joins)
 	}
 
 	if u.Where != nil {
@@ -527,8 +528,8 @@ func renderUpdate(u *ast.UpdateStatement, opts ast.FormatOptions) string {
 		sb.WriteString(" ")
 		sb.WriteString(FormatExpression(u.Where, opts))
 	}
-	writeDMLOrderLimit(sb, f, &u.DMLTargetFields)
-	writeReturning(sb, f, u.Returning, u.ReturningInto)
+	writeDMLOrderLimit(sb, f, x)
+	writeReturning(sb, f, u.Returning, x.ReturningInto)
 
 	if opts.AddSemicolon {
 		sb.WriteString(";")
@@ -549,22 +550,23 @@ func renderDelete(d *ast.DeleteStatement, opts ast.FormatOptions) string {
 		sb.WriteString(f.clauseSep())
 	}
 
+	x := dmlExtras(d.Extras)
 	sb.WriteString(f.kw("DELETE"))
 	sb.WriteString(" ")
-	writeDMLModifiers(sb, f, d.Modifiers)
-	writeDMLTop(sb, f, d.Top)
+	writeDMLModifiers(sb, f, x.Modifiers)
+	writeDMLTop(sb, f, x.Top)
 	if len(d.From) == 0 {
 		sb.WriteString(f.kw("FROM"))
 		sb.WriteString(" ")
 	}
-	writeDMLTargets(sb, f, &d.DMLTargetFields, d.TableName, d.Alias)
+	writeDMLTargets(sb, f, x, d.TableName, d.TableNameQuote, d.Alias, d.AliasQuote)
 	if d.BeforeSystemTime != nil {
 		sb.WriteString(" ")
 		sb.WriteString(f.kw("BEFORE SYSTEM_TIME"))
 		sb.WriteString(" ")
 		sb.WriteString(exprSQL(d.BeforeSystemTime))
 	}
-	writeDMLOutput(sb, f, d.Output, d.OutputInto)
+	writeDMLOutput(sb, f, x.Output, x.OutputInto)
 
 	if len(d.From) > 0 {
 		sb.WriteString(f.clauseSep())
@@ -587,7 +589,7 @@ func renderDelete(d *ast.DeleteStatement, opts ast.FormatOptions) string {
 		}
 		sb.WriteString(strings.Join(usings, ", "))
 	}
-	writeDMLJoins(sb, f, d.Joins)
+	writeDMLJoins(sb, f, x.Joins)
 
 	if d.Where != nil {
 		sb.WriteString(f.clauseSep())
@@ -595,8 +597,8 @@ func renderDelete(d *ast.DeleteStatement, opts ast.FormatOptions) string {
 		sb.WriteString(" ")
 		sb.WriteString(FormatExpression(d.Where, opts))
 	}
-	writeDMLOrderLimit(sb, f, &d.DMLTargetFields)
-	writeReturning(sb, f, d.Returning, d.ReturningInto)
+	writeDMLOrderLimit(sb, f, x)
+	writeReturning(sb, f, d.Returning, x.ReturningInto)
 
 	if opts.AddSemicolon {
 		sb.WriteString(";")

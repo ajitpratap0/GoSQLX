@@ -1511,30 +1511,31 @@ func (u *UpdateStatement) writeSQL(buf *bytes.Buffer) {
 		buf.WriteByte(' ')
 	}
 
+	x := dmlExtras(u.Extras)
 	buf.WriteString("UPDATE ")
-	writeDMLModifiers(buf, u.Modifiers)
-	writeDMLTop(buf, u.Top)
-	u.writeDMLTargets(buf, u.TableName, u.Alias)
+	writeDMLModifiers(buf, x.Modifiers)
+	writeDMLTop(buf, x.Top)
+	x.writeDMLTargets(buf, u.TableName, u.TableNameQuote, u.Alias, u.AliasQuote)
 	if len(u.From) == 0 {
-		writeDMLJoins(buf, u.Joins)
+		writeDMLJoins(buf, x.Joins)
 	}
 
 	buf.WriteString(" SET ")
 	writeAssignments(buf, u.Assignments)
-	writeDMLOutput(buf, u.Output, u.OutputInto)
+	writeDMLOutput(buf, x.Output, x.OutputInto)
 
 	if len(u.From) > 0 {
 		buf.WriteString(" FROM ")
 		writeTableRefList(buf, u.From)
-		writeDMLJoins(buf, u.Joins)
+		writeDMLJoins(buf, x.Joins)
 	}
 
 	if u.Where != nil {
 		buf.WriteString(" WHERE ")
 		writeExpr(buf, u.Where)
 	}
-	u.writeDMLOrderLimit(buf)
-	writeReturning(buf, u.Returning, u.ReturningInto)
+	x.writeDMLOrderLimit(buf)
+	writeReturning(buf, u.Returning, x.ReturningInto)
 }
 
 // SQL returns the full SQL string for this DELETE statement, including the
@@ -1559,18 +1560,19 @@ func (d *DeleteStatement) writeSQL(buf *bytes.Buffer) {
 		buf.WriteByte(' ')
 	}
 
+	x := dmlExtras(d.Extras)
 	buf.WriteString("DELETE ")
-	writeDMLModifiers(buf, d.Modifiers)
-	writeDMLTop(buf, d.Top)
+	writeDMLModifiers(buf, x.Modifiers)
+	writeDMLTop(buf, x.Top)
 	if len(d.From) == 0 {
 		buf.WriteString("FROM ")
 	}
-	d.writeDMLTargets(buf, d.TableName, d.Alias)
+	x.writeDMLTargets(buf, d.TableName, d.TableNameQuote, d.Alias, d.AliasQuote)
 	if d.BeforeSystemTime != nil {
 		buf.WriteString(" BEFORE SYSTEM_TIME ")
 		writeExpr(buf, d.BeforeSystemTime)
 	}
-	writeDMLOutput(buf, d.Output, d.OutputInto)
+	writeDMLOutput(buf, x.Output, x.OutputInto)
 
 	if len(d.From) > 0 {
 		buf.WriteString(" FROM ")
@@ -1580,14 +1582,14 @@ func (d *DeleteStatement) writeSQL(buf *bytes.Buffer) {
 		buf.WriteString(" USING ")
 		writeTableRefList(buf, d.Using)
 	}
-	writeDMLJoins(buf, d.Joins)
+	writeDMLJoins(buf, x.Joins)
 
 	if d.Where != nil {
 		buf.WriteString(" WHERE ")
 		writeExpr(buf, d.Where)
 	}
-	d.writeDMLOrderLimit(buf)
-	writeReturning(buf, d.Returning, d.ReturningInto)
+	x.writeDMLOrderLimit(buf)
+	writeReturning(buf, d.Returning, x.ReturningInto)
 }
 
 // SQL returns the full SQL string for this CREATE TABLE statement including

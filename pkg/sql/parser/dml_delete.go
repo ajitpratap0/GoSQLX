@@ -34,16 +34,20 @@ import (
 func (p *Parser) parseDeleteStatement() (ast.Statement, error) {
 	// We've already consumed the DELETE token in matchType
 	stmt := &ast.DeleteStatement{}
-	stmt.Modifiers = p.parseDMLModifiers(dmlDelete)
+	// The dialect-specific fields are collected in x and copied to
+	// stmt.Extras only when one of them is set.
+	var x ast.DMLTargetFields
+	q := dmlTargetQuotes{&stmt.TableNameQuote, &stmt.AliasQuote}
+	x.Modifiers = p.parseDMLModifiers(dmlDelete)
 	top, err := p.parseTopClause()
 	if err != nil {
 		return nil, err
 	}
-	stmt.Top = top
+	x.Top = top
 
 	// MariaDB: DELETE HISTORY FROM t [BEFORE SYSTEM_TIME point]
 	if p.isMariaDB() && p.isUnquotedWord("HISTORY") && p.peekToken().Token.Type == models.TokenTypeFrom {
-		return p.parseDeleteHistory(stmt)
+		return p.parseDeleteHistory(stmt, &x)
 	}
 
 	sqlServer := p.dialect == string(keywords.DialectSQLServer)
@@ -51,16 +55,16 @@ func (p *Parser) parseDeleteStatement() (ast.Statement, error) {
 		p.advance() // Consume FROM
 		// ONLY is followed by the table name.
 		if p.nextIsName() && p.isDMLOnly() {
-			stmt.Only = true
+			x.Only = true
 			p.advance() // Consume ONLY
 		}
 		// MySQL: DELETE FROM t1, t2 USING t1 JOIN t2 ...
-		if _, err := p.parseDMLTargets(&stmt.TableName, &stmt.Alias, &stmt.DMLTargetFields, p.isMySQLFamily(), nil); err != nil {
+		if _, err := p.parseDMLTargets(&stmt.TableName, &stmt.Alias, &q, &x, p.isMySQLFamily(), nil); err != nil {
 			return nil, err
 		}
 		// MySQL names several targets only in the USING form; without it
 		// DELETE FROM t1, t2 WHERE ... is a syntax error.
-		if p.isMySQLFamily() && len(stmt.Tables) > 0 && stmt.TableName != "" && !p.isType(models.TokenTypeUsing) {
+		if p.isMySQLFamily() && len(x.Tables) > 0 && stmt.TableName != "" && !p.isType(models.TokenTypeUsing) {
 			return nil, p.expectedError("USING")
 		}
 	} else {
@@ -68,20 +72,20 @@ func (p *Parser) parseDeleteStatement() (ast.Statement, error) {
 		if !multiFrom && p.dialect != string(keywords.DialectOracle) {
 			return nil, p.expectedError("FROM")
 		}
-		if _, err := p.parseDMLTargets(&stmt.TableName, &stmt.Alias, &stmt.DMLTargetFields, p.isMySQLFamily(), nil); err != nil {
+		if _, err := p.parseDMLTargets(&stmt.TableName, &stmt.Alias, &q, &x, p.isMySQLFamily(), nil); err != nil {
 			return nil, err
 		}
 		if p.isDMLOutputKeyword() {
-			stmt.Output, stmt.OutputInto, err = p.parseDMLOutputClause()
+			x.Output, x.OutputInto, err = p.parseDMLOutputClause()
 			if err != nil {
 				return nil, err
 			}
 		}
 		if multiFrom && p.isType(models.TokenTypeFrom) {
-			if err := p.parseDeleteSources(&stmt.From, stmt); err != nil {
+			if err := p.parseDeleteSources(&stmt.From, &x.Joins); err != nil {
 				return nil, err
 			}
-		} else if p.isMySQLFamily() || (len(stmt.Tables) > 0 && stmt.TableName != "") {
+		} else if p.isMySQLFamily() || (len(x.Tables) > 0 && stmt.TableName != "") {
 			// DELETE t1, t2 needs a FROM clause naming the source tables,
 			// and MySQL has no FROM-less DELETE t WHERE ... at all (only
 			// Oracle and SQL Server do).
@@ -90,21 +94,21 @@ func (p *Parser) parseDeleteStatement() (ast.Statement, error) {
 	}
 
 	// SQL Server: DELETE FROM t OUTPUT ... [FROM t JOIN ...]
-	if len(stmt.Output) == 0 && p.isDMLOutputKeyword() {
-		stmt.Output, stmt.OutputInto, err = p.parseDMLOutputClause()
+	if len(x.Output) == 0 && p.isDMLOutputKeyword() {
+		x.Output, x.OutputInto, err = p.parseDMLOutputClause()
 		if err != nil {
 			return nil, err
 		}
 	}
 	if sqlServer && len(stmt.From) == 0 && p.isType(models.TokenTypeFrom) {
-		if err := p.parseDeleteSources(&stmt.From, stmt); err != nil {
+		if err := p.parseDeleteSources(&stmt.From, &x.Joins); err != nil {
 			return nil, err
 		}
 	}
 
 	// PostgreSQL / Snowflake / MySQL: DELETE FROM t USING s [JOIN ...]
 	if len(stmt.From) == 0 && p.isType(models.TokenTypeUsing) {
-		if err := p.parseDeleteSources(&stmt.Using, stmt); err != nil {
+		if err := p.parseDeleteSources(&stmt.Using, &x.Joins); err != nil {
 			return nil, err
 		}
 	}
@@ -119,23 +123,24 @@ func (p *Parser) parseDeleteStatement() (ast.Statement, error) {
 	}
 
 	// MySQL / MariaDB / SQLite: ORDER BY ... LIMIT n
-	if err := p.parseDMLOrderLimit(&stmt.DMLTargetFields); err != nil {
+	if err := p.parseDMLOrderLimit(&x); err != nil {
 		return nil, err
 	}
 
 	// Parse RETURNING clause if present (PostgreSQL, SQLite, MariaDB, Oracle INTO)
 	if p.isReturningKeyword() {
-		stmt.Returning, stmt.ReturningInto, err = p.parseReturningClause()
+		stmt.Returning, x.ReturningInto, err = p.parseReturningClause()
 		if err != nil {
 			return nil, err
 		}
 	}
+	stmt.Extras = finishDMLExtras(&x)
 	return stmt, nil
 }
 
 // parseDeleteSources consumes FROM or USING and parses the source table list
-// and its joins into *dst and stmt.Joins.
-func (p *Parser) parseDeleteSources(dst *[]ast.TableReference, stmt *ast.DeleteStatement) error {
+// and its joins into *dst and *joinsDst.
+func (p *Parser) parseDeleteSources(dst *[]ast.TableReference, joinsDst *[]ast.JoinClause) error {
 	p.advance() // Consume FROM / USING
 	prev := p.dmlReturning
 	p.dmlReturning = true
@@ -145,15 +150,15 @@ func (p *Parser) parseDeleteSources(dst *[]ast.TableReference, stmt *ast.DeleteS
 		return err
 	}
 	*dst = refs
-	stmt.Joins = joins
+	*joinsDst = joins
 	return nil
 }
 
 // parseDeleteHistory parses the rest of MariaDB's DELETE HISTORY FROM table
 // [BEFORE SYSTEM_TIME point]; the current token is HISTORY. HISTORY is kept as
 // a statement modifier.
-func (p *Parser) parseDeleteHistory(stmt *ast.DeleteStatement) (ast.Statement, error) {
-	stmt.Modifiers = append(stmt.Modifiers, "HISTORY")
+func (p *Parser) parseDeleteHistory(stmt *ast.DeleteStatement, x *ast.DMLTargetFields) (ast.Statement, error) {
+	x.Modifiers = append(x.Modifiers, "HISTORY")
 	p.advance() // Consume HISTORY
 	p.advance() // Consume FROM
 	name, quote, err := p.parseQualifiedNameQuoted()
@@ -168,5 +173,6 @@ func (p *Parser) parseDeleteHistory(stmt *ast.DeleteStatement) (ast.Statement, e
 			return nil, err
 		}
 	}
+	stmt.Extras = finishDMLExtras(x)
 	return stmt, nil
 }

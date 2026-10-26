@@ -393,6 +393,9 @@ func (c *metadataCollector) addTableRef(t *ast.TableReference) {
 // addDMLTargetTables adds the extra UPDATE / DELETE targets and the joined
 // tables of a multi-table statement.
 func (c *metadataCollector) addDMLTargetTables(d *ast.DMLTargetFields) {
+	if d == nil {
+		return
+	}
 	for i := range d.Tables {
 		c.addTable(d.Tables[i].Name)
 	}
@@ -505,7 +508,7 @@ func (c *metadataCollector) collectFromNode(node ast.Node, aliases map[string]st
 		for _, from := range n.From {
 			c.addTable(from.Name)
 		}
-		c.addDMLTargetTables(&n.DMLTargetFields)
+		c.addDMLTargetTables(n.Extras)
 		for i := range n.Assignments {
 			c.collectFromNode(&n.Assignments[i], nil)
 		}
@@ -526,10 +529,10 @@ func (c *metadataCollector) collectFromNode(node ast.Node, aliases map[string]st
 			c.addTable(from.Name)
 		}
 		if len(n.From) == 0 {
-			c.addDMLTargetTables(&n.DMLTargetFields)
-		} else {
-			for i := range n.Joins {
-				c.addTableRef(&n.Joins[i].Right)
+			c.addDMLTargetTables(n.Extras)
+		} else if n.Extras != nil {
+			for i := range n.Extras.Joins {
+				c.addTableRef(&n.Extras.Joins[i].Right)
 			}
 		}
 		c.collectFromExpression(n.Where, c.want, nil)

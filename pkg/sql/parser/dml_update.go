@@ -31,24 +31,28 @@ import (
 func (p *Parser) parseUpdateStatement() (ast.Statement, error) {
 	// We've already consumed the UPDATE token in matchType
 	stmt := &ast.UpdateStatement{}
-	stmt.Modifiers = p.parseDMLModifiers(dmlUpdate)
+	// The dialect-specific fields are collected in x and copied to
+	// stmt.Extras only when one of them is set.
+	var x ast.DMLTargetFields
+	q := dmlTargetQuotes{&stmt.TableNameQuote, &stmt.AliasQuote}
+	x.Modifiers = p.parseDMLModifiers(dmlUpdate)
 	top, err := p.parseTopClause()
 	if err != nil {
 		return nil, err
 	}
-	stmt.Top = top
+	x.Top = top
 	// ONLY is followed by the table name.
 	if p.nextIsName() && p.isDMLOnly() {
-		stmt.Only = true
+		x.Only = true
 		p.advance() // Consume ONLY
 	}
 
 	// Target(s). MySQL/MariaDB allow a multi-table target list with JOINs.
 	if p.isMySQLFamily() {
-		if err := p.parseMultiTableUpdateTargets(stmt); err != nil {
+		if err := p.parseMultiTableUpdateTargets(stmt, &q, &x); err != nil {
 			return nil, err
 		}
-	} else if _, err := p.parseDMLTargets(&stmt.TableName, &stmt.Alias, &stmt.DMLTargetFields, false, nil); err != nil {
+	} else if _, err := p.parseDMLTargets(&stmt.TableName, &stmt.Alias, &q, &x, false, nil); err != nil {
 		return nil, err
 	}
 
@@ -65,7 +69,7 @@ func (p *Parser) parseUpdateStatement() (ast.Statement, error) {
 
 	// SQL Server: OUTPUT precedes FROM and WHERE.
 	if p.isDMLOutputKeyword() {
-		stmt.Output, stmt.OutputInto, err = p.parseDMLOutputClause()
+		x.Output, x.OutputInto, err = p.parseDMLOutputClause()
 		if err != nil {
 			return nil, err
 		}
@@ -73,13 +77,13 @@ func (p *Parser) parseUpdateStatement() (ast.Statement, error) {
 
 	// PostgreSQL / SQL Server / SQLite: UPDATE t SET ... FROM s [, ...] (#610).
 	if p.isType(models.TokenTypeFrom) {
-		if len(stmt.Joins) > 0 {
+		if len(x.Joins) > 0 {
 			return nil, goerrors.UnsupportedFeatureError("FROM after a joined UPDATE target", p.currentLocation(), "")
 		}
 		p.advance() // Consume FROM
 		prev := p.dmlReturning
 		p.dmlReturning = true
-		stmt.From, stmt.Joins, err = p.parseUpdateFromList()
+		stmt.From, x.Joins, err = p.parseUpdateFromList()
 		p.dmlReturning = prev
 		if err != nil {
 			return nil, err
@@ -96,25 +100,26 @@ func (p *Parser) parseUpdateStatement() (ast.Statement, error) {
 	}
 
 	// MySQL / MariaDB / SQLite: ORDER BY ... LIMIT n
-	if err := p.parseDMLOrderLimit(&stmt.DMLTargetFields); err != nil {
+	if err := p.parseDMLOrderLimit(&x); err != nil {
 		return nil, err
 	}
 
 	// Parse RETURNING clause if present (PostgreSQL, SQLite, Oracle INTO)
 	if p.isReturningKeyword() {
-		stmt.Returning, stmt.ReturningInto, err = p.parseReturningClause()
+		stmt.Returning, x.ReturningInto, err = p.parseReturningClause()
 		if err != nil {
 			return nil, err
 		}
 	}
+	stmt.Extras = finishDMLExtras(&x)
 	return stmt, nil
 }
 
 // parseMultiTableUpdateTargets parses the MySQL / MariaDB UPDATE target
 // list: comma-separated targets, then JOIN clauses joined to the first one.
-func (p *Parser) parseMultiTableUpdateTargets(stmt *ast.UpdateStatement) error {
+func (p *Parser) parseMultiTableUpdateTargets(stmt *ast.UpdateStatement, q *dmlTargetQuotes, x *ast.DMLTargetFields) error {
 	var first ast.TableReference
-	isParen, err := p.parseDMLTargets(&stmt.TableName, &stmt.Alias, &stmt.DMLTargetFields, true, &first)
+	isParen, err := p.parseDMLTargets(&stmt.TableName, &stmt.Alias, q, x, true, &first)
 	if err != nil {
 		return err
 	}
@@ -126,7 +131,7 @@ func (p *Parser) parseMultiTableUpdateTargets(stmt *ast.UpdateStatement) error {
 		if err != nil {
 			return err
 		}
-		stmt.Joins = joins
+		x.Joins = joins
 	}
 	return nil
 }

@@ -35,6 +35,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   INTO, LIMIT BY, ROWS EXAMINED, INTERPOLATE, query hints and output formats.
   These fields were introduced on this unreleased branch; reads must allow
   `Extras == nil`, and writes must allocate it first.
+- **UPDATE / DELETE extension fields**: modifiers, TOP, ONLY, extra targets,
+  joins, OUTPUT, ORDER BY / LIMIT and RETURNING INTO live under the optional
+  `UpdateStatement.Extras` / `DeleteStatement.Extras` pointer
+  (`DMLTargetFields`); `EnsureExtras()` allocates it. `TableNameQuote` and
+  `AliasQuote` stay on the statement. A plain UPDATE / DELETE has `Extras == nil`,
+  which shrinks the statements from 352 B to 160 / 176 B. These fields were
+  introduced on this unreleased branch.
 - **Transpilation**: string literals and quoted identifiers are rendered using
   the target dialect's escape rules and delimiters. Unrepresentable literals
   return an error rather than changing their value. SQL Server GO scripts

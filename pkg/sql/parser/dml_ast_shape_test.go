@@ -37,6 +37,45 @@ func parseDMLShape(t *testing.T, sql string, dialect keywords.SQLDialect) (ast.S
 	return tree.Statements[0], tree
 }
 
+// dmlExt returns x, or an empty DMLTargetFields when the statement has no
+// Extras, so the checks can read the fields either way.
+func dmlExt(x *ast.DMLTargetFields) *ast.DMLTargetFields {
+	if x != nil {
+		return x
+	}
+	return &ast.DMLTargetFields{}
+}
+
+// TestDMLShape_PlainStatementsHaveNoExtras checks that UPDATE and DELETE
+// statements without dialect-specific parts carry no Extras, quoted names
+// included.
+func TestDMLShape_PlainStatementsHaveNoExtras(t *testing.T) {
+	for _, tc := range []struct {
+		dialect keywords.SQLDialect
+		sql     string
+	}{
+		{keywords.DialectPostgreSQL, `UPDATE t AS x SET a = 1 WHERE b = 2`},
+		{keywords.DialectSQLServer, `UPDATE [dbo].[t] SET a = 1`},
+		{keywords.DialectPostgreSQL, `DELETE FROM "t" WHERE b = 2 RETURNING a`},
+		{keywords.DialectMySQL, "DELETE FROM `t` WHERE b = 2"},
+	} {
+		stmt, tree := parseDMLShape(t, tc.sql, tc.dialect)
+		switch s := stmt.(type) {
+		case *ast.UpdateStatement:
+			if s.Extras != nil {
+				t.Errorf("%s: Extras = %+v, want nil", tc.sql, s.Extras)
+			}
+		case *ast.DeleteStatement:
+			if s.Extras != nil {
+				t.Errorf("%s: Extras = %+v, want nil", tc.sql, s.Extras)
+			}
+		default:
+			t.Errorf("%s: got %T", tc.sql, stmt)
+		}
+		ast.ReleaseAST(tree)
+	}
+}
+
 func TestDMLShape_Update(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -46,15 +85,15 @@ func TestDMLShape_Update(t *testing.T) {
 	}{
 		{"limit is stored", keywords.DialectMySQL, "UPDATE t SET a = 1 WHERE b = 2 ORDER BY id LIMIT 5",
 			func(t *testing.T, u *ast.UpdateStatement) {
-				lit, ok := u.Limit.(*ast.LiteralValue)
+				lit, ok := dmlExt(u.Extras).Limit.(*ast.LiteralValue)
 				if !ok {
-					t.Fatalf("Limit: expected *ast.LiteralValue, got %T", u.Limit)
+					t.Fatalf("Limit: expected *ast.LiteralValue, got %T", dmlExt(u.Extras).Limit)
 				}
 				if lit.Value != "5" {
 					t.Errorf("Limit = %v, want 5", lit.Value)
 				}
-				if len(u.OrderBy) != 1 {
-					t.Errorf("OrderBy: got %d items, want 1", len(u.OrderBy))
+				if len(dmlExt(u.Extras).OrderBy) != 1 {
+					t.Errorf("OrderBy: got %d items, want 1", len(dmlExt(u.Extras).OrderBy))
 				}
 			}},
 		{"alias", keywords.DialectPostgreSQL, "UPDATE t AS x SET a = 1",
@@ -62,26 +101,26 @@ func TestDMLShape_Update(t *testing.T) {
 				if u.TableName != "t" || u.Alias != "x" {
 					t.Errorf("target = %q %q, want t x", u.TableName, u.Alias)
 				}
-				if len(u.Tables) != 0 {
-					t.Errorf("Tables should be empty for a single plain target, got %d", len(u.Tables))
+				if len(dmlExt(u.Extras).Tables) != 0 {
+					t.Errorf("Tables should be empty for a single plain target, got %d", len(dmlExt(u.Extras).Tables))
 				}
 			}},
 		{"modifiers", keywords.DialectMySQL, "UPDATE LOW_PRIORITY IGNORE t SET x = 1",
 			func(t *testing.T, u *ast.UpdateStatement) {
-				if !reflect.DeepEqual(u.Modifiers, []string{"LOW_PRIORITY", "IGNORE"}) {
-					t.Errorf("Modifiers = %v", u.Modifiers)
+				if !reflect.DeepEqual(dmlExt(u.Extras).Modifiers, []string{"LOW_PRIORITY", "IGNORE"}) {
+					t.Errorf("Modifiers = %v", dmlExt(u.Extras).Modifiers)
 				}
 			}},
 		{"sqlite or modifier", keywords.DialectSQLite, "UPDATE OR IGNORE t SET a = 1",
 			func(t *testing.T, u *ast.UpdateStatement) {
-				if !reflect.DeepEqual(u.Modifiers, []string{"OR IGNORE"}) {
-					t.Errorf("Modifiers = %v", u.Modifiers)
+				if !reflect.DeepEqual(dmlExt(u.Extras).Modifiers, []string{"OR IGNORE"}) {
+					t.Errorf("Modifiers = %v", dmlExt(u.Extras).Modifiers)
 				}
 			}},
 		{"joins", keywords.DialectMySQL, "UPDATE t JOIN u ON t.id = u.id SET t.a = 1",
 			func(t *testing.T, u *ast.UpdateStatement) {
-				if len(u.Joins) != 1 || u.Joins[0].Right.Name != "u" {
-					t.Fatalf("Joins = %+v", u.Joins)
+				if len(dmlExt(u.Extras).Joins) != 1 || dmlExt(u.Extras).Joins[0].Right.Name != "u" {
+					t.Fatalf("Joins = %+v", dmlExt(u.Extras).Joins)
 				}
 				col, ok := u.Assignments[0].Column.(*ast.Identifier)
 				if !ok {
@@ -93,26 +132,26 @@ func TestDMLShape_Update(t *testing.T) {
 			}},
 		{"comma targets", keywords.DialectMySQL, "UPDATE t1, t2 x SET t1.a = x.b",
 			func(t *testing.T, u *ast.UpdateStatement) {
-				if u.TableName != "t1" || len(u.Tables) != 1 || u.Tables[0].Name != "t2" || u.Tables[0].Alias != "x" {
-					t.Errorf("targets = %q + %+v", u.TableName, u.Tables)
+				if u.TableName != "t1" || len(dmlExt(u.Extras).Tables) != 1 || dmlExt(u.Extras).Tables[0].Name != "t2" || dmlExt(u.Extras).Tables[0].Alias != "x" {
+					t.Errorf("targets = %q + %+v", u.TableName, dmlExt(u.Extras).Tables)
 				}
 			}},
 		{"derived target", keywords.DialectOracle, "UPDATE (SELECT a FROM t) SET a = 1",
 			func(t *testing.T, u *ast.UpdateStatement) {
-				if u.TableName != "" || len(u.Tables) != 1 || u.Tables[0].Subquery == nil {
-					t.Errorf("derived target not stored in Tables: %q %+v", u.TableName, u.Tables)
+				if u.TableName != "" || len(dmlExt(u.Extras).Tables) != 1 || dmlExt(u.Extras).Tables[0].Subquery == nil {
+					t.Errorf("derived target not stored in Tables: %q %+v", u.TableName, dmlExt(u.Extras).Tables)
 				}
 			}},
 		{"top and only", keywords.DialectSQLServer, "UPDATE TOP (5) t SET a = 1",
 			func(t *testing.T, u *ast.UpdateStatement) {
-				if u.Top == nil || u.Top.Count == nil {
+				if dmlExt(u.Extras).Top == nil || dmlExt(u.Extras).Top.Count == nil {
 					t.Fatal("Top not stored")
 				}
 			}},
 		{"only", keywords.DialectPostgreSQL, "UPDATE ONLY t SET a = 1",
 			func(t *testing.T, u *ast.UpdateStatement) {
-				if !u.Only || u.TableName != "t" {
-					t.Errorf("Only = %v, TableName = %q", u.Only, u.TableName)
+				if !dmlExt(u.Extras).Only || u.TableName != "t" {
+					t.Errorf("Only = %v, TableName = %q", dmlExt(u.Extras).Only, u.TableName)
 				}
 			}},
 		{"tuple target and default", keywords.DialectPostgreSQL, "UPDATE t SET (a, b) = (1, 2), c = DEFAULT",
@@ -130,14 +169,14 @@ func TestDMLShape_Update(t *testing.T) {
 			}},
 		{"output into", keywords.DialectSQLServer, "UPDATE t SET a = 1 OUTPUT inserted.a AS na INTO @v (a) WHERE b = 1",
 			func(t *testing.T, u *ast.UpdateStatement) {
-				if len(u.Output) != 1 {
-					t.Fatalf("Output = %v", u.Output)
+				if len(dmlExt(u.Extras).Output) != 1 {
+					t.Fatalf("Output = %v", dmlExt(u.Extras).Output)
 				}
-				if _, ok := u.Output[0].(*ast.AliasedExpression); !ok {
-					t.Errorf("Output[0]: expected *ast.AliasedExpression, got %T", u.Output[0])
+				if _, ok := dmlExt(u.Extras).Output[0].(*ast.AliasedExpression); !ok {
+					t.Errorf("Output[0]: expected *ast.AliasedExpression, got %T", dmlExt(u.Extras).Output[0])
 				}
-				if u.OutputInto == nil || u.OutputInto.Target != "@v" || len(u.OutputInto.Columns) != 1 {
-					t.Errorf("OutputInto = %+v", u.OutputInto)
+				if dmlExt(u.Extras).OutputInto == nil || dmlExt(u.Extras).OutputInto.Target != "@v" || len(dmlExt(u.Extras).OutputInto.Columns) != 1 {
+					t.Errorf("OutputInto = %+v", dmlExt(u.Extras).OutputInto)
 				}
 				if u.Where == nil {
 					t.Error("Where lost after OUTPUT")
@@ -145,14 +184,14 @@ func TestDMLShape_Update(t *testing.T) {
 			}},
 		{"returning into", keywords.DialectOracle, "UPDATE t SET a = 1 RETURNING a INTO :x",
 			func(t *testing.T, u *ast.UpdateStatement) {
-				if len(u.Returning) != 1 || len(u.ReturningInto) != 1 {
-					t.Errorf("Returning = %v, ReturningInto = %v", u.Returning, u.ReturningInto)
+				if len(u.Returning) != 1 || len(dmlExt(u.Extras).ReturningInto) != 1 {
+					t.Errorf("Returning = %v, ReturningInto = %v", u.Returning, dmlExt(u.Extras).ReturningInto)
 				}
 			}},
 		{"from with joins", keywords.DialectSQLServer, "UPDATE t SET a = 1 FROM t JOIN u ON u.id = t.id",
 			func(t *testing.T, u *ast.UpdateStatement) {
-				if len(u.From) != 1 || len(u.Joins) != 1 {
-					t.Errorf("From = %d, Joins = %d; want 1, 1", len(u.From), len(u.Joins))
+				if len(u.From) != 1 || len(dmlExt(u.Extras).Joins) != 1 {
+					t.Errorf("From = %d, Joins = %d; want 1, 1", len(u.From), len(dmlExt(u.Extras).Joins))
 				}
 			}},
 	}
@@ -178,7 +217,7 @@ func TestDMLShape_Delete(t *testing.T) {
 	}{
 		{"limit", keywords.DialectMySQL, "DELETE FROM t WHERE a = 1 LIMIT 10",
 			func(t *testing.T, d *ast.DeleteStatement) {
-				if d.Limit == nil {
+				if dmlExt(d.Extras).Limit == nil {
 					t.Error("Limit not stored")
 				}
 			}},
@@ -190,23 +229,23 @@ func TestDMLShape_Delete(t *testing.T) {
 			}},
 		{"mysql multi-table", keywords.DialectMySQL, "DELETE a, b FROM a JOIN b ON a.id = b.id",
 			func(t *testing.T, d *ast.DeleteStatement) {
-				if d.TableName != "a" || len(d.Tables) != 1 || d.Tables[0].Name != "b" {
-					t.Errorf("targets = %q + %+v", d.TableName, d.Tables)
+				if d.TableName != "a" || len(dmlExt(d.Extras).Tables) != 1 || dmlExt(d.Extras).Tables[0].Name != "b" {
+					t.Errorf("targets = %q + %+v", d.TableName, dmlExt(d.Extras).Tables)
 				}
-				if len(d.From) != 1 || d.From[0].Name != "a" || len(d.Joins) != 1 {
-					t.Errorf("From = %+v, Joins = %d", d.From, len(d.Joins))
+				if len(d.From) != 1 || d.From[0].Name != "a" || len(dmlExt(d.Extras).Joins) != 1 {
+					t.Errorf("From = %+v, Joins = %d", d.From, len(dmlExt(d.Extras).Joins))
 				}
 			}},
 		{"modifiers", keywords.DialectMySQL, "DELETE LOW_PRIORITY QUICK IGNORE FROM t",
 			func(t *testing.T, d *ast.DeleteStatement) {
-				if !reflect.DeepEqual(d.Modifiers, []string{"LOW_PRIORITY", "QUICK", "IGNORE"}) {
-					t.Errorf("Modifiers = %v", d.Modifiers)
+				if !reflect.DeepEqual(dmlExt(d.Extras).Modifiers, []string{"LOW_PRIORITY", "QUICK", "IGNORE"}) {
+					t.Errorf("Modifiers = %v", dmlExt(d.Extras).Modifiers)
 				}
 			}},
 		{"top output", keywords.DialectSQLServer, "DELETE TOP (3) FROM t OUTPUT deleted.id WHERE a = 1",
 			func(t *testing.T, d *ast.DeleteStatement) {
-				if d.Top == nil || len(d.Output) != 1 || d.Where == nil {
-					t.Errorf("Top = %v, Output = %v, Where = %v", d.Top, d.Output, d.Where)
+				if dmlExt(d.Extras).Top == nil || len(dmlExt(d.Extras).Output) != 1 || d.Where == nil {
+					t.Errorf("Top = %v, Output = %v, Where = %v", dmlExt(d.Extras).Top, dmlExt(d.Extras).Output, d.Where)
 				}
 			}},
 		{"oracle without from", keywords.DialectOracle, "DELETE t x WHERE x.a = 1",

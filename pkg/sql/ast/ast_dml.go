@@ -15,8 +15,9 @@
 package ast
 
 // DMLTargetFields holds the dialect-specific parts of UPDATE and DELETE that
-// surround the target table. It is embedded in UpdateStatement and
-// DeleteStatement, so its fields are accessed directly (stmt.Limit).
+// surround the target table. UpdateStatement.Extras and DeleteStatement.Extras
+// point to it; they are nil for a statement that uses none of these parts, so
+// a plain UPDATE t SET ... WHERE ... does not carry them.
 //
 // The first target stays in the statement's TableName and Alias when it is a
 // plain table name, so code that only looks at TableName keeps working; Tables
@@ -49,10 +50,44 @@ type DMLTargetFields struct {
 	Limit   Expression
 	// ReturningInto holds the Oracle RETURNING ... INTO :bind targets.
 	ReturningInto []Expression
-	// TableNameQuote and AliasQuote record the delimiters of the statement's
-	// TableName and Alias when they must be kept (see NameQuote).
-	TableNameQuote NameQuote
-	AliasQuote     NameQuote
+}
+
+// noDMLTargetFields is the read-only stand-in returned for a statement
+// without Extras. Nothing may write through it.
+var noDMLTargetFields DMLTargetFields
+
+// dmlExtras returns x, or a read-only empty DMLTargetFields when it is nil,
+// so renderers and walkers can read the fields without nil checks.
+func dmlExtras(x *DMLTargetFields) *DMLTargetFields {
+	if x != nil {
+		return x
+	}
+	return &noDMLTargetFields
+}
+
+// EnsureExtras returns u.Extras, allocating it first when it is nil. Use it
+// to set one of the DMLTargetFields.
+func (u *UpdateStatement) EnsureExtras() *DMLTargetFields {
+	if u.Extras == nil {
+		u.Extras = &DMLTargetFields{}
+	}
+	return u.Extras
+}
+
+// EnsureExtras returns d.Extras, allocating it first when it is nil. Use it
+// to set one of the DMLTargetFields.
+func (d *DeleteStatement) EnsureExtras() *DMLTargetFields {
+	if d.Extras == nil {
+		d.Extras = &DMLTargetFields{}
+	}
+	return d.Extras
+}
+
+// IsZero reports whether no field of d is set.
+func (d *DMLTargetFields) IsZero() bool {
+	return len(d.Modifiers) == 0 && d.Top == nil && !d.Only && len(d.Tables) == 0 &&
+		len(d.Joins) == 0 && len(d.Output) == 0 && d.OutputInto == nil &&
+		len(d.OrderBy) == 0 && d.Limit == nil && len(d.ReturningInto) == 0
 }
 
 // dmlTargetChildren appends the nodes of d to children.

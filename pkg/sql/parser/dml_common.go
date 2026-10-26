@@ -202,13 +202,30 @@ func (p *Parser) parseDMLTargetName(name *string, nameQuote *ast.NameQuote, alia
 	return nil
 }
 
+// dmlTargetQuotes points to the TableNameQuote and AliasQuote fields of the
+// UPDATE / DELETE statement being parsed.
+type dmlTargetQuotes struct {
+	name, alias *ast.NameQuote
+}
+
+// finishDMLExtras returns a heap copy of x for the statement's Extras, or nil
+// when the statement uses none of the dialect-specific fields, so that a plain
+// UPDATE / DELETE carries no Extras.
+func finishDMLExtras(x *ast.DMLTargetFields) *ast.DMLTargetFields {
+	if x.IsZero() {
+		return nil
+	}
+	c := *x
+	return &c
+}
+
 // parseDMLTargets parses the target list of UPDATE/DELETE. The first target
 // is stored in *name / *alias when it is a plain table name and in d.Tables
 // otherwise; further comma-separated targets (multi=true, MySQL multi-table
 // forms) go to d.Tables. When the first target is parenthesized it is also
 // copied to *paren (if paren is not nil) and isParen is set; otherwise it is
-// fully described by *name, *alias and d's quotes.
-func (p *Parser) parseDMLTargets(name, alias *string, d *ast.DMLTargetFields, multi bool, paren *ast.TableReference) (isParen bool, err error) {
+// fully described by *name, *alias and their quotes in q.
+func (p *Parser) parseDMLTargets(name, alias *string, q *dmlTargetQuotes, d *ast.DMLTargetFields, multi bool, paren *ast.TableReference) (isParen bool, err error) {
 	if !p.isType(models.TokenTypeLParen) {
 		// A plain table name: parsed straight into the statement, without
 		// building a TableReference.
@@ -218,9 +235,9 @@ func (p *Parser) parseDMLTargets(name, alias *string, d *ast.DMLTargetFields, mu
 			return false, err
 		}
 		*name, *alias = n, a
-		d.TableNameQuote, d.AliasQuote = nq, aq
+		*q.name, *q.alias = nq, aq
 	} else {
-		if err := p.parseDMLParenTarget(name, alias, d, paren); err != nil {
+		if err := p.parseDMLParenTarget(name, alias, q, d, paren); err != nil {
 			return false, err
 		}
 		isParen = true
@@ -239,14 +256,14 @@ func (p *Parser) parseDMLTargets(name, alias *string, d *ast.DMLTargetFields, mu
 // parseDMLParenTarget parses a parenthesized first UPDATE/DELETE target for
 // parseDMLTargets. It is a function of its own so that the TableReference it
 // needs is not part of parseDMLTargets' frame.
-func (p *Parser) parseDMLParenTarget(name, alias *string, d *ast.DMLTargetFields, paren *ast.TableReference) error {
+func (p *Parser) parseDMLParenTarget(name, alias *string, q *dmlTargetQuotes, d *ast.DMLTargetFields, paren *ast.TableReference) error {
 	first, err := p.parseFromTableReference()
 	if err != nil {
 		return err
 	}
 	if first.Subquery == nil && first.SetSubquery == nil && first.TableFunc == nil {
 		*name, *alias = first.Name, first.Alias
-		d.TableNameQuote, d.AliasQuote = first.NameQuote, first.AliasQuote
+		*q.name, *q.alias = first.NameQuote, first.AliasQuote
 	} else {
 		d.Tables = append(d.Tables, first)
 	}

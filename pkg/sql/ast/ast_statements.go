@@ -403,9 +403,14 @@ type UpdateStatement struct {
 	Where       Expression
 	Returning   []Expression
 	Pos         models.Location // Source position of the UPDATE keyword (1-based line and column)
-	// DMLTargetFields holds modifiers, TOP, ONLY, extra targets, joins,
-	// OUTPUT, ORDER BY, LIMIT and RETURNING INTO (see ast_dml.go).
-	DMLTargetFields
+	// TableNameQuote and AliasQuote record the delimiters of TableName and
+	// Alias when they must be kept (see NameQuote).
+	TableNameQuote NameQuote
+	AliasQuote     NameQuote
+	// Extras holds modifiers, TOP, ONLY, extra targets, joins, OUTPUT,
+	// ORDER BY, LIMIT and RETURNING INTO; nil when the statement has none
+	// of them. See DMLTargetFields.
+	Extras *DMLTargetFields
 }
 
 // GetUpdates returns Assignments for backward compatibility.
@@ -433,7 +438,10 @@ func (u UpdateStatement) Children() []Node {
 		children = append(children, u.Where)
 	}
 	children = append(children, nodifyExpressions(u.Returning)...)
-	return u.dmlTargetChildren(children)
+	if u.Extras == nil {
+		return children
+	}
+	return u.Extras.dmlTargetChildren(children)
 }
 
 // CreateTableStatement represents a CREATE TABLE statement
@@ -504,9 +512,14 @@ type DeleteStatement struct {
 	// BEFORE SYSTEM_TIME point; nil when the statement has none. DELETE
 	// HISTORY itself is the HISTORY modifier.
 	BeforeSystemTime Expression
-	// DMLTargetFields holds modifiers, TOP, ONLY, extra targets, joins,
-	// OUTPUT, ORDER BY, LIMIT and RETURNING INTO (see ast_dml.go).
-	DMLTargetFields
+	// TableNameQuote and AliasQuote record the delimiters of TableName and
+	// Alias when they must be kept (see NameQuote).
+	TableNameQuote NameQuote
+	AliasQuote     NameQuote
+	// Extras holds modifiers, TOP, ONLY, extra targets, joins, OUTPUT,
+	// ORDER BY, LIMIT and RETURNING INTO; nil when the statement has none
+	// of them. See DMLTargetFields.
+	Extras *DMLTargetFields
 }
 
 func (d *DeleteStatement) statementNode()      {}
@@ -530,7 +543,10 @@ func (d DeleteStatement) Children() []Node {
 		children = append(children, d.Where)
 	}
 	children = append(children, nodifyExpressions(d.Returning)...)
-	return d.dmlTargetChildren(children)
+	if d.Extras == nil {
+		return children
+	}
+	return d.Extras.dmlTargetChildren(children)
 }
 
 // AlterTableStatement represents an ALTER TABLE statement.

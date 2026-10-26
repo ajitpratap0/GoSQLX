@@ -45,18 +45,31 @@ func writeDMLTop(sb *strings.Builder, f *nodeFormatter, top *ast.TopClause) {
 	}
 }
 
+// noDMLExtras is the read-only stand-in dmlExtras returns for a statement
+// without Extras. Nothing may write through it.
+var noDMLExtras ast.DMLTargetFields
+
+// dmlExtras returns x, or a read-only empty DMLTargetFields when it is nil,
+// so the renderers can read the UPDATE / DELETE fields without nil checks.
+func dmlExtras(x *ast.DMLTargetFields) *ast.DMLTargetFields {
+	if x != nil {
+		return x
+	}
+	return &noDMLExtras
+}
+
 // writeDMLTargets writes the UPDATE / DELETE target list.
-func writeDMLTargets(sb *strings.Builder, f *nodeFormatter, d *ast.DMLTargetFields, name, alias string) {
+func writeDMLTargets(sb *strings.Builder, f *nodeFormatter, d *ast.DMLTargetFields, name string, nameQ ast.NameQuote, alias string, aliasQ ast.NameQuote) {
 	if d.Only {
 		sb.WriteString(f.kw("ONLY"))
 		sb.WriteString(" ")
 	}
 	first := true
 	if name != "" {
-		sb.WriteString(ast.QuoteQualifiedNameWith(name, f.nq(d.TableNameQuote)))
+		sb.WriteString(ast.QuoteQualifiedNameWith(name, f.nq(nameQ)))
 		if alias != "" {
 			sb.WriteString(" ")
-			sb.WriteString(ast.QuoteTableAliasWith(alias, f.nq(d.AliasQuote)))
+			sb.WriteString(ast.QuoteTableAliasWith(alias, f.nq(aliasQ)))
 		}
 		first = false
 	}

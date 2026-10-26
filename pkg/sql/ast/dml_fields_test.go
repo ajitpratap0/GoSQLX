@@ -36,22 +36,24 @@ func TestDMLDialectFields_ResetOnPut(t *testing.T) {
 	}{
 		{"Update", func() any {
 			s := GetUpdateStatement()
-			fillNonZero(reflect.ValueOf(&s.DMLTargetFields).Elem())
+			fillNonZero(reflect.ValueOf(s.EnsureExtras()).Elem())
+			s.TableNameQuote, s.AliasQuote = 1, 1
 			PutUpdateStatement(s)
 			return s
 		}, func() any { return GetUpdateStatement() }, func(v any) bool {
 			s, ok := v.(*UpdateStatement)
-			return ok && reflect.ValueOf(s.DMLTargetFields).IsZero()
+			return ok && s.Extras == nil && s.TableNameQuote == 0 && s.AliasQuote == 0
 		}},
 		{"Delete", func() any {
 			s := GetDeleteStatement()
-			fillNonZero(reflect.ValueOf(&s.DMLTargetFields).Elem())
+			fillNonZero(reflect.ValueOf(s.EnsureExtras()).Elem())
+			s.TableNameQuote, s.AliasQuote = 1, 1
 			s.From = []TableReference{{Name: "x"}}
 			PutDeleteStatement(s)
 			return s
 		}, func() any { return GetDeleteStatement() }, func(v any) bool {
 			s, ok := v.(*DeleteStatement)
-			return ok && reflect.ValueOf(s.DMLTargetFields).IsZero() && len(s.From) == 0
+			return ok && s.Extras == nil && s.TableNameQuote == 0 && s.AliasQuote == 0 && len(s.From) == 0
 		}},
 		{"Insert", func() any {
 			s := GetInsertStatement()
@@ -86,9 +88,9 @@ func TestDMLDialectFields_ResetOnPut(t *testing.T) {
 // hand to arbitrary text are not written into the SQL.
 func TestDMLRender_UnknownKeywordTextDropped(t *testing.T) {
 	u := &UpdateStatement{
-		TableName:       "t",
-		Assignments:     []UpdateExpression{{Column: &Identifier{Name: "a"}, Value: &LiteralValue{Value: "1", Type: "int"}}},
-		DMLTargetFields: DMLTargetFields{Modifiers: []string{"IGNORE", "; DROP TABLE x; --"}},
+		TableName:   "t",
+		Assignments: []UpdateExpression{{Column: &Identifier{Name: "a"}, Value: &LiteralValue{Value: "1", Type: "int"}}},
+		Extras:      &DMLTargetFields{Modifiers: []string{"IGNORE", "; DROP TABLE x; --"}},
 	}
 	if got, want := u.SQL(), "UPDATE IGNORE t SET a = 1"; got != want {
 		t.Errorf("UPDATE SQL() = %q, want %q", got, want)
@@ -113,8 +115,8 @@ func TestDMLChildren_IncludeDialectFields(t *testing.T) {
 	limit := &LiteralValue{Value: "5", Type: "int"}
 	into := &Identifier{Name: "v"}
 	u := &UpdateStatement{
-		TableName:       "t",
-		DMLTargetFields: DMLTargetFields{Limit: limit, ReturningInto: []Expression{into}},
+		TableName: "t",
+		Extras:    &DMLTargetFields{Limit: limit, ReturningInto: []Expression{into}},
 	}
 	children := u.Children()
 	found := 0

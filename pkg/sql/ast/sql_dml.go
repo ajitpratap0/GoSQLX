@@ -61,16 +61,16 @@ func writeDMLTop(buf *bytes.Buffer, top *TopClause) {
 }
 
 // writeDMLTargets writes the target list: name [alias] followed by Tables.
-func (d *DMLTargetFields) writeDMLTargets(buf *bytes.Buffer, name, alias string) {
+func (d *DMLTargetFields) writeDMLTargets(buf *bytes.Buffer, name string, nameQ NameQuote, alias string, aliasQ NameQuote) {
 	if d.Only {
 		buf.WriteString("ONLY ")
 	}
 	first := true
 	if name != "" {
-		writeQualifiedNameQ(buf, name, d.TableNameQuote)
+		writeQualifiedNameQ(buf, name, nameQ)
 		if alias != "" {
 			buf.WriteByte(' ')
-			writeTableAliasQ(buf, alias, d.AliasQuote)
+			writeTableAliasQ(buf, alias, aliasQ)
 		}
 		first = false
 	}

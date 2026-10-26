@@ -32,7 +32,7 @@ import (
 // column qualifier of an UPDATE statement.
 func replaceTableInUpdate(s *ast.UpdateStatement, old, new string) {
 	renameTableName(&s.TableName, &s.TableNameQuote, old, new)
-	replaceTableInDMLTargets(&s.DMLTargetFields, old, new)
+	replaceTableInDMLTargets(s.Extras, old, new)
 	replaceTableInFrom(s.From, old, new)
 	for i := range s.Assignments {
 		s.Assignments[i].Column = replaceTableInExpr(s.Assignments[i].Column, old, new)
@@ -48,7 +48,7 @@ func replaceTableInUpdate(s *ast.UpdateStatement, old, new string) {
 // column qualifier of a DELETE statement.
 func replaceTableInDelete(s *ast.DeleteStatement, old, new string) {
 	renameTableName(&s.TableName, &s.TableNameQuote, old, new)
-	replaceTableInDMLTargets(&s.DMLTargetFields, old, new)
+	replaceTableInDMLTargets(s.Extras, old, new)
 	replaceTableInFrom(s.From, old, new)
 	replaceTableInFrom(s.Using, old, new)
 	s.Where = replaceTableInExpr(s.Where, old, new)
@@ -60,6 +60,9 @@ func replaceTableInDelete(s *ast.DeleteStatement, old, new string) {
 // replaceTableInDMLTargets renames old to new in the extra targets, the
 // joins, the OUTPUT list and the ORDER BY of a DML statement.
 func replaceTableInDMLTargets(d *ast.DMLTargetFields, old, new string) {
+	if d == nil {
+		return
+	}
 	replaceTableInFrom(d.Tables, old, new)
 	replaceTableInJoins(d.Joins, old, new)
 	for i := range d.Output {
@@ -68,6 +71,18 @@ func replaceTableInDMLTargets(d *ast.DMLTargetFields, old, new string) {
 	for i := range d.OrderBy {
 		d.OrderBy[i].Expression = replaceTableInExpr(d.OrderBy[i].Expression, old, new)
 	}
+}
+
+// noDMLTargets is the read-only stand-in dmlTargets returns for a statement
+// without Extras. Nothing may write to its fields.
+var noDMLTargets ast.DMLTargetFields
+
+// dmlTargets returns x, or a read-only empty DMLTargetFields when it is nil.
+func dmlTargets(x *ast.DMLTargetFields) *ast.DMLTargetFields {
+	if x != nil {
+		return x
+	}
+	return &noDMLTargets
 }
 
 func renameTableName(name *string, quote *ast.NameQuote, old, new string) {
@@ -82,9 +97,9 @@ func renameTableName(name *string, quote *ast.NameQuote, old, new string) {
 func addAliasToUpdate(s *ast.UpdateStatement, tableName, alias string) error {
 	refs := dmlAliasTargets{tableName: tableName, alias: alias}
 	refs.name(&s.TableName, &s.Alias, &s.AliasQuote)
-	refs.list(s.Tables)
+	refs.list(dmlTargets(s.Extras).Tables)
 	refs.list(s.From)
-	refs.joins(s.Joins)
+	refs.joins(dmlTargets(s.Extras).Joins)
 	if err := refs.check(); err != nil {
 		return err
 	}
@@ -98,7 +113,7 @@ func addAliasToUpdate(s *ast.UpdateStatement, tableName, alias string) error {
 	for i := range s.Returning {
 		s.Returning[i] = rewrite(s.Returning[i])
 	}
-	rewriteDMLTargetExprs(&s.DMLTargetFields, rewrite)
+	rewriteDMLTargetExprs(s.Extras, rewrite)
 	return nil
 }
 
@@ -115,10 +130,10 @@ func addAliasToDelete(s *ast.DeleteStatement, tableName, alias string) error {
 		refs.list(s.From)
 	} else {
 		refs.name(&s.TableName, &s.Alias, &s.AliasQuote)
-		refs.list(s.Tables)
+		refs.list(dmlTargets(s.Extras).Tables)
 	}
 	refs.list(s.Using)
-	refs.joins(s.Joins)
+	refs.joins(dmlTargets(s.Extras).Joins)
 	if err := refs.check(); err != nil {
 		return err
 	}
@@ -131,7 +146,7 @@ func addAliasToDelete(s *ast.DeleteStatement, tableName, alias string) error {
 	for i := range s.Returning {
 		s.Returning[i] = rewrite(s.Returning[i])
 	}
-	rewriteDMLTargetExprs(&s.DMLTargetFields, rewrite)
+	rewriteDMLTargetExprs(s.Extras, rewrite)
 	return nil
 }
 
@@ -152,8 +167,8 @@ func deleteTargetsReferenceSources(s *ast.DeleteStatement) bool {
 		if strings.EqualFold(s.TableName, eff) {
 			return true
 		}
-		for j := range s.Tables {
-			if strings.EqualFold(s.Tables[j].Name, eff) {
+		for _, t := range dmlTargets(s.Extras).Tables {
+			if strings.EqualFold(t.Name, eff) {
 				return true
 			}
 		}
@@ -191,12 +206,13 @@ func renameDeleteTargets(s *ast.DeleteStatement, names []string, alias string) {
 		s.TableNameQuote = replacedNameQuote(s.TableNameQuote)
 		s.AliasQuote = 0
 	}
-	for i := range s.Tables {
-		if matches(s.Tables[i].Name) {
-			s.Tables[i].Name = alias
-			s.Tables[i].Alias = ""
-			s.Tables[i].NameQuote = replacedNameQuote(s.Tables[i].NameQuote)
-			s.Tables[i].AliasQuote = 0
+	tables := dmlTargets(s.Extras).Tables
+	for i := range tables {
+		if matches(tables[i].Name) {
+			tables[i].Name = alias
+			tables[i].Alias = ""
+			tables[i].NameQuote = replacedNameQuote(tables[i].NameQuote)
+			tables[i].AliasQuote = 0
 		}
 	}
 }
@@ -204,6 +220,9 @@ func renameDeleteTargets(s *ast.DeleteStatement, names []string, alias string) {
 // rewriteDMLTargetExprs applies rewrite to the expressions held by the DML
 // target fields: join conditions, OUTPUT and ORDER BY.
 func rewriteDMLTargetExprs(d *ast.DMLTargetFields, rewrite func(ast.Expression) ast.Expression) {
+	if d == nil {
+		return
+	}
 	for i := range d.Joins {
 		d.Joins[i].Condition = rewrite(d.Joins[i].Condition)
 		for j := range d.Joins[i].Using {

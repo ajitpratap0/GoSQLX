@@ -172,7 +172,7 @@ func (c *txnCursor) grantee() error {
 	p := c.p
 	if w := c.word(); granteeKinds[w] && c.granteeNameAt(c.i+1) {
 		c.i++
-		if w == "DATABASE" || w == "APPLICATION" {
+		if w == "DATABASE" || (w == "APPLICATION" && c.p.utilityWord(c.i) == "ROLE") {
 			if err := c.expect("ROLE"); err != nil {
 				return err
 			}
@@ -181,8 +181,22 @@ func (c *txnCursor) grantee() error {
 	if !c.granteeNameAt(c.i) {
 		return c.fail("grantee")
 	}
-	if !c.acceptString() { // 'user'@'host'
+	switch {
+	case c.acceptString(): // 'user'@'host'
+	case c.typeAt(c.i) == models.TokenTypeLBracket:
+		// [AppUser]: a bracketed name the tokenizer did not read as one
+		// outside SQL Server.
+		if c.i = c.bracketEnd(c.i); c.i < 0 {
+			return c.fail("]")
+		}
+	default:
 		c.i = p.nameEnd(c.i)
+		if c.typeAt(c.i) == models.TokenTypeLParen {
+			// CURRENT_USER(), Snowflake IDENTIFIER('r')
+			if c.i = p.groupEnd(c.i); c.i < 0 {
+				return c.fail(")")
+			}
+		}
 	}
 	if c.typeAt(c.i) == models.TokenTypeAtSign {
 		c.i++
@@ -200,11 +214,25 @@ func (c *txnCursor) grantee() error {
 	return nil
 }
 
+// bracketEnd returns the index after the [ ... ] that opens at token
+// index i, or -1 when it does not close on the statement.
+func (c *txnCursor) bracketEnd(i int) int {
+	for j := i + 1; j < len(c.p.tokens); j++ {
+		switch c.typeAt(j) {
+		case models.TokenTypeRBracket:
+			return j + 1
+		case models.TokenTypeSemicolon, models.TokenTypeEOF, models.TokenTypeLBracket:
+			return -1
+		}
+	}
+	return -1
+}
+
 // granteeNameAt reports whether a grantee name (an identifier, a word or a
 // string) starts at token index i.
 func (c *txnCursor) granteeNameAt(i int) bool {
 	switch c.typeAt(i) {
-	case models.TokenTypeString, models.TokenTypeSingleQuotedString:
+	case models.TokenTypeString, models.TokenTypeSingleQuotedString, models.TokenTypeLBracket:
 		return true
 	case models.TokenTypeComma, models.TokenTypeSemicolon, models.TokenTypeEOF:
 		return false
@@ -243,6 +271,13 @@ func (c *txnCursor) grantOptions() error {
 			c.i++ // Oracle REVOKE ... FORCE
 		case "IDENTIFIED":
 			c.i++
+			if c.accept("VIA") {
+				// MariaDB: IDENTIFIED VIA plugin [USING 'x'] [OR plugin ...]
+				if err := c.mariadbAuth(); err != nil {
+					return err
+				}
+				continue
+			}
 			if c.accept("WITH") {
 				if !c.p.isNamePartAt(c.i) && !c.acceptString() {
 					return c.fail("authentication plugin")
@@ -257,6 +292,12 @@ func (c *txnCursor) grantOptions() error {
 				return err
 			}
 			c.accept("PASSWORD")
+			if c.accept("RANDOM") {
+				if err := c.expect("PASSWORD"); err != nil {
+					return err
+				}
+				continue
+			}
 			if !c.acceptString() {
 				if !c.p.isNamePartAt(c.i) {
 					return c.fail("password")
@@ -313,7 +354,10 @@ func (c *txnCursor) grantWithOption() error {
 			if err := c.expect("OPTION"); err != nil {
 				return err
 			}
-			return nil
+			if !c.resourceLimit() {
+				return nil
+			}
+			continue // MySQL: WITH GRANT OPTION MAX_QUERIES_PER_HOUR n
 		case "ADMIN", "INHERIT", "SET":
 			c.i++
 			if !c.accept("OPTION") && !c.accept("TRUE") && !c.accept("FALSE") {
@@ -374,7 +418,10 @@ func (c *txnCursor) resourceLimit() bool {
 // ISSUER | CIPHER} 'text' [[AND] ...]}.
 func (c *txnCursor) grantRequire() error {
 	switch {
-	case c.accept("NONE"), c.accept("SSL"), c.accept("X509"):
+	case c.accept("NONE"), c.accept("SSL"):
+		return nil
+	case c.i < len(c.p.tokens) && strings.EqualFold(c.p.tokens[c.i].Token.Value, "X509"):
+		c.i++
 		return nil
 	}
 	n := 0
@@ -394,6 +441,40 @@ func (c *txnCursor) grantRequire() error {
 		}
 		return nil
 	}
+}
+
+// mariadbAuth consumes plugin [{USING | AS} 'auth'] [OR plugin ...] after
+// MariaDB's IDENTIFIED VIA.
+func (c *txnCursor) mariadbAuth() error {
+	for {
+		if !c.p.isNamePartAt(c.i) {
+			return c.fail("authentication plugin")
+		}
+		c.i = c.p.nameEnd(c.i)
+		if c.accept("USING") || c.accept("AS") {
+			if !c.acceptString() {
+				// PASSWORD('x')
+				c.i = c.p.nameEnd(c.i)
+				if c.i = c.p.groupEnd(c.i); c.i < 0 {
+					return c.fail("string")
+				}
+			}
+		}
+		if !c.accept("OR") {
+			return nil
+		}
+	}
+}
+
+// copyString consumes a COPY file name or option value: a string, an
+// escape string (E'...') or a dollar-quoted string.
+func (c *txnCursor) copyString() bool {
+	switch c.typeAt(c.i) {
+	case models.TokenTypeEscapedStringLiteral, models.TokenTypeDollarQuotedString:
+		c.i++
+		return true
+	}
+	return c.acceptString()
 }
 
 // copyEnd returns the index after the PostgreSQL COPY statement starting at
@@ -425,12 +506,21 @@ func (p *Parser) copyEnd(start int) (int, error) {
 	}
 	switch {
 	case c.accept("PROGRAM"):
-		if !c.acceptString() {
+		if !c.copyString() {
 			return 0, c.fail("command")
 		}
-	case c.acceptString(), c.accept("STDIN"), c.accept("STDOUT"):
+	case c.copyString(), c.accept("STDIN"), c.accept("STDOUT"):
 	default:
 		return 0, c.fail("file name, PROGRAM, STDIN or STDOUT")
+	}
+	if c.accept("USING") {
+		// USING DELIMITERS 'd' (before PostgreSQL 7.3)
+		if err := c.expect("DELIMITERS"); err != nil {
+			return 0, err
+		}
+		if !c.copyString() {
+			return 0, c.fail("string")
+		}
 	}
 	c.accept("WITH")
 	if c.typeAt(c.i) == models.TokenTypeLParen {
@@ -461,10 +551,10 @@ func (c *txnCursor) copyLegacyOptions() error {
 		switch c.word() {
 		case "BINARY", "OIDS", "FREEZE", "CSV", "HEADER":
 			c.i++
-		case "DELIMITER", "NULL", "QUOTE", "ESCAPE", "ENCODING":
+		case "DELIMITER", "DELIMITERS", "NULL", "QUOTE", "ESCAPE", "ENCODING":
 			c.i++
 			c.accept("AS")
-			if !c.acceptString() {
+			if !c.copyString() {
 				return c.fail("string")
 			}
 		case "FORCE":

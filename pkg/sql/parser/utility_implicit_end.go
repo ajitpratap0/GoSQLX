@@ -100,6 +100,12 @@ const (
 	// CREATE FUNCTION / PROCEDURE / TRIGGER / EVENT / RULE / TASK / VIEW).
 	// It ends where that definition ends (see lineBodyEnd).
 	implicitLineBody
+	// implicitLineOptions: outside SQL Server, a statement of names and
+	// options that may span lines (LOAD DATA, CREATE of an object without
+	// a body, a routine after its quoted body). It ends like
+	// implicitLineDDL, and also at a statement word on the same line (see
+	// sameLineStatementAt).
+	implicitLineOptions
 )
 
 // tsqlRoutineObjects are the objects whose CREATE / ALTER body runs to the
@@ -161,6 +167,9 @@ func (p *Parser) implicitEndAt(i, start int, policy implicitPolicy, blk *blockSc
 		return grantee && p.startsNewLineStatement(i, start)
 	case implicitLineDDL:
 		return p.startsNewLineDDL(i, start, false)
+	case implicitLineOptions:
+		return p.startsNewLineDDL(i, start, false) ||
+			(!p.startsLine(i) && p.sameLineStatementAt(i, start))
 	case implicitLineSchema:
 		return p.startsNewLineDDL(i, start, true)
 	case implicitDDL:
@@ -384,7 +393,7 @@ func (p *Parser) lineEndPolicy(start int) implicitPolicy {
 		return implicitLineDDL
 	case "LOAD":
 		// LOAD DATA ... [SET col = expr, ...]: SET belongs to it.
-		return implicitLineDDL
+		return implicitLineOptions
 	case "PREPARE":
 		return implicitLineBody
 	case "DECLARE":
@@ -406,6 +415,9 @@ func (p *Parser) lineEndPolicy(start int) implicitPolicy {
 		case w == "SCHEMA" && word == "CREATE":
 			return implicitLineSchema
 		case lineClosedObjects[w]:
+			if word == "CREATE" {
+				return implicitLineOptions
+			}
 			return implicitLineDDL
 		}
 		return implicitNone
@@ -501,7 +513,8 @@ func (p *Parser) startsNewStatementAnywhere(i int) bool {
 // a transaction word (Oracle's SET TRANSACTION USE ROLLBACK SEGMENT s),
 // VACUUM ANALYZE, DEALLOCATE PREPARE, LOCK ... SHARE UPDATE EXCLUSIVE
 // MODE, FLUSH TABLES WITH READ LOCK, Oracle's FLASHBACK TABLE t TO BEFORE
-// DROP, MySQL's ANALYZE TABLE t {UPDATE |
+// DROP, Snowflake's EXECUTE AS CALLER, BigQuery's GRANT TO (...), MySQL's
+// ANALYZE TABLE t {UPDATE |
 // DROP} HISTOGRAM and Oracle's ANALYZE ... DELETE STATISTICS. SHOW
 // (SHOW CREATE TABLE), ClickHouse's SYSTEM (SYSTEM DROP DNS CACHE) and XA
 // (XA COMMIT 'x') name statements in their grammar and end only at the
@@ -533,6 +546,22 @@ func (p *Parser) sameLineStatementAt(i, start int) bool {
 	case "PREPARE":
 		if lead == "DEALLOCATE" {
 			return false
+		}
+	case "REPLACE":
+		if lead == "LOAD" {
+			return false // LOAD DATA INFILE 'f' REPLACE INTO TABLE t
+		}
+	case "WITH":
+		if p.utilityWord(i+1) == "CHECK" {
+			return false // CREATE POLICY ... WITH CHECK (cond)
+		}
+	case "EXECUTE":
+		if p.utilityWord(i+1) == "AS" {
+			return false // Snowflake CREATE PROCEDURE ... EXECUTE AS CALLER
+		}
+	case "GRANT":
+		if p.utilityWord(i+1) == "TO" {
+			return false // BigQuery CREATE ROW ACCESS POLICY ... GRANT TO (...)
 		}
 	case "LOCK":
 		if prev := p.utilityWord(i - 1); prev == "READ" || prev == "WRITE" {

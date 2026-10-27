@@ -574,3 +574,79 @@ func TestParser_RecoveryAfterFailedStatementWithGOLine(t *testing.T) {
 		t.Fatalf("recovery shapes = %s, want the batches after the GO line", got)
 	}
 }
+
+// Review follow-ups: forms main accepted that the statement grammars must
+// keep accepting, and same-line statements after option lists.
+func TestParser_UtilityGrammarReviewCases(t *testing.T) {
+	const missingSemi = "error: end of statement"
+	pg, my, gen := keywords.DialectPostgreSQL, keywords.DialectMySQL, keywords.DialectGeneric
+	snow, ch := keywords.DialectSnowflake, keywords.DialectClickHouse
+	runShapeCases(t, []shapeCase{
+		// COPY file names and old option spellings
+		{"copy escape string", pg, "COPY t FROM E'/x'", "[Utility(COPY)]"},
+		{"copy dollar string", pg, "COPY t FROM $$/x$$", "[Utility(COPY)]"},
+		{"copy using delimiters", pg, "COPY t FROM STDIN USING DELIMITERS ','", "[Utility(COPY)]"},
+		{"copy with delimiters", pg, "COPY t FROM STDIN WITH DELIMITERS ','", "[Utility(COPY)]"},
+		{"generic copy legacy", gen, "COPY t FROM '/x' WITH DELIMITER AS ','", "[Utility(COPY)]"},
+		{"generic copy then drop", gen, "COPY t FROM '/x' DROP TABLE t", missingSemi},
+		{"generic copy redshift options", gen, "COPY t FROM 's3://b/x' IAM_ROLE 'arn' FORMAT AS PARQUET", "[Utility(COPY)]"},
+		{"redshift copy options", keywords.DialectRedshift, "COPY t FROM 's3://b/x' IAM_ROLE 'arn' CSV", "[Utility(COPY)]"},
+		// BigQuery LOAD DATA
+		{"bigquery load into", keywords.DialectBigQuery, "LOAD DATA INTO t FROM FILES (format='CSV', uris=['gs://x'])",
+			"[Utility(LOAD)]"},
+		{"bigquery load overwrite", keywords.DialectBigQuery, "LOAD DATA OVERWRITE t FROM FILES (format='CSV')",
+			"[Utility(LOAD)]"},
+		// GRANT grantees and options
+		{"mysql current_user()", my, "GRANT ALL ON db.* TO CURRENT_USER()", "[Utility(GRANT)]"},
+		{"mysql require x509", my, "GRANT SELECT ON db.t TO u REQUIRE X509 WITH GRANT OPTION", "[Utility(GRANT)]"},
+		{"mysql grant option then limit", my, "GRANT SELECT ON db.t TO u WITH GRANT OPTION MAX_QUERIES_PER_HOUR 1",
+			"[Utility(GRANT)]"},
+		{"mysql random password", my, "GRANT SELECT ON mysql.* TO u IDENTIFIED BY RANDOM PASSWORD", "[Utility(GRANT)]"},
+		{"mariadb identified via", keywords.DialectMariaDB,
+			"GRANT SELECT ON db.t TO 'u'@'%' IDENTIFIED VIA ed25519 USING PASSWORD('x') OR unix_socket", "[Utility(GRANT)]"},
+		{"snowflake application", snow, "GRANT USAGE ON DATABASE d TO APPLICATION a", "[Utility(GRANT)]"},
+		{"snowflake identifier()", snow, "GRANT SELECT ON TABLE db.sc.t TO ROLE IDENTIFIER('r')", "[Utility(GRANT)]"},
+		{"bracket grantee generic", gen, "GRANT SELECT ON dbo.Customers TO [AppUser]", "[Utility(GRANT)]"},
+		{"bracket grantee mysql", my, "GRANT SELECT ON [dbo].[t] TO [u]", "[Utility(GRANT)]"},
+		{"bracket grantee then drop", pg, "GRANT SELECT ON [dbo].[t] TO [u] DROP TABLE t", missingSemi},
+		// Same-line statements after option lists
+		{"load data then select", my, "LOAD DATA INFILE '/x' INTO TABLE t SELECT 2", missingSemi},
+		{"load data columns then select", my, "LOAD DATA INFILE '/x' INTO TABLE t (a,b) SELECT 2", missingSemi},
+		{"load data set then select", my, "LOAD DATA INFILE '/x' INTO TABLE t SET a = 1 SELECT 2", missingSemi},
+		{"load data ignore lines then select", my, "LOAD DATA INFILE '/x' INTO TABLE t IGNORE 1 LINES SELECT 2", missingSemi},
+		{"load data replace", my,
+			"LOAD DATA INFILE '/x' REPLACE INTO TABLE t CHARACTER SET utf8 IGNORE 1 LINES (a, @b) SET b = @b",
+			"[Utility(LOAD)]"},
+		{"pg function then select", pg, "CREATE FUNCTION f() RETURNS int AS $$ select 1 $$ LANGUAGE sql SELECT 2", missingSemi},
+		{"pg procedure then select", pg, "CREATE PROCEDURE p() LANGUAGE sql AS $$ select 1 $$ SELECT 2", missingSemi},
+		{"pg event trigger then select", pg, "CREATE EVENT TRIGGER et ON ddl_command_start EXECUTE FUNCTION f() SELECT 2",
+			missingSemi},
+		{"pg event trigger", pg,
+			"CREATE EVENT TRIGGER et ON ddl_command_start WHEN TAG IN ('DROP TABLE') EXECUTE FUNCTION f()",
+			"[Utility(CREATE EVENT TRIGGER)]"},
+		{"pg policy with check", pg, "CREATE POLICY p ON t FOR UPDATE USING (a = 1) WITH CHECK (b = 2)",
+			"[Utility(CREATE POLICY)]"},
+		{"snowflake function then select", snow, "CREATE FUNCTION f() RETURNS INT AS 'select 1' SELECT 2", missingSemi},
+		{"snowflake stream then select", snow, "CREATE STREAM s ON TABLE t SELECT 2", missingSemi},
+		{"snowflake pipe then select", snow, "CREATE PIPE p AUTO_INGEST = TRUE AS COPY INTO t FROM @s\nSELECT 2", missingSemi},
+		{"snowflake pipe", snow, "CREATE PIPE p AS COPY INTO t FROM @s FILE_FORMAT = (TYPE = 'CSV')",
+			"[Utility(CREATE PIPE)]"},
+		{"snowflake alert then select", snow,
+			"CREATE ALERT a WAREHOUSE = w SCHEDULE = '1 minute' IF (EXISTS (SELECT 1 FROM t)) THEN CALL p()\nSELECT 2",
+			missingSemi},
+		{"snowflake execute as caller", snow,
+			"CREATE OR REPLACE PROCEDURE p() RETURNS STRING LANGUAGE SQL EXECUTE AS CALLER AS $$ BEGIN RETURN 1; END $$",
+			"[Utility(CREATE PROCEDURE)]"},
+		{"clickhouse function then select", ch, "CREATE FUNCTION f AS (x) -> x + 1 SELECT 2", missingSemi},
+		{"clickhouse function then select line", ch, "CREATE FUNCTION f AS (x) -> x + 1\nSELECT 2", missingSemi},
+		{"bigquery row access policy", keywords.DialectBigQuery,
+			"CREATE ROW ACCESS POLICY p ON t GRANT TO ('x') FILTER USING (true)", "[Utility(CREATE ROW)]"},
+		// Oracle-style routines: accepted without a dialect, not in
+		// PostgreSQL or MySQL.
+		{"generic plsql procedure", gen, "CREATE OR REPLACE PROCEDURE p IS BEGIN NULL; END p;", "[Utility(CREATE PROCEDURE)]"},
+		{"generic java function", gen, "CREATE FUNCTION f RETURN NUMBER AS LANGUAGE JAVA NAME 'X.f() return int'",
+			"[Utility(CREATE FUNCTION)]"},
+		{"pg plsql procedure", pg, "CREATE OR REPLACE PROCEDURE p IS BEGIN NULL; END p;", missingSemi},
+		{"pg named argument needs a name", pg, "SELECT f(select := 1)", "error: "},
+	})
+}

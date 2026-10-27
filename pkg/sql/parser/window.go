@@ -70,7 +70,8 @@ func (p *Parser) parseFunctionCall(funcName string) (*ast.FunctionCall, error) {
 			// back with =>).
 			if (p.isIdentifier() || p.isWordToken()) &&
 				(p.peekToken().Token.Type == models.TokenTypeRArrow ||
-					p.peekToken().Token.Type == models.TokenTypeAssignment && p.alterDialect(txnPostgres)) {
+					p.peekToken().Token.Type == models.TokenTypeAssignment && p.alterDialect(txnPostgres) &&
+						(p.isIdentifier() || p.isNonReservedKeyword())) {
 				namePos := p.currentLocation()
 				argName := p.currentToken.Token.Value
 				p.advance() // name

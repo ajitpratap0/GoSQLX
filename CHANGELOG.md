@@ -195,8 +195,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Utility statements are accepted only in the dialects that have them
   (`VACUUM` in PostgreSQL/SQLite, `LISTEN`/`NOTIFY`/`CLUSTER`/`DISCARD` in
   PostgreSQL, `FLUSH`/`OPTIMIZE`/`LOCK TABLES`/`KILL` in MySQL-family, `PRAGMA`
-  in SQLite, `DO $$ ... $$` in PostgreSQL, `LOAD DATA` in MySQL-family, `SHOW`
-  not in SQLite/SQL Server/Oracle, no `SET`/`GRANT` in SQLite, ...); a parser
+  in SQLite, `DO $$ ... $$` in PostgreSQL, `LOAD DATA` in MySQL-family and
+  BigQuery, `SHOW` not in SQLite/SQL Server/Oracle, no `SET`/`GRANT` in SQLite, ...); a parser
   without a dialect still accepts all of them.
 - MySQL / MariaDB: `:=` inside an expression assigns only to a user variable
   (`SELECT @v := 1`); `f(a := 1)` and `arr[1:=2]` are errors. PostgreSQL

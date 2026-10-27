@@ -71,7 +71,7 @@ type lineBody struct {
 // hold a statement outside SQL Server.
 var lineBodyObjects = map[string]bool{
 	"FUNCTION": true, "PROCEDURE": true, "TRIGGER": true, "EVENT": true,
-	"RULE": true, "TASK": true, "VIEW": true,
+	"RULE": true, "TASK": true, "VIEW": true, "PIPE": true, "ALERT": true,
 }
 
 // createObjectAt returns the index of the object word of the CREATE or
@@ -245,14 +245,30 @@ func (p *Parser) lineBodyStart(start int) lineBody {
 			do++
 		}
 		return lineBody{at: do, kind: bodyRuleAction}
-	case "TASK":
-		// CREATE TASK name [options] AS statement (Snowflake).
+	case "TASK", "PIPE":
+		// CREATE TASK name [options] AS statement, CREATE PIPE name
+		// [options] AS COPY INTO ... (Snowflake).
 		as := p.topLevelWord(obj+1, "AS")
 		if as < 0 {
 			return lineBody{fallback: implicitLineDDL}
 		}
 		return p.bodyAt(as+1, false)
+	case "ALERT":
+		// CREATE ALERT name ... IF (EXISTS (query)) THEN statement
+		// (Snowflake).
+		then := p.topLevelWord(obj+1, "THEN")
+		if then < 0 {
+			return lineBody{fallback: implicitLineDDL}
+		}
+		return p.bodyAt(then+1, false)
 	case "EVENT":
+		if p.utilityWord(obj+1) == "TRIGGER" {
+			// PostgreSQL CREATE EVENT TRIGGER ... EXECUTE FUNCTION f()
+			if p.utilityWord(start) == "ALTER" {
+				return lineBody{fallback: implicitLineDDL}
+			}
+			return p.triggerBodyStart(obj + 2)
+		}
 		// CREATE / ALTER EVENT name ... DO body (MySQL).
 		do := p.topLevelWord(obj+1, "DO")
 		if do < 0 {
@@ -390,6 +406,7 @@ func (p *Parser) routineBodyStart(from int) lineBody {
 	}
 	i = p.nameEnd(i)
 	mysql := p.isMySQLFamily()
+	generic := p.alterMask() == dialectAll
 	for ; i < len(p.tokens); i++ {
 		tok := &p.tokens[i]
 		switch tok.Token.Type {
@@ -404,18 +421,34 @@ func (p *Parser) routineBodyStart(from int) lineBody {
 		case models.TokenTypeString, models.TokenTypeSingleQuotedString,
 			models.TokenTypeDollarQuotedString:
 			if p.utilityWord(i-1) == "AS" {
-				return lineBody{fallback: implicitLineDDL}
+				// A quoted body: only options follow it.
+				return lineBody{fallback: implicitLineOptions}
 			}
 			continue
 		}
-		if p.utilityWord(i-1) == "RETURNS" {
+		if prev := p.utilityWord(i - 1); prev == "RETURNS" || (prev == "RETURN" && generic) {
 			continue // the return type: RETURNS SET('a'), RETURNS TABLE (...)
+		}
+		if w := p.utilityWord(i); w == "AS" || w == "IS" {
+			switch {
+			case generic && !p.isStringAt(i+1):
+				// PL/SQL (IS | AS) BEGIN ... END name, AS LANGUAGE JAVA:
+				// without a dialect, run to the next ';' as before.
+				return lineBody{fallback: implicitNone}
+			case w == "AS" && i+1 < len(p.tokens) && p.tokens[i+1].Token.Type == models.TokenTypeLParen:
+				// AS (expr): a ClickHouse lambda or a BigQuery SQL
+				// function; only options follow.
+				return lineBody{fallback: implicitLineOptions}
+			}
 		}
 		if p.opensBlockAt(i) {
 			return lineBody{at: i, kind: bodyBlock}
 		}
 		switch w := p.utilityWord(i); w {
 		case "RETURN":
+			if generic && p.topLevelIsAsAfter(i+1) {
+				continue // Oracle: RETURN type {IS | AS}
+			}
 			return lineBody{at: i, kind: bodyReturn}
 		case "SET":
 			// PostgreSQL's SET configuration_parameter option; a statement
@@ -436,6 +469,17 @@ func (p *Parser) routineBodyStart(from int) lineBody {
 		}
 	}
 	return lineBody{fallback: implicitNone}
+}
+
+// topLevelIsAsAfter reports whether an IS or AS follows the type name
+// starting at token index i (Oracle's FUNCTION f RETURN NUMBER AS ...).
+func (p *Parser) topLevelIsAsAfter(i int) bool {
+	i = p.nameEnd(i)
+	if e := p.groupEnd(i); e > 0 {
+		i = e
+	}
+	w := p.utilityWord(i)
+	return w == "IS" || w == "AS"
 }
 
 // lineBodyEnd returns the end of the verbatim statement starting at token

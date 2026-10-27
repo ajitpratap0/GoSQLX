@@ -161,6 +161,20 @@ func (p *Parser) parseUtilityStatement() (stmt ast.Statement, ok bool, err error
 		if p.dialect == string(keywords.DialectPostgreSQL) {
 			return p.parseGrammarStatement(word, p.copyEnd)
 		}
+		if next != "INTO" {
+			// Without a dialect (and in Redshift) COPY takes the
+			// PostgreSQL grammar when it fits; Redshift's many options
+			// fall back to the verbatim form.
+			saved, savedTok := p.currentPos, p.currentToken
+			if end, err := p.copyEnd(saved); err == nil && (end >= len(p.tokens) ||
+				p.tokens[end].Token.Type == models.TokenTypeSemicolon ||
+				p.tokens[end].Token.Type == models.TokenTypeEOF ||
+				p.startsLine(end) || p.startsNewStatementAnywhere(end)) {
+				p.currentPos, p.currentToken = saved, savedTok
+				return p.parseGrammarStatement(word, p.copyEnd)
+			}
+			p.currentPos, p.currentToken = saved, savedTok
+		}
 		return p.parseVerbatimArgs(word)
 	case "DO":
 		// PostgreSQL: DO [LANGUAGE lang] 'code' (usually $$ ... $$);
@@ -179,8 +193,10 @@ func (p *Parser) parseUtilityStatement() (stmt ast.Statement, ok bool, err error
 		}
 		return p.parseVerbatimArgs(word)
 	case "LOAD":
-		// PostgreSQL has only LOAD 'library'; LOAD DATA is MySQL's.
-		if p.alterMask() == dialectPostgres && !p.isStringAt(p.currentPos+1) {
+		// PostgreSQL has only LOAD 'library'; LOAD DATA is MySQL's and
+		// BigQuery's.
+		if p.alterMask() == dialectPostgres && !p.isStringAt(p.currentPos+1) ||
+			p.alterMask() == dialectBigQuery && next != "DATA" {
 			return nil, false, nil
 		}
 		return p.parseVerbatimArgs(word)
@@ -231,7 +247,8 @@ var utilityDialects = map[string]alterDialects{
 	"DO":         dialectPostgres | dialectMySQLFamily,
 	"DECLARE": txnPostgres | dialectSQLServer | dialectOracle | dialectSnowflake |
 		dialectBigQuery,
-	"LOAD":       dialectMySQLFamily | dialectPostgres, // PostgreSQL: LOAD 'library'
+	"LOAD": dialectMySQLFamily | dialectPostgres | // PostgreSQL: LOAD 'library'
+		dialectBigQuery, // BigQuery: LOAD DATA {INTO | OVERWRITE} t FROM FILES (...)
 	"RENAME":     dialectMySQLFamily | dialectClickHouse | dialectOracle,
 	"REINDEX":    dialectPostgres | dialectSQLite,
 	"CHECKPOINT": dialectPostgres | dialectSQLServer,

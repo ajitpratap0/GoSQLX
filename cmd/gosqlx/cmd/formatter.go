@@ -320,6 +320,13 @@ func (f *Formatter) formatSQLText(sql string) (string, error) {
 	return formatted, nil
 }
 
+func normalizedComment(text string) string {
+	if strings.HasPrefix(text, "--") {
+		text = strings.TrimSuffix(text, "\r")
+	}
+	return strings.ReplaceAll(strings.ReplaceAll(text, "\r\n", "\n"), "\r", "\n")
+}
+
 // verifyComments requires the formatted output to contain exactly the
 // comments of the input, so format -i can never delete or invent one.
 func verifyComments(input []models.Comment, formatted, dialect string) error {
@@ -333,13 +340,13 @@ func verifyComments(input []models.Comment, formatted, dialect string) error {
 	}
 	pool := make(map[string]int, len(input))
 	for _, c := range tkz.Comments {
-		pool[c.Text]++
+		pool[normalizedComment(c.Text)]++
 	}
 	for _, c := range input {
-		if pool[c.Text] == 0 {
+		if pool[normalizedComment(c.Text)] == 0 {
 			return fmt.Errorf("formatted output loses the comment %q (formatter bug; input left unchanged)", c.Text)
 		}
-		pool[c.Text]--
+		pool[normalizedComment(c.Text)]--
 	}
 	for text, n := range pool {
 		if n > 0 {

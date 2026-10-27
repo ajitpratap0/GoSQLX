@@ -20,6 +20,9 @@ func TestFormatCommentsStayWithTheirStatements(t *testing.T) {
 		order []string
 	}{
 		{"sqlserver",
+			"SELECT 1\n-- before go\nGO\n-- after go\nSELECT 2",
+			[]string{"SELECT 1", "-- before go", "GO", "-- after go", "SELECT 2"}},
+		{"sqlserver",
 			"-- A\nSELECT 1\nSELECT 2;\n-- B: the proc\nCREATE PROC p AS BEGIN SELECT 1; END;\n",
 			[]string{"-- A", "SELECT 1", "SELECT 2", "-- B: the proc", "CREATE PROC"}},
 		{"mysql",

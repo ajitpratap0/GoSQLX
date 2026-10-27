@@ -55,6 +55,16 @@ func TestFormatRoundTrip_UtilityAndIdentifiers(t *testing.T) {
 		{keywords.DialectMySQL, "SELECT `my col` FROM t", "SELECT `my col`\nFROM t"},
 		{keywords.DialectSQLServer, "SELECT [Group] FROM t", "SELECT [Group]\nFROM t"},
 		{keywords.DialectSQLServer, "SELECT @@VERSION", "SELECT @@VERSION"},
+		{keywords.DialectPostgreSQL, "ALTER DEFAULT PRIVILEGES FOR ROLE app IN SCHEMA s GRANT SELECT ON TABLES TO ro",
+			"ALTER DEFAULT PRIVILEGES FOR ROLE app IN SCHEMA s GRANT SELECT ON TABLES TO ro"},
+		{keywords.DialectPostgreSQL, "PREPARE s (int) AS SELECT * FROM t WHERE id = $1",
+			"PREPARE s (int) AS SELECT * FROM t WHERE id = $1"},
+		{keywords.DialectPostgreSQL, "COPY t (a, b) FROM STDIN WITH (FORMAT csv)", "COPY t (a, b) FROM STDIN WITH (FORMAT csv)"},
+		{keywords.DialectPostgreSQL, "SELECT make_interval(days := 7)", "SELECT make_interval(days => 7)"},
+		{keywords.DialectMySQL, "CREATE TRIGGER tr BEFORE INSERT ON t FOR EACH ROW SET NEW.a = 1",
+			"CREATE TRIGGER tr BEFORE INSERT ON t FOR EACH ROW SET NEW.a = 1"},
+		{keywords.DialectMariaDB, "DELETE `history` FROM history", "DELETE `history`\nFROM history"},
+		{keywords.DialectMariaDB, "DELETE history FROM history", "DELETE HISTORY FROM history"},
 	}
 	for _, tt := range tests {
 		t.Run(string(tt.dialect)+"/"+tt.sql, func(t *testing.T) {

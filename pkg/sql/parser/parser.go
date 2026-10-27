@@ -449,33 +449,10 @@ func (p *Parser) parseTokens(tokens []models.TokenWithSpan) (*ast.AST, error) {
 			p.advance()
 			continue
 		}
-		start := p.currentToken.Start
-		if separator, ok := p.parseBatchSeparator(); ok {
-			result.Statements = append(result.Statements, separator)
-			result.StatementStarts = append(result.StatementStarts, start)
-			continue
-		}
-
-		startPos := p.currentPos
-		stmt, err := p.parseStatement()
-		if err == nil {
-			result.Statements = append(result.Statements, stmt)
-			result.StatementStarts = append(result.StatementStarts, start)
-		}
-		if p.IsSQLServer() { // batchLineError returns err unchanged elsewhere
-			_, err = p.batchLineError(startPos, err)
-		}
-		if err != nil {
+		if err := p.parseScriptItem(result); err != nil {
 			// Clean up the AST on error
 			ast.ReleaseAST(result)
 			return nil, err
-		}
-
-		// Optionally consume semicolon after statement
-		if p.isType(models.TokenTypeSemicolon) {
-			p.advance()
-		} else if !p.isType(models.TokenTypeEOF) { // noteStatementEnd has nothing to do at the end
-			p.noteStatementEnd()
 		}
 	}
 
@@ -489,6 +466,40 @@ func (p *Parser) parseTokens(tokens []models.TokenWithSpan) (*ast.AST, error) {
 	}
 
 	return result, nil
+}
+
+// parseScriptItem parses the T-SQL GO line or the statement at the current
+// token, appends it to result and consumes the ';' after a statement; it is
+// the loop body of parseTokens and parseContextTokens. In SQL Server a
+// statement that ran across a GO line is an error (see batchLineError).
+// When no ';' follows, noteStatementEnd decides whether the next token may
+// start a statement.
+func (p *Parser) parseScriptItem(result *ast.AST) error {
+	start := p.currentToken.Start
+	if separator, ok := p.parseBatchSeparator(); ok {
+		result.Statements = append(result.Statements, separator)
+		result.StatementStarts = append(result.StatementStarts, start)
+		return nil
+	}
+	startPos := p.currentPos
+	stmt, err := p.parseStatement()
+	if err == nil {
+		result.Statements = append(result.Statements, stmt)
+		result.StatementStarts = append(result.StatementStarts, start)
+	}
+	if p.IsSQLServer() { // batchLineError returns err unchanged elsewhere
+		_, err = p.batchLineError(startPos, err)
+	}
+	if err != nil {
+		return err
+	}
+	// Optionally consume semicolon after statement
+	if p.isType(models.TokenTypeSemicolon) {
+		p.advance()
+	} else if !p.isType(models.TokenTypeEOF) { // noteStatementEnd has nothing to do at the end
+		p.noteStatementEnd()
+	}
+	return nil
 }
 
 // ParseFromModelTokens parses tokenizer output ([]models.TokenWithSpan) directly into an AST.
@@ -661,33 +672,10 @@ func (p *Parser) parseContextTokens(ctx context.Context, tokens []models.TokenWi
 			p.advance()
 			continue
 		}
-		start := p.currentToken.Start
-		if separator, ok := p.parseBatchSeparator(); ok {
-			result.Statements = append(result.Statements, separator)
-			result.StatementStarts = append(result.StatementStarts, start)
-			continue
-		}
-
-		startPos := p.currentPos
-		stmt, err := p.parseStatement()
-		if err == nil {
-			result.Statements = append(result.Statements, stmt)
-			result.StatementStarts = append(result.StatementStarts, start)
-		}
-		if p.IsSQLServer() { // batchLineError returns err unchanged elsewhere
-			_, err = p.batchLineError(startPos, err)
-		}
-		if err != nil {
+		if err := p.parseScriptItem(result); err != nil {
 			// Clean up the AST on error
 			ast.ReleaseAST(result)
 			return nil, err
-		}
-
-		// Optionally consume semicolon after statement
-		if p.isType(models.TokenTypeSemicolon) {
-			p.advance()
-		} else if !p.isType(models.TokenTypeEOF) { // noteStatementEnd has nothing to do at the end
-			p.noteStatementEnd()
 		}
 	}
 
@@ -927,7 +915,7 @@ func (p *Parser) parseStatement() (ast.Statement, error) {
 		// Handle keyword-type tokens that have dedicated parsers.
 		// PRAGMA is a SQLite statement keyword tokenized as TokenTypeKeyword
 		// when the SQLite dialect keyword set is active.
-		if strings.EqualFold(p.currentToken.Token.Value, "PRAGMA") {
+		if strings.EqualFold(p.currentToken.Token.Value, "PRAGMA") && p.alterDialect(dialectSQLite) {
 			p.advance()
 			return p.parsePragmaStatement()
 		}
@@ -943,8 +931,9 @@ func (p *Parser) parseStatement() (ast.Statement, error) {
 	case models.TokenTypeIdentifier:
 		// PRAGMA may be tokenized as IDENTIFIER when no dialect-specific keyword
 		// set is active (e.g. when using the default PostgreSQL tokenizer dialect).
-		// Support it as a statement keyword regardless of tokenizer dialect.
-		if strings.EqualFold(p.currentToken.Token.Value, "PRAGMA") {
+		// Support it as a statement keyword regardless of tokenizer dialect;
+		// only SQLite (and a parser without a dialect) has the statement.
+		if strings.EqualFold(p.currentToken.Token.Value, "PRAGMA") && p.alterDialect(dialectSQLite) {
 			p.advance()
 			return p.parsePragmaStatement()
 		}

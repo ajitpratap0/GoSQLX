@@ -157,6 +157,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Docs**: removed `parser.NewTokenConverter`, `SetMaxTokens`,
   `SetMaxRecursionDepth` and the `parser.max_tokens` config key, none of which
   exist; the limits are constants.
+- **Parser**: PostgreSQL `ALTER DEFAULT PRIVILEGES [FOR ROLE r] [IN SCHEMA s]
+  GRANT | REVOKE ...` parses and round-trips; MariaDB ``DELETE `history` FROM
+  history`` stays a multi-table delete when formatted (it was written back as
+  `DELETE HISTORY`); a T-SQL `IF ... ELSE IF ...` chain of any length is one
+  statement, parsed in linear time (chains over ~100 branches hit the
+  recursion limit and swallowed the next statement); MySQL `ANALYZE TABLE t
+  UPDATE HISTOGRAM ...` and Oracle `ANALYZE TABLE t DELETE STATISTICS` are no
+  longer read as MariaDB's `ANALYZE <statement>`.
 
 ### Behavior changes
 - SQL Server: a line holding only `GO [n]` inside a statement is now a parse
@@ -177,10 +185,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Outside SQL Server, a utility statement (`SET`, `USE`, `GRANT`, `COPY`,
   `CALL`, ...) followed on the next line by another statement without `;` is
   an error; only a transaction statement on its own line is accepted without
-  a separator. Statements whose body may hold other statements (`CREATE
-  FUNCTION`/`TRIGGER`/`RULE`, `PREPARE ... AS`, `DECLARE ... CURSOR`) still
-  run to the next `;`, as does a second statement on the same line as a
-  `GRANT` or `COPY`.
+  a separator. Statements whose definition holds a statement (`PREPARE ...
+  AS`, `DECLARE ... CURSOR FOR`, `CREATE FUNCTION`/`PROCEDURE`/`TRIGGER`/
+  `EVENT`/`RULE`/`TASK`/`VIEW` with a single-statement, `RETURN` or
+  `BEGIN ... END` body, `LOAD DATA`) end with that definition, and `GRANT`,
+  `REVOKE`, PostgreSQL `COPY`, `CALL`, `VACUUM`, `ANALYZE`, `LISTEN`, ... end
+  with their grammar, so a statement after them without `;` is an error on the
+  same line as well.
+- Utility statements are accepted only in the dialects that have them
+  (`VACUUM` in PostgreSQL/SQLite, `LISTEN`/`NOTIFY`/`CLUSTER`/`DISCARD` in
+  PostgreSQL, `FLUSH`/`OPTIMIZE`/`LOCK TABLES`/`KILL` in MySQL-family, `PRAGMA`
+  in SQLite, `DO $$ ... $$` in PostgreSQL, `LOAD DATA` in MySQL-family, `SHOW`
+  not in SQLite/SQL Server/Oracle, no `SET`/`GRANT` in SQLite, ...); a parser
+  without a dialect still accepts all of them.
+- MySQL / MariaDB: `:=` inside an expression assigns only to a user variable
+  (`SELECT @v := 1`); `f(a := 1)` and `arr[1:=2]` are errors. PostgreSQL
+  `f(a := 1)` parses as a named argument, written back as `f(a => 1)`.
 - Transaction statements are checked against each dialect's grammar
   (`BEGIN banana` is rejected); `<=>` is accepted only in MySQL, MariaDB and
   PostgreSQL (pgvector), `==` only in SQLite and ClickHouse; an unbalanced

@@ -257,7 +257,7 @@ func (p *Parser) parsePrimaryExpression() (ast.Expression, error) {
 		}
 		ph := &ast.LiteralValue{Value: value, Type: "placeholder"}
 		// MySQL user-variable assignment: @rownum := @rownum + 1
-		if p.isVariableAssignment() {
+		if p.isVariableAssignment() && isUserVariable(ph) {
 			return p.parseVariableAssignment(ph)
 		}
 		return ph, nil

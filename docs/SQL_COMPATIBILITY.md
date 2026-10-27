@@ -25,7 +25,17 @@ retain their text rather than receiving a complete semantic AST.
 | Snowflake | 325 / 325 | 0 | 100% |
 | ClickHouse | 392 / 392 | 0 | 100% |
 
-Reproduce the ratchet and per-dialect summaries from the repository root:
+The table totals 2,788 statements and was checked with `scripts/dialect-audit`
+at commit `8d8c5272`. Reproduce one dialect's row from the repository root
+(replace `<d>` with a dialect string such as `mysql`); the last line of output
+reads, for example, `dialect=mysql total=405 passed=405 failed=0`:
+
+```sh
+go run ./scripts/dialect-audit -dialect <d> testdata/realworld/<d>/*.sql
+```
+
+The same command audits your own SQL files. To reproduce the ratchet and every
+per-dialect summary at once:
 
 ```sh
 go test ./pkg/gosqlx -run '^TestRealWorldCorpus$' -count=1
@@ -33,6 +43,12 @@ for dir in testdata/realworld/*/; do
   go run ./scripts/dialect-audit -dialect "$(basename "$dir")" "$dir"*.sql
 done
 ```
+
+`TestRealWorldCorpus` is a ratchet against `known_failures.txt`: a statement
+that fails and is not listed fails the test, and so does a listed statement
+that now passes, so the list can only shrink. Regenerate it with
+`go test ./pkg/gosqlx -run TestRealWorldCorpus -update-known-failures`.
+`BenchmarkRealWorldParse` and `BenchmarkRealWorldParseFormat` measure the corpus.
 
 SQL Server batch boundaries also have whole-script round-trip tests: the AST
 retains each `GO` as a `BatchSeparator`, including its optional repeat count,
@@ -469,6 +485,36 @@ MariaDB inherits all MySQL features (SHOW, DESCRIBE, REPLACE INTO, ON DUPLICATE 
 | **Type affinity** | ✅ Full | ⚠️ Partial | 30% | Flexible typing |
 | **WITHOUT ROWID** | ✅ Full | ✅ Full | 85% | CREATE TABLE option fully supported |
 | **Simplified syntax** | ✅ Full | ✅ Full | 85% | SQLite variations |
+
+### Statement syntax on main (not yet released)
+
+These forms are merged on `main` and listed under `[Unreleased]` in the
+CHANGELOG; they are not in a tagged release yet. Each example was parsed with
+`gosqlx.ParseWithDialect` and formatted with `gosqlx.FormatWithDialect` in the
+named dialect.
+
+| Syntax | Dialects | GoSQLX Parser | Notes |
+|--------|----------|---------------|-------|
+| **Multi-table UPDATE** | MySQL, MariaDB | ✅ Full | `UPDATE a JOIN b ON a.id = b.id SET a.x = b.x`; joins and extra targets live in `UpdateStatement.Extras` |
+| **Multi-table DELETE** | MySQL, MariaDB | ✅ Full | `DELETE a, b FROM a JOIN b ON a.id = b.id WHERE ...`; `DeleteStatement.Extras` |
+| **UPDATE / DELETE TOP** | SQL Server | ✅ Full | `UPDATE TOP (10) t SET ...`, `DELETE TOP (5) FROM t ...` |
+| **OUTPUT clause** | SQL Server | ✅ Full | `UPDATE ... OUTPUT inserted.id WHERE ...`, `DELETE ... OUTPUT deleted.id` |
+| **GO [n] batch separator** | SQL Server | ✅ Full | Kept as `ast.BatchSeparator` with its optional `RepeatCount`; repeated batches are not expanded. `SQL()` and `FormatAST` keep GO on its own line. Statement counts exclude GO. A `GO` line inside a statement is an error. Transpiling a GO script to another dialect returns an error |
+| **RETURNING ... INTO** | Oracle | ✅ Full | `UPDATE t SET x = 1 WHERE id = 2 RETURNING x INTO :v` |
+| **ARRAY JOIN / LIMIT BY** | ClickHouse | ✅ Full | `SELECT a FROM t ARRAY JOIN arr AS x LIMIT 1 BY a`. Parsed since earlier releases; AST walkers (`ast.Inspect`, `Walk`, security scanner, linter, table extraction) now reach `ARRAY JOIN` |
+| **MERGE with a VALUES source** | PostgreSQL, SQL Server | ✅ Full | `MERGE INTO t USING (VALUES (1, 'a')) AS s (id, val) ON ...`; the source's column alias list is kept when rendering |
+| **CREATE TABLE ... CLONE ... AT** | Snowflake | ✅ Full | `CREATE TABLE t2 CLONE t1 AT (TIMESTAMP => ...)`; walkers now reach the clone clause |
+| **CREATE / ALTER / DROP SEQUENCE** | PostgreSQL, Oracle, Snowflake | ⚠️ Partial | Parsed and kept as statement text (`UtilityStatement`); `AST.SQL()` no longer drops them. MariaDB has a full `CreateSequenceStatement` (see MariaDB-Specific Features) |
+| **EXPLAIN** | PostgreSQL, MySQL, SQLite | ✅ Full | `ExplainStatement` now retains the explained statement as an AST (`EXPLAIN ANALYZE ...`, SQLite `EXPLAIN QUERY PLAN ...`) |
+| **SQL\*Plus `/` line** | Oracle | ✅ Full | A line holding only `/` ends a statement in the parser and in `SplitStatements`; `/` with other SQL on the line is still division. Known gap: formatting drops the `/` lines |
+| **`<=>` operator** | MySQL, MariaDB, PostgreSQL | ✅ Full | Null-safe equality (MySQL family) and pgvector distance (PostgreSQL). Now rejected in every other dialect |
+| **`==` operator** | SQLite, ClickHouse | ✅ Full | Now rejected in every other dialect |
+
+Related grammar checks on `main`: outside SQL Server, a utility statement
+(`SET`, `USE`, `GRANT`, `COPY`, `CALL`, ...) followed on the next line by
+another statement without `;` is an error (E2002); transaction statements are
+checked against each dialect's grammar (`BEGIN banana` is rejected); an
+unbalanced SQL Server `BEGIN ... END` block is an error.
 
 ## SQL Standards Compliance
 

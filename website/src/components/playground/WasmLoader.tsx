@@ -1,6 +1,6 @@
 'use client';
 import { useState, useEffect, useRef } from "react";
-import type { HighlightData } from "./bridgeTypes";
+import type { HighlightData, TextData } from "./bridgeTypes";
 
 // Type declarations for the Go WASM runtime
 declare global {
@@ -16,17 +16,22 @@ declare global {
     gosqlxValidate(sql: string, dialect?: string): string;
     /** Absent in WASM binaries built before syntax highlighting was added. */
     gosqlxHighlight?: (sql: string, dialect?: string) => string;
+    /** Absent in WASM binaries built before the Transpile tab was added. */
+    gosqlxTranspile?: (sql: string, from: string, to: string) => string;
   }
 }
 
 export interface GoSQLXApi {
   parse(sql: string, dialect?: string): unknown;
-  format(sql: string, dialect?: string): { result: string };
+  /** Throws with the error message when the SQL cannot be formatted. */
+  format(sql: string, dialect?: string): TextData;
   lint(sql: string, dialect?: string): unknown;
   analyze(sql: string, dialect?: string): unknown;
   validate(sql: string, dialect?: string): { valid: boolean; error?: string };
   /** Span offsets are UTF-16 code units (JavaScript string indices). Throws on failure. */
   highlight(sql: string, dialect?: string): HighlightData;
+  /** Rewrites SQL from one dialect to another. Throws on failure. */
+  transpile(sql: string, from: string, to: string): TextData;
 }
 
 export interface UseWasmResult {
@@ -38,12 +43,16 @@ export interface UseWasmResult {
 }
 
 function callAndParse(fn: (sql: string, dialect?: string) => string, sql: string, dialect?: string): unknown {
-  const raw = dialect ? fn(sql, dialect) : fn(sql);
+  return parseResult(dialect ? fn(sql, dialect) : fn(sql));
+}
+
+function parseResult(raw: string): unknown {
   let result: unknown;
   try {
     result = JSON.parse(raw);
   } catch {
-    // Not JSON — plain text result (e.g., format() returns SQL text)
+    // Not JSON: a plain text result (format() in WASM builds before it
+    // returned {"result": ...}).
     return raw;
   }
   // Check for error objects OUTSIDE the try/catch so they propagate correctly
@@ -159,7 +168,7 @@ export async function initWasm(): Promise<GoSQLXApi> {
         return callAndParse(window.gosqlxParse, sql, dialect);
       },
       format(sql: string, dialect?: string) {
-        return callAndParse(window.gosqlxFormat, sql, dialect) as { result: string };
+        return callAndParse(window.gosqlxFormat, sql, dialect) as TextData;
       },
       lint(sql: string, dialect?: string) {
         return callAndParse(window.gosqlxLint, sql, dialect);
@@ -176,6 +185,13 @@ export async function initWasm(): Promise<GoSQLXApi> {
           throw new Error("gosqlxHighlight is not available in this WASM build");
         }
         return callAndParse(fn, sql, dialect) as HighlightData;
+      },
+      transpile(sql: string, from: string, to: string) {
+        const fn = window.gosqlxTranspile;
+        if (typeof fn !== "function") {
+          throw new Error("gosqlxTranspile is not available in this WASM build");
+        }
+        return parseResult(fn(sql, from, to)) as TextData;
       },
     };
 

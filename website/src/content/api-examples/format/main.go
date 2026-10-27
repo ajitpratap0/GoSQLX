@@ -8,11 +8,15 @@ import (
 )
 
 func main() {
-	// Format messy SQL
+	// Format messy SQL; comments are kept
 	opts := gosqlx.DefaultFormatOptions()
-	formatted, err := gosqlx.Format("select id,name from users where id>5", opts)
+	formatted, err := gosqlx.Format("-- active users\nselect id,name from users where id>5", opts)
 	if err != nil {
 		log.Fatal(err)
 	}
 	fmt.Println(formatted)
+	// -- active users
+	// SELECT id, name
+	// FROM users
+	// WHERE id > 5
 }

@@ -17,6 +17,7 @@ import type {
   OptimizationSuggestion,
   SecurityFinding,
   SecurityReport,
+  TextData,
 } from "./bridgeTypes";
 
 type SameKeys<A, B> = [Exclude<keyof A, keyof B>, Exclude<keyof B, keyof A>] extends [never, never] ? true : false;
@@ -24,6 +25,8 @@ type SameKeys<A, B> = [Exclude<keyof A, keyof B>, Exclude<keyof B, keyof A>] ext
 type GoLint = typeof fixture.lint;
 type GoAnalyze = typeof fixture.analyze;
 type GoHighlight = typeof fixture.highlight;
+type GoFormat = typeof fixture.format;
+type GoTranspile = typeof fixture.transpile;
 
 // `error` on AnalysisData is set by wasm/main.go when the call throws, not by
 // the bridge's AnalyzeResponse, so it is excluded from that comparison.
@@ -39,9 +42,15 @@ export const contractChecks: Record<string, true> = {
   optimizationSuggestion: true satisfies SameKeys<GoAnalyze["optimization"]["suggestions"][number], OptimizationSuggestion>,
   highlight: true satisfies SameKeys<GoHighlight, HighlightData>,
   highlightSpan: true satisfies SameKeys<GoHighlight["spans"][number], HighlightSpan>,
+  format: true satisfies SameKeys<GoFormat, TextData>,
+  formatErrorSpan: true satisfies SameKeys<GoFormat["error_span"], ErrorSpan>,
+  transpile: true satisfies SameKeys<GoTranspile, TextData>,
+  transpileErrorSpan: true satisfies SameKeys<GoTranspile["error_span"], ErrorSpan>,
 };
 
 // Values must also be assignable, not just share key names.
 export const lintSample: LintData = fixture.lint;
 export const analyzeSample: AnalysisData = fixture.analyze;
 export const highlightSample: HighlightData = fixture.highlight;
+export const formatSample: TextData = fixture.format;
+export const transpileSample: TextData = fixture.transpile;

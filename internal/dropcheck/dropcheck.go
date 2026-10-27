@@ -5,27 +5,30 @@
 // drops even though its output re-parses: it reports words of the input
 // (outside comments and string literals) that are missing from the output.
 // It is shared by the real-world corpus test and scripts/dialect-audit.
+// This is a heuristic: it can miss a moved clause or other semantic changes.
 package dropcheck
 
 import (
 	"regexp"
 	"strings"
+
+	sqldialect "github.com/ajitpratap0/GoSQLX/pkg/sql/dialect"
 )
 
-// DroppedWords reports words of the input (outside comments and string
-// literals) that are missing from the formatted output — a cheap detector for
-// clauses the formatter silently drops even though its output reparses.
-func DroppedWords(in, out string) []string {
+// DroppedWords compares word multisets, reporting each missing occurrence in
+// input order after canonicalizing synonyms and ignoring optional noise words.
+// The optional dialect is passed to Words.
+func DroppedWords(in, out string, dialect ...string) []string {
 	in = CanonicalSynonyms(in)
-	have := map[string]bool{}
-	for _, w := range Words(out) {
-		have[w] = true
+	have := map[string]int{}
+	for _, w := range Words(out, dialect...) {
+		have[w]++
 	}
 	var lost []string
-	seen := map[string]bool{}
-	for _, w := range Words(in) {
-		if !have[w] && !ignorable[w] && !seen[w] {
-			seen[w] = true
+	for _, w := range Words(in, dialect...) {
+		if have[w] > 0 {
+			have[w]--
+		} else if !ignorable[w] {
 			lost = append(lost, w)
 		}
 	}
@@ -40,7 +43,7 @@ func DroppedWords(in, out string) []string {
 // and the function ISNULL(...) are not touched.
 var synonyms = regexp.MustCompile(`(?i)\b(SELECT\s+ALL|SELECT\s+UNIQUE|DISTINCTROW|ISNULL|NOTNULL)\b`)
 
-// CanonicalSynonyms rewrites the synonyms of synonyms in s
+// CanonicalSynonyms rewrites SQL synonyms in s
 // to the canonical spelling the formatter writes.
 func CanonicalSynonyms(s string) string {
 	var sb strings.Builder
@@ -76,7 +79,14 @@ var ignorable = map[string]bool{"AS": true, "ASC": true, "INNER": true, "OUTER":
 
 // Words returns the upper-cased identifier-like words of s, skipping
 // comments and quoted string literals but keeping quoted identifiers' text.
-func Words(s string) []string {
+// The optional dialect uses the tokenizer's string escape rules; omitted means
+// generic SQL. PostgreSQL E-prefixed strings always allow backslash escapes.
+func Words(s string, dialect ...string) []string {
+	d := sqldialect.Generic
+	if len(dialect) > 0 {
+		d = sqldialect.Parse(dialect[0])
+	}
+	backslash := d.StringEscape() != sqldialect.StringEscapeNone
 	var words []string
 	for i := 0; i < len(s); {
 		c := s[i]
@@ -93,9 +103,14 @@ func Words(s string) []string {
 			i += end + 4
 		case c == '$' && dollarQuoteEnd(s, i) > i:
 			i = dollarQuoteEnd(s, i)
-		case c == '\'':
+		case c == '\'' || (c == 'E' || c == 'e') && i+1 < len(s) && s[i+1] == '\'' && d == sqldialect.PostgreSQL:
+			escapes := backslash
+			if c != '\'' {
+				i++
+				escapes = true
+			}
 			for i++; i < len(s); i++ {
-				if s[i] == '\\' {
+				if s[i] == '\\' && escapes {
 					i++
 					continue
 				}

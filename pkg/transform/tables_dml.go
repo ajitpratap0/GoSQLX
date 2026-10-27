@@ -91,6 +91,9 @@ func addAliasToUpdate(s *ast.UpdateStatement, tableName, alias string) error {
 	if err := refs.check(); err != nil {
 		return err
 	}
+	if err := refs.checkCaptures(s); err != nil {
+		return err
+	}
 	refs.apply()
 	rewrite := refs.qualifierRewriter()
 	for i := range s.Assignments {
@@ -123,6 +126,9 @@ func addAliasToDelete(s *ast.DeleteStatement, tableName, alias string) error {
 	refs.list(s.Using)
 	refs.joins(s.DialectExtras().Joins)
 	if err := refs.check(); err != nil {
+		return err
+	}
+	if err := refs.checkCaptures(s); err != nil {
 		return err
 	}
 	refs.apply()
@@ -297,66 +303,69 @@ func (t *dmlAliasTargets) apply() {
 // names refer to the subquery's table, not the aliased one, and are left
 // alone.
 func (t *dmlAliasTargets) qualifierRewriter() func(ast.Expression) ast.Expression {
-	names := t.matched
 	return func(expr ast.Expression) ast.Expression {
-		shadowed := shadowedIdentifiers(expr, names)
-		return walkExpr(expr, func(e ast.Expression) ast.Expression {
-			if id, ok := e.(*ast.Identifier); ok && id.Table != "" && !shadowed[id] {
-				for _, n := range names {
-					if strings.EqualFold(id.Table, n) {
-						id.Table = t.alias
-						id.Quotes = replacedQualifierQuote(id.Quotes)
-						break
-					}
-				}
-			}
-			return e
+		rewriteAliasQualifiers(expr, t.matched, t.alias)
+		return expr
+	}
+}
+
+// rewriteAliasQualifiers follows AST children, including window clauses.
+// Each nested SELECT shadows only the names it binds, leaving other
+// correlated qualifiers visible.
+func rewriteAliasQualifiers(node ast.Node, names []string, alias string) {
+	walkAliasQualifiers(node, names, alias, false, func(id *ast.Identifier, _ bool) {
+		id.Table = alias
+		id.Quotes = replacedQualifierQuote(id.Quotes)
+	})
+}
+
+// checkCaptures rejects aliases that would redirect a correlated reference
+// to a different table introduced by a nested query.
+func (t *dmlAliasTargets) checkCaptures(stmt ast.Statement) error {
+	captured := false
+	for _, child := range stmt.Children() {
+		walkAliasQualifiers(child, t.matched, t.alias, false, func(_ *ast.Identifier, shadowed bool) {
+			captured = captured || shadowed
 		})
 	}
+	if captured {
+		return fmt.Errorf("transform AddTableAlias: alias %q would capture a correlated qualifier", t.alias)
+	}
+	return nil
 }
 
-// shadowedIdentifiers returns the identifiers of expr that sit inside a
-// subquery whose FROM or JOIN list introduces one of names, so that a
-// qualifier with that name resolves to the subquery's own table.
-func shadowedIdentifiers(expr ast.Expression, names []string) map[*ast.Identifier]bool {
-	var shadowed map[*ast.Identifier]bool
-	mark := func(e ast.Expression) ast.Expression {
-		if id, ok := e.(*ast.Identifier); ok {
-			if shadowed == nil {
-				shadowed = make(map[*ast.Identifier]bool)
+func walkAliasQualifiers(node ast.Node, names []string, alias string, captured bool, visit func(*ast.Identifier, bool)) {
+	if node == nil || len(names) == 0 {
+		return
+	}
+	switch n := node.(type) {
+	case *ast.Identifier:
+		for _, name := range names {
+			if strings.EqualFold(n.Table, name) {
+				visit(n, captured)
+				return
 			}
-			shadowed[id] = true
 		}
-		return e
-	}
-	walkExpr(expr, func(e ast.Expression) ast.Expression {
-		if sel := exprSubquery(e); sel != nil && selectIntroduces(sel, names) {
-			walkStmtExprs(sel, mark)
+	case *ast.SelectStatement:
+		visible := make([]string, 0, len(names))
+		for _, name := range names {
+			if !selectIntroduces(n, []string{name}) {
+				visible = append(visible, name)
+			}
 		}
-		return e
-	})
-	return shadowed
-}
-
-// exprSubquery returns the SELECT held by a subquery-bearing expression.
-func exprSubquery(e ast.Expression) *ast.SelectStatement {
-	var stmt ast.Statement
-	switch x := e.(type) {
-	case *ast.SubqueryExpression:
-		stmt = x.Subquery
-	case *ast.ExistsExpression:
-		stmt = x.Subquery
-	case *ast.InExpression:
-		stmt = x.Subquery
-	case *ast.AnyExpression:
-		stmt = x.Subquery
-	case *ast.AllExpression:
-		stmt = x.Subquery
-	case *ast.ArrayConstructorExpression:
-		stmt = x.Subquery
+		names = visible
+		captured = captured || selectIntroduces(n, []string{alias})
 	}
-	sel, _ := stmt.(*ast.SelectStatement)
-	return sel
+	for _, child := range node.Children() {
+		if ref, ok := node.(*ast.TableReference); ok && !ref.Lateral {
+			switch child.(type) {
+			case *ast.SelectStatement, *ast.SetOperation:
+				// Only LATERAL derived tables can use this query's bindings.
+				continue
+			}
+		}
+		walkAliasQualifiers(child, names, alias, captured, visit)
+	}
 }
 
 // selectIntroduces reports whether the FROM or JOIN list of sel introduces

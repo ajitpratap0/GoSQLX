@@ -124,6 +124,7 @@ func JoinWithComments(stmts []string, tokens []models.TokenWithSpan, comments []
 	var tail []string
 	for ci := range comments {
 		c := comments[ci]
+		c.Text = normalizeCommentText(c.Text)
 		sig := isSignificantComment(c.Text)
 		idx, role := locateComment(items, c)
 		switch role {
@@ -233,6 +234,15 @@ func JoinWithComments(stmts []string, tokens []models.TokenWithSpan, comments []
 	return sb.String(), nil
 }
 
+// normalizeCommentText uses LF endings, including the CR a line comment can
+// retain from a source CRLF terminator.
+func normalizeCommentText(text string) string {
+	if strings.HasPrefix(text, "--") {
+		text = strings.TrimSuffix(text, "\r")
+	}
+	return strings.ReplaceAll(strings.ReplaceAll(text, "\r\n", "\n"), "\r", "\n")
+}
+
 func hasExecutable(comments []string) bool {
 	for _, c := range comments {
 		if isExecutable(c) {
@@ -288,7 +298,7 @@ func joinHoisted(stmts []string, comments []models.Comment, layout CommentLayout
 		if isSignificantComment(c.Text) {
 			return "", fmt.Errorf("%w: %s", ErrUnplaceableComment, abbreviate(c.Text))
 		}
-		sb.WriteString(c.Text)
+		sb.WriteString(normalizeCommentText(c.Text))
 		sb.WriteString("\n")
 	}
 	sb.WriteString(joinPlain(stmts, layout))

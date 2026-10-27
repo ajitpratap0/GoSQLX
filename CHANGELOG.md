@@ -66,6 +66,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - Scan raw dialect statements and standalone VALUES for injection patterns, recover
   panics at every C export, and guard unlinked tokenizer scratch calls.
+- Formatter lower-case mode covers expression and built-in function keywords;
+  comments use LF endings and keep SQL Server batch boundaries. Fix MySQL join
+  comma spacing, SELECT alias qualifiers, and TOP/FETCH limit transforms.
+- Lower-case expression formatting avoids repeated subtree rendering and copying.
+  Raw `JSON_TABLE`/`XMLTABLE` clauses retain their source case in either mode.
+- Statement splitting follows dialect string escapes, parenthesized bodies,
+  commented SQL Server GO lines and Oracle SQL*Plus execute lines; corpus and
+  CLI audits share a pipeline and detect repeated dropped words.
 - **AST walkers** (`ast.Inspect`, `Walk`, the security scanner, linter and
   table extraction) reach SELECT `TOP` and ClickHouse `ARRAY JOIN`, the
   ENGINE/ORDER BY/PARTITION BY/TTL/SETTINGS clauses of `CREATE TABLE` and
@@ -145,9 +153,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   formatting no longer drop comments either. New `formatter.JoinWithComments`,
   `gosqlx.FormatWithDialect` and `gosqlx.WithComments()`.
 - **CLI**: `lint` exits 1 on syntax errors and `--auto-fix` judges the fixed
-  text; `format --no-uppercase` lower-cases clause keywords (it used to upper-case
-  them; operators such as `AND`, `IN`, `IS NULL`, `DESC` and function names
-  are still written in upper case); `postgres`, `pg`, `mssql`, `tsql` and `sqlite3` are accepted by every
+  text; `format --no-uppercase` lower-cases keywords, keyword operators
+  and built-in function keywords (raw `JSON_TABLE`/`XMLTABLE` clauses retain source
+  case); `postgres`, `pg`, `mssql`, `tsql` and `sqlite3` are accepted by every
   `--dialect` flag; errors are printed once and usage only for flag and
   argument errors; `validate --quiet` exits silently; `validate` names stdin
   `<stdin>`, validates `GO`/`DELIMITER` scripts and files over the token

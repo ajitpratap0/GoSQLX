@@ -25,7 +25,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ajitpratap0/GoSQLX/internal/dropcheck"
+	"github.com/ajitpratap0/GoSQLX/internal/dialectaudit"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/keywords"
 )
@@ -66,7 +66,10 @@ func TestRealWorldCorpus(t *testing.T) {
 			t.Errorf("testdata/realworld/%s: not a valid dialect name", dialect)
 			continue
 		}
-		files, _ := filepath.Glob(filepath.Join(realworldRoot, dialect, "*.sql"))
+		files, err := realworldSQLFiles(filepath.Join(realworldRoot, dialect))
+		if err != nil {
+			t.Fatalf("corpus dialect %s: %v", dialect, err)
+		}
 		for _, file := range files {
 			data, err := os.ReadFile(file)
 			if err != nil {
@@ -79,7 +82,11 @@ func TestRealWorldCorpus(t *testing.T) {
 				}
 				key := fmt.Sprintf("%s#%d", base, i)
 				seen[key] = true
-				stage, detail := realworldCheck(stmt, keywords.SQLDialect(dialect))
+				result := dialectaudit.Check(stmt, keywords.SQLDialect(dialect), ParseWithDialect, func(tree *ast.AST) string { return FormatAST(tree) })
+				stage, detail := result.Stage, result.Error
+				if result.Format != "" {
+					detail += "\n  formatted: " + compact(result.Format)
+				}
 				if stage != "ok" {
 					current = append(current, key+" "+stage)
 				}
@@ -116,28 +123,23 @@ func TestRealWorldCorpus(t *testing.T) {
 	}
 }
 
-func realworldCheck(stmt string, d keywords.SQLDialect) (stage, detail string) {
-	defer func() {
-		if p := recover(); p != nil {
-			stage, detail = "panic", fmt.Sprint(p)
+func realworldSQLFiles(dir string) ([]string, error) {
+	files, err := filepath.Glob(filepath.Join(dir, "*.sql"))
+	if err != nil {
+		return nil, fmt.Errorf("glob %s: %w", dir, err)
+	}
+	if len(files) == 0 {
+		return nil, fmt.Errorf("%s: no .sql files", dir)
+	}
+	return files, nil
+}
+
+func TestRealworldSQLFilesRejectsMissingCorpus(t *testing.T) {
+	for _, dir := range []string{t.TempDir(), "["} {
+		if _, err := realworldSQLFiles(dir); err == nil {
+			t.Errorf("realworldSQLFiles(%q) succeeded", dir)
 		}
-	}()
-	tree, err := ParseWithDialect(stmt, d)
-	if err != nil {
-		return "parse", err.Error()
 	}
-	f1 := FormatAST(tree)
-	tree2, err := ParseWithDialect(f1, d)
-	if err != nil {
-		return "reparse", err.Error() + "\n  formatted: " + compact(f1)
-	}
-	if f2 := FormatAST(tree2); f2 != f1 {
-		return "idempotent", compact(f1) + "\n  != " + compact(f2)
-	}
-	if lost := dropcheck.DroppedWords(stmt, f1); len(lost) > 0 {
-		return "drop", "formatter lost " + strings.Join(lost, " ") + "\n  formatted: " + compact(f1)
-	}
-	return "ok", ""
 }
 
 func writeKnownFailures(t *testing.T, lines []string) {
@@ -195,22 +197,9 @@ func loadKnownFailures(t *testing.T) map[string]string {
 	return known
 }
 
-func onlyComments(s string) bool {
-	for _, line := range strings.Split(s, "\n") {
-		if t := strings.TrimSpace(line); t != "" && !strings.HasPrefix(t, "--") {
-			return false
-		}
-	}
-	return true
-}
+func onlyComments(s string) bool { return dialectaudit.Empty(s) }
 
-func compact(s string) string {
-	s = strings.Join(strings.Fields(s), " ")
-	if r := []rune(s); len(r) > 240 {
-		s = string(r[:240]) + "…"
-	}
-	return s
-}
+func compact(s string) string { return dialectaudit.Compact(s) }
 
 func assertDialectStandInsUntouched(t *testing.T) {
 	t.Helper()

@@ -14,7 +14,11 @@
 
 package gosqlx
 
-import "strings"
+import (
+	"strings"
+
+	sqldialect "github.com/ajitpratap0/GoSQLX/pkg/sql/dialect"
+)
 
 // SplitStatements splits a SQL source string into top-level statements on
 // unquoted semicolons. It is dialect-aware: depending on the supplied dialect
@@ -55,6 +59,9 @@ import "strings"
 // downstream), and its only allocation is the result slice.
 func SplitStatements(sql, dialect string) []string {
 	p := profileForDialect(dialect)
+	if d := sqldialect.Parse(dialect); d != sqldialect.Unknown {
+		p.supportsBackslash = d.StringEscape() != sqldialect.StringEscapeNone
+	}
 	return splitWithProfile(sql, p)
 }
 
@@ -66,7 +73,9 @@ func SplitStatements(sql, dialect string) []string {
 // DELIMITER directive for MySQL/MariaDB, and a line holding only "/" for
 // Oracle. Directive lines are consumed and do not appear in any segment.
 // Transaction statements (BEGIN; BEGIN TRANSACTION; …) are not blocks, and a
-// script whose blocks do not balance falls back to plain semicolon splitting.
+// script whose blocks or parentheses do not balance falls back in one extra
+// linear pass to plain semicolon splitting, so the parser can reject malformed
+// fragments without hiding subsequent statements.
 
 // dialectProfile collects the per-dialect feature flags the splitter needs.
 // Profiles are immutable and shared; one is resolved per call and passed to
@@ -76,6 +85,7 @@ type dialectProfile struct {
 	supportsBackticks           bool
 	supportsBrackets            bool
 	supportsEStrings            bool
+	supportsBackslash           bool
 	supportsNestedBlockComments bool
 
 	// Procedural-script features (see splitter_proc.go).
@@ -83,6 +93,7 @@ type dialectProfile struct {
 	oracle    bool // DECLARE / IS|AS sections; "/" line terminator
 	delimiter bool // MySQL client DELIMITER directive
 	noBlocks  bool // disable BEGIN…END tracking (unbalanced-script fallback)
+	noParens  bool // ignore parentheses during the unbalanced-script fallback
 }
 
 // profileForDialect returns the feature flags for the named dialect. The
@@ -124,10 +135,12 @@ func profileForDialect(dialect string) dialectProfile {
 // reconstruct the logic from a stack trace.
 func splitWithProfile(src string, p dialectProfile) []string {
 	out, open := splitCore(src, p)
-	if open && !p.noBlocks {
-		// Unbalanced BEGIN/CASE/IF: don't let one malformed block swallow
-		// the rest of the script; fall back to plain semicolon splitting.
+	if open {
+		// Retry unbalanced blocks or parentheses once, ignoring nesting.
+		// Each malformed fragment can then reach the parser for an error
+		// without hiding later statements. Two linear passes bound the work.
 		p.noBlocks = true
+		p.noParens = true
 		out, _ = splitCore(src, p)
 	}
 	return out
@@ -147,6 +160,7 @@ func splitCore(src string, p dialectProfile) (out []string, open bool) {
 	// start is the index in src where the current segment begins. Every
 	// segment is the contiguous substring src[start:i], so no bytes are copied.
 	start := 0
+	parens := 0
 
 	// Mutually-exclusive context flags. At most one of (inSingle, inDouble,
 	// inBacktick, inBracket, inLine, dollarTag != "") is ever true at a time.
@@ -216,10 +230,10 @@ func splitCore(src string, p dialectProfile) (out []string, open bool) {
 			continue
 
 		case inSingle:
-			// PG E-strings: `\` escapes the next byte (commonly \' for a
+			// Backslash dialects and PG E-strings escape the next byte (commonly \' for a
 			// literal apostrophe). The quote we are escaping must not close
 			// the string.
-			if eStringActive && c == '\\' && i+1 < len(src) {
+			if (eStringActive || p.supportsBackslash) && c == '\\' && i+1 < len(src) {
 				i += 2
 				continue
 			}
@@ -322,8 +336,18 @@ func splitCore(src string, p dialectProfile) (out []string, open bool) {
 			}
 			i++
 
+		case c == '(' && !p.noParens:
+			parens++
+			i++
+
+		case c == ')' && !p.noParens:
+			if parens > 0 {
+				parens--
+			}
+			i++
+
 		case c == ';':
-			if delim != "" || st.depth > 0 || (p.tsql && elseFollows(src, i+1)) {
+			if delim != "" || parens > 0 || st.depth > 0 || (p.tsql && elseFollows(src, i+1)) {
 				// Inside a custom-delimiter statement or an open block, or
 				// T-SQL IF ... stmt; ELSE stmt.
 				st.semicolon()
@@ -383,7 +407,7 @@ func splitCore(src string, p dialectProfile) (out []string, open bool) {
 		}
 	}
 
-	open = st.depth > 0
+	open = st.depth > 0 || parens > 0
 	if start < len(src) {
 		out = append(out, src[start:])
 	}

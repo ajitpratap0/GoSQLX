@@ -736,7 +736,30 @@ func (s *Scanner) scanStatement(stmt ast.Statement, result *ScanResult) {
 		s.scanDeleteStatement(st, result)
 	case *ast.SetOperation:
 		s.scanSetOperation(st, result)
+	case *ast.Values:
+		// The text rules cover expressions under every VALUES wrapper (CAST,
+		// CASE, subqueries, ...), without duplicating AST function findings.
+		s.scanStatementText(st.SQL(), result)
+	case *ast.UtilityStatement:
+		s.scanStatementText(st.Text, result)
+	case *ast.SetStatement:
+		s.scanStatementText(st.Text, result)
+	case *ast.TransactionStatement:
+		s.scanStatementText(st.Text, result)
+	case *ast.UseStatement:
+		s.scanStatementText(st.Text, result)
+	case *ast.UnsupportedStatement:
+		s.scanStatementText(st.RawSQL, result)
 	}
+}
+
+// scanStatementText covers statements whose bodies are retained as text rather
+// than expression nodes, including PREPARE/EXECUTE, T-SQL blocks and CREATE
+// POLICY/TRIGGER. These nodes take only the text path, so AST and text checks
+// cannot report the same occurrence twice. Counts are updated once by Scan.
+func (s *Scanner) scanStatementText(text string, result *ScanResult) {
+	findings := s.ScanSQL(text)
+	result.Findings = append(result.Findings, findings.Findings...)
 }
 
 // scanSelectStatement analyzes SELECT for injection patterns.

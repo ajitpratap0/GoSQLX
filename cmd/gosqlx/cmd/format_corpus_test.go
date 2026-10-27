@@ -50,6 +50,36 @@ func corpusDialect(rel string) string {
 	}
 }
 
+func TestCorpusDialectSQLServer(t *testing.T) {
+	for _, path := range []string{"realworld/sqlserver/01.sql", "realworld/mssql/01.sql"} {
+		if got := corpusDialect(path); got != "sqlserver" {
+			t.Errorf("corpusDialect(%q) = %q", path, got)
+		}
+	}
+}
+
+func TestCLI_FormatOracleExecuteLines(t *testing.T) {
+	const input = "BEGIN\n  NULL;\nEND;\n/\nBEGIN\n  NULL;\nEND;\n/\nSELECT 3 FROM dual;"
+	// SQL*Plus execute commands do not add statements to the SQL buffer.
+	reference := strings.ReplaceAll(input, "\n/\n", "\n")
+	original, err := parseWithDialect(t, reference, "oracle")
+	if err != nil {
+		t.Fatalf("reference script does not parse: %v", err)
+	}
+	defer ast.ReleaseAST(original)
+	if len(original.Statements) != 3 {
+		t.Fatalf("reference script has %d statements, want 3", len(original.Statements))
+	}
+
+	t.Cleanup(func() { rootCmd.SetArgs(nil) })
+	path := writeTemp(t, "oracle.sql", input)
+	result := runCLI(t, nil, "format", "--dialect", "oracle", path)
+	if result.err != nil {
+		t.Fatalf("format --dialect oracle failed: %v\nstderr:\n%s", result.err, result.stderr)
+	}
+	checkCorpusOutput(t, "Oracle execute lines", "CLI", result.stdout, "oracle", original.SQL(), len(original.Statements))
+}
+
 // TestFormatSQL_CorpusRoundTrip formats every parseable testdata/**/*.sql file
 // with the CLI formatter in several modes and requires that the output
 // re-parses to an equivalent tree and formats idempotently (#599).

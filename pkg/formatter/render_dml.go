@@ -37,7 +37,7 @@ func writeDMLTop(sb *strings.Builder, f *nodeFormatter, top *ast.TopClause) {
 	}
 	sb.WriteString(f.kw("TOP"))
 	sb.WriteString(" (")
-	sb.WriteString(exprSQL(top.Count))
+	sb.WriteString(f.exprSQL(top.Count))
 	sb.WriteString(") ")
 	if top.IsPercent {
 		sb.WriteString(f.kw("PERCENT"))
@@ -46,7 +46,7 @@ func writeDMLTop(sb *strings.Builder, f *nodeFormatter, top *ast.TopClause) {
 }
 
 // writeDMLTargets writes the UPDATE / DELETE target list.
-func writeDMLTargets(sb *strings.Builder, f *nodeFormatter, d *ast.DMLTargetFields, name string, nameQ ast.NameQuote, alias string, aliasQ ast.NameQuote) {
+func writeDMLTargets(sb *strings.Builder, f *nodeFormatter, d ast.DMLTargetFields, name string, nameQ ast.NameQuote, alias string, aliasQ ast.NameQuote) {
 	if d.Only {
 		sb.WriteString(f.kw("ONLY"))
 		sb.WriteString(" ")
@@ -72,7 +72,9 @@ func writeDMLTargets(sb *strings.Builder, f *nodeFormatter, d *ast.DMLTargetFiel
 // writeDMLJoins writes the JOIN clauses of a multi-table UPDATE / DELETE.
 func writeDMLJoins(sb *strings.Builder, f *nodeFormatter, joins []ast.JoinClause) {
 	for i := range joins {
-		sb.WriteString(f.clauseSep())
+		if !joins[i].Comma {
+			sb.WriteString(f.clauseSep())
+		}
 		sb.WriteString(joinSQL(&joins[i], f))
 	}
 }
@@ -85,7 +87,7 @@ func writeDMLOutput(sb *strings.Builder, f *nodeFormatter, output []ast.Expressi
 	sb.WriteString(f.clauseSep())
 	sb.WriteString(f.kw("OUTPUT"))
 	sb.WriteString(" ")
-	sb.WriteString(exprListSQL(output))
+	sb.WriteString(f.exprListSQL(output))
 	if into != nil && into.Target != "" {
 		sb.WriteString(" ")
 		sb.WriteString(f.kw("INTO"))
@@ -100,18 +102,18 @@ func writeDMLOutput(sb *strings.Builder, f *nodeFormatter, output []ast.Expressi
 }
 
 // writeDMLOrderLimit writes the single-table ORDER BY ... LIMIT n clauses.
-func writeDMLOrderLimit(sb *strings.Builder, f *nodeFormatter, d *ast.DMLTargetFields) {
+func writeDMLOrderLimit(sb *strings.Builder, f *nodeFormatter, d ast.DMLTargetFields) {
 	if len(d.OrderBy) > 0 {
 		sb.WriteString(f.clauseSep())
 		sb.WriteString(f.kw("ORDER BY"))
 		sb.WriteString(" ")
-		sb.WriteString(orderBySQL(d.OrderBy))
+		sb.WriteString(f.orderBySQL(d.OrderBy))
 	}
 	if d.Limit != nil {
 		sb.WriteString(f.clauseSep())
 		sb.WriteString(f.kw("LIMIT"))
 		sb.WriteString(" ")
-		sb.WriteString(exprSQL(d.Limit))
+		sb.WriteString(f.exprSQL(d.Limit))
 	}
 }
 
@@ -123,12 +125,12 @@ func writeReturning(sb *strings.Builder, f *nodeFormatter, returning, into []ast
 	sb.WriteString(f.clauseSep())
 	sb.WriteString(f.kw("RETURNING"))
 	sb.WriteString(" ")
-	sb.WriteString(exprListSQL(returning))
+	sb.WriteString(f.exprListSQL(returning))
 	if len(into) > 0 {
 		sb.WriteString(" ")
 		sb.WriteString(f.kw("INTO"))
 		sb.WriteString(" ")
-		sb.WriteString(exprListSQL(into))
+		sb.WriteString(f.exprListSQL(into))
 	}
 }
 
@@ -142,7 +144,7 @@ func writeInsertHead(sb *strings.Builder, f *nodeFormatter, i *ast.InsertStateme
 	if i.DialectExtras().TableFunction != nil {
 		sb.WriteString(f.kw("FUNCTION"))
 		sb.WriteString(" ")
-		sb.WriteString(exprSQL(i.DialectExtras().TableFunction))
+		sb.WriteString(f.exprSQL(i.DialectExtras().TableFunction))
 		return
 	}
 	sb.WriteString(ast.QuoteQualifiedNameWith(i.TableName, f.nq(i.DialectExtras().TableNameQuote)))
@@ -198,7 +200,7 @@ func writeInsertTail(sb *strings.Builder, f *nodeFormatter, i *ast.InsertStateme
 		}
 		if l.Tag != nil {
 			sb.WriteString(" (")
-			sb.WriteString(exprSQL(l.Tag))
+			sb.WriteString(f.exprSQL(l.Tag))
 			sb.WriteString(")")
 		}
 		if lim := ast.LogErrorsRejectLimitText(l.RejectLimit); lim != "" {
@@ -241,12 +243,12 @@ func writeMergeActionWhere(sb *strings.Builder, f *nodeFormatter, a *ast.MergeAc
 		sb.WriteString(" ")
 		sb.WriteString(f.kw("WHERE"))
 		sb.WriteString(" ")
-		sb.WriteString(exprSQL(a.Where))
+		sb.WriteString(f.exprSQL(a.Where))
 	}
 	if a.DeleteWhere != nil {
 		sb.WriteString(" ")
 		sb.WriteString(f.kw("DELETE WHERE"))
 		sb.WriteString(" ")
-		sb.WriteString(exprSQL(a.DeleteWhere))
+		sb.WriteString(f.exprSQL(a.DeleteWhere))
 	}
 }

@@ -65,17 +65,13 @@ type SelectExtras struct {
 	RowsExamined    Expression         // MariaDB LIMIT ... ROWS EXAMINED n
 }
 
-// noSelectExtras is the read-only stand-in extras returns for a statement
-// without Extras. Nothing may write through it.
-var noSelectExtras SelectExtras
-
-// extras returns s.Extras, or a read-only empty SelectExtras when it is nil,
-// so renderers and walkers can read the clauses without nil checks.
-func (s *SelectStatement) extras() *SelectExtras {
+// extras returns a copy of s.Extras, or a zero value when it is nil, so
+// renderers and walkers can read the clauses without nil checks.
+func (s *SelectStatement) extras() SelectExtras {
 	if s.Extras != nil {
-		return s.Extras
+		return *s.Extras
 	}
-	return &noSelectExtras
+	return SelectExtras{}
 }
 
 // EnsureExtras returns s.Extras, allocating it first when it is nil. Use it

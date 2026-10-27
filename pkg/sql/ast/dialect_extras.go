@@ -80,15 +80,13 @@ func (n *LiteralValue) SetRawBackslash(raw bool) {
 	n.extras.RawBackslash = raw
 }
 
-var noFunctionExtras FunctionExtras
-
-// DialectExtras returns the optional dialect metadata, or a read-only empty
-// value when absent. Call EnsureExtras before writing; never mutate this result.
-func (n *FunctionCall) DialectExtras() *FunctionExtras {
+// DialectExtras returns a copy of the optional dialect metadata, or a zero
+// value when absent. Use EnsureExtras to modify metadata on this node.
+func (n *FunctionCall) DialectExtras() FunctionExtras {
 	if n.Extras != nil {
-		return n.Extras
+		return *n.Extras
 	}
-	return &noFunctionExtras
+	return FunctionExtras{}
 }
 
 // EnsureExtras returns mutable metadata, allocating it on first use.
@@ -99,15 +97,13 @@ func (n *FunctionCall) EnsureExtras() *FunctionExtras {
 	return n.Extras
 }
 
-var noBinaryExtras BinaryExtras
-
-// DialectExtras returns the optional dialect metadata, or a read-only empty
-// value when absent. Call EnsureExtras before writing; never mutate this result.
-func (n *BinaryExpression) DialectExtras() *BinaryExtras {
+// DialectExtras returns a copy of the optional dialect metadata, or a zero
+// value when absent. Use EnsureExtras to modify metadata on this node.
+func (n *BinaryExpression) DialectExtras() BinaryExtras {
 	if n.Extras != nil {
-		return n.Extras
+		return *n.Extras
 	}
-	return &noBinaryExtras
+	return BinaryExtras{}
 }
 
 // EnsureExtras returns mutable metadata, allocating it on first use.
@@ -118,15 +114,13 @@ func (n *BinaryExpression) EnsureExtras() *BinaryExtras {
 	return n.Extras
 }
 
-var noInsertDialectFields InsertDialectFields
-
-// DialectExtras returns the optional dialect metadata, or a read-only empty
-// value when absent. Call EnsureExtras before writing; never mutate this result.
-func (n *InsertStatement) DialectExtras() *InsertDialectFields {
+// DialectExtras returns a copy of the optional dialect metadata, or a zero
+// value when absent. Use EnsureExtras to modify metadata on this node.
+func (n *InsertStatement) DialectExtras() InsertDialectFields {
 	if n.Extras != nil {
-		return n.Extras
+		return *n.Extras
 	}
-	return &noInsertDialectFields
+	return InsertDialectFields{}
 }
 
 // EnsureExtras returns mutable metadata, allocating it on first use.
@@ -137,19 +131,17 @@ func (n *InsertStatement) EnsureExtras() *InsertDialectFields {
 	return n.Extras
 }
 
-// DialectExtras returns the SELECT dialect clauses for read access. Call
-// EnsureExtras before writing; never mutate the empty stand-in it may return.
-func (s *SelectStatement) DialectExtras() *SelectExtras { return s.extras() }
+// DialectExtras returns a copy of the SELECT dialect clauses. Use EnsureExtras
+// to modify clauses on this node.
+func (s *SelectStatement) DialectExtras() SelectExtras { return s.extras() }
 
-var noTableModifiers TableModifiers
-
-// DialectModifiers returns the optional table modifiers for read access. Call
-// EnsureModifiers before writing; never mutate the empty stand-in it may return.
-func (t *TableReference) DialectModifiers() *TableModifiers {
+// DialectModifiers returns a copy of the optional table modifiers. Use
+// EnsureModifiers to modify modifiers on this node.
+func (t *TableReference) DialectModifiers() TableModifiers {
 	if t.Modifiers != nil {
-		return t.Modifiers
+		return *t.Modifiers
 	}
-	return &noTableModifiers
+	return TableModifiers{}
 }
 
 // EnsureModifiers returns mutable modifiers, allocating them on first use.

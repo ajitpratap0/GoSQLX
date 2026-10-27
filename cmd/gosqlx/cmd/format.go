@@ -265,7 +265,7 @@ func init() {
 
 	// Negation flag. It has its own variable: sharing formatUppercase made
 	// --no-uppercase set uppercase to true.
-	formatCmd.Flags().BoolVar(&formatNoUppercase, "no-uppercase", false, "write keywords in lower case (opposite of --uppercase)")
+	formatCmd.Flags().BoolVar(&formatNoUppercase, "no-uppercase", false, "write keywords in lower case, including keyword operators and built-in function keywords; raw JSON_TABLE/XMLTABLE clauses retain source case (opposite of --uppercase)")
 }
 
 // resolveUppercaseFlags folds --no-uppercase into formatUppercase.

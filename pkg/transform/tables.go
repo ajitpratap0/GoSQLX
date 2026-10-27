@@ -69,13 +69,13 @@ func ReplaceTable(oldName, newName string) Rule {
 
 // AddTableAlias returns a Rule that assigns an alias to a specific table in a
 // SELECT, UPDATE, or DELETE statement. For SELECT statements the alias is applied
-// to the matching entry in the FROM clause. For UPDATE and DELETE it is applied
-// to the matching table wherever the statement names it (the target, further
+// to the matching FROM or JOIN entry and its column qualifiers. For UPDATE and
+// DELETE it is applied wherever the statement names the table (the target, further
 // targets, JOINs, FROM / USING lists) and the column qualifiers that named the
 // table are renamed to the alias, because a table with an alias can no longer
 // be referred to by its name. In DELETE t FROM t JOIN ... the target is renamed
-// to the alias as well. A table that appears more than once in an UPDATE or
-// DELETE (a self join) is an error, since one alias cannot name both.
+// to the alias as well. A table that appears more than once in the same scope
+// (a self join) is an error, since one alias cannot name both.
 //
 // Parameters:
 //   - tableName: The table to alias (case-insensitive match)
@@ -86,13 +86,7 @@ func AddTableAlias(tableName, alias string) Rule {
 	return RuleFunc(func(stmt ast.Statement) error {
 		switch s := stmt.(type) {
 		case *ast.SelectStatement:
-			for i := range s.From {
-				if strings.EqualFold(s.From[i].Name, tableName) {
-					s.From[i].Alias = alias
-					s.From[i].AliasQuote = replacedNameQuote(s.From[i].AliasQuote)
-				}
-			}
-			return nil
+			return addAliasToSelect(s, tableName, alias)
 		case *ast.UpdateStatement:
 			return addAliasToUpdate(s, tableName, alias)
 		case *ast.DeleteStatement:

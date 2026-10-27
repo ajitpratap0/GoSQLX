@@ -27,9 +27,10 @@ import (
 
 // nodeFormatter holds state during a single rendering pass.
 type nodeFormatter struct {
-	opts  ast.FormatOptions
-	sb    *strings.Builder
-	depth int
+	opts           ast.FormatOptions
+	sb             *strings.Builder
+	depth          int
+	expressionCase *expressionCase
 }
 
 func newNodeFormatter(opts ast.FormatOptions) *nodeFormatter {
@@ -210,6 +211,12 @@ func FormatExpression(e ast.Expression, opts ast.FormatOptions) string {
 	if e == nil {
 		return ""
 	}
+	if opts.KeywordCase == ast.KeywordLower {
+		f := newNodeFormatter(opts)
+		c := newExpressionCase(f, exprSQL(e))
+		f.expressionCase = c
+		return c.restore(c.formatWith(f, e))
+	}
 	switch v := e.(type) {
 	case *ast.CaseExpression:
 		return renderCase(v, opts)
@@ -222,6 +229,9 @@ func FormatExpression(e ast.Expression, opts ast.FormatOptions) string {
 	case *ast.SubqueryExpression:
 		return renderSubquery(v, opts)
 	default:
+		if opts.KeywordCase == ast.KeywordLower {
+			return newNodeFormatter(opts).exprSQL(e)
+		}
 		return exprSQL(e)
 	}
 }
@@ -255,7 +265,7 @@ func renderSelect(s *ast.SelectStatement, opts ast.FormatOptions) string {
 	if len(s.DistinctOnColumns) > 0 {
 		sb.WriteString(f.kw("DISTINCT ON"))
 		sb.WriteString(" (")
-		sb.WriteString(exprListSQL(s.DistinctOnColumns))
+		sb.WriteString(f.exprListSQL(s.DistinctOnColumns))
 		sb.WriteString(") ")
 	} else if s.Distinct {
 		sb.WriteString(f.kw("DISTINCT"))
@@ -265,7 +275,7 @@ func renderSelect(s *ast.SelectStatement, opts ast.FormatOptions) string {
 	// MySQL select modifiers and TOP, between SELECT [DISTINCT] and columns.
 	writeSelectPrologue(sb, s, f)
 
-	sb.WriteString(exprListSQL(s.Columns))
+	sb.WriteString(f.exprListSQL(s.Columns))
 
 	if into := selectExtras(s).Into; into != nil && !into.Trailing {
 		sb.WriteString(" ")
@@ -285,7 +295,9 @@ func renderSelect(s *ast.SelectStatement, opts ast.FormatOptions) string {
 
 	for _, j := range s.Joins {
 		j := j
-		sb.WriteString(f.clauseSep())
+		if !j.Comma {
+			sb.WriteString(f.clauseSep())
+		}
 		sb.WriteString(joinSQL(&j, f))
 	}
 
@@ -334,7 +346,7 @@ func renderSelect(s *ast.SelectStatement, opts ast.FormatOptions) string {
 		sb.WriteString(" ")
 		wins := make([]string, len(s.Windows))
 		for i := range s.Windows {
-			wins[i] = ast.QuoteNameWith(s.Windows[i].Name, f.nq(s.Windows[i].NameQuote)) + " AS (" + windowSpecSQL(&s.Windows[i]) + ")"
+			wins[i] = ast.QuoteNameWith(s.Windows[i].Name, f.nq(s.Windows[i].NameQuote)) + " " + f.kw("AS") + " (" + f.windowSpecSQL(&s.Windows[i]) + ")"
 		}
 		sb.WriteString(strings.Join(wins, ", "))
 	}
@@ -347,7 +359,7 @@ func renderSelect(s *ast.SelectStatement, opts ast.FormatOptions) string {
 			sb.WriteString(f.kw("ORDER BY"))
 		}
 		sb.WriteString(" ")
-		sb.WriteString(orderBySQL(s.OrderBy))
+		sb.WriteString(f.orderBySQL(s.OrderBy))
 	}
 	if interp := selectExtras(s).Interpolate; interp != nil {
 		sb.WriteString(interpolateSQL(interp, f))
@@ -366,7 +378,7 @@ func renderSelect(s *ast.SelectStatement, opts ast.FormatOptions) string {
 	}
 
 	if s.For != nil {
-		sb.WriteString(forSQL(s.For))
+		sb.WriteString(forSQL(s.For, f))
 	}
 
 	// FOR JSON/XML, SETTINGS, OPTION (...), FORMAT
@@ -429,7 +441,7 @@ func renderInsert(i *ast.InsertStatement, opts ast.FormatOptions) string {
 		sb.WriteString(" ")
 		sets := make([]string, len(i.Columns))
 		for k, col := range i.Columns {
-			sets[k] = ast.ColumnRefSQL(col) + " = " + exprSQL(i.Values[0][k])
+			sets[k] = ast.ColumnRefSQL(col) + " = " + f.exprSQL(i.Values[0][k])
 		}
 		sb.WriteString(strings.Join(sets, ", "))
 	} else if i.Query != nil {
@@ -443,7 +455,7 @@ func renderInsert(i *ast.InsertStatement, opts ast.FormatOptions) string {
 		for idx, row := range i.Values {
 			vals := make([]string, len(row))
 			for j, v := range row {
-				vals[j] = exprSQL(v)
+				vals[j] = f.exprSQL(v)
 			}
 			rows[idx] = "(" + strings.Join(vals, ", ") + ")"
 		}
@@ -455,7 +467,7 @@ func renderInsert(i *ast.InsertStatement, opts ast.FormatOptions) string {
 	writeInsertAfterSource(sb, f, i)
 
 	if i.OnConflict != nil {
-		sb.WriteString(onConflictSQL(i.OnConflict))
+		sb.WriteString(onConflictSQL(i.OnConflict, f))
 	}
 
 	if i.OnDuplicateKey != nil && len(i.OnDuplicateKey.Updates) > 0 {
@@ -464,7 +476,7 @@ func renderInsert(i *ast.InsertStatement, opts ast.FormatOptions) string {
 		sb.WriteString(" ")
 		upds := make([]string, len(i.OnDuplicateKey.Updates))
 		for k, u := range i.OnDuplicateKey.Updates {
-			upds[k] = ast.ColumnRefSQL(u.Column) + " = " + exprSQL(u.Value)
+			upds[k] = ast.ColumnRefSQL(u.Column) + " = " + f.exprSQL(u.Value)
 		}
 		sb.WriteString(strings.Join(upds, ", "))
 	}
@@ -505,7 +517,7 @@ func renderUpdate(u *ast.UpdateStatement, opts ast.FormatOptions) string {
 	sb.WriteString(" ")
 	upds := make([]string, len(u.Assignments))
 	for i, upd := range u.Assignments {
-		upds[i] = ast.ColumnRefSQL(upd.Column) + " = " + exprSQL(upd.Value)
+		upds[i] = ast.ColumnRefSQL(upd.Column) + " = " + f.exprSQL(upd.Value)
 	}
 	sb.WriteString(strings.Join(upds, ", "))
 	writeDMLOutput(sb, f, x.Output, x.OutputInto)
@@ -564,7 +576,7 @@ func renderDelete(d *ast.DeleteStatement, opts ast.FormatOptions) string {
 		sb.WriteString(" ")
 		sb.WriteString(f.kw("BEFORE SYSTEM_TIME"))
 		sb.WriteString(" ")
-		sb.WriteString(exprSQL(d.BeforeSystemTime))
+		sb.WriteString(f.exprSQL(d.BeforeSystemTime))
 	}
 	writeDMLOutput(sb, f, x.Output, x.OutputInto)
 
@@ -692,7 +704,7 @@ func renderSetOperationBody(s *ast.SetOperation, opts ast.FormatOptions) string 
 			sb.WriteString(f.clauseSep())
 			sb.WriteString(f.kw("ORDER BY"))
 			sb.WriteString(" ")
-			sb.WriteString(orderBySQL(view.OrderBy))
+			sb.WriteString(f.orderBySQL(view.OrderBy))
 		}
 		writeLimitOffsetClauses(sb, view, f)
 		if view.Fetch != nil {
@@ -821,7 +833,7 @@ func renderMerge(m *ast.MergeStatement, opts ast.FormatOptions) string {
 	sb.WriteString(f.clauseSep())
 	sb.WriteString(f.kw("ON"))
 	sb.WriteString(" ")
-	sb.WriteString(exprSQL(m.OnCondition))
+	sb.WriteString(f.exprSQL(m.OnCondition))
 
 	for _, when := range m.WhenClauses {
 		sb.WriteString(f.clauseSep())
@@ -844,7 +856,7 @@ func renderMerge(m *ast.MergeStatement, opts ast.FormatOptions) string {
 			sb.WriteString(" ")
 			sb.WriteString(f.kw("AND"))
 			sb.WriteString(" ")
-			sb.WriteString(exprSQL(when.Condition))
+			sb.WriteString(f.exprSQL(when.Condition))
 		}
 		sb.WriteString(" ")
 		sb.WriteString(f.kw("THEN"))
@@ -859,7 +871,7 @@ func renderMerge(m *ast.MergeStatement, opts ast.FormatOptions) string {
 				sb.WriteString(" ")
 				sets := make([]string, len(when.Action.SetClauses))
 				for i, sc := range when.Action.SetClauses {
-					sets[i] = ast.QuoteQualifiedNameWith(sc.Column, f.nq(sc.ColumnQuote)) + " = " + exprSQL(sc.Value)
+					sets[i] = ast.QuoteQualifiedNameWith(sc.Column, f.nq(sc.ColumnQuote)) + " = " + f.exprSQL(sc.Value)
 				}
 				sb.WriteString(strings.Join(sets, ", "))
 			case "DELETE":
@@ -881,7 +893,7 @@ func renderMerge(m *ast.MergeStatement, opts ast.FormatOptions) string {
 						sb.WriteString(" (")
 						vals := make([]string, len(when.Action.Values))
 						for i, v := range when.Action.Values {
-							vals[i] = exprSQL(v)
+							vals[i] = f.exprSQL(v)
 						}
 						sb.WriteString(strings.Join(vals, ", "))
 						sb.WriteString(")")
@@ -904,7 +916,7 @@ func renderMerge(m *ast.MergeStatement, opts ast.FormatOptions) string {
 
 // ─── expression renderers ─────────────────────────────────────────────────────
 
-func renderCase(c *ast.CaseExpression, opts ast.FormatOptions) string {
+func renderCase(c *ast.CaseExpression, opts ast.FormatOptions, context ...*expressionCase) string {
 	if c == nil {
 		return ""
 	}
@@ -914,23 +926,23 @@ func renderCase(c *ast.CaseExpression, opts ast.FormatOptions) string {
 	sb.WriteString(f.kw("CASE"))
 	if c.Value != nil {
 		sb.WriteString(" ")
-		sb.WriteString(FormatExpression(c.Value, opts))
+		sb.WriteString(formatExpressionChild(c.Value, opts, context...))
 	}
 	for _, when := range c.WhenClauses {
 		sb.WriteString(" ")
 		sb.WriteString(f.kw("WHEN"))
 		sb.WriteString(" ")
-		sb.WriteString(FormatExpression(when.Condition, opts))
+		sb.WriteString(formatExpressionChild(when.Condition, opts, context...))
 		sb.WriteString(" ")
 		sb.WriteString(f.kw("THEN"))
 		sb.WriteString(" ")
-		sb.WriteString(FormatExpression(when.Result, opts))
+		sb.WriteString(formatExpressionChild(when.Result, opts, context...))
 	}
 	if c.ElseClause != nil {
 		sb.WriteString(" ")
 		sb.WriteString(f.kw("ELSE"))
 		sb.WriteString(" ")
-		sb.WriteString(FormatExpression(c.ElseClause, opts))
+		sb.WriteString(formatExpressionChild(c.ElseClause, opts, context...))
 	}
 	sb.WriteString(" ")
 	sb.WriteString(f.kw("END"))
@@ -938,14 +950,14 @@ func renderCase(c *ast.CaseExpression, opts ast.FormatOptions) string {
 	return f.result()
 }
 
-func renderBetween(b *ast.BetweenExpression, opts ast.FormatOptions) string {
+func renderBetween(b *ast.BetweenExpression, opts ast.FormatOptions, context ...*expressionCase) string {
 	if b == nil {
 		return ""
 	}
 	f := newNodeFormatter(opts)
 	sb := f.sb
 
-	sb.WriteString(FormatExpression(b.Expr, opts))
+	sb.WriteString(formatExpressionChild(b.Expr, opts, context...))
 	sb.WriteString(" ")
 	if b.Not {
 		sb.WriteString(f.kw("NOT"))
@@ -953,23 +965,23 @@ func renderBetween(b *ast.BetweenExpression, opts ast.FormatOptions) string {
 	}
 	sb.WriteString(f.kw("BETWEEN"))
 	sb.WriteString(" ")
-	sb.WriteString(FormatExpression(b.Lower, opts))
+	sb.WriteString(formatExpressionChild(b.Lower, opts, context...))
 	sb.WriteString(" ")
 	sb.WriteString(f.kw("AND"))
 	sb.WriteString(" ")
-	sb.WriteString(FormatExpression(b.Upper, opts))
+	sb.WriteString(formatExpressionChild(b.Upper, opts, context...))
 
 	return f.result()
 }
 
-func renderIn(i *ast.InExpression, opts ast.FormatOptions) string {
+func renderIn(i *ast.InExpression, opts ast.FormatOptions, context ...*expressionCase) string {
 	if i == nil {
 		return ""
 	}
 	f := newNodeFormatter(opts)
 	sb := f.sb
 
-	sb.WriteString(FormatExpression(i.Expr, opts))
+	sb.WriteString(formatExpressionChild(i.Expr, opts, context...))
 	sb.WriteString(" ")
 	if i.Global {
 		sb.WriteString(f.kw("GLOBAL"))
@@ -983,7 +995,16 @@ func renderIn(i *ast.InExpression, opts ast.FormatOptions) string {
 	if i.Bare && i.Subquery == nil {
 		// SQLite "a IN tbl": no parentheses around the table reference.
 		sb.WriteString(" ")
-		sb.WriteString(exprListSQL(i.List))
+		if len(context) == 0 {
+			sb.WriteString(f.exprListSQL(i.List))
+		} else {
+			for idx, e := range i.List {
+				if idx > 0 {
+					sb.WriteString(", ")
+				}
+				sb.WriteString(formatExpressionChild(e, opts, context...))
+			}
+		}
 		return f.result()
 	}
 	sb.WriteString(" (")
@@ -992,7 +1013,7 @@ func renderIn(i *ast.InExpression, opts ast.FormatOptions) string {
 	} else {
 		parts := make([]string, len(i.List))
 		for idx, e := range i.List {
-			parts[idx] = FormatExpression(e, opts)
+			parts[idx] = formatExpressionChild(e, opts, context...)
 		}
 		sb.WriteString(strings.Join(parts, ", "))
 	}
@@ -1019,6 +1040,9 @@ func renderExists(e *ast.ExistsExpression, opts ast.FormatOptions) string {
 func renderSubquery(s *ast.SubqueryExpression, opts ast.FormatOptions) string {
 	if s == nil {
 		return ""
+	}
+	if opts.KeywordCase == ast.KeywordLower && s.Bare {
+		return FormatStatement(s.Subquery, nestedOpts(opts))
 	}
 	f := newNodeFormatter(opts)
 	sb := f.sb
@@ -1139,7 +1163,9 @@ func tableRefSQL(t *ast.TableReference, f *nodeFormatter) string {
 			sb.WriteString(tableRefSQL(&g.Tables[i], f))
 		}
 		for i := range g.Joins {
-			sb.WriteString(" ")
+			if !g.Joins[i].Comma {
+				sb.WriteString(" ")
+			}
 			sb.WriteString(joinSQL(&g.Joins[i], f))
 		}
 		sb.WriteString(")")
@@ -1151,17 +1177,17 @@ func tableRefSQL(t *ast.TableReference, f *nodeFormatter) string {
 	}
 	if t.Subquery != nil {
 		sb.WriteString("(")
-		sb.WriteString(stmtSQL(t.Subquery))
+		sb.WriteString(f.tableSubquerySQL(t.Subquery))
 		sb.WriteString(")")
 	} else if t.TableFunc != nil {
-		sb.WriteString(t.TableFunc.SQL())
+		sb.WriteString(f.exprSQL(t.TableFunc))
 		if t.WithOrdinality {
 			sb.WriteString(" ")
 			sb.WriteString(f.kw("WITH ORDINALITY"))
 		}
 	} else if t.SetSubquery != nil {
 		sb.WriteString("(")
-		sb.WriteString(stmtSQL(t.SetSubquery))
+		sb.WriteString(f.tableSubquerySQL(t.SetSubquery))
 		sb.WriteString(")")
 	} else if t.DialectModifiers().Values != nil {
 		sb.WriteString("(")
@@ -1258,7 +1284,7 @@ func joinSQL(j *ast.JoinClause, f *nodeFormatter) string {
 		sb.WriteString(" ")
 		sb.WriteString(f.kw("MATCH_CONDITION"))
 		sb.WriteString(" (")
-		sb.WriteString(exprSQL(j.MatchCondition))
+		sb.WriteString(f.exprSQL(j.MatchCondition))
 		sb.WriteString(")")
 	}
 	if len(j.Using) > 0 {
@@ -1269,14 +1295,14 @@ func joinSQL(j *ast.JoinClause, f *nodeFormatter) string {
 			if i > 0 {
 				sb.WriteString(", ")
 			}
-			sb.WriteString(exprSQL(u))
+			sb.WriteString(f.exprSQL(u))
 		}
 		sb.WriteString(")")
 	} else if j.Condition != nil {
 		sb.WriteString(" ")
 		sb.WriteString(f.kw("ON"))
 		sb.WriteString(" ")
-		sb.WriteString(exprSQL(j.Condition))
+		sb.WriteString(f.exprSQL(j.Condition))
 	}
 	return sb.String()
 }
@@ -1357,67 +1383,67 @@ func fetchSQL(fc *ast.FetchClause, f *nodeFormatter) string {
 }
 
 // forSQL renders a FOR UPDATE/SHARE clause.
-func forSQL(f *ast.ForClause) string {
+func forSQL(lock *ast.ForClause, f *nodeFormatter) string {
 	var sb strings.Builder
-	if f.LockInShareMode {
-		sb.WriteString(" LOCK IN SHARE MODE")
-		if f.NoWait {
-			sb.WriteString(" NOWAIT")
+	if lock.LockInShareMode {
+		sb.WriteString(f.kw(" LOCK IN SHARE MODE"))
+		if lock.NoWait {
+			sb.WriteString(f.kw(" NOWAIT"))
 		}
-		if f.Wait != nil {
-			sb.WriteString(" WAIT ")
-			sb.WriteString(exprSQL(f.Wait))
+		if lock.Wait != nil {
+			sb.WriteString(f.kw(" WAIT "))
+			sb.WriteString(f.exprSQL(lock.Wait))
 		}
 		return sb.String()
 	}
-	sb.WriteString(" FOR ")
-	sb.WriteString(ast.LockTypeText(f.LockType))
-	if len(f.Tables) > 0 {
-		sb.WriteString(" OF ")
-		sb.WriteString(quoteQualifiedNames(f.Tables))
+	sb.WriteString(f.kw(" FOR "))
+	sb.WriteString(f.kw(ast.LockTypeText(lock.LockType)))
+	if len(lock.Tables) > 0 {
+		sb.WriteString(f.kw(" OF "))
+		sb.WriteString(quoteQualifiedNames(lock.Tables))
 	}
-	if f.NoWait {
-		sb.WriteString(" NOWAIT")
+	if lock.NoWait {
+		sb.WriteString(f.kw(" NOWAIT"))
 	}
-	if f.SkipLocked {
-		sb.WriteString(" SKIP LOCKED")
+	if lock.SkipLocked {
+		sb.WriteString(f.kw(" SKIP LOCKED"))
 	}
-	if f.Wait != nil {
-		sb.WriteString(" WAIT ")
-		sb.WriteString(exprSQL(f.Wait))
+	if lock.Wait != nil {
+		sb.WriteString(f.kw(" WAIT "))
+		sb.WriteString(f.exprSQL(lock.Wait))
 	}
 	return sb.String()
 }
 
 // onConflictSQL renders an ON CONFLICT clause.
-func onConflictSQL(oc *ast.OnConflict) string {
+func onConflictSQL(oc *ast.OnConflict, f *nodeFormatter) string {
 	var sb strings.Builder
-	sb.WriteString(" ON CONFLICT")
+	sb.WriteString(f.kw(" ON CONFLICT"))
 	if len(oc.Target) > 0 {
 		sb.WriteString(" (")
 		sb.WriteString(ast.ColumnRefListSQL(oc.Target))
 		sb.WriteString(")")
 	}
 	if oc.TargetWhere != nil {
-		sb.WriteString(" WHERE ")
-		sb.WriteString(exprSQL(oc.TargetWhere))
+		sb.WriteString(f.kw(" WHERE "))
+		sb.WriteString(f.exprSQL(oc.TargetWhere))
 	}
 	if oc.Constraint != "" {
-		sb.WriteString(" ON CONSTRAINT ")
+		sb.WriteString(f.kw(" ON CONSTRAINT "))
 		sb.WriteString(ast.QuoteColumnName(oc.Constraint))
 	}
 	if oc.Action.DoNothing {
-		sb.WriteString(" DO NOTHING")
+		sb.WriteString(f.kw(" DO NOTHING"))
 	} else if len(oc.Action.DoUpdate) > 0 {
-		sb.WriteString(" DO UPDATE SET ")
+		sb.WriteString(f.kw(" DO UPDATE SET "))
 		upds := make([]string, len(oc.Action.DoUpdate))
 		for i, u := range oc.Action.DoUpdate {
-			upds[i] = ast.ColumnRefSQL(u.Column) + " = " + exprSQL(u.Value)
+			upds[i] = ast.ColumnRefSQL(u.Column) + " = " + f.exprSQL(u.Value)
 		}
 		sb.WriteString(strings.Join(upds, ", "))
 		if oc.Action.Where != nil {
-			sb.WriteString(" WHERE ")
-			sb.WriteString(exprSQL(oc.Action.Where))
+			sb.WriteString(f.kw(" WHERE "))
+			sb.WriteString(f.exprSQL(oc.Action.Where))
 		}
 	}
 	return sb.String()

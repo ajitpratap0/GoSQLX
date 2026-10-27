@@ -16,12 +16,13 @@ package transform
 
 import (
 	"fmt"
+	"strconv"
 
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
 )
 
-// SetLimit returns a Rule that sets (or replaces) the LIMIT clause of a SELECT
-// statement. Any existing LIMIT value is overwritten.
+// SetLimit returns a Rule that sets or replaces the row limit of a SELECT,
+// preserving an existing TOP or FETCH clause. PERCENT and WITH TIES are rejected.
 //
 // Parameters:
 //   - n: Number of rows to return; must be >= 0. Returns an error for negative values.
@@ -36,7 +37,21 @@ func SetLimit(n int) Rule {
 		if err != nil {
 			return err
 		}
-		sel.Limit = &n
+		if err := checkPaginationModifiers(sel, "SetLimit"); err != nil {
+			return err
+		}
+		switch {
+		case sel.Top != nil:
+			sel.Top.Count = &ast.LiteralValue{Value: strconv.Itoa(n), Type: "INTEGER"}
+			sel.Limit = nil
+		case sel.Fetch != nil:
+			value := int64(n)
+			sel.Fetch.FetchValue = &value
+			sel.Fetch.FetchExpr = nil
+			sel.Limit = nil
+		default:
+			sel.Limit = &n
+		}
 		if sel.Extras != nil {
 			sel.Extras.LimitExpr = nil
 			sel.Extras.LimitAll = false
@@ -46,7 +61,8 @@ func SetLimit(n int) Rule {
 }
 
 // SetOffset returns a Rule that sets (or replaces) the OFFSET clause of a SELECT
-// statement. Use together with SetLimit to implement pagination.
+// statement. Use together with SetLimit to implement pagination. TOP and
+// FETCH PERCENT or WITH TIES clauses are rejected.
 //
 // Parameters:
 //   - n: Number of rows to skip; must be >= 0. Returns an error for negative values.
@@ -61,7 +77,16 @@ func SetOffset(n int) Rule {
 		if err != nil {
 			return err
 		}
+		if err := checkPaginationModifiers(sel, "SetOffset"); err != nil {
+			return err
+		}
+		if sel.Top != nil {
+			return fmt.Errorf("SetOffset: cannot combine OFFSET with TOP")
+		}
 		sel.Offset = &n
+		if sel.Fetch != nil {
+			sel.Fetch.OffsetValue = nil
+		}
 		if sel.Extras != nil {
 			sel.Extras.OffsetExpr = nil
 		}
@@ -69,8 +94,8 @@ func SetOffset(n int) Rule {
 	})
 }
 
-// RemoveLimit returns a Rule that removes the LIMIT clause from a SELECT statement,
-// allowing the query to return an unbounded number of rows.
+// RemoveLimit returns a Rule that removes LIMIT, TOP, or FETCH from a SELECT,
+// allowing an unbounded number of rows. PERCENT and WITH TIES are rejected.
 //
 // Returns ErrUnsupportedStatement for non-SELECT statements.
 func RemoveLimit() Rule {
@@ -79,7 +104,18 @@ func RemoveLimit() Rule {
 		if err != nil {
 			return err
 		}
+		if err := checkPaginationModifiers(sel, "RemoveLimit"); err != nil {
+			return err
+		}
+		// Preserve the offset of ASTs constructed with the legacy FETCH field.
+		if sel.Fetch != nil && sel.Fetch.OffsetValue != nil && sel.Offset == nil && sel.DialectExtras().OffsetExpr == nil {
+			offset := int(*sel.Fetch.OffsetValue)
+			sel.Offset = &offset
+			sel.EnsureExtras().OffsetRows = true
+		}
 		sel.Limit = nil
+		sel.Top = nil
+		sel.Fetch = nil
 		if sel.Extras != nil {
 			sel.Extras.LimitExpr = nil
 			sel.Extras.LimitAll = false
@@ -100,10 +136,24 @@ func RemoveOffset() Rule {
 			return err
 		}
 		sel.Offset = nil
+		if sel.Fetch != nil {
+			sel.Fetch.OffsetValue = nil
+		}
 		if sel.Extras != nil {
 			sel.Extras.OffsetExpr = nil
 			sel.Extras.OffsetRows = false
 		}
 		return nil
 	})
+}
+
+// Percentages and ties change the meaning of a row count; reject them before mutation.
+func checkPaginationModifiers(sel *ast.SelectStatement, operation string) error {
+	if sel.Top != nil && (sel.Top.IsPercent || sel.Top.WithTies) {
+		return fmt.Errorf("%s: TOP PERCENT or WITH TIES is not supported", operation)
+	}
+	if sel.Fetch != nil && (sel.Fetch.IsPercent || sel.Fetch.WithTies) {
+		return fmt.Errorf("%s: FETCH PERCENT or WITH TIES is not supported", operation)
+	}
+	return nil
 }

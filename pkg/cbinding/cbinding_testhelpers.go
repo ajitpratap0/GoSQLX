@@ -280,3 +280,9 @@ func transpileRaw(sql, from, to *string) string {
 func dialectsRaw() string {
 	return takeResult(gosqlx_dialects())
 }
+
+func versionIsNull() bool {
+	p := gosqlx_version()
+	defer freeCString(p)
+	return p == nil
+}

@@ -16,6 +16,7 @@ package lsp
 
 import (
 	"encoding/json"
+	stderrors "errors"
 	"fmt"
 	"regexp"
 	"strconv"
@@ -803,8 +804,10 @@ func (h *Handler) handleFormatting(params json.RawMessage) ([]TextEdit, error) {
 	}
 	formatted, err := formatForDialect(content, opts, h.currentDialect())
 	if err != nil {
-		// If parsing fails, fall back to basic formatting
-		formatted = formatSQL(content, p.Options)
+		formatted, err = formattingFallback(content, p.Options, err)
+		if err != nil {
+			return nil, err
+		}
 	}
 	if formatted == content {
 		return []TextEdit{}, nil
@@ -823,6 +826,15 @@ func (h *Handler) handleFormatting(params json.RawMessage) ([]TextEdit, error) {
 			NewText: formatted,
 		},
 	}, nil
+}
+
+// formattingFallback tolerates incomplete SQL while preserving semantic
+// rendering errors, which must reach the client rather than yield a misleading edit.
+func formattingFallback(content string, opts FormattingOptions, err error) (string, error) {
+	if !stderrors.Is(err, gosqlx.ErrSyntax) && !stderrors.Is(err, gosqlx.ErrTokenize) {
+		return "", fmt.Errorf("formatting failed: %w", err)
+	}
+	return formatSQL(content, opts), nil
 }
 
 // formatSQL provides basic SQL formatting

@@ -181,7 +181,7 @@ func (f *Formatter) Format(sql string) (string, error) {
 	}
 	style.Dialect = f.opts.Dialect
 
-	return FormatAST(parsedAST, style), nil
+	return FormatASTChecked(parsedAST, style)
 }
 
 // FormatString is a convenience function that formats SQL with default options.

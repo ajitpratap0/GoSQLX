@@ -117,7 +117,11 @@ func Normalize(sql string) (string, error) {
 	opts := ast.CompactStyle()
 	var parts []string
 	for _, stmt := range astObj.Statements {
-		parts = append(parts, formatter.FormatStatement(stmt, opts))
+		formatted, err := formatter.FormatStatementChecked(stmt, opts)
+		if err != nil {
+			return "", fmt.Errorf("fingerprint: formatting failed: %w", err)
+		}
+		parts = append(parts, formatted)
 	}
 
 	return strings.Join(parts, "; "), nil

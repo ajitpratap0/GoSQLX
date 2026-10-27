@@ -23,7 +23,7 @@ func numericLiteralType(value string) string {
 	if len(value) > 2 && value[0] == '0' && (value[1] == 'x' || value[1] == 'X') {
 		return "int"
 	}
-	if strings.ContainsAny(value, ".eE") {
+	if strings.ContainsAny(value, ".eEdDfF") { // dD/fF: Oracle 1d, 1.5f
 		return "float"
 	}
 	return "int"

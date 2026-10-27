@@ -77,15 +77,38 @@ func (f *nodeFormatter) result() string {
 
 // ─── public rendering API ────────────────────────────────────────────────────
 
-// FormatAST renders a full *ast.AST with the given options.
+// FormatAST renders an AST. An unsupported target operator returns an empty
+// string; use FormatASTChecked to receive the diagnostic.
 func FormatAST(a *ast.AST, opts ast.FormatOptions) string {
+	out, _ := FormatASTChecked(a, opts)
+	return out
+}
+
+// FormatStatement renders a statement. If a target-dialect conversion is
+// unsupported, it returns an empty string and discards the error. Use
+// FormatStatementChecked whenever the result can carry a target dialect.
+func FormatStatement(s ast.Statement, opts ast.FormatOptions) string {
+	out, _ := FormatStatementChecked(s, opts)
+	return out
+}
+
+// FormatExpression renders an expression. If a target-dialect conversion is
+// unsupported, it returns an empty string and discards the error. Use
+// FormatExpressionChecked whenever the result can carry a target dialect.
+func FormatExpression(e ast.Expression, opts ast.FormatOptions) string {
+	out, _ := FormatExpressionChecked(e, opts)
+	return out
+}
+
+// FormatAST renders a full *ast.AST with the given options.
+func formatAST(a *ast.AST, opts ast.FormatOptions) string {
 	if a == nil {
 		return ""
 	}
 	parts := make([]string, 0, len(a.Statements))
 	hasBatch := false
 	for _, stmt := range a.Statements {
-		part := FormatStatement(stmt, opts)
+		part := formatStatement(stmt, opts)
 		// Renderers that keep a statement as written (UtilityStatement and
 		// the stmtSQL fallback) do not add the ";" themselves; without it the
 		// next statement would be read back as part of their text.
@@ -149,7 +172,7 @@ func FormatAST(a *ast.AST, opts ast.FormatOptions) string {
 
 // FormatStatement renders a single AST statement with the given options.
 // Returns "" for nil.
-func FormatStatement(s ast.Statement, opts ast.FormatOptions) string {
+func formatStatement(s ast.Statement, opts ast.FormatOptions) string {
 	if s == nil {
 		return ""
 	}
@@ -206,7 +229,7 @@ func FormatStatement(s ast.Statement, opts ast.FormatOptions) string {
 
 // FormatExpression renders an AST expression with the given options.
 // Returns "" for nil.
-func FormatExpression(e ast.Expression, opts ast.FormatOptions) string {
+func formatExpression(e ast.Expression, opts ast.FormatOptions) string {
 	if e == nil {
 		return ""
 	}
@@ -303,14 +326,14 @@ func renderSelect(s *ast.SelectStatement, opts ast.FormatOptions) string {
 		sb.WriteString(f.clauseSep())
 		sb.WriteString(f.kw("PREWHERE"))
 		sb.WriteString(" ")
-		sb.WriteString(FormatExpression(s.PrewhereClause, opts))
+		sb.WriteString(formatExpression(s.PrewhereClause, opts))
 	}
 
 	if s.Where != nil {
 		sb.WriteString(f.clauseSep())
 		sb.WriteString(f.kw("WHERE"))
 		sb.WriteString(" ")
-		sb.WriteString(FormatExpression(s.Where, opts))
+		sb.WriteString(formatExpression(s.Where, opts))
 	}
 
 	if gb := groupBySQL(s, f); gb != "" {
@@ -322,7 +345,7 @@ func renderSelect(s *ast.SelectStatement, opts ast.FormatOptions) string {
 		sb.WriteString(f.clauseSep())
 		sb.WriteString(f.kw("HAVING"))
 		sb.WriteString(" ")
-		sb.WriteString(FormatExpression(s.Having, opts))
+		sb.WriteString(formatExpression(s.Having, opts))
 	}
 
 	// QUALIFY, START WITH, CONNECT BY
@@ -434,7 +457,7 @@ func renderInsert(i *ast.InsertStatement, opts ast.FormatOptions) string {
 		sb.WriteString(strings.Join(sets, ", "))
 	} else if i.Query != nil {
 		sb.WriteString(f.clauseSep())
-		sb.WriteString(FormatStatement(i.Query, nestedOpts(opts)))
+		sb.WriteString(formatStatement(i.Query, nestedOpts(opts)))
 	} else if len(i.Values) > 0 {
 		sb.WriteString(f.clauseSep())
 		sb.WriteString(f.kw("VALUES"))
@@ -526,7 +549,7 @@ func renderUpdate(u *ast.UpdateStatement, opts ast.FormatOptions) string {
 		sb.WriteString(f.clauseSep())
 		sb.WriteString(f.kw("WHERE"))
 		sb.WriteString(" ")
-		sb.WriteString(FormatExpression(u.Where, opts))
+		sb.WriteString(formatExpression(u.Where, opts))
 	}
 	writeDMLOrderLimit(sb, f, x)
 	writeReturning(sb, f, u.Returning, x.ReturningInto)
@@ -595,7 +618,7 @@ func renderDelete(d *ast.DeleteStatement, opts ast.FormatOptions) string {
 		sb.WriteString(f.clauseSep())
 		sb.WriteString(f.kw("WHERE"))
 		sb.WriteString(" ")
-		sb.WriteString(FormatExpression(d.Where, opts))
+		sb.WriteString(formatExpression(d.Where, opts))
 	}
 	writeDMLOrderLimit(sb, f, x)
 	writeReturning(sb, f, d.Returning, x.ReturningInto)
@@ -657,10 +680,10 @@ func renderSetOperationBody(s *ast.SetOperation, opts ast.FormatOptions) string 
 	if innermost := spine[len(spine)-1]; innermost.Left != nil {
 		if ast.SetOperandNeedsParens(innermost, false, opts.Dialect) {
 			sb.WriteString("(")
-			sb.WriteString(FormatStatement(innermost.Left, inner))
+			sb.WriteString(formatStatement(innermost.Left, inner))
 			sb.WriteString(")")
 		} else {
-			sb.WriteString(FormatStatement(innermost.Left, inner))
+			sb.WriteString(formatStatement(innermost.Left, inner))
 		}
 	}
 	for i := len(spine) - 1; i >= 0; i-- {
@@ -678,10 +701,10 @@ func renderSetOperationBody(s *ast.SetOperation, opts ast.FormatOptions) string 
 		if level.Right != nil {
 			if ast.SetOperandNeedsParens(level, true, opts.Dialect) {
 				sb.WriteString("(")
-				sb.WriteString(FormatStatement(level.Right, inner))
+				sb.WriteString(formatStatement(level.Right, inner))
 				sb.WriteString(")")
 			} else {
-				sb.WriteString(FormatStatement(level.Right, inner))
+				sb.WriteString(formatStatement(level.Right, inner))
 			}
 		}
 	}
@@ -914,23 +937,23 @@ func renderCase(c *ast.CaseExpression, opts ast.FormatOptions) string {
 	sb.WriteString(f.kw("CASE"))
 	if c.Value != nil {
 		sb.WriteString(" ")
-		sb.WriteString(FormatExpression(c.Value, opts))
+		sb.WriteString(formatExpression(c.Value, opts))
 	}
 	for _, when := range c.WhenClauses {
 		sb.WriteString(" ")
 		sb.WriteString(f.kw("WHEN"))
 		sb.WriteString(" ")
-		sb.WriteString(FormatExpression(when.Condition, opts))
+		sb.WriteString(formatExpression(when.Condition, opts))
 		sb.WriteString(" ")
 		sb.WriteString(f.kw("THEN"))
 		sb.WriteString(" ")
-		sb.WriteString(FormatExpression(when.Result, opts))
+		sb.WriteString(formatExpression(when.Result, opts))
 	}
 	if c.ElseClause != nil {
 		sb.WriteString(" ")
 		sb.WriteString(f.kw("ELSE"))
 		sb.WriteString(" ")
-		sb.WriteString(FormatExpression(c.ElseClause, opts))
+		sb.WriteString(formatExpression(c.ElseClause, opts))
 	}
 	sb.WriteString(" ")
 	sb.WriteString(f.kw("END"))
@@ -945,7 +968,7 @@ func renderBetween(b *ast.BetweenExpression, opts ast.FormatOptions) string {
 	f := newNodeFormatter(opts)
 	sb := f.sb
 
-	sb.WriteString(FormatExpression(b.Expr, opts))
+	sb.WriteString(formatExpression(b.Expr, opts))
 	sb.WriteString(" ")
 	if b.Not {
 		sb.WriteString(f.kw("NOT"))
@@ -953,11 +976,11 @@ func renderBetween(b *ast.BetweenExpression, opts ast.FormatOptions) string {
 	}
 	sb.WriteString(f.kw("BETWEEN"))
 	sb.WriteString(" ")
-	sb.WriteString(FormatExpression(b.Lower, opts))
+	sb.WriteString(formatExpression(b.Lower, opts))
 	sb.WriteString(" ")
 	sb.WriteString(f.kw("AND"))
 	sb.WriteString(" ")
-	sb.WriteString(FormatExpression(b.Upper, opts))
+	sb.WriteString(formatExpression(b.Upper, opts))
 
 	return f.result()
 }
@@ -969,7 +992,7 @@ func renderIn(i *ast.InExpression, opts ast.FormatOptions) string {
 	f := newNodeFormatter(opts)
 	sb := f.sb
 
-	sb.WriteString(FormatExpression(i.Expr, opts))
+	sb.WriteString(formatExpression(i.Expr, opts))
 	sb.WriteString(" ")
 	if i.Global {
 		sb.WriteString(f.kw("GLOBAL"))
@@ -988,11 +1011,11 @@ func renderIn(i *ast.InExpression, opts ast.FormatOptions) string {
 	}
 	sb.WriteString(" (")
 	if i.Subquery != nil {
-		sb.WriteString(FormatStatement(i.Subquery, nestedOpts(opts)))
+		sb.WriteString(formatStatement(i.Subquery, nestedOpts(opts)))
 	} else {
 		parts := make([]string, len(i.List))
 		for idx, e := range i.List {
-			parts[idx] = FormatExpression(e, opts)
+			parts[idx] = formatExpression(e, opts)
 		}
 		sb.WriteString(strings.Join(parts, ", "))
 	}
@@ -1010,7 +1033,7 @@ func renderExists(e *ast.ExistsExpression, opts ast.FormatOptions) string {
 
 	sb.WriteString(f.kw("EXISTS"))
 	sb.WriteString(" (")
-	sb.WriteString(FormatStatement(e.Subquery, nestedOpts(opts)))
+	sb.WriteString(formatStatement(e.Subquery, nestedOpts(opts)))
 	sb.WriteString(")")
 
 	return f.result()
@@ -1024,7 +1047,7 @@ func renderSubquery(s *ast.SubqueryExpression, opts ast.FormatOptions) string {
 	sb := f.sb
 
 	sb.WriteString("(")
-	sb.WriteString(FormatStatement(s.Subquery, nestedOpts(opts)))
+	sb.WriteString(formatStatement(s.Subquery, nestedOpts(opts)))
 	sb.WriteString(")")
 
 	return f.result()

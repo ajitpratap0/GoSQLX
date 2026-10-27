@@ -87,7 +87,7 @@ func ddlNameRenderCases() []aliasRenderCase {
 			}
 			return ""
 		}},
-		{"create_table_column_type", `CREATE TABLE t (a ` + hostileQ + `)`, hostile, func(s ast.Statement) string {
+		{"create_table_column_type", `CREATE TABLE t (a ` + hostileQ + `)`, hostileQ, func(s ast.Statement) string {
 			if c := createTable(s); c != nil && len(c.Columns) > 0 {
 				return c.Columns[0].Type
 			}
@@ -221,7 +221,7 @@ func ddlNameRenderCases() []aliasRenderCase {
 			}
 			return ""
 		}},
-		{"cast_type", `SELECT a::` + hostileQ + ` FROM t`, hostile, func(s ast.Statement) string {
+		{"cast_type", `SELECT a::` + hostileQ + ` FROM t`, hostileQ, func(s ast.Statement) string {
 			if c, ok := firstColumnExpr(s).(*ast.CastExpression); ok {
 				return c.Type
 			}

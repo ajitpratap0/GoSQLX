@@ -64,6 +64,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   in dialects without them.
 
 ### Fixed
+- Preserve dialect numeric and PostgreSQL Unicode-escape literals and quoted type names; correct JSON/power precedence and retain operator meaning during target-dialect formatting. Hand-built expression trees, including hand-built operands inserted into parsed trees, now render necessary parentheses.
+- Formatting or transpiling to another dialect rewrites PostgreSQL `#` (XOR),
+  `~`, `<<`/`>>`, `&`/`|` and `||` (CONCAT in MySQL/MariaDB) into the target's
+  form, and refuses with an error where the target has none (for example `#`
+  in Oracle/SQLite, `@>`/`?`/regex `~` outside PostgreSQL), instead of
+  emitting them unchanged (`a # b` read as `a` plus a comment in MySQL).
 - **AST walkers** (`ast.Inspect`, `Walk`, the security scanner, linter and
   table extraction) reach SELECT `TOP` and ClickHouse `ARRAY JOIN`, the
   ENGINE/ORDER BY/PARTITION BY/TTL/SETTINGS clauses of `CREATE TABLE` and
@@ -159,6 +165,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   exist; the limits are constants.
 
 ### Behavior changes
+- Numeric words without whitespace no longer silently become a number plus a
+  column alias. Numeric spelling is retained. Differences from the previous lexer:
+
+  | Dialect | Numeric changes | Unicode-escape changes |
+  | --- | --- | --- |
+  | PostgreSQL | `1_000`, `1_000.000_1`, `0o17`, `0b101`, and base-prefix separators such as `0x_FF` are single numbers. Malformed forms (`1x`, `0x`, `1__0`, `1_`, `1FROM`) error. | `U&'...'` with optional `UESCAPE` (comments allowed before it) is validated and preserved as one literal; `U&"..."` decodes to a quoted identifier usable wherever a name is. Malformed escapes error. |
+  | MySQL / MariaDB | `0b101` is a single bit literal; `1x`, `1_000`, and bare `0x` are identifiers rather than number/alias pairs. A number with a fraction still ends before a name (`1.5a` is `1.5 AS a`). | Unchanged: `U&'x'` remains separate `U`, `&`, and string tokens. |
+  | SQLite | `1_000` is one number; numeric trailing junk and unsupported `0b101` error. | Unchanged. |
+  | ClickHouse | `1_000` and `0b101` are single numbers; numeric trailing junk errors. | Unchanged. |
+  | SQL Server | Numeric trailing junk, including `1_000` and `0b101`, errors; a keyword written against a number (`1AS x`) is still accepted. | Unchanged. |
+  | Oracle | `1d`, `1.5f`, `1e5D` (BINARY_DOUBLE/BINARY_FLOAT) are single numbers. Storage sizes (`100M`, `8K`, `2G`) keep their units wherever a size appears; keywords against a number (`1FROM`) are accepted; other trailing junk, `1_000` and `0b101` error. | Unchanged. |
+  | Snowflake / BigQuery / Redshift | Numeric trailing junk, `0b101` and `1_000` error. | Unchanged. |
+  | generic | As Oracle for storage sizes and keywords; `1d`, `1x`, `1_000`, `0b101` error. | Unchanged. |
+
+  `0x1F` remains a single hex literal in every dialect.
 - SQL Server: a line holding only `GO [n]` inside a statement is now a parse
   error ("GO batch separator inside a statement"), matching sqlcmd, instead of
   a column or alias named `go`. `GO 0` / `GO 1.5` alone on a line report

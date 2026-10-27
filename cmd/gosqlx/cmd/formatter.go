@@ -394,8 +394,14 @@ func verifyFormattedSQL(original *ast.AST, inputTokens []models.TokenWithSpan, f
 	}
 	canonical := NewSQLFormatter(FormatterOptions{Compact: true, UppercaseKw: true, Dialect: dialect}).style
 	for i, stmt := range original.Statements {
-		want := pkgformatter.FormatStatement(stmt, canonical)
-		got := pkgformatter.FormatStatement(reparsed.Statements[i], canonical)
+		want, err := pkgformatter.FormatStatementChecked(stmt, canonical)
+		if err != nil {
+			return fmt.Errorf("cannot format original statement %d: %w", i+1, err)
+		}
+		got, err := pkgformatter.FormatStatementChecked(reparsed.Statements[i], canonical)
+		if err != nil {
+			return fmt.Errorf("cannot format reparsed statement %d: %w", i+1, err)
+		}
 		if !strings.EqualFold(want, got) {
 			return fmt.Errorf("formatted output changes statement %d (formatter bug; input left unchanged)", i+1)
 		}

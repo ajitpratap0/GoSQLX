@@ -16,6 +16,7 @@ package cmd
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 
 	pkgformatter "github.com/ajitpratap0/GoSQLX/pkg/formatter"
@@ -26,7 +27,7 @@ import (
 // SQLFormatter renders a parsed AST as SQL text for the format command.
 //
 // It is a thin adapter over pkg/formatter: every statement is rendered with
-// pkgformatter.FormatStatement, so the CLI and the library share a single
+// pkgformatter.FormatStatementChecked, so the CLI and the library share a single
 // renderer and the CLI has no renderer of its own to fall out of sync (#599).
 // Rendering gaps in pkg/formatter are caught, where detectable, by
 // verifyFormattedSQL.
@@ -106,7 +107,11 @@ func (f *SQLFormatter) formatStatements(astObj *ast.AST) ([]string, error) {
 	}
 	stmts := make([]string, len(astObj.Statements))
 	for i, stmt := range astObj.Statements {
-		stmts[i] = pkgformatter.FormatStatement(stmt, f.style)
+		formatted, err := pkgformatter.FormatStatementChecked(stmt, f.style)
+		if err != nil {
+			return nil, fmt.Errorf("cannot format statement %d: %w", i+1, err)
+		}
+		stmts[i] = formatted
 	}
 	return stmts, nil
 }

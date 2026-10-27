@@ -406,7 +406,7 @@ func (b *BinaryExpression) writeSQL(buf *bytes.Buffer) {
 	// prefix NOT, matching UnaryExpression, instead of the infix NOT form.
 	if b.Right == nil && strings.EqualFold(op, "NOT") {
 		buf.WriteString("NOT ")
-		writeExpr(buf, b.Left)
+		writeBinaryOperand(buf, b, b.Left, false)
 		return
 	}
 
@@ -414,7 +414,7 @@ func (b *BinaryExpression) writeSQL(buf *bytes.Buffer) {
 	// The parser stores the operator as "IS NULL" and uses the Not flag to
 	// disambiguate `IS NOT NULL`, so honour it here to avoid dropping NOT.
 	if strings.EqualFold(op, "IS NULL") {
-		writeExpr(buf, b.Left)
+		writeBinaryOperand(buf, b, b.Left, false)
 		if b.Not {
 			buf.WriteString(" IS NOT NULL")
 		} else {
@@ -426,25 +426,25 @@ func (b *BinaryExpression) writeSQL(buf *bytes.Buffer) {
 	// Handle special operators like LIKE, ILIKE, SIMILAR TO
 	if b.Not {
 		if canon, ok := notQualifiedOperator(op); ok {
-			writeExpr(buf, b.Left)
+			writeBinaryOperand(buf, b, b.Left, false)
 			buf.WriteString(" NOT ")
 			buf.WriteString(canon)
 			buf.WriteByte(' ')
-			writeExpr(buf, b.Right)
+			writeBinaryOperand(buf, b, b.Right, true)
 			writeEscape(buf, b.DialectExtras().Escape)
 			return
 		}
 		buf.WriteString("NOT (")
-		writeExpr(buf, b.Left)
+		writeBinaryOperand(buf, b, b.Left, false)
 		buf.WriteByte(' ')
 		writeOp()
 		buf.WriteByte(' ')
-		writeExpr(buf, b.Right)
+		writeBinaryOperand(buf, b, b.Right, true)
 		buf.WriteByte(')')
 		return
 	}
 
-	writeExpr(buf, b.Left)
+	writeBinaryOperand(buf, b, b.Left, false)
 	buf.WriteByte(' ')
 	if b.PipesOr && b.CustomOp == nil && strings.EqualFold(op, "OR") {
 		// Keep the source spelling of a MySQL / MariaDB || OR (#781).
@@ -453,7 +453,7 @@ func (b *BinaryExpression) writeSQL(buf *bytes.Buffer) {
 		writeOp()
 	}
 	buf.WriteByte(' ')
-	writeExpr(buf, b.Right)
+	writeBinaryOperand(buf, b, b.Right, true)
 	writeEscape(buf, b.DialectExtras().Escape)
 }
 
@@ -501,17 +501,17 @@ func (u *UnaryExpression) writeSQL(buf *bytes.Buffer) {
 	switch u.Operator {
 	case Not:
 		buf.WriteString("NOT ")
-		writeExpr(buf, u.Expr)
+		writeUnaryOperand(buf, u)
 	case PGPostfixFactorial:
-		writeExpr(buf, u.Expr)
+		writeUnaryOperand(buf, u)
 		buf.WriteByte('!')
 	case Plus:
 		buf.WriteByte('+')
-		writeExpr(buf, u.Expr)
+		writeUnaryOperand(buf, u)
 	case Minus:
 		buf.WriteByte('-')
 		start := buf.Len()
-		writeExpr(buf, u.Expr)
+		writeUnaryOperand(buf, u)
 		// "--" starts a line comment: separate a nested unary minus or a
 		// negative literal from this operator ("- -1", not "--1").
 		if b := buf.Bytes(); len(b) > start && b[start] == '-' {
@@ -522,19 +522,19 @@ func (u *UnaryExpression) writeSQL(buf *bytes.Buffer) {
 		}
 	case Prior:
 		buf.WriteString("PRIOR ")
-		writeExpr(buf, u.Expr)
+		writeUnaryOperand(buf, u)
 	case MySQLBinary:
 		buf.WriteString("BINARY ")
-		writeExpr(buf, u.Expr)
+		writeUnaryOperand(buf, u)
 	case PGAbs:
 		// Always separate "@" from its operand: "@a", "@t.a" and "@abs(a)"
 		// read as a placeholder or variable, and "@-5" as the operator "@-".
 		buf.WriteString("@ ")
-		writeExpr(buf, u.Expr)
+		writeUnaryOperand(buf, u)
 	default:
 		buf.WriteString(u.Operator.String())
 		start := buf.Len()
-		writeExpr(buf, u.Expr)
+		writeUnaryOperand(buf, u)
 		// A symbolic prefix operator followed by an operand that starts with
 		// an operator character would read as one longer operator ("@-5" is
 		// the operator "@-"): keep them apart.

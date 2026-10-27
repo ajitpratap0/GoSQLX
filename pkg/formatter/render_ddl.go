@@ -141,7 +141,7 @@ func renderExplain(s *ast.ExplainStatement, opts ast.FormatOptions) string {
 	}
 	if s.Statement != nil {
 		sb.WriteString(" ")
-		sb.WriteString(FormatStatement(s.Statement, opts))
+		sb.WriteString(formatStatement(s.Statement, opts))
 	}
 	return sb.String()
 }

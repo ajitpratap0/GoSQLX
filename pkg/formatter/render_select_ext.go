@@ -79,11 +79,11 @@ func selectIntoSQL(in *ast.SelectInto, f *nodeFormatter) string {
 	sb.WriteString(" ")
 	switch in.Kind {
 	case ast.SelectIntoVariables:
-		sb.WriteString(exprListSQL(in.Targets))
+		sb.WriteString(f.exprListSQL(in.Targets))
 	case ast.SelectIntoOutfile, ast.SelectIntoDumpfile:
 		sb.WriteString(f.kw(in.Kind))
 		sb.WriteString(" ")
-		sb.WriteString(exprSQL(in.File))
+		sb.WriteString(f.exprSQL(in.File))
 		if in.Kind == ast.SelectIntoOutfile {
 			if in.CharacterSet != "" {
 				sb.WriteString(" ")
@@ -123,7 +123,7 @@ func writeIntoFileOptions(sb *strings.Builder, clause string, opts []ast.IntoFil
 		sb.WriteString(" ")
 		sb.WriteString(f.kw(kw))
 		sb.WriteString(" ")
-		sb.WriteString(exprSQL(o.Value))
+		sb.WriteString(f.exprSQL(o.Value))
 	}
 }
 
@@ -140,7 +140,7 @@ func arrayJoinSQL(a *ast.ArrayJoinClause, f *nodeFormatter) string {
 		if i > 0 {
 			sb.WriteString(", ")
 		}
-		sb.WriteString(exprSQL(e.Expr))
+		sb.WriteString(f.exprSQL(e.Expr))
 		if e.Alias != "" {
 			sb.WriteString(" ")
 			sb.WriteString(f.kw("AS"))
@@ -164,7 +164,7 @@ func groupBySQL(s *ast.SelectStatement, f *nodeFormatter) string {
 	if m.All {
 		sb.WriteString(f.kw("ALL"))
 	} else {
-		sb.WriteString(exprListSQL(s.GroupBy))
+		sb.WriteString(f.exprListSQL(s.GroupBy))
 	}
 	switch {
 	case m.WithRollup:
@@ -216,17 +216,17 @@ func writeLimitOffsetClauses(sb *strings.Builder, s *ast.SelectStatement, f *nod
 		sb.WriteString(f.clauseSep())
 		sb.WriteString(f.kw("LIMIT"))
 		sb.WriteString(" ")
-		sb.WriteString(exprSQL(lb.Count))
+		sb.WriteString(f.exprSQL(lb.Count))
 		if lb.Offset != nil {
 			sb.WriteString(" ")
 			sb.WriteString(f.kw("OFFSET"))
 			sb.WriteString(" ")
-			sb.WriteString(exprSQL(lb.Offset))
+			sb.WriteString(f.exprSQL(lb.Offset))
 		}
 		sb.WriteString(" ")
 		sb.WriteString(f.kw("BY"))
 		sb.WriteString(" ")
-		sb.WriteString(exprListSQL(lb.Exprs))
+		sb.WriteString(f.exprListSQL(lb.Exprs))
 	}
 	if s.HasLimit() {
 		sb.WriteString(f.clauseSep())
@@ -236,7 +236,7 @@ func writeLimitOffsetClauses(sb *strings.Builder, s *ast.SelectStatement, f *nod
 		case s.Limit != nil:
 			sb.WriteString(strconv.Itoa(*s.Limit))
 		case s.DialectExtras().LimitExpr != nil:
-			sb.WriteString(exprSQL(s.DialectExtras().LimitExpr))
+			sb.WriteString(f.exprSQL(s.DialectExtras().LimitExpr))
 		default:
 			sb.WriteString(f.kw("ALL"))
 		}
@@ -252,7 +252,7 @@ func writeLimitOffsetClauses(sb *strings.Builder, s *ast.SelectStatement, f *nod
 		if s.Offset != nil {
 			sb.WriteString(strconv.Itoa(*s.Offset))
 		} else {
-			sb.WriteString(exprSQL(s.DialectExtras().OffsetExpr))
+			sb.WriteString(f.exprSQL(s.DialectExtras().OffsetExpr))
 		}
 		if s.DialectExtras().OffsetRows || s.Fetch != nil {
 			sb.WriteString(" ")
@@ -263,7 +263,7 @@ func writeLimitOffsetClauses(sb *strings.Builder, s *ast.SelectStatement, f *nod
 		sb.WriteString(f.clauseSep())
 		sb.WriteString(f.kw("ROWS EXAMINED"))
 		sb.WriteString(" ")
-		sb.WriteString(exprSQL(x.RowsExamined))
+		sb.WriteString(f.exprSQL(x.RowsExamined))
 	}
 }
 
@@ -284,7 +284,7 @@ func forOutputSQL(fo *ast.ForOutputClause, f *nodeFormatter) string {
 		sb.WriteString(f.kw(mode))
 		if fo.ModeArg != nil {
 			sb.WriteString("(")
-			sb.WriteString(exprSQL(fo.ModeArg))
+			sb.WriteString(f.exprSQL(fo.ModeArg))
 			sb.WriteString(")")
 		}
 	}
@@ -297,7 +297,7 @@ func forOutputSQL(fo *ast.ForOutputClause, f *nodeFormatter) string {
 		sb.WriteString(f.kw(name))
 		if o.Arg != nil {
 			sb.WriteString("(")
-			sb.WriteString(exprSQL(o.Arg))
+			sb.WriteString(f.exprSQL(o.Arg))
 			sb.WriteString(")")
 		}
 	}
@@ -327,7 +327,7 @@ func queryHintsSQL(hints []ast.QueryHint, f *nodeFormatter) string {
 			} else {
 				sb.WriteString(" ")
 			}
-			sb.WriteString(exprSQL(h.Value))
+			sb.WriteString(f.exprSQL(h.Value))
 		}
 		if h.HasArgs {
 			sb.WriteString(" (")
@@ -335,7 +335,7 @@ func queryHintsSQL(hints []ast.QueryHint, f *nodeFormatter) string {
 				if j > 0 {
 					sb.WriteString(", ")
 				}
-				sb.WriteString(exprSQL(a.Expr))
+				sb.WriteString(f.exprSQL(a.Expr))
 				if a.Unknown {
 					sb.WriteString(" ")
 					sb.WriteString(f.kw("UNKNOWN"))
@@ -401,7 +401,7 @@ func interpolateSQL(c *ast.InterpolateClause, f *nodeFormatter) string {
 			sb.WriteString(" ")
 			sb.WriteString(f.kw("AS"))
 			sb.WriteString(" ")
-			sb.WriteString(exprSQL(it.Expr))
+			sb.WriteString(f.exprSQL(it.Expr))
 		}
 	}
 	sb.WriteString(")")

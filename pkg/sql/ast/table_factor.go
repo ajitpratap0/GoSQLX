@@ -218,7 +218,9 @@ func writeJoinGroup(buf *bytes.Buffer, g *JoinGroup) {
 	buf.WriteByte('(')
 	writeTableRefList(buf, g.Tables)
 	for i := range g.Joins {
-		buf.WriteByte(' ')
+		if !g.Joins[i].Comma {
+			buf.WriteByte(' ')
+		}
 		writeJoin(buf, &g.Joins[i])
 	}
 	buf.WriteByte(')')

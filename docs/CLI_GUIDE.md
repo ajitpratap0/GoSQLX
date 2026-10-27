@@ -206,10 +206,13 @@ gosqlx format [file...] [flags]
 | `--dialect` | string | postgresql | SQL dialect (generic, postgresql, mysql, mariadb, sqlserver, oracle, sqlite, snowflake, bigquery, redshift, clickhouse); unknown names are rejected |
 | `--indent` | int | 2 | Indentation size in spaces (0-8) |
 | `--uppercase` | bool | true | Uppercase SQL keywords |
-| `--no-uppercase` | bool | false | Write keywords in lower case (cannot be combined with `--uppercase`) |
+| `--no-uppercase` | bool | false | Write all keywords, including keyword operators and built-in function keywords, in lower case (cannot be combined with `--uppercase`) |
 | `--compact` | bool | false | Compact format (minimal whitespace) |
 | `--check` | bool | false | Check if formatting is needed (CI mode) |
 | `--max-line` | int | 80 | Maximum line length (0-500) |
+
+Dialect clauses stored verbatim inside `JSON_TABLE` and `XMLTABLE` retain their
+source case, including their `COLUMNS` definitions, to preserve names and literals.
 
 #### Examples
 

@@ -106,7 +106,7 @@ func TestSelectExt_SQL(t *testing.T) {
 				{Type: "OUTER APPLY", Right: TableReference{Name: "f"}},
 				{Type: "INNER", Strictness: "ASOF", Right: TableReference{Name: "g"}, MatchCondition: id("m"), Condition: id("y")},
 			}
-		}, "SELECT a FROM t GLOBAL ALL JOIN b USING (k) LEFT MERGE JOIN c ON x , d STRAIGHT_JOIN e OUTER APPLY f ASOF JOIN g MATCH_CONDITION (m) ON y"},
+		}, "SELECT a FROM t GLOBAL ALL JOIN b USING (k) LEFT MERGE JOIN c ON x, d STRAIGHT_JOIN e OUTER APPLY f ASOF JOIN g MATCH_CONDITION (m) ON y"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

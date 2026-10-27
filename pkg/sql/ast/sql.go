@@ -1304,7 +1304,9 @@ func (s *SelectStatement) writeSQL(buf *bytes.Buffer) {
 	}
 
 	for i := range s.Joins {
-		buf.WriteByte(' ')
+		if !s.Joins[i].Comma {
+			buf.WriteByte(' ')
+		}
 		writeJoin(buf, &s.Joins[i])
 	}
 

@@ -48,7 +48,7 @@ func TestRender_SelectBodyClauses(t *testing.T) {
 		{"mysql modifiers", keywords.DialectMySQL, "SELECT SQL_CALC_FOUND_ROWS * FROM t", "SELECT SQL_CALC_FOUND_ROWS * FROM t"},
 		{"mysql straight join", keywords.DialectMySQL, "SELECT * FROM a STRAIGHT_JOIN b ON a.id = b.id", "SELECT * FROM a STRAIGHT_JOIN b ON a.id = b.id"},
 		{"mysql join without on", keywords.DialectMySQL, "SELECT * FROM a JOIN b", "SELECT * FROM a INNER JOIN b"},
-		{"mysql comma after join", keywords.DialectMySQL, "SELECT * FROM a LEFT JOIN b ON a.id = b.id, t3", "SELECT * FROM a LEFT JOIN b ON a.id = b.id , t3"},
+		{"mysql comma after join", keywords.DialectMySQL, "SELECT * FROM a LEFT JOIN b ON a.id = b.id, t3", "SELECT * FROM a LEFT JOIN b ON a.id = b.id, t3"},
 		{"mysql lock in share mode", keywords.DialectMySQL, "SELECT * FROM t WHERE id = 1 LOCK IN SHARE MODE", "SELECT * FROM t WHERE id = 1 LOCK IN SHARE MODE"},
 		{"mysql into vars", keywords.DialectMySQL, "SELECT a, b INTO @x, @y FROM t", "SELECT a, b INTO @x, @y FROM t"},
 		{"mysql outfile", keywords.DialectMySQL, "SELECT * FROM o INTO OUTFILE '/tmp/o.csv' FIELDS TERMINATED BY ',' LINES TERMINATED BY ';'", "SELECT * FROM o INTO OUTFILE '/tmp/o.csv' FIELDS TERMINATED BY ',' LINES TERMINATED BY ';'"},

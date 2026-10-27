@@ -61,26 +61,34 @@ func (p *Parser) parseTSQLConditional(kind string) (ast.Statement, bool, error) 
 }
 
 // tsqlConditionalEnd returns the index of the token after the IF / WHILE
-// statement that begins at start.
+// statement that begins at start. An ELSE IF chain is followed in a loop:
+// each ELSE IF is the last statement of the IF before it, so the chain
+// ends where its last branch ends, and parsing it branch by branch keeps a
+// chain of thousands of branches within the recursion limit and linear.
 func (p *Parser) tsqlConditionalEnd(start int, isIf bool) (int, bool) {
-	body, ok := p.tsqlConditionEnd(start)
-	if !ok {
-		return 0, false
+	for {
+		body, ok := p.tsqlConditionEnd(start)
+		if !ok {
+			return 0, false
+		}
+		end, ok := p.tsqlBodyEnd(body, isIf)
+		if !ok || !isIf {
+			return end, ok
+		}
+		// IF cond stmt; ELSE stmt: a ';' may close the first branch.
+		j := end
+		if j < len(p.tokens) && p.tokens[j].Token.Type == models.TokenTypeSemicolon &&
+			p.utilityWord(j+1) == "ELSE" {
+			j++
+		}
+		if p.utilityWord(j) != "ELSE" {
+			return end, true
+		}
+		if p.utilityWord(j+1) != "IF" {
+			return p.tsqlBodyEnd(j+1, false)
+		}
+		start = j + 1 // ELSE IF: the next branch of the chain
 	}
-	end, ok := p.tsqlBodyEnd(body, isIf)
-	if !ok || !isIf {
-		return end, ok
-	}
-	// IF cond stmt; ELSE stmt: a ';' may close the first branch.
-	j := end
-	if j < len(p.tokens) && p.tokens[j].Token.Type == models.TokenTypeSemicolon &&
-		p.utilityWord(j+1) == "ELSE" {
-		j++
-	}
-	if p.utilityWord(j) != "ELSE" {
-		return end, true
-	}
-	return p.tsqlBodyEnd(j+1, false)
 }
 
 // tsqlConditionEnd returns the index of the first token of the body of the

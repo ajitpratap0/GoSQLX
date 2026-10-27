@@ -3,6 +3,7 @@ package parser_test
 import (
 	"encoding/json"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/ajitpratap0/GoSQLX/pkg/gosqlx"
@@ -25,6 +26,13 @@ func dialectConstructTreeShape(t *testing.T, tree *ast.AST) any {
 		switch n := v.(type) {
 		case map[string]any:
 			delete(n, "Pos")
+			// Unquoted function names are case-insensitive, and lower-case
+			// formatting writes them in lower case (SUM -> sum).
+			if name, ok := n["Name"].(string); ok && n["NameQuote"] == float64(0) {
+				if _, call := n["Arguments"]; call {
+					n["Name"] = strings.ToUpper(name)
+				}
+			}
 			for _, child := range n {
 				clearPositions(child)
 			}

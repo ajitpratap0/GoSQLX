@@ -60,7 +60,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   ORDER BY / LIMIT, RETURNING INTO), `FunctionCall.Extras`,
   `BinaryExpression.Extras` and `TableReference.Modifiers` (including derived
   `VALUES`). Read them through `DialectExtras()` / `DialectModifiers()`, which
-  return a shared read-only empty value when the pointer is nil, and call
+  return values for read access without shared mutable stand-ins; call
   `EnsureExtras()` / `EnsureModifiers()` before writing.
 - **Transpilation**: string literals and quoted identifiers are rendered using
   the target dialect's escape rules and delimiters. Unrepresentable literals
@@ -79,6 +79,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   in dialects without them.
 
 ### Fixed
+- Scan raw dialect statements and standalone VALUES for injection patterns, recover
+  panics at every C export, and guard unlinked tokenizer scratch calls.
+- Formatter lower-case mode covers expression and built-in function keywords;
+  comments use LF endings and keep SQL Server batch boundaries. Fix MySQL join
+  comma spacing, SELECT alias qualifiers, and TOP/FETCH limit transforms.
+- Lower-case expression formatting avoids repeated subtree rendering and copying.
+  Raw `JSON_TABLE`/`XMLTABLE` clauses retain their source case in either mode.
+- Statement splitting follows dialect string escapes, parenthesized bodies,
+  commented SQL Server GO lines and Oracle SQL*Plus execute lines; corpus and
+  CLI audits share a pipeline and detect repeated dropped words.
 - **AST walkers** (`ast.Inspect`, `Walk`, the security scanner, linter and
   table extraction) reach SELECT `TOP` and ClickHouse `ARRAY JOIN`, the
   ENGINE/ORDER BY/PARTITION BY/TTL/SETTINGS clauses of `CREATE TABLE` and
@@ -158,9 +168,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   formatting no longer drop comments either. New `formatter.JoinWithComments`,
   `gosqlx.FormatWithDialect` and `gosqlx.WithComments()`.
 - **CLI**: `lint` exits 1 on syntax errors and `--auto-fix` judges the fixed
-  text; `format --no-uppercase` lower-cases clause keywords (it used to upper-case
-  them; operators such as `AND`, `IN`, `IS NULL`, `DESC` and function names
-  are still written in upper case); `postgres`, `pg`, `mssql`, `tsql` and `sqlite3` are accepted by every
+  text; `format --no-uppercase` lower-cases keywords, keyword operators
+  and built-in function keywords (raw `JSON_TABLE`/`XMLTABLE` clauses retain source
+  case); `postgres`, `pg`, `mssql`, `tsql` and `sqlite3` are accepted by every
   `--dialect` flag; errors are printed once and usage only for flag and
   argument errors; `validate --quiet` exits silently; `validate` names stdin
   `<stdin>`, validates `GO`/`DELIMITER` scripts and files over the token
@@ -172,6 +182,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Docs**: removed `parser.NewTokenConverter`, `SetMaxTokens`,
   `SetMaxRecursionDepth` and the `parser.max_tokens` config key, none of which
   exist; the limits are constants.
+- **Parser**: PostgreSQL `ALTER DEFAULT PRIVILEGES [FOR ROLE r] [IN SCHEMA s]
+  GRANT | REVOKE ...` parses and round-trips; MariaDB ``DELETE `history` FROM
+  history`` stays a multi-table delete when formatted (it was written back as
+  `DELETE HISTORY`); a T-SQL `IF ... ELSE IF ...` chain of any length is one
+  statement, parsed in linear time (chains over ~100 branches hit the
+  recursion limit and swallowed the next statement); MySQL `ANALYZE TABLE t
+  UPDATE HISTOGRAM ...` and Oracle `ANALYZE TABLE t DELETE STATISTICS` are no
+  longer read as MariaDB's `ANALYZE <statement>`.
 
 ### Behavior changes
 - SQL Server: a line holding only `GO [n]` inside a statement is now a parse
@@ -192,10 +210,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Outside SQL Server, a utility statement (`SET`, `USE`, `GRANT`, `COPY`,
   `CALL`, ...) followed on the next line by another statement without `;` is
   an error; only a transaction statement on its own line is accepted without
-  a separator. Statements whose body may hold other statements (`CREATE
-  FUNCTION`/`TRIGGER`/`RULE`, `PREPARE ... AS`, `DECLARE ... CURSOR`) still
-  run to the next `;`, as does a second statement on the same line as a
-  `GRANT` or `COPY`.
+  a separator. Statements whose definition holds a statement (`PREPARE ...
+  AS`, `DECLARE ... CURSOR FOR`, `CREATE FUNCTION`/`PROCEDURE`/`TRIGGER`/
+  `EVENT`/`RULE`/`TASK`/`VIEW` with a single-statement, `RETURN` or
+  `BEGIN ... END` body, `LOAD DATA`) end with that definition, and `GRANT`,
+  `REVOKE`, PostgreSQL `COPY`, `CALL`, `VACUUM`, `ANALYZE`, `LISTEN`, ... end
+  with their grammar, so a statement after them without `;` is an error on the
+  same line as well.
+- Utility statements are accepted only in the dialects that have them
+  (`VACUUM` in PostgreSQL/SQLite, `LISTEN`/`NOTIFY`/`CLUSTER`/`DISCARD` in
+  PostgreSQL, `FLUSH`/`OPTIMIZE`/`LOCK TABLES`/`KILL` in MySQL-family, `PRAGMA`
+  in SQLite, `DO $$ ... $$` in PostgreSQL, `LOAD DATA` in MySQL-family and
+  BigQuery, `SHOW` not in SQLite/SQL Server/Oracle, no `SET`/`GRANT` in SQLite, ...); a parser
+  without a dialect still accepts all of them.
+- MySQL / MariaDB: `:=` inside an expression assigns only to a user variable
+  (`SELECT @v := 1`); `f(a := 1)` and `arr[1:=2]` are errors. PostgreSQL
+  `f(a := 1)` parses as a named argument, written back as `f(a => 1)`.
 - Transaction statements are checked against each dialect's grammar
   (`BEGIN banana` is rejected); `<=>` is accepted only in MySQL, MariaDB and
   PostgreSQL (pgvector), `==` only in SQLite and ClickHouse; an unbalanced

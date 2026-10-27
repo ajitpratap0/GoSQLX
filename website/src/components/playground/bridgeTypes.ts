@@ -120,6 +120,19 @@ export interface HighlightData {
   spans: HighlightSpan[];
 }
 
+/**
+ * Result of Format and Transpile (bridge.TextResponse). On success `result`
+ * holds the SQL; on failure `error` says why and `error_span` locates it when
+ * the error is a tokenizer or parser error. The loader turns a set `error`
+ * into an exception, so the tabs receive `{ error }` from the playground's
+ * safe call wrapper instead.
+ */
+export interface TextData {
+  result?: string;
+  error?: string;
+  error_span?: ErrorSpan;
+}
+
 /** Formats a 1-based position, or returns null when the position is unknown. */
 export function formatPosition(line?: number, column?: number): string | null {
   if (!line || line < 1) return null;

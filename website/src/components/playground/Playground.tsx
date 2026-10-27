@@ -3,14 +3,17 @@ import React, { useState, useEffect, useCallback, useMemo, useRef, Suspense } fr
 import { useWasm } from "./WasmLoader";
 import SqlEditor from "./SqlEditor";
 import AstTab from "./AstTab";
-import FormatTab from "./FormatTab";
+import FormatTab, { type SqlOutputData } from "./FormatTab";
 import LintTab from "./LintTab";
+import TranspileTab, { type DialectOption } from "./TranspileTab";
 import type { AnalysisData, LintData } from "./bridgeTypes";
 import type { EditorErrorMarker } from "./editorDiagnostics";
 import type { HighlightSource } from "./editorHighlight";
 const AnalyzeTab = React.lazy(() => import("./AnalyzeTab"));
 
-const DEFAULT_SQL = `SELECT u.id, u.name, COUNT(o.id) AS order_count
+// The comment shows that Format keeps comments.
+const DEFAULT_SQL = `-- Active users with more than five orders
+SELECT u.id, u.name, COUNT(o.id) AS order_count
 FROM users u
 LEFT JOIN orders o ON u.id = o.user_id
 WHERE u.active = true
@@ -19,7 +22,7 @@ HAVING COUNT(o.id) > 5
 ORDER BY order_count DESC
 LIMIT 10;`;
 
-const DIALECTS = [
+const DIALECTS: DialectOption[] = [
   { value: "generic", label: "Generic" },
   { value: "postgresql", label: "PostgreSQL" },
   { value: "mysql", label: "MySQL" },
@@ -31,11 +34,12 @@ const DIALECTS = [
   { value: "clickhouse", label: "ClickHouse" },
 ];
 
-type TabId = "ast" | "format" | "lint" | "analyze";
+type TabId = "ast" | "format" | "transpile" | "lint" | "analyze";
 
 const TABS: { id: TabId; label: string }[] = [
   { id: "ast", label: "AST" },
   { id: "format", label: "Format" },
+  { id: "transpile", label: "Transpile" },
   { id: "lint", label: "Lint" },
   { id: "analyze", label: "Analyze" },
 ];
@@ -44,7 +48,8 @@ interface Results {
   /** The SQL these results were computed for. */
   source: string | null;
   ast: (Record<string, unknown> & { error?: string }) | null;
-  format: string | { result?: string; formatted?: string; error?: string } | null;
+  format: SqlOutputData;
+  transpile: SqlOutputData;
   lint: LintData | null;
   analyze: AnalysisData | null;
 }
@@ -53,20 +58,22 @@ export default function Playground() {
   const { loading, ready, error, api, progress } = useWasm();
   const [sql, setSql] = useState(DEFAULT_SQL);
   const [dialect, setDialect] = useState("generic");
+  const [transpileTarget, setTranspileTarget] = useState("postgresql");
   const [activeTab, setActiveTab] = useState<TabId>("ast");
   const [results, setResults] = useState<Results>({
     source: null,
     ast: null,
     format: null,
+    transpile: null,
     lint: null,
     analyze: null,
   });
   const runIdRef = useRef(0);
 
   const runAll = useCallback(
-    (query: string, dial: string) => {
+    (query: string, dial: string, target: string) => {
       if (!api || !query.trim()) {
-        setResults({ source: null, ast: null, format: null, lint: null, analyze: null });
+        setResults({ source: null, ast: null, format: null, transpile: null, lint: null, analyze: null });
         return;
       }
 
@@ -86,6 +93,7 @@ export default function Playground() {
 
         const astResult = safeCall(() => api.parse(query, dial)) as Results['ast'];
         const formatResult = safeCall(() => api.format(query, dial)) as Results['format'];
+        const transpileResult = safeCall(() => api.transpile(query, dial, target)) as Results['transpile'];
         const lintResult = safeCall(() => api.lint(query, dial)) as Results['lint'];
         const analyzeResult = safeCall(() => api.analyze(query, dial)) as Results['analyze'];
 
@@ -94,6 +102,7 @@ export default function Playground() {
             source: query,
             ast: astResult,
             format: formatResult,
+            transpile: transpileResult,
             lint: lintResult,
             analyze: analyzeResult,
           });
@@ -105,9 +114,9 @@ export default function Playground() {
 
   useEffect(() => {
     if (ready && api) {
-      runAll(sql, dialect);
+      runAll(sql, dialect, transpileTarget);
     }
-  }, [ready, api, sql, dialect, runAll]);
+  }, [ready, api, sql, dialect, transpileTarget, runAll]);
 
   const handleSqlChange = useCallback(
     (value: string) => {
@@ -163,7 +172,7 @@ export default function Playground() {
           {/* Right: tab + content skeleton */}
           <div className="w-full lg:w-1/2 bg-pane-bg flex flex-col min-h-0">
             <div className="flex border-b border-border bg-fg/[0.03] gap-2 px-2 py-1">
-              {[80, 72, 60, 88].map((w, i) => (
+              {[80, 72, 88, 60, 88].map((w, i) => (
                 <div key={i} className={`animate-pulse bg-bg-overlay rounded h-6`} style={{ width: w }} />
               ))}
             </div>
@@ -272,7 +281,7 @@ export default function Playground() {
         {/* Right panel - Tabs + Content */}
         <div className="w-full lg:w-1/2 bg-pane-bg flex flex-col min-h-[240px] lg:min-h-0">
           {/* Tab bar with animated underline */}
-          <div className="flex border-b border-border bg-pane-band" role="tablist" aria-label="Output format">
+          <div className="flex overflow-x-auto border-b border-border bg-pane-band" role="tablist" aria-label="Output format">
             {TABS.map((tab) => (
               <button
                 key={tab.id}
@@ -280,7 +289,7 @@ export default function Playground() {
                 role="tab"
                 aria-selected={activeTab === tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`px-4 py-3 text-sm font-medium transition-colors relative ${
+                className={`shrink-0 whitespace-nowrap px-3 sm:px-4 py-3 text-sm font-medium transition-colors relative ${
                   activeTab === tab.id
                     ? "text-info"
                     : "text-fg-muted hover:text-fg"
@@ -303,6 +312,16 @@ export default function Playground() {
           <div className="flex-1 overflow-auto min-h-0" role="tabpanel" id={`tabpanel-${activeTab}`} aria-labelledby={`tab-${activeTab}`} aria-live="polite">
             {activeTab === "ast" && <AstTab data={results.ast} />}
             {activeTab === "format" && <FormatTab data={results.format} />}
+            {activeTab === "transpile" && (
+              <TranspileTab
+                data={results.transpile}
+                dialects={DIALECTS}
+                from={dialect}
+                to={transpileTarget}
+                onFromChange={setDialect}
+                onToChange={setTranspileTarget}
+              />
+            )}
             {activeTab === "lint" && <LintTab data={results.lint} />}
             {activeTab === "analyze" && (
               <Suspense fallback={<div className="flex items-center justify-center h-full text-fg-muted text-sm">Loading analyzer...</div>}>

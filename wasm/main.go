@@ -20,7 +20,6 @@ import (
 	"encoding/json"
 	"syscall/js"
 
-	"github.com/ajitpratap0/GoSQLX/pkg/formatter"
 	"github.com/ajitpratap0/GoSQLX/pkg/gosqlx"
 	"github.com/ajitpratap0/GoSQLX/wasm/internal/bridge"
 )
@@ -49,18 +48,28 @@ func parse(_ js.Value, args []js.Value) any {
 	return string(b)
 }
 
+// format formats the SQL for the selected dialect, keeping comments and
+// optimizer hints. It returns {"result": "..."} or {"error": "...",
+// "error_span": {...}} (bridge.TextResponse).
 func format(_ js.Value, args []js.Value) any {
 	if len(args) == 0 {
 		return jsonError("no SQL provided")
 	}
-	sql := args[0].String()
-	// dialect is accepted but formatter currently uses generic formatting
+	return jsonResult(bridge.Format(args[0].String(), dialectArg(args)))
+}
 
-	result, err := formatter.FormatString(sql)
-	if err != nil {
-		return jsonError(err.Error())
+// transpile rewrites the SQL from the dialect in the second argument to the
+// one in the third. It returns the same envelope as format.
+func transpile(_ js.Value, args []js.Value) any {
+	if len(args) < 3 {
+		return jsonError("transpile needs SQL, a source dialect and a target dialect")
 	}
-	return result
+	for _, a := range args[:3] {
+		if a.Type() != js.TypeString {
+			return jsonError("transpile arguments must be strings")
+		}
+	}
+	return jsonResult(bridge.Transpile(args[0].String(), args[1].String(), args[2].String()))
 }
 
 // lint runs the full built-in rule set (L001-L030, the same rules as
@@ -129,6 +138,7 @@ func main() {
 	js.Global().Set("gosqlxValidate", js.FuncOf(validate))
 	js.Global().Set("gosqlxAnalyze", js.FuncOf(analyze))
 	js.Global().Set("gosqlxHighlight", js.FuncOf(highlight))
+	js.Global().Set("gosqlxTranspile", js.FuncOf(transpile))
 
 	// Keep the Go program running
 	select {}

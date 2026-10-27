@@ -16,7 +16,9 @@
               "Line": 2,
               "Column": 3
             },
-            "Quoted": false
+            "Quoted": false,
+            "Quotes": 0,
+            "QuoteStyle": 0
           },
           {
             "Name": "email",
@@ -25,7 +27,9 @@
               "Line": 3,
               "Column": 3
             },
-            "Quoted": false
+            "Quoted": false,
+            "Quotes": 0,
+            "QuoteStyle": 0
           },
           {
             "Expr": {
@@ -38,12 +42,15 @@
                     "Line": 4,
                     "Column": 9
                   },
-                  "Quoted": false
+                  "Quoted": false,
+                  "Quotes": 0,
+                  "QuoteStyle": 0
                 }
               ],
               "Parameters": null,
               "Over": null,
               "Distinct": false,
+              "NameQuote": 0,
               "Filter": null,
               "OrderBy": null,
               "WithinGroup": null,
@@ -51,9 +58,11 @@
               "Pos": {
                 "Line": 4,
                 "Column": 3
-              }
+              },
+              "Extras": null
             },
-            "Alias": "order_count"
+            "Alias": "order_count",
+            "AliasQuote": 0
           },
           {
             "Expr": {
@@ -66,12 +75,15 @@
                     "Line": 5,
                     "Column": 7
                   },
-                  "Quoted": false
+                  "Quoted": false,
+                  "Quotes": 0,
+                  "QuoteStyle": 0
                 }
               ],
               "Parameters": null,
               "Over": null,
               "Distinct": false,
+              "NameQuote": 0,
               "Filter": null,
               "OrderBy": null,
               "WithinGroup": null,
@@ -79,9 +91,11 @@
               "Pos": {
                 "Line": 5,
                 "Column": 3
-              }
+              },
+              "Extras": null
             },
-            "Alias": "lifetime_value"
+            "Alias": "lifetime_value",
+            "AliasQuote": 0
           }
         ],
         "From": [
@@ -92,6 +106,9 @@
             "Lateral": false,
             "Final": false,
             "WithOrdinality": false,
+            "Only": false,
+            "NameQuote": 0,
+            "AliasQuote": 0,
             "TableHints": null,
             "TableFunc": null,
             "ColumnAliases": null,
@@ -100,7 +117,8 @@
             "Pivot": null,
             "Unpivot": null,
             "MatchRecognize": null,
-            "SetSubquery": null
+            "SetSubquery": null,
+            "Modifiers": null
           }
         ],
         "TableName": "users",
@@ -114,6 +132,9 @@
               "Lateral": false,
               "Final": false,
               "WithOrdinality": false,
+              "Only": false,
+              "NameQuote": 0,
+              "AliasQuote": 0,
               "TableHints": null,
               "TableFunc": null,
               "ColumnAliases": null,
@@ -122,7 +143,8 @@
               "Pivot": null,
               "Unpivot": null,
               "MatchRecognize": null,
-              "SetSubquery": null
+              "SetSubquery": null,
+              "Modifiers": null
             },
             "Right": {
               "Name": "orders",
@@ -131,6 +153,9 @@
               "Lateral": false,
               "Final": false,
               "WithOrdinality": false,
+              "Only": false,
+              "NameQuote": 0,
+              "AliasQuote": 0,
               "TableHints": null,
               "TableFunc": null,
               "ColumnAliases": null,
@@ -139,7 +164,8 @@
               "Pivot": null,
               "Unpivot": null,
               "MatchRecognize": null,
-              "SetSubquery": null
+              "SetSubquery": null,
+              "Modifiers": null
             },
             "Condition": {
               "Left": {
@@ -149,7 +175,9 @@
                   "Line": 7,
                   "Column": 23
                 },
-                "Quoted": false
+                "Quoted": false,
+                "Quotes": 0,
+                "QuoteStyle": 0
               },
               "Operator": "=",
               "Right": {
@@ -159,11 +187,15 @@
                   "Line": 7,
                   "Column": 35
                 },
-                "Quoted": false
+                "Quoted": false,
+                "Quotes": 0,
+                "QuoteStyle": 0
               },
               "Not": false,
               "PipesOr": false,
+              "BitwiseXor": false,
               "CustomOp": null,
+              "Extras": null,
               "Pos": {
                 "Line": 7,
                 "Column": 33
@@ -173,7 +205,12 @@
             "Pos": {
               "Line": 7,
               "Column": 1
-            }
+            },
+            "Global": false,
+            "Comma": false,
+            "Strictness": "",
+            "Hint": "",
+            "MatchCondition": null
           }
         ],
         "ArrayJoin": null,
@@ -187,16 +224,22 @@
               "Line": 8,
               "Column": 7
             },
-            "Quoted": false
+            "Quoted": false,
+            "Quotes": 0,
+            "QuoteStyle": 0
           },
           "Operator": "\u003e",
           "Right": {
             "Value": "2024-01-01",
-            "Type": "string"
+            "Type": "string",
+            "Prefix": "",
+            "RawBackslash": false
           },
           "Not": false,
           "PipesOr": false,
+          "BitwiseXor": false,
           "CustomOp": null,
+          "Extras": null,
           "Pos": {
             "Line": 8,
             "Column": 20
@@ -210,7 +253,9 @@
               "Line": 9,
               "Column": 10
             },
-            "Quoted": false
+            "Quoted": false,
+            "Quotes": 0,
+            "QuoteStyle": 0
           },
           {
             "Name": "email",
@@ -219,7 +264,9 @@
               "Line": 9,
               "Column": 18
             },
-            "Quoted": false
+            "Quoted": false,
+            "Quotes": 0,
+            "QuoteStyle": 0
           }
         ],
         "Having": {
@@ -233,12 +280,15 @@
                   "Line": 10,
                   "Column": 14
                 },
-                "Quoted": false
+                "Quoted": false,
+                "Quotes": 0,
+                "QuoteStyle": 0
               }
             ],
             "Parameters": null,
             "Over": null,
             "Distinct": false,
+            "NameQuote": 0,
             "Filter": null,
             "OrderBy": null,
             "WithinGroup": null,
@@ -246,16 +296,21 @@
             "Pos": {
               "Line": 10,
               "Column": 8
-            }
+            },
+            "Extras": null
           },
           "Operator": "\u003e",
           "Right": {
             "Value": "5",
-            "Type": "int"
+            "Type": "int",
+            "Prefix": "",
+            "RawBackslash": false
           },
           "Not": false,
           "PipesOr": false,
+          "BitwiseXor": false,
           "CustomOp": null,
+          "Extras": null,
           "Pos": {
             "Line": 10,
             "Column": 20
@@ -274,11 +329,14 @@
                 "Line": 11,
                 "Column": 10
               },
-              "Quoted": false
+              "Quoted": false,
+              "Quotes": 0,
+              "QuoteStyle": 0
             },
             "Ascending": false,
             "NullsFirst": null,
-            "WithFill": null
+            "WithFill": null,
+            "UsingOperator": ""
           }
         ],
         "Limit": 20,
@@ -289,9 +347,16 @@
         "Pos": {
           "Line": 1,
           "Column": 1
-        }
+        },
+        "Extras": null
       }
     ],
-    "Comments": null
+    "Comments": null,
+    "StatementStarts": [
+      {
+        "Line": 1,
+        "Column": 1
+      }
+    ]
   }
 }

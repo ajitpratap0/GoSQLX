@@ -28,6 +28,7 @@ package bridge
 
 import (
 	"errors"
+	"fmt"
 
 	"github.com/ajitpratap0/GoSQLX/pkg/advisor"
 	"github.com/ajitpratap0/GoSQLX/pkg/gosqlx"
@@ -53,6 +54,68 @@ func Parse(sql, dialect string) (*ast.AST, error) {
 		return gosqlx.ParseWithDialect(sql, d)
 	}
 	return gosqlx.Parse(sql)
+}
+
+// TextResponse is the result of Format and Transpile: the rewritten SQL, or
+// the reason there is none.
+//
+// Exactly one of Result and Error is set. ErrorSpan locates Error in the
+// submitted SQL when the error carries a position (a tokenizer or parser
+// error); errors such as formatter.ErrUnplaceableComment, an unsupported
+// dialect or a construct the transpile target cannot express have none.
+//
+// The website reads these responses without turning "error" into an
+// exception (unlike the other exports), so the span reaches the editor.
+type TextResponse struct {
+	Result    string     `json:"result"`
+	Error     string     `json:"error,omitempty"`
+	ErrorSpan *ErrorSpan `json:"error_span,omitempty"`
+}
+
+func textResponse(sql, result string, err error) TextResponse {
+	if err != nil {
+		return TextResponse{Error: err.Error(), ErrorSpan: errorSpan(sql, err)}
+	}
+	return TextResponse{Result: result}
+}
+
+// Format formats sql with gosqlx.FormatWithDialect and the default format
+// options, tokenizing, parsing and rendering it for the selected playground
+// dialect ("generic", empty or unknown names use the generic rules).
+// Comments and optimizer hints are kept; SQL whose comments cannot be placed
+// faithfully is refused with an error wrapping formatter.ErrUnplaceableComment.
+func Format(sql, dialect string) TextResponse {
+	out, err := gosqlx.FormatWithDialect(sql, gosqlx.DefaultFormatOptions(), Dialect(dialect))
+	return textResponse(sql, out, err)
+}
+
+// transpileDialect resolves a transpile source or target. Unlike Dialect, an
+// unknown name is an error: silently transpiling for a different dialect than
+// the one asked for would show a misleading result. Empty means generic.
+func transpileDialect(role, name string) (sqlkeywords.SQLDialect, error) {
+	if name == "" {
+		return sqlkeywords.DialectGeneric, nil
+	}
+	if !sqlkeywords.IsValidDialect(name) {
+		return "", fmt.Errorf("unsupported %s dialect %q", role, name)
+	}
+	return sqlkeywords.SQLDialect(name), nil
+}
+
+// Transpile rewrites sql from one playground dialect to another with
+// gosqlx.Transpile. SQL that does not parse in the source dialect, or that
+// uses a construct the target cannot express, yields an error.
+func Transpile(sql, from, to string) TextResponse {
+	src, err := transpileDialect("source", from)
+	if err != nil {
+		return textResponse(sql, "", err)
+	}
+	dst, err := transpileDialect("target", to)
+	if err != nil {
+		return textResponse(sql, "", err)
+	}
+	out, err := gosqlx.Transpile(sql, src, dst)
+	return textResponse(sql, out, err)
 }
 
 // LintViolation is one lint finding as the playground renders it.

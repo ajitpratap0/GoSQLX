@@ -15,6 +15,7 @@
 // Command dialect-audit runs real-world SQL files through the user-facing
 // pipeline (split → parse with dialect → format → reparse → reformat) and
 // reports every statement that fails a stage.
+// JSON mode emits failures only, even when -v is also supplied.
 //
 // Usage:
 //
@@ -26,11 +27,12 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"os"
-	"strings"
 
-	"github.com/ajitpratap0/GoSQLX/internal/dropcheck"
+	"github.com/ajitpratap0/GoSQLX/internal/dialectaudit"
 	"github.com/ajitpratap0/GoSQLX/pkg/gosqlx"
+	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/keywords"
 )
 
@@ -43,101 +45,65 @@ type result struct {
 	Format string `json:"formatted,omitempty"`
 }
 
-func main() {
-	dialect := flag.String("dialect", "generic", "SQL dialect")
-	asJSON := flag.Bool("json", false, "emit JSON lines for every failure")
-	verbose := flag.Bool("v", false, "print passing statements too")
-	flag.Parse()
+func main() { os.Exit(run(os.Args[1:], os.Stdout, os.Stderr)) }
+
+func run(args []string, stdout, stderr io.Writer) int {
+	flags := flag.NewFlagSet("dialect-audit", flag.ContinueOnError)
+	flags.SetOutput(stderr)
+	dialect := flags.String("dialect", "generic", "SQL dialect")
+	asJSON := flags.Bool("json", false, "emit JSON lines for every failure")
+	verbose := flags.Bool("v", false, "print passing statements too")
+	if err := flags.Parse(args); err != nil {
+		return 2
+	}
+	if !keywords.IsValidDialect(*dialect) {
+		fmt.Fprintf(stderr, "invalid SQL dialect: %q\n", *dialect)
+		return 2
+	}
 
 	d := keywords.SQLDialect(*dialect)
 	total, failed := 0, 0
 	stages := map[string]int{}
-	enc := json.NewEncoder(os.Stdout)
+	enc := json.NewEncoder(stdout)
 
-	for _, path := range flag.Args() {
+	for _, path := range flags.Args() {
 		data, err := os.ReadFile(path)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "read %s: %v\n", path, err)
-			os.Exit(2)
+			fmt.Fprintf(stderr, "read %s: %v\n", path, err)
+			return 2
 		}
 		for i, stmt := range gosqlx.SplitStatements(string(data), *dialect) {
-			if strings.TrimSpace(stripComments(stmt)) == "" {
+			audit := dialectaudit.Check(stmt, d, gosqlx.ParseWithDialect, func(tree *ast.AST) string { return gosqlx.FormatAST(tree) })
+			if audit.Stage == "empty" {
 				continue
 			}
 			total++
-			r := check(path, i, stmt, d)
+			r := result{File: path, Index: i, SQL: stmt, Stage: audit.Stage, Error: audit.Error, Format: audit.Format}
 			stages[r.Stage]++
 			if r.Stage == "ok" {
-				if *verbose {
-					fmt.Printf("ok   %s#%d\n", path, i)
+				if *verbose && !*asJSON {
+					fmt.Fprintf(stdout, "ok   %s#%d\n", path, i)
 				}
 				continue
 			}
 			failed++
 			if *asJSON {
-				_ = enc.Encode(r)
+				if err := enc.Encode(r); err != nil {
+					fmt.Fprintf(stderr, "encode failure: %v\n", err)
+					return 2
+				}
 				continue
 			}
-			fmt.Printf("FAIL %s#%d [%s] %s\n  sql: %s\n", path, i, r.Stage, r.Error, oneLine(r.SQL))
+			fmt.Fprintf(stdout, "FAIL %s#%d [%s] %s\n  sql: %s\n", path, i, r.Stage, r.Error, dialectaudit.Compact(r.SQL))
 			if r.Format != "" {
-				fmt.Printf("  fmt: %s\n", oneLine(r.Format))
+				fmt.Fprintf(stdout, "  fmt: %s\n", dialectaudit.Compact(r.Format))
 			}
 		}
 	}
-	fmt.Fprintf(os.Stderr, "dialect=%s total=%d passed=%d failed=%d stages=%v\n",
+	fmt.Fprintf(stderr, "dialect=%s total=%d passed=%d failed=%d stages=%v\n",
 		*dialect, total, total-failed, failed, stages)
 	if failed > 0 {
-		os.Exit(1)
+		return 1
 	}
-}
-
-func check(path string, i int, stmt string, d keywords.SQLDialect) (r result) {
-	r = result{File: path, Index: i, SQL: stmt}
-	defer func() {
-		if p := recover(); p != nil {
-			r.Stage, r.Error = "panic", fmt.Sprint(p)
-		}
-	}()
-	tree, err := gosqlx.ParseWithDialect(stmt, d)
-	if err != nil {
-		r.Stage, r.Error = "parse", err.Error()
-		return r
-	}
-	f1 := gosqlx.FormatAST(tree)
-	r.Format = f1
-	tree2, err := gosqlx.ParseWithDialect(f1, d)
-	if err != nil {
-		r.Stage, r.Error = "reparse", err.Error()
-		return r
-	}
-	if f2 := gosqlx.FormatAST(tree2); f2 != f1 {
-		r.Stage, r.Error = "idempotent", "format(parse(format(x))) != format(x): "+oneLine(f2)
-		return r
-	}
-	if lost := dropcheck.DroppedWords(stmt, f1); len(lost) > 0 {
-		r.Stage, r.Error = "drop", "formatter output lost words: "+strings.Join(lost, " ")
-		return r
-	}
-	r.Stage, r.Format = "ok", ""
-	return r
-}
-
-func stripComments(s string) string {
-	var b strings.Builder
-	for _, line := range strings.Split(s, "\n") {
-		if t := strings.TrimSpace(line); strings.HasPrefix(t, "--") {
-			continue
-		}
-		b.WriteString(line)
-		b.WriteByte('\n')
-	}
-	return b.String()
-}
-
-func oneLine(s string) string {
-	s = strings.Join(strings.Fields(s), " ")
-	if r := []rune(s); len(r) > 300 {
-		s = string(r[:300]) + "…"
-	}
-	return s
+	return 0
 }

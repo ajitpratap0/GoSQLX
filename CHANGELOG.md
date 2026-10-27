@@ -69,6 +69,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   comma spacing, SELECT alias qualifiers, and TOP/FETCH limit transforms.
 - Lower-case expression formatting avoids repeated subtree rendering and copying.
   Raw `JSON_TABLE`/`XMLTABLE` clauses retain their source case in either mode.
+- Statement splitting follows dialect string escapes, parenthesized bodies,
+  commented SQL Server GO lines and Oracle SQL*Plus execute lines; corpus and
+  CLI audits share a pipeline and detect repeated dropped words.
 - **AST walkers** (`ast.Inspect`, `Walk`, the security scanner, linter and
   table extraction) reach SELECT `TOP` and ClickHouse `ARRAY JOIN`, the
   ENGINE/ORDER BY/PARTITION BY/TTL/SETTINGS clauses of `CREATE TABLE` and

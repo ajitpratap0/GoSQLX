@@ -532,30 +532,14 @@ func lineOnly(src string, i, j int) (ls, le int, ok bool) {
 	return ls, le, true
 }
 
-// goLine recognises a T-SQL batch separator: the word GO at src[i:j], alone
-// on its line, optionally followed by a repeat count and a -- comment.
+// goLine recognises a T-SQL GO [count] line with SQL comments, using the
+// same comment and repeat-count rules as the parser's batch.Line helper.
 func goLine(src string, i, j int) (ls, le int, ok bool) {
 	ls, ok = lineStartOK(src, i)
 	if !ok {
 		return 0, 0, false
 	}
-	k := skipBlanks(src, j)
-	countStart := k
-	for k < len(src) && src[k] >= '0' && src[k] <= '9' {
-		k++
-	}
-	if k > countStart {
-		if _, valid := batch.Count(src[countStart:k]); !valid {
-			return 0, 0, false
-		}
-	}
-	k = skipBlanks(src, k)
-	if k+1 < len(src) && src[k] == '-' && src[k+1] == '-' {
-		for k < len(src) && src[k] != '\n' {
-			k++
-		}
-	}
-	le, ok = afterLine(src, k)
+	le, ok = batch.TextEnd(src, j)
 	if !ok {
 		return 0, 0, false
 	}

@@ -408,6 +408,7 @@ func (p *Parser) preprocess(tokens []models.TokenWithSpan) []models.TokenWithSpa
 	// previous stream so a shorter one cannot leave stale strings in the tail.
 	clear(p.tokenBuf)
 	p.tokenBuf = preprocessTokensInto(p.tokenBuf, tokens)
+	p.oracleExecuteLines("")
 	return p.tokenBuf
 }
 

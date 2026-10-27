@@ -23,6 +23,8 @@ func TestDroppedWordsCanonicalSynonyms(t *testing.T) {
 		{"postfix notnull", "SELECT x NOTNULL FROM users", "SELECT x IS NOT NULL FROM users", nil},
 		{"isnull function preserved", "SELECT ISNULL(x, y) FROM users", "SELECT x FROM users", []string{"ISNULL", "Y"}},
 		{"union all retained", "SELECT x FROM a UNION ALL SELECT x FROM b", "SELECT x FROM a UNION SELECT x FROM b", []string{"ALL"}},
+		{"one repeated AND dropped", "SELECT x FROM t WHERE a AND b AND c", "SELECT x FROM t WHERE a AND b c", []string{"AND"}},
+		{"two repeated words dropped", "SELECT x, x, x FROM t", "SELECT x FROM t", []string{"X", "X"}},
 		{"dropped clause words", "SELECT x FROM users WHERE enabled = true", "SELECT x FROM users", []string{"WHERE", "ENABLED", "TRUE"}},
 		{"dollar-quoted literal contents ignored", "SELECT $body$WHERE missing$body$ FROM users", "SELECT 'rewritten' FROM users", nil},
 		{"quoted and commented words ignored", "SELECT x, 'missing string' FROM users -- missing comment", "SELECT x FROM users", nil},
@@ -33,6 +35,24 @@ func TestDroppedWordsCanonicalSynonyms(t *testing.T) {
 				t.Errorf("DroppedWords(%q, %q) = %v, want %v", tt.in, tt.out, got, tt.want)
 			}
 		})
+	}
+}
+
+func TestWordsDialectBackslash(t *testing.T) {
+	for _, dialect := range []string{"generic", "postgresql", "sqlite", "sqlserver", "oracle", "mysql", "mariadb", "clickhouse", "snowflake", "bigquery", "redshift"} {
+		t.Run(dialect, func(t *testing.T) {
+			want := []string{"SELECT", "AND", "B"}
+			switch dialect {
+			case "mysql", "mariadb", "clickhouse", "snowflake", "bigquery", "redshift":
+				want = []string{"SELECT"}
+			}
+			if got := Words(`SELECT 'a\' AND b`, dialect); !reflect.DeepEqual(got, want) {
+				t.Fatalf("Words = %v, want %v", got, want)
+			}
+		})
+	}
+	if got := Words(`SELECT E'a\'; b' AND x`, "postgresql"); !reflect.DeepEqual(got, []string{"SELECT", "AND", "X"}) {
+		t.Fatalf("E string words = %v", got)
 	}
 }
 

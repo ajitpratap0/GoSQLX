@@ -287,5 +287,5 @@ func parseWithDialect(in sqlText, dialect keywords.SQLDialect) (*ast.AST, error)
 	defer PutParser(p)
 	p.ApplyOptions(WithDialect(string(dialect)))
 
-	return p.ParseFromModelTokens(tokens)
+	return p.parseWithSource(tokens, in)
 }

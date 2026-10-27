@@ -51,7 +51,9 @@ func End(tokens []models.TokenWithSpan, i int) (int, bool) {
 
 // Line reports whether the token at index i is an unquoted GO alone on its
 // line, optionally followed on that line by one number token: the shape of a
-// sqlcmd batch separator. end is the index of the first token after the line
+// sqlcmd batch separator. SQL comments are trivia and may follow GO or its
+// count, including a block comment spanning multiple lines (see TextEnd).
+// end is the index of the first token after the line
 // and valid reports whether the number, if any, is a valid repeat count
 // (GO 0 and GO 1.5 have the shape of a separator but an invalid count).
 // Tokens without source positions cannot describe a client directive.

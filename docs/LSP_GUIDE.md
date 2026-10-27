@@ -170,11 +170,22 @@ Markdown documentation for 70+ SQL keywords including:
 }
 ```
 
+Formatting keeps comments and optimizer hints, in the configured dialect as
+well as the default one: a comment inside a statement moves to the line above
+it, and a `/*+ ... */` hint after a statement's first keyword stays in place.
+When the AST formatter cannot place a document's hints, the server falls back to
+the same basic line-by-line formatting it uses for SQL that does not parse. This
+is unreleased behaviour on the main branch and ships in the next release.
+
 ### 6. Document Symbols
 
 Lists all SQL statements with categorization:
 - Method (DML: SELECT, INSERT, UPDATE, DELETE)
 - Struct (DDL: CREATE, DROP, ALTER)
+
+SQL Server `GO` batch separators do not appear in the outline, and a statement
+before a `GO` line ends at that line instead of running to the end of the file
+(unreleased, on the main branch).
 
 ### 7. Signature Help
 

@@ -75,22 +75,79 @@ fmt.Println(err)
 
 Use `errors.Is(err, gosqlx.ErrSyntax)` and `gosqlx.ErrorLocation(err)` to report the position, as shown in [Parse PostgreSQL in Go](parse-postgresql-in-go.md#handle-syntax-errors).
 
-## Comments are not preserved
+## Comments and optimizer hints
 
-Because the output is generated from the AST, SQL comments (`-- ...` and `/* ... */`) are dropped:
+On the main branch, `gosqlx.Format` keeps comments; this is unreleased behaviour that ships in the next release. A comment between statements stays between them, a trailing comment stays after its statement, and a comment inside a statement moves to the line above that statement:
 
 ```go
-out, _ := gosqlx.Format("-- top users\nselect id /* pk */ from users where id = 1", gosqlx.DefaultFormatOptions())
-// SELECT id
-// FROM users
-// WHERE id = 1
+sql := "-- top users\nselect id, /* pk */ email from users where id = 1; -- one user\nselect 2"
+out, err := gosqlx.Format(sql, gosqlx.DefaultFormatOptions())
+if err != nil {
+	log.Fatal(err)
+}
+fmt.Println(out)
 ```
 
-If your files carry important comments, run the formatter in check mode in CI rather than rewriting files automatically, or keep comments outside the statements you format.
+Output:
+
+```sql
+-- top users
+/* pk */
+SELECT id, email
+FROM users
+WHERE id = 1; -- one user
+SELECT 2
+```
+
+An optimizer hint (`/*+ ... */`) directly after the first keyword of a statement stays where it is, because moving it would change what the database does:
+
+```go
+out, _ := gosqlx.Format("select /*+ FULL(t) */ a from t", gosqlx.DefaultFormatOptions())
+// SELECT /*+ FULL(t) */ a
+// FROM t
+```
+
+When a hint or a MySQL `/*! ... */` comment cannot be put back faithfully, `Format` returns an error wrapping `formatter.ErrUnplaceableComment` (from `github.com/ajitpratap0/GoSQLX/pkg/formatter`) instead of rewriting the SQL without it. Leave such input unformatted:
+
+```go
+_, err := gosqlx.Format("select a from /*+ FULL(t) */ t", gosqlx.DefaultFormatOptions())
+if errors.Is(err, formatter.ErrUnplaceableComment) {
+	// keep the original text
+}
+fmt.Println(err)
+// cannot format SQL: formatter: cannot preserve comment: /*+ FULL(t) */
+```
+
+If you work with a parsed tree instead of text, pass `gosqlx.WithComments()` to `gosqlx.ParseTree` so that `gosqlx.FormatTree` writes the comments back. A tree does not record where each comment stood, so comments on their own line go in front of the query and comments that shared a line with SQL go after it. Use `Format` or `FormatWithDialect` on the text when the placement matters.
 
 ## Format dialect-specific SQL
 
-`gosqlx.Format` parses with the default dialect. To format SQL that only parses under a specific dialect, parse it into a `Tree` with that dialect and call `Format` on the tree:
+`gosqlx.Format` parses with the default dialect. To format SQL that only parses under a specific dialect, call `gosqlx.FormatWithDialect`, which tokenizes and parses with that dialect's rules and keeps comments and hints the same way as `Format`. It is also unreleased and available on the main branch:
+
+```go
+out, err := gosqlx.FormatWithDialect(
+	"select top 10 [order id] from dbo.orders -- latest\nwhere total > 100",
+	gosqlx.DefaultFormatOptions(),
+	keywords.DialectSQLServer, // github.com/ajitpratap0/GoSQLX/pkg/sql/keywords
+)
+if err != nil {
+	log.Fatal(err)
+}
+fmt.Println(out)
+```
+
+Output:
+
+```sql
+-- latest
+SELECT TOP 10 [order id]
+FROM dbo.orders
+WHERE total > 100
+```
+
+An empty dialect behaves like `Format`, and an unknown dialect returns an error wrapping `gosqlx.ErrUnsupportedDialect`.
+
+If you already hold a parsed tree, `tree.Format` takes functional options instead of `FormatOptions`:
 
 ```go
 tree, err := gosqlx.ParseTree(ctx,
@@ -138,6 +195,23 @@ gosqlx format --indent 4 --dialect mysql report.sql
 ```
 
 `--check` prints the files that need formatting and exits with status 1, which makes it a good CI gate. Defaults can be set in a `.gosqlx.yml` file; see [Configuration](../CONFIGURATION.md).
+
+The CLI keeps comments and a leading byte order mark. Before it writes a file with `-i`, it checks that the formatted output holds exactly the comments of the input, and it leaves the file unchanged when it does not. `--no-uppercase` writes every keyword in lower case, including keyword operators such as `AND`, `IN` and `IS NULL`, data types and built-in function keywords such as `CAST`; identifiers, quoted names and literals keep their spelling:
+
+```bash
+echo "SELECT a FROM t WHERE b IS NULL AND c IN (1,2) ORDER BY CAST(a AS INTEGER) DESC" | gosqlx format --no-uppercase
+```
+
+Output:
+
+```sql
+select a
+from t
+where b is null and c in (1, 2)
+order by cast(a as integer) desc
+```
+
+These behaviours are unreleased: they are on the main branch and ship in the next release.
 
 ## Next steps
 

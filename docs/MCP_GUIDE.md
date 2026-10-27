@@ -407,6 +407,12 @@ curl -s -X POST http://127.0.0.1:8080/mcp \
 | `statement_count` | integer | Number of statements parsed |
 | `statement_types` | array of string | Go type names of each parsed statement (e.g. `*ast.SelectStatement`) |
 
+On the main branch (unreleased, next release), SQL Server `GO` batch separators
+(`*ast.BatchSeparator`) are left out of `statement_count` and `statement_types`.
+`parse_sql` parses with the default dialect, which does not accept `GO` lines, so
+a T-SQL script with `GO` is reported as a parse error; use `validate_sql` with
+`"dialect": "sqlserver"` to check such a script.
+
 #### Example
 
 ```bash
@@ -460,6 +466,12 @@ curl -s -X POST http://127.0.0.1:8080/mcp \
   "functions": ["COUNT"]
 }
 ```
+
+On the main branch (unreleased, next release; issue #849), an unqualified name
+in `ORDER BY` or `HAVING` that matches a SELECT-list alias is treated as the
+alias, so `extract_metadata` and the metadata part of `analyze_sql` no longer
+report SELECT aliases as columns. For `SELECT count(*) AS orders FROM t GROUP BY
+customer_id ORDER BY orders`, `columns` holds only `customer_id`.
 
 ---
 

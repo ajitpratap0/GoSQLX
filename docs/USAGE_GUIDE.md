@@ -200,6 +200,64 @@ func BatchProcess(queries []string) ([][]models.TokenWithSpan, error) {
 }
 ```
 
+### Splitting SQL Scripts
+
+`gosqlx.SplitStatements(sql, dialect)` splits a script into statements so you can
+parse, validate or execute them one at a time. It ignores semicolons inside
+strings, quoted identifiers and comments, and returns segments without the
+terminating `;`; skip the empty ones.
+
+On the main branch (unreleased, next release), it also keeps compound
+statements whole (`BEGIN ... END` bodies of triggers, procedures and functions,
+`CASE ... END`, T-SQL `BEGIN TRY`, PostgreSQL `BEGIN ATOMIC`, Oracle `DECLARE`
+sections) and honours client batch separators, which it removes from the
+output: a line holding only `GO [n]` for `sqlserver`, `DELIMITER` for `mysql` and
+`mariadb`, and a line holding only `/` for `oracle`. Backslash escapes in strings
+follow the dialect you pass.
+
+```go
+package main
+
+import (
+	"fmt"
+	"log"
+	"strings"
+
+	"github.com/ajitpratap0/GoSQLX/pkg/gosqlx"
+	"github.com/ajitpratap0/GoSQLX/pkg/sql/keywords"
+)
+
+func main() {
+	script := `CREATE TABLE audit (n INT);
+DELIMITER //
+CREATE TRIGGER trg AFTER INSERT ON t FOR EACH ROW
+BEGIN
+  UPDATE audit SET n = n + 1;
+END//
+DELIMITER ;
+SELECT n FROM audit;`
+
+	for i, stmt := range gosqlx.SplitStatements(script, "mysql") {
+		stmt = strings.TrimSpace(stmt)
+		if stmt == "" {
+			continue
+		}
+		if _, err := gosqlx.ParseWithDialect(stmt, keywords.DialectMySQL); err != nil {
+			log.Fatalf("statement %d: %v", i+1, err)
+		}
+		fmt.Printf("%d: %s\n", i+1, strings.SplitN(stmt, "\n", 2)[0])
+	}
+}
+```
+
+Output:
+
+```text
+1: CREATE TABLE audit (n INT)
+2: CREATE TRIGGER trg AFTER INSERT ON t FOR EACH ROW
+3: SELECT n FROM audit
+```
+
 ### Concurrent Processing
 
 Handle multiple queries concurrently:
@@ -987,6 +1045,23 @@ func LintSQL(sql string) error {
 }
 ```
 
+On the main branch (unreleased, next release), `gosqlx.Lint` and
+`gosqlx.LintWithDialect` return an error for SQL that does not tokenize or parse.
+The error wraps `gosqlx.ErrTokenize` or `gosqlx.ErrSyntax`, and the result is
+still returned with the violations of the text and token rules, so the function
+above reports invalid SQL instead of calling it clean. To keep those violations,
+check for the two errors before returning:
+
+```go
+result, err := gosqlx.Lint("SELEC 1")
+if errors.Is(err, gosqlx.ErrSyntax) || errors.Is(err, gosqlx.ErrTokenize) {
+    fmt.Println("invalid SQL:", err)
+    // result is not nil here and may still hold text-rule violations
+}
+```
+
+`gosqlx lint` on the command line exits 1 for such input.
+
 ### Rule Categories
 
 | Category | Rules | Examples |
@@ -1319,7 +1394,9 @@ gosqlx validate query1.sql query2.sql query3.sql
 
 ### Format Command
 
-Format SQL with intelligent indentation:
+Format SQL with consistent indentation. On the main branch (unreleased, next
+release) the formatter keeps comments and optimizer hints, and `--no-uppercase`
+writes every keyword in lower case; see the [CLI Guide](CLI_GUIDE.md#comments-hints-and-keyword-case).
 
 ```bash
 # Format and print to stdout

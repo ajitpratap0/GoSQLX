@@ -15,9 +15,13 @@ The GoSQLX Command Line Interface (CLI) provides high-performance SQL parsing, v
   - [lint](#gosqlx-lint---style-and-quality-checking)
   - [lsp](#gosqlx-lsp---language-server-protocol)
   - [highlight](#gosqlx-highlight---syntax-highlighting)
+  - [transpile](#gosqlx-transpile---convert-sql-between-dialects)
+  - [stats](#gosqlx-stats---object-pool-counters)
+  - [watch](#gosqlx-watch---re-run-on-file-changes)
   - [config](#gosqlx-config---configuration-management)
   - [completion](#gosqlx-completion---shell-autocompletion)
 - [Global Flags](#global-flags)
+- [Dialect Names and Aliases](#dialect-names-and-aliases)
 - [Configuration](#configuration)
 - [Input Methods](#input-methods)
 - [Output Formats](#output-formats)
@@ -103,11 +107,13 @@ gosqlx validate [file...] [flags]
 | `--dialect` | string | postgresql | SQL dialect (generic, postgresql, mysql, mariadb, sqlserver, oracle, sqlite, snowflake, bigquery, redshift, clickhouse) |
 | `-r, --recursive` | bool | false | Recursively process directories |
 | `-p, --pattern` | string | `*.sql` | File pattern for recursive processing |
-| `-q, --quiet` | bool | false | Quiet mode (exit code only) |
+| `-q, --quiet` | bool | false | Quiet mode: print nothing, report the result through the exit code only |
+| `--check` | bool | false | Alias for `--quiet` |
 | `-s, --stats` | bool | false | Show performance statistics |
 | `--strict` | bool | false | Enable strict validation mode |
 | `--output-format` | string | text | Output format (text, json, sarif) |
 | `--output-file` | string | stdout | Output file path |
+| `--list-dialects` | bool | false | Print all valid SQL dialects and exit |
 
 #### Examples
 
@@ -179,7 +185,13 @@ A file that fails as a whole is checked again statement by statement, so
 scripts that use the T-SQL `GO` batch separator or the MySQL `DELIMITER`
 directive validate, and a file over the tokenizer's 1,000,000 token limit
 validates when every statement is under it. Results read from stdin are named
-`<stdin>`.
+`<stdin>`; stdin with no bytes at all is reported as an error. `--quiet` prints nothing, not even errors. These behaviours are
+unreleased: they are on the main branch and ship in the next release.
+
+```bash
+printf 'SELECT 1\nGO\nSELECT 2\nGO\n' | gosqlx validate --dialect mssql
+# ✅ <stdin>: Valid SQL   (exit code 0)
+```
 
 #### Performance Target
 
@@ -190,7 +202,7 @@ validates when every statement is under it. Results read from stdin are named
 
 ### `gosqlx format` - High-Performance SQL Formatting
 
-Format SQL queries with intelligent indentation and style - 100x faster than SQLFluff.
+Format SQL queries with consistent indentation and keyword style. Comments, optimizer hints and a leading byte order mark are kept.
 
 #### Syntax
 
@@ -214,6 +226,53 @@ gosqlx format [file...] [flags]
 Dialect clauses stored verbatim inside `JSON_TABLE` and `XMLTABLE` retain their
 source case, including their `COLUMNS` definitions, to preserve names and literals.
 
+#### Comments, hints and keyword case
+
+On the main branch (unreleased, next release), `gosqlx format` keeps comments.
+A comment between statements stays between them, a trailing comment stays after
+its statement, and a comment inside a statement moves to the line above it. An
+optimizer hint (`/*+ ... */`) directly after a statement's first keyword stays in
+place. Input whose hints or MySQL `/*! ... */` comments cannot be placed faithfully
+is refused with an error and left unchanged, and before `-i` rewrites a file the
+command checks that the output holds exactly the input's comments. A leading byte
+order mark is kept.
+
+```bash
+printf -- '-- top users\nselect id, /* pk */ email from users where id = 1; -- one user\nselect 2\n' | gosqlx format
+```
+
+Output:
+
+```sql
+-- top users
+/* pk */
+SELECT id, email
+FROM users
+WHERE id = 1; -- one user
+
+SELECT 2
+```
+
+`--no-uppercase` writes every keyword in lower case, including keyword operators
+(`AND`, `IN`, `IS NULL`, `BETWEEN`, `CASE`, `DESC`), data types and built-in
+function keywords. Identifiers, quoted names and literals keep their spelling:
+
+```bash
+echo "SELECT a FROM t WHERE b IS NULL AND c IN (1,2) ORDER BY CAST(a AS INTEGER) DESC" | gosqlx format --no-uppercase
+```
+
+Output:
+
+```sql
+select a
+from t
+where b is null and c in (1, 2)
+order by cast(a as integer) desc
+```
+
+With `--dialect sqlserver`, the statement-count guard counts `GO` lines and
+statements that end without `;`, and comments stay on their side of a `GO` line.
+
 #### Examples
 
 ```bash
@@ -229,7 +288,7 @@ gosqlx format -i query1.sql query2.sql
 # Custom indentation (4 spaces)
 gosqlx format --indent 4 query.sql
 
-# Keep original keyword case
+# Lower-case every keyword
 gosqlx format --no-uppercase query.sql
 
 # Compact format (minimal whitespace)
@@ -250,8 +309,8 @@ gosqlx format -o formatted.sql query.sql
 # Format with custom line length
 gosqlx format --max-line 120 query.sql
 
-# Format with lowercase keywords
-gosqlx format --no-uppercase query.sql
+# Format T-SQL scripts that use GO
+gosqlx format --dialect mssql script.sql
 ```
 
 #### Pipeline/Stdin Examples
@@ -282,11 +341,6 @@ cat query.sql | gosqlx format | gosqlx validate
 |------|---------|
 | 0 | File is already formatted correctly |
 | 1 | File needs formatting |
-
-#### Performance
-
-- **100x faster** than SQLFluff for equivalent operations
-- Handles complex queries with CTEs, window functions, JOINs
 
 ---
 
@@ -338,7 +392,14 @@ gosqlx parse -f table query.sql
 
 # Combine with other tools
 gosqlx parse -f json query.sql | jq '.Statements[0]'
+
+# Write the output to a file
+gosqlx parse -f json -o ast.json query.sql
 ```
+
+With `--dialect sqlserver`, `GO` lines appear in the statement list as
+`BatchSeparator` entries but are not counted in the `Statements` total
+(unreleased, on the main branch).
 
 #### Pipeline/Stdin Examples
 
@@ -551,7 +612,14 @@ gosqlx lint -
 >
 > SQL that does not tokenize or parse is reported as a syntax error and also exits 1; the style
 > rules that need no parse tree still report their violations. With `--auto-fix` the exit code
-> reflects what is left after the fixes.
+> reflects what is left after the fixes. Exiting 1 on syntax errors is unreleased behaviour on the
+> main branch. An empty or comment-only file, and comment-only stdin, has no violations and exits 0.
+
+```bash
+echo 'SELEC 1' | gosqlx lint
+# Syntax error: Error E2002 at line 1, column 1: expected statement, got IDENTIFIER
+# (exit code 1)
+```
 
 ---
 
@@ -706,6 +774,144 @@ An inline query is detected by the same rules as the other commands (see [Input 
 
 ---
 
+### `gosqlx transpile` - Convert SQL Between Dialects
+
+Parse SQL in one dialect and write it for another, applying the rewrite rules
+registered for that pair. The same engine backs `gosqlx.Transpile` in Go.
+
+#### Syntax
+
+```bash
+gosqlx transpile [SQL] [flags]
+```
+
+Pass the SQL as one argument or pipe it on stdin.
+
+#### Flags
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--from` | string | `mysql` | Source dialect: `mysql`, `postgres`, `sqlite`, `sqlserver`, `oracle`, `snowflake`, `clickhouse`, `mariadb` |
+| `--to` | string | `postgres` | Target dialect, same names as `--from` |
+| `-o, --output` | string | stdout | Write the result to a file (global flag) |
+
+Both flags also accept `postgresql`, `pg`, `mssql`, `tsql`, `sql-server` and
+`sqlite3`. `-f, --format` is not supported by this command.
+
+#### Examples
+
+```bash
+# MySQL to PostgreSQL
+gosqlx transpile --from mysql --to postgres "CREATE TABLE t (id INT AUTO_INCREMENT PRIMARY KEY)"
+# CREATE TABLE t (id SERIAL PRIMARY KEY)
+
+# Read from stdin
+echo "SELECT * FROM users WHERE name ILIKE '%alice%'" | gosqlx transpile --from postgres --to mysql
+
+# Write to a file
+gosqlx transpile --from mysql --to postgres -o out.sql "SELECT 1"
+```
+
+On the main branch (unreleased, next release), strings and quoted identifiers
+are written with the target dialect's escape rules and delimiters, and
+dialect-specific operators are mapped. `^` is exponentiation in PostgreSQL and
+bitwise XOR in MySQL, MariaDB and SQL Server; PostgreSQL `@`, `|/` and `||/`
+become `ABS()`, `SQRT()` and `CBRT()`. Something the target cannot express
+returns an error and exit code 1 instead of SQL with a different meaning:
+
+```bash
+gosqlx transpile --from mysql --to postgres "SELECT \`Order Id\` FROM t WHERE n = 'it\\'s'"
+# SELECT "Order Id" FROM t WHERE n = 'it''s'
+
+gosqlx transpile --from pg --to mysql "SELECT 2 ^ 3"
+# SELECT POWER(2, 3)
+
+gosqlx transpile --from mysql --to postgres "SELECT a ^ b FROM t"
+# SELECT a # b FROM t
+
+gosqlx transpile --from mysql --to snowflake "SELECT a ^ b FROM t"
+# SELECT BITXOR(a, b) FROM t
+
+gosqlx transpile --from pg --to mysql "SELECT @ x, |/ y FROM t"
+# SELECT ABS(x), SQRT(y) FROM t
+
+gosqlx transpile --from mysql --to oracle "SELECT a ^ b FROM t"
+# Error: transpile: rewrite: the bitwise XOR operator ^ has no equivalent in oracle
+```
+
+A SQL Server script with `GO` separators returns an error for any other target
+dialect, because batch scopes and repeat counts cannot be represented there.
+
+---
+
+### `gosqlx stats` - Object Pool Counters
+
+Print the object pool counters of the current process: gets (pool
+retrievals), puts (pool returns) and active (currently borrowed) for the
+`tokenizer`, `parser` and `ast` pools. A fresh `gosqlx stats` process has done
+no parsing, so its counters start at zero.
+
+#### Syntax
+
+```bash
+gosqlx stats [flags]
+```
+
+#### Flags
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--json` | bool | false | Output as JSON |
+
+#### Examples
+
+```bash
+gosqlx stats
+# POOL                       GETS       PUTS     ACTIVE
+# ----                       ----       ----     ------
+# ast                           0          0          0
+# parser                        0          0          0
+# tokenizer                     0          0          0
+
+gosqlx stats --json
+```
+
+---
+
+### `gosqlx watch` - Re-run on File Changes
+
+Watch SQL files or directories and re-process them whenever they change.
+
+#### Syntax
+
+```bash
+gosqlx watch [file|dir...] [flags]
+```
+
+#### Flags
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--mode` | string | `validate` | `validate` re-runs validation; `format` re-formats the files in place |
+| `--debounce` | int | 300 | Debounce delay in milliseconds |
+| `--clear` | bool | false | Clear the screen before each re-run |
+| `--watch-verbose` | bool | false | Verbose output from the watcher |
+
+#### Examples
+
+```bash
+# Validate on every change
+gosqlx watch *.sql
+
+# Re-format a directory in place on every change
+gosqlx watch --mode format queries/
+
+# Longer debounce for editors that write in several steps
+gosqlx watch --debounce 500 schema.sql migrations/
+```
+
+---
+
 ### `gosqlx config` - Configuration Management
 
 Manage GoSQLX configuration files for persistent settings.
@@ -850,6 +1056,31 @@ Available for all commands:
 | `-f, --format FORMAT` | string | auto | Output format (auto, json, yaml, table, tree) |
 | `-h, --help` | bool | false | Help for any command |
 | `--version` | bool | false | Show version information |
+
+On the main branch (unreleased), `-o` also works for `parse` and `transpile`.
+`-f`/`-o` map onto `validate`'s `--output-format`/`--output-file`, and commands
+that cannot honour them reject them instead of ignoring them.
+
+---
+
+## Dialect Names and Aliases
+
+Every `--dialect` flag takes a canonical dialect name (`gosqlx validate
+--list-dialects` prints them). On the main branch (unreleased, next release),
+these aliases are accepted too:
+
+| Alias | Dialect |
+|-------|---------|
+| `postgres`, `pg` | `postgresql` |
+| `mssql`, `tsql`, `sql-server` | `sqlserver` |
+| `sqlite3` | `sqlite` |
+
+```bash
+gosqlx validate --dialect pg "SELECT 1"
+gosqlx format --dialect tsql script.sql
+```
+
+Unknown names are rejected with an error that lists the valid names.
 
 ---
 
@@ -1220,28 +1451,9 @@ Run with: `task sql:validate`, `task sql:format`, or `task sql:check`
 
 ## Performance
 
-GoSQLX CLI delivers exceptional performance for all operations.
-
-### Benchmark Results
-
-| Operation | Throughput | Latency | Performance vs Competitors |
-|-----------|------------|---------|----------------------------|
-| **Validation** | 100+ files/sec | <10ms per query | 100-1000x faster |
-| **Formatting** | - | <5ms per file | 100x faster than SQLFluff |
-| **Analysis** | 1.38M+ ops/sec | <1μs per query | Production-ready |
-| **Parsing** | 1.5M+ ops/sec | <1μs per query | Direct AST inspection |
-| **Linting** | 50+ files/sec | <20ms per file | High-performance |
-
-### Core Library Performance
-
-- **1.38M+ operations/second** sustained throughput
-- **1.5M peak** with memory-efficient object pooling
-- **60-80% memory reduction** through object pooling
-- **Zero-copy tokenization** for maximum efficiency
-- **Concurrent processing** support with linear scaling
-- **Race-free implementation** validated through comprehensive testing
-
-### Performance Tips
+Measured numbers for parsing, formatting and validation, with the hardware and
+method behind them, are published on the [benchmarks page](/benchmarks/). For
+faster runs:
 
 1. **Use batch processing** for multiple files with glob patterns
 2. **Enable verbose output only when needed** (`-v` adds overhead)

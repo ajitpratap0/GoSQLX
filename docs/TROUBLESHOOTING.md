@@ -411,6 +411,36 @@ func AutoFixFile(filename string) error {
 }
 ```
 
+#### Issue: Lint Returns an Error for Invalid SQL
+
+**Symptom:** `gosqlx.Lint` or `gosqlx.LintWithDialect` returns a non-nil error
+together with a result, or `gosqlx lint` exits 1 although no style rule fired.
+
+**Cause:** On the main branch (unreleased, next release), SQL that does not
+tokenize or parse is reported as an error instead of an empty, clean-looking
+result. The error wraps `gosqlx.ErrTokenize` or `gosqlx.ErrSyntax`, and the
+returned `*LintResult` still holds the violations of the text and token rules.
+The CLI prints the syntax error and exits 1.
+
+**Solution:** Check the error before treating an empty `Violations` list as clean:
+
+```go
+res, err := gosqlx.Lint(sql)
+switch {
+case errors.Is(err, gosqlx.ErrSyntax), errors.Is(err, gosqlx.ErrTokenize):
+    return fmt.Errorf("invalid SQL: %w", err) // res may still list text-rule violations
+case err != nil:
+    return err
+}
+for _, v := range res.Violations {
+    fmt.Println(v.Rule, v.Message)
+}
+```
+
+When you use `pkg/linter` directly, `linter.FileResult` carries the same
+information in `TokenizeError` and `ParseError`; `SyntaxError()` returns
+whichever is set.
+
 #### Issue: Rules Not Detecting Violations
 
 **Symptom:** Expected violations not reported by linter
@@ -904,6 +934,15 @@ func ParseLargeScript(script string) error {
 `gosqlx validate` does this for you: when a file fails as a whole it re-checks
 it statement by statement, so a file past the token limit validates as long as
 each statement is under it.
+
+On the main branch (unreleased, next release), `SplitStatements` keeps compound
+statements whole: a `BEGIN ... END` body of a trigger, procedure or function,
+`CASE ... END`, T-SQL `BEGIN TRY` and Oracle `DECLARE` sections are not cut at an
+inner `;`. Client batch separators are honoured and removed from the output: a
+line holding only `GO [n]` for `sqlserver`, `DELIMITER` for `mysql` and
+`mariadb`, and a line holding only `/` for `oracle`. Pass the script's dialect so
+that these rules and the dialect's string escapes apply. If a script's blocks
+do not balance, the splitter falls back to plain `;` splitting.
 
 **Refactor Complex Query:**
 ```sql

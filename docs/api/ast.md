@@ -43,25 +43,30 @@ type Expression interface {
 ### `SelectStatement`
 ```go
 type SelectStatement struct {
-    With        *WithClause         // CTE support
-    Distinct    bool                // DISTINCT keyword
-    DistinctOn  []Expression        // PostgreSQL DISTINCT ON
-    Columns     []Expression
-    From        []TableReference
-    Joins       []JoinClause
-    Where       Expression
-    GroupBy     []Expression        // Supports ROLLUP, CUBE, GROUPING SETS
-    Having      Expression
-    Windows     []WindowSpec        // Window function specifications
-    OrderBy     []OrderByExpression // Supports NULLS FIRST/LAST
-    Limit       *int
-    Offset      *int
-    FetchClause *FetchClause        // SQL-99 FETCH FIRST support
+    With              *WithClause         // CTE support
+    Distinct          bool                // DISTINCT keyword
+    DistinctOnColumns []Expression        // PostgreSQL DISTINCT ON
+    Top               *TopClause          // SQL Server TOP N [PERCENT]
+    Columns           []Expression
+    From              []TableReference
+    Joins             []JoinClause
+    Where             Expression
+    GroupBy           []Expression        // Supports ROLLUP, CUBE, GROUPING SETS
+    Having            Expression
+    Windows           []WindowSpec        // Window function specifications
+    OrderBy           []OrderByExpression // Supports NULLS FIRST/LAST
+    Limit             *int
+    Offset            *int
+    Fetch             *FetchClause        // SQL-99 FETCH FIRST/NEXT
+    Extras            *SelectExtras       // Rarer dialect clauses; nil when absent
+    // ... dialect clauses such as ArrayJoin, Sample, Qualify, For, Settings
 }
 ```
 
 **PostgreSQL-Specific Features:**
-- `DistinctOn` - SELECT DISTINCT ON (column1, column2)
+- `DistinctOnColumns` - SELECT DISTINCT ON (column1, column2)
+
+`Extras` is described under [Dialect extension fields](#dialect-extension-fields).
 
 **Example:**
 ```go
@@ -69,7 +74,7 @@ type SelectStatement struct {
 sql := "SELECT DISTINCT ON (dept_id) dept_id, name, salary FROM employees ORDER BY dept_id, salary DESC"
 ast, _ := gosqlx.Parse(sql)
 if stmt, ok := ast.Statements[0].(*ast.SelectStatement); ok {
-    fmt.Printf("DISTINCT ON columns: %d\n", len(stmt.DistinctOn))
+    fmt.Printf("DISTINCT ON columns: %d\n", len(stmt.DistinctOnColumns))
 }
 ```
 
@@ -259,6 +264,51 @@ type DropStatement struct {
 }
 ```
 
+## Utility Statements
+
+### `ExplainStatement`
+`EXPLAIN`, `DESCRIBE` or `DESC` applied to a statement, such as `EXPLAIN ANALYZE SELECT ...`, `EXPLAIN (FORMAT JSON) ...` or SQLite `EXPLAIN QUERY PLAN ...`. `DESCRIBE` of a table name is still a `DescribeStatement`.
+
+```go
+type ExplainStatement struct {
+    Keyword   string    // EXPLAIN, DESCRIBE or DESC, upper-cased
+    Options   string    // text between the keyword and the statement, e.g. "ANALYZE VERBOSE"
+    Statement Statement // the explained statement
+}
+```
+
+On the main branch (unreleased, next release), `EXPLAIN SELECT 1` parses into an `*ast.ExplainStatement` whose `Statement` is the `*ast.SelectStatement`, and `SQL()` writes it back as `EXPLAIN SELECT 1`. In earlier releases it became a `DescribeStatement`, so code that matched `EXPLAIN` through `*ast.DescribeStatement` must handle `*ast.ExplainStatement` instead. `Children()` returns the explained statement, so `ast.Inspect` and `ast.Walk` reach it.
+
+```go
+tree, _ := gosqlx.ParseWithDialect("EXPLAIN SELECT 1", keywords.DialectPostgreSQL)
+if e, ok := tree.Statements[0].(*ast.ExplainStatement); ok {
+    fmt.Printf("%s %T\n", e.Keyword, e.Statement) // EXPLAIN *ast.SelectStatement
+}
+```
+
+### `BatchSeparator`
+A SQL Server `GO` line. It sits in `AST.Statements` between the statements of a T-SQL script.
+
+```go
+type BatchSeparator struct {
+    RepeatCount int             // n in "GO n"; 0 when no count was written
+    Pos         models.Location // source position of the GO keyword
+}
+```
+
+On the main branch (unreleased, next release), scripts that use `GO` and `GO <count>` parse with the SQL Server dialect, also without semicolons. Repeated batches are not expanded, and `SQL()` and `FormatAST` keep each `GO` on its own line. Code that enumerates `AST.Statements` must skip `*ast.BatchSeparator` nodes when it counts statements:
+
+```go
+tree, _ := gosqlx.ParseWithDialect("SELECT 1\nGO\nSELECT 2\nGO 3", keywords.DialectSQLServer)
+for _, stmt := range tree.Statements {
+    if sep, ok := stmt.(*ast.BatchSeparator); ok {
+        fmt.Println("GO", sep.RepeatCount) // GO 0, then GO 3
+        continue
+    }
+    fmt.Printf("%T\n", stmt) // *ast.SelectStatement
+}
+```
+
 ## CTE and Set Operations
 
 ### `WithClause`
@@ -377,27 +427,59 @@ ast, _ := gosqlx.Parse(sql)
 ### `Identifier`
 ```go
 type Identifier struct {
-    Name  string
-    Value string // Alias for Name
+    Name       string
+    Table      string          // optional qualifier; "db.t" for db.t.col
+    Pos        models.Location
+    Quoted     bool            // Name was an ANSI double-quoted identifier
+    Quotes     NameQuote       // which parts were delimited and must stay delimited
+    QuoteStyle rune            // '"', '`' or '[' as written; 0 when nothing was delimited
 }
 ```
+
+`QuoteStyle` records the opening delimiter the source used: `"` (ANSI), `` ` `` (MySQL, MariaDB, ClickHouse) or `[` (SQL Server). On the main branch (unreleased, next release), `SQL()`, the formatter and fingerprints write quoted identifiers back with the same delimiters, so a MySQL `` `select` `` stays a name. Statement, table and column names carry the same information in `NameQuote` fields, such as `TableReference.NameQuote` and `TableReference.AliasQuote`.
 
 ### `LiteralValue`
 ```go
 type LiteralValue struct {
-    Type  string // STRING, NUMBER, BOOLEAN, NULL
-    Value string
+    Value interface{}
+    Type  string // INTEGER, FLOAT, STRING, BOOLEAN, NULL, ...
+    // unexported extras: introducer and escape metadata
 }
+```
+
+String literals keep their introducer and escape rules (unreleased, on the main branch). Read them with `DialectExtras()`, which returns a `LiteralExtras` value, and change them through `EnsureExtras()` or `SetRawBackslash()`:
+
+```go
+type LiteralExtras struct {
+    Prefix       string // N, X, B or a MySQL introducer such as _utf8mb4; "" for a plain string
+    RawBackslash bool   // backslash is an ordinary character in the source dialect
+}
+```
+
+```go
+tree, _ := gosqlx.ParseWithDialect("SELECT N'abc', X'0F', _utf8mb4'hi' FROM t", keywords.DialectMySQL)
+sel := tree.Statements[0].(*ast.SelectStatement)
+lit := sel.Columns[2].(*ast.LiteralValue)
+fmt.Println(lit.DialectExtras().Prefix) // _utf8mb4
+fmt.Println(tree.SQL())                 // SELECT N'abc', X'0F', _utf8mb4'hi' FROM t
 ```
 
 ### `BinaryExpression`
 ```go
 type BinaryExpression struct {
-    Left     Expression
-    Operator string
-    Right    Expression
+    Left       Expression
+    Operator   string
+    Right      Expression
+    Not        bool
+    PipesOr    bool                  // MySQL || meaning OR
+    BitwiseXor bool                  // ^ is bitwise XOR (MySQL, MariaDB, SQL Server), not exponentiation
+    CustomOp   *CustomBinaryOperator // PostgreSQL custom operators
+    Extras     *BinaryExtras         // LIKE ... ESCAPE; nil when absent
+    Pos        models.Location
 }
 ```
+
+`^` is exponentiation in PostgreSQL and bitwise XOR in MySQL, MariaDB and SQL Server. The parser records the XOR meaning in `BitwiseXor` (unreleased, on the main branch), and `gosqlx.Transpile` uses it to write `POWER()`, `#`, `BITXOR()` or `bitXor()` for the target dialect.
 
 **Supported Operators:**
 - Arithmetic: `+`, `-`, `*`, `/`, `%`
@@ -512,11 +594,19 @@ ast, _ := gosqlx.Parse(sql)
 type TableReference struct {
     Name        string
     Alias       string
-    Lateral     bool             // PostgreSQL LATERAL JOIN
     Subquery    *SelectStatement // Derived table: (SELECT ...) alias
+    Lateral     bool             // PostgreSQL LATERAL JOIN
+    NameQuote   NameQuote        // delimited parts of Name
+    AliasQuote  NameQuote        // delimited parts of Alias
+    Pivot       *PivotClause     // PIVOT (...)
+    Unpivot     *UnpivotClause   // UNPIVOT (...)
     SetSubquery *SetOperation    // Derived table whose body is a set operation
+    Modifiers   *TableModifiers  // Rarer table modifiers; nil when absent
+    // ... Final, Only, TableHints, TableFunc, TimeTravel and other dialect fields
 }
 ```
+
+`Modifiers` holds TABLESAMPLE / SAMPLE, Oracle flashback and `@dblink`, MySQL `PARTITION` selection and index hints, SQLite `INDEXED BY`, the SQL Server `OPENJSON ... WITH` schema and a derived `VALUES` table. Read it with `DialectModifiers()` and write it after `EnsureModifiers()`; see [Dialect extension fields](#dialect-extension-fields).
 
 **Enhancement:**
 - `Lateral` - PostgreSQL LATERAL JOIN support
@@ -536,9 +626,12 @@ ast, _ := gosqlx.Parse(sql)
 ### `FetchClause`
 ```go
 type FetchClause struct {
-    Count       *int64  // Number of rows
-    Percent     bool    // PERCENT keyword
-    WithTies    bool    // WITH TIES keyword
+    OffsetValue *int64     // OFFSET n ROWS
+    FetchValue  *int64     // FETCH n ROWS
+    FetchType   string     // "FIRST" or "NEXT"
+    IsPercent   bool       // PERCENT keyword
+    WithTies    bool       // WITH TIES keyword
+    FetchExpr   Expression // row count that is not a plain integer
 }
 ```
 
@@ -547,6 +640,60 @@ type FetchClause struct {
 // FETCH FIRST with TIES
 sql := "SELECT * FROM users ORDER BY score DESC FETCH FIRST 10 ROWS WITH TIES"
 ast, _ := gosqlx.Parse(sql)
+```
+
+### `PivotClause` and `UnpivotClause`
+```go
+type PivotClause struct {
+    AggregateFunction Expression       // e.g. SUM(sales)
+    AggregateAlias    string           // alias of AggregateFunction
+    ExtraAggregates   []PivotAggregate // second and later aggregates (Oracle, BigQuery)
+    PivotColumn       string
+    InValues          []string
+    Pos               models.Location
+    PivotExtensions                    // XML, dynamic IN lists, source aliases
+}
+
+type PivotAggregate struct {
+    Function Expression
+    Alias    string
+}
+
+type UnpivotClause struct {
+    NullHandling     string   // "", "INCLUDE NULLS" or "EXCLUDE NULLS"
+    ValueColumn      string
+    ValueColumns     []string // multi-column UNPIVOT
+    NameColumn       string
+    InColumns        []string
+    Pos              models.Location
+    SourceAlias      string
+    SourceAliasQuote NameQuote
+}
+```
+
+`AggregateAlias`, `ExtraAggregates`, `NullHandling` and `ValueColumns` are unreleased additions on the main branch. `ast.UnpivotNullHandling(s)` normalizes a `NullHandling` value. Quoted aliases and value columns keep their source delimiters when rendered.
+
+## Dialect Extension Fields
+
+Dialect-specific clauses that most statements never use live behind optional pointers, so common statements do not carry them. On the main branch (unreleased, next release) these are:
+
+| Field | Type | Holds |
+|---|---|---|
+| `SelectStatement.Extras` | `*SelectExtras` | SELECT modifiers, INTO, LIMIT BY, ROWS EXAMINED, INTERPOLATE, query hints, output formats |
+| `InsertStatement.Extras` | `*InsertDialectFields` | INSERT modifiers (MySQL `IGNORE`, SQLite `OR REPLACE`, Snowflake `OVERWRITE`), PostgreSQL `OVERRIDING`, the MySQL row alias and other INSERT clauses |
+| `UpdateStatement.Extras`, `DeleteStatement.Extras` | `*DMLTargetFields` | modifiers, TOP, ONLY, extra targets, joins, OUTPUT, ORDER BY / LIMIT, RETURNING INTO |
+| `FunctionCall.Extras` | `*FunctionExtras` | `GROUP_CONCAT ... SEPARATOR`, Oracle KEEP |
+| `BinaryExpression.Extras` | `*BinaryExtras` | `LIKE ... ESCAPE` |
+| `TableReference.Modifiers` | `*TableModifiers` | sampling, partitions, index hints, derived `VALUES` |
+
+Read them through `DialectExtras()` (or `DialectModifiers()` for a table reference). When the pointer is nil it returns a shared, read-only empty value, so callers need no nil check, but they must never write through it. Call `EnsureExtras()` (or `EnsureModifiers()`) before writing; it allocates the struct when needed and returns it:
+
+```go
+sel := tree.Statements[0].(*ast.SelectStatement)
+if sel.DialectExtras().Into != nil { // safe when sel.Extras is nil
+    // SELECT ... INTO
+}
+sel.EnsureExtras().OutputFormat = "JSON" // allocates sel.Extras if needed
 ```
 
 ## Object Pool Functions

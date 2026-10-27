@@ -139,6 +139,8 @@ func (o OutputInto) Children() []Node     { return nodifyExpressions(o.Columns) 
 // InsertDialectFields holds the dialect-specific parts of INSERT. It is
 // held behind InsertStatement.Extras, allocated only for dialect clauses.
 type InsertDialectFields struct {
+	// Top is the SQL Server TOP (expression) [PERCENT] row limit.
+	Top *TopClause
 	// Modifiers are the keywords between INSERT and INTO, upper-cased and in
 	// source order: MySQL IGNORE / LOW_PRIORITY / HIGH_PRIORITY / DELAYED,
 	// SQLite OR REPLACE / OR IGNORE / OR ABORT / OR FAIL / OR ROLLBACK,
@@ -203,6 +205,9 @@ func (l LogErrorsClause) Children() []Node {
 
 // insertDialectChildren appends the nodes of d to children.
 func (d *InsertDialectFields) insertDialectChildren(children []Node) []Node {
+	if d.Top != nil {
+		children = append(children, d.Top)
+	}
 	if d.TableFunction != nil {
 		children = append(children, d.TableFunction)
 	}

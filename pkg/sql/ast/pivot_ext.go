@@ -21,6 +21,8 @@ import "strings"
 //	Oracle:    PIVOT XML (SUM(c) FOR a IN (ANY))
 //	Snowflake: PIVOT (AVG(a) FOR q IN (ANY ORDER BY q)), IN (SELECT ...)
 type PivotExtensions struct {
+	// DefaultOnNull replaces NULL pivot results in Snowflake.
+	DefaultOnNull Expression
 	// XML is the Oracle PIVOT XML form.
 	XML bool
 	// InAny is IN (ANY [ORDER BY ...]) in place of a value list.
@@ -39,6 +41,9 @@ type PivotExtensions struct {
 }
 
 func (e *PivotExtensions) pivotExtensionChildren(nodes []Node) []Node {
+	if e.DefaultOnNull != nil {
+		nodes = append(nodes, e.DefaultOnNull)
+	}
 	for i := range e.InAnyOrderBy {
 		nodes = append(nodes, &e.InAnyOrderBy[i])
 	}
@@ -153,7 +158,15 @@ func writePivot(w textWriter, p *PivotClause, kw func(string) string) {
 	default:
 		writePivotItemList(w, p.InValues)
 	}
-	w.WriteString("))")
+	w.WriteByte(')')
+	if p.DefaultOnNull != nil {
+		w.WriteByte(' ')
+		w.WriteString(kw("DEFAULT ON NULL"))
+		w.WriteString(" (")
+		w.WriteString(exprSQL(p.DefaultOnNull))
+		w.WriteByte(')')
+	}
+	w.WriteByte(')')
 }
 
 func writePivotAggregateAlias(w textWriter, alias string, kw func(string) string) {
@@ -233,6 +246,7 @@ func pivotTupleLen(s string) int {
 // releasePivotExtensions releases dynamic IN-list expressions. Aggregate
 // expressions are owned by AggregateFunction and ExtraAggregates.
 func releasePivotExtensions(p *PivotClause, mode releaseMode) {
+	releaseExpression(p.DefaultOnNull, mode)
 	for i := range p.InAnyOrderBy {
 		releaseExpression(p.InAnyOrderBy[i].Expression, mode)
 	}

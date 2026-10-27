@@ -8,6 +8,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Parse and faithfully render Snowflake PIVOT defaults, ClickHouse FINAL/SAMPLE
+  (also on joined tables, `TableModifiers.Sample`), SQL Server INSERT TOP, MySQL /
+  MariaDB ALTER TABLE partition actions (ADD/DROP [IF [NOT] EXISTS], TRUNCATE,
+  REORGANIZE, COALESCE, EXCHANGE, ANALYZE/CHECK/OPTIMIZE/REBUILD/REPAIR,
+  DISCARD/IMPORT, REMOVE/UPGRADE PARTITIONING, ALL), PostgreSQL ROWS FROM and
+  array subscripts, and ROLLUP/CUBE/nested GROUPING SETS inside GROUPING SETS;
+  cover identity constraints. Partition actions outside the structured grammar
+  still parse as as-written `AlterTableOther` text.
 - `ast.PivotClause.AggregateAlias`, `ast.PivotClause.ExtraAggregates`
   (`[]ast.PivotAggregate`), `ast.UnpivotClause.NullHandling`,
   `ast.UnpivotClause.ValueColumns` and `ast.UnpivotNullHandling`; rendered by
@@ -36,6 +44,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   identifier delimiters through rendering.
 
 ### Changed
+- Parsed ClickHouse SAMPLE sizes and offsets now use inspectable expression
+  fields, which take rendering precedence over the retained legacy string fields.
+- ClickHouse SAMPLE accepts only decimal numbers (hex such as `0x10` is
+  rejected) and renders before ARRAY JOIN; a SAMPLE clause with no valid size is
+  omitted instead of rendered as a bare `SAMPLE`.
+- A column with more than one of DEFAULT, an identity clause and a generation
+  expression is rejected; signed numbers in identity options render as `-1`.
 - **Dialect extension fields**: the new dialect-specific clauses live behind
   optional pointers so that common statements do not carry them:
   `SelectStatement.Extras` (`SelectExtras`: SELECT modifiers, INTO, LIMIT BY,

@@ -118,11 +118,17 @@ type IndexHint struct {
 // pointer on TableReference so the many references without any of them pay
 // one word.
 type TableModifiers struct {
+	// RowsFrom combines PostgreSQL set-returning functions in one table.
+	RowsFrom []RowsFromItem
 	// Values is a derived table whose body is a VALUES table constructor:
 	// FROM (VALUES (1, 'a'), (2, 'b')) AS v(id, name).
 	Values *Values
 	// TableSample is a row-sampling clause: TABLESAMPLE / SAMPLE.
 	TableSample *TableSampleClause
+	// Sample is the ClickHouse SAMPLE k [OFFSET m] of a table expression in
+	// a FROM list with joins or several tables; a lone FROM table keeps its
+	// SAMPLE on SelectStatement.Sample.
+	Sample *SampleClause
 	// Flashback is the Oracle AS OF / VERSIONS BETWEEN flashback clause.
 	Flashback *FlashbackClause
 	// DBLink is the Oracle database link of t@dblink.
@@ -326,16 +332,20 @@ func writeTableRefPreAlias(w textWriter, t *TableReference, kw func(string) stri
 // TABLESAMPLE, ClickHouse FINAL, MySQL index hints and SQLite INDEXED BY.
 // Each is preceded by a space.
 func writeTableRefPostAlias(w textWriter, t *TableReference, kw func(string) string) {
-	if s := t.tableSample(); s != nil && s.AfterAlias {
-		writeTableSample(w, s, kw)
-	}
 	if t.Final {
 		w.WriteByte(' ')
 		w.WriteString(kw("FINAL"))
 	}
+	if s := t.tableSample(); s != nil && s.AfterAlias {
+		writeTableSample(w, s, kw)
+	}
 	m := t.Modifiers
 	if m == nil {
 		return
+	}
+	if s := SampleExpressionSQL(m.Sample, kw); s != "" {
+		w.WriteByte(' ')
+		w.WriteString(s)
 	}
 	for _, h := range m.IndexHints {
 		writeIndexHint(w, h, kw)
@@ -374,7 +384,7 @@ func TableRefPreAliasSQL(t *TableReference, kw func(string) string) string {
 // space; see TableRefPreAliasSQL.
 func TableRefPostAliasSQL(t *TableReference, kw func(string) string) string {
 	if t == nil || (!t.Final && (t.tableSample() == nil || !t.tableSample().AfterAlias) &&
-		(t.Modifiers == nil || (len(t.Modifiers.IndexHints) == 0 && t.Modifiers.IndexedBy == "" && !t.Modifiers.NotIndexed))) {
+		(t.Modifiers == nil || (t.Modifiers.Sample == nil && len(t.Modifiers.IndexHints) == 0 && t.Modifiers.IndexedBy == "" && !t.Modifiers.NotIndexed))) {
 		return ""
 	}
 	if kw == nil {
@@ -719,6 +729,15 @@ func writeMatchRecognize(w textWriter, mr *MatchRecognizeClause, kw func(string)
 // releaseTableFactorModifiers releases the expressions held by the
 // table-factor modifiers of tr and clears them.
 func releaseTableFactorModifiers(tr *TableReference, mode releaseMode) {
+	if m := tr.Modifiers; m != nil {
+		for i := range m.RowsFrom {
+			releaseExpression(m.RowsFrom[i].Function, mode)
+			m.RowsFrom[i] = RowsFromItem{}
+		}
+		m.RowsFrom = nil
+		releaseSampleClause(m.Sample, mode)
+		m.Sample = nil
+	}
 	if s := tr.tableSample(); s != nil {
 		for i := range s.Args {
 			releaseExpression(s.Args[i], mode)

@@ -137,6 +137,7 @@ func writeInsertHead(sb *strings.Builder, f *nodeFormatter, i *ast.InsertStateme
 	sb.WriteString(f.kw("INSERT"))
 	sb.WriteString(" ")
 	writeDMLModifiers(sb, f, i.DialectExtras().Modifiers)
+	writeDMLTop(sb, f, i.DialectExtras().Top)
 	sb.WriteString(f.kw("INTO"))
 	sb.WriteString(" ")
 	if i.DialectExtras().TableFunction != nil {

@@ -238,6 +238,20 @@ type AlterTableOperation struct {
 	Assignments   []UpdateExpression
 	PartitionExpr Expression
 	Where         Expression
+
+	// Structured MySQL partition actions; Keyword identifies the action.
+	Partitioning         *PartitionBy
+	PartitionDefinitions []PartitionDefinition
+	PartitionNames       []*Ident
+	// PartitionAll is true when the action names ALL partitions.
+	PartitionAll bool
+	// PartitionCount is n of COALESCE PARTITION n and ADD PARTITION
+	// PARTITIONS n.
+	PartitionCount Expression
+	// ExchangeTable and Validation describe EXCHANGE PARTITION p WITH TABLE
+	// t [WITH | WITHOUT VALIDATION]; Validation is "", "WITH" or "WITHOUT".
+	ExchangeTable ObjectName
+	Validation    string
 }
 
 func (a *AlterTableOperation) alterOperationNode() {}
@@ -305,6 +319,8 @@ const (
 	UpdateMutation
 	// DeleteMutation is the ClickHouse DELETE [IN PARTITION p] WHERE cond.
 	DeleteMutation
+	// AlterPartitioning is a structured MySQL partition action.
+	AlterPartitioning
 )
 
 // RoleOption represents an option in ROLE statement

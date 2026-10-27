@@ -140,7 +140,14 @@ func (p *Parser) parsePrimaryExpression() (ast.Expression, error) {
 
 	if p.isType(models.TokenTypeArray) {
 		// Handle ARRAY[...] or ARRAY(SELECT ...) constructor
-		return p.parseArrayConstructor()
+		array, err := p.parseArrayConstructor()
+		if err != nil {
+			return nil, err
+		}
+		if p.isType(models.TokenTypeLBracket) {
+			return p.parseArrayAccessExpression(array)
+		}
+		return array, nil
 	}
 
 	// ClickHouse / Snowflake array literal: [expr, expr, ...] without the

@@ -43,6 +43,18 @@ func (p *Parser) parseInsertStatement() (ast.Statement, error) {
 		}
 	}
 
+	// SQL Server INSERT permits TOP (expression) [PERCENT], without WITH TIES.
+	if p.IsSQLServer() && p.isUnquotedWord("TOP") {
+		top, err := p.parseTopClause()
+		if err != nil {
+			return nil, err
+		}
+		if !top.Parenthesized || top.WithTies {
+			return nil, p.expectedError("TOP (expression) [PERCENT] in INSERT")
+		}
+		stmt.EnsureExtras().Top = top
+	}
+
 	// Parse INTO. SQL Server, MySQL and MariaDB make it optional.
 	if p.isType(models.TokenTypeInto) {
 		p.advance() // Consume INTO

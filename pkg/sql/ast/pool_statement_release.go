@@ -331,7 +331,7 @@ func GetSelectStatement() *SelectStatement {
 //   - Joins (Right TableRef, Condition; Left is a non-owning copy, never released)
 //   - ArrayJoin (element Exprs)
 //   - PrewhereClause
-//   - Sample (no Expressions, but zeroed for hygiene)
+//   - Sample (size and offset expressions)
 //   - Where
 //   - GroupBy
 //   - Having
@@ -445,7 +445,8 @@ func releaseSelectStatement(stmt *SelectStatement, mode releaseMode) {
 		stmt.ConnectBy = nil
 	}
 
-	// ── SAMPLE (no expression children, just drop) ─────────────────────
+	// ── SAMPLE ────────────────────────────────────────────────────────
+	releaseSampleClause(stmt.Sample, mode)
 	stmt.Sample = nil
 
 	// ── GROUP BY ───────────────────────────────────────────────────────

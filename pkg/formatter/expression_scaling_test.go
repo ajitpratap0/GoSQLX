@@ -25,8 +25,9 @@ import (
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
 )
 
-// Fourfold expression growth must stay below the sixteenfold cost of repeatedly
-// rendering or scanning every descendant. Build ASTs outside the measurement so
+// Sixteenfold expression growth must stay far below the 256-fold cost of
+// repeatedly rendering or scanning every descendant: linear work grows ~16x,
+// and the 64x bound leaves room for noisy shared CI runners. Build ASTs outside the measurement so
 // parser limits and parsing time do not conceal formatter regressions.
 func TestFormatASTExpressionLinearGrowth(t *testing.T) {
 	for _, shape := range []struct {
@@ -53,7 +54,7 @@ func TestFormatASTExpressionLinearGrowth(t *testing.T) {
 						opts.KeywordCase = ast.KeywordLower
 					}
 					small, smallWant := shape.build(shape.small, mode.lower)
-					large, largeWant := shape.build(4*shape.small, mode.lower)
+					large, largeWant := shape.build(16*shape.small, mode.lower)
 					for _, tc := range []struct {
 						tree *ast.AST
 						want string
@@ -64,9 +65,9 @@ func TestFormatASTExpressionLinearGrowth(t *testing.T) {
 					}
 					smallTime := expressionFormatDuration(small, opts)
 					largeTime := expressionFormatDuration(large, opts)
-					t.Logf("n=%d: %v; n=%d: %v; ratio %.2f", shape.small, smallTime, 4*shape.small, largeTime, float64(largeTime)/float64(smallTime))
-					if largeTime > 10*smallTime {
-						t.Fatalf("fourfold expression growth took %v -> %v, exceeding 10x", smallTime, largeTime)
+					t.Logf("n=%d: %v; n=%d: %v; ratio %.2f", shape.small, smallTime, 16*shape.small, largeTime, float64(largeTime)/float64(smallTime))
+					if largeTime > 64*smallTime {
+						t.Fatalf("sixteenfold expression growth took %v -> %v, exceeding 64x", smallTime, largeTime)
 					}
 				})
 			}
@@ -143,17 +144,21 @@ func scalingMarkerLiterals(n int, lower bool) (*ast.AST, string) {
 // Use the minimum of repeated equal-size batches to limit scheduler and GC
 // noise. The assertion compares input sizes, never an absolute time budget.
 func expressionFormatDuration(tree *ast.AST, opts ast.FormatOptions) time.Duration {
+	// Repeat until a sample spans at least 20ms so coarse timers (Windows)
+	// and scheduler noise cannot dominate, then keep the best per-call time.
 	var best time.Duration
 	for sample := 0; sample < 3; sample++ {
 		runtime.GC()
+		calls := 0
 		start := time.Now()
-		for batch := 0; batch < 2; batch++ {
+		for time.Since(start) < 20*time.Millisecond {
 			out := formatter.FormatAST(tree, opts)
 			runtime.KeepAlive(out)
+			calls++
 		}
-		elapsed := time.Since(start)
-		if best == 0 || elapsed < best {
-			best = elapsed
+		perCall := time.Since(start) / time.Duration(calls)
+		if best == 0 || perCall < best {
+			best = perCall
 		}
 	}
 	return best

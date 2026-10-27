@@ -8,10 +8,10 @@ import (
 	"testing"
 )
 
-func checkLazyDialectMetadata[T any](t *testing.T, stored, read, ensure func() *T) {
+func checkLazyDialectMetadata[T any](t *testing.T, stored func() *T, read func() T, ensure func() *T) {
 	t.Helper()
 	var zero T
-	if stored() != nil || read() == nil || !reflect.DeepEqual(*read(), zero) {
+	if stored() != nil || !reflect.DeepEqual(read(), zero) {
 		t.Fatal("ordinary node must expose empty metadata without storing it")
 	}
 	if allocs := testing.AllocsPerRun(100, func() { _ = read() }); allocs != 0 {
@@ -21,7 +21,7 @@ func checkLazyDialectMetadata[T any](t *testing.T, stored, read, ensure func() *
 		t.Fatal("reading metadata allocated a side struct")
 	}
 	first := ensure()
-	if first == nil || stored() != first || read() != first || ensure() != first {
+	if first == nil || stored() != first || !reflect.DeepEqual(read(), *first) || ensure() != first {
 		t.Fatal("Ensure must allocate once and reuse the node's metadata")
 	}
 }
@@ -65,9 +65,72 @@ func TestDialectMetadataLazy(t *testing.T) {
 		n := &SelectStatement{}
 		checkLazyDialectMetadata(t, func() *SelectExtras { return n.Extras }, n.DialectExtras, n.EnsureExtras)
 	})
+	t.Run("update", func(t *testing.T) {
+		n := &UpdateStatement{}
+		checkLazyDialectMetadata(t, func() *DMLTargetFields { return n.Extras }, n.DialectExtras, n.EnsureExtras)
+	})
+	t.Run("delete", func(t *testing.T) {
+		n := &DeleteStatement{}
+		checkLazyDialectMetadata(t, func() *DMLTargetFields { return n.Extras }, n.DialectExtras, n.EnsureExtras)
+	})
 	t.Run("table", func(t *testing.T) {
 		n := &TableReference{}
 		checkLazyDialectMetadata(t, func() *TableModifiers { return n.Modifiers }, n.DialectModifiers, n.EnsureModifiers)
+	})
+}
+
+// Mutating a read snapshot must never change the defaults exposed by another
+// node. This also checks that Ensure keeps metadata specific to its node.
+func checkDialectMetadataIsolation[T any](t *testing.T, read, other func() T, ensure func() *T, mutate func(*T)) {
+	t.Helper()
+	var zero T
+	copy := read()
+	mutate(&copy)
+	if reflect.DeepEqual(copy, zero) {
+		t.Fatal("test mutation did not change metadata")
+	}
+	if !reflect.DeepEqual(read(), zero) || !reflect.DeepEqual(other(), zero) {
+		t.Fatal("read metadata mutation changed node defaults")
+	}
+	mutate(ensure())
+	copy = read()
+	if !reflect.DeepEqual(copy, *ensure()) || !reflect.DeepEqual(other(), zero) {
+		t.Fatal("Ensure must mutate only its own node")
+	}
+	copy = zero
+	if reflect.DeepEqual(read(), copy) {
+		t.Fatal("read metadata must be a detached value")
+	}
+}
+
+func TestDialectMetadataReadIsolation(t *testing.T) {
+	t.Run("function", func(t *testing.T) {
+		a, b := &FunctionCall{}, &FunctionCall{}
+		checkDialectMetadataIsolation(t, a.DialectExtras, b.DialectExtras, a.EnsureExtras, func(x *FunctionExtras) { x.Separator = &LiteralValue{} })
+	})
+	t.Run("binary", func(t *testing.T) {
+		a, b := &BinaryExpression{}, &BinaryExpression{}
+		checkDialectMetadataIsolation(t, a.DialectExtras, b.DialectExtras, a.EnsureExtras, func(x *BinaryExtras) { x.Escape = &Identifier{} })
+	})
+	t.Run("insert", func(t *testing.T) {
+		a, b := &InsertStatement{}, &InsertStatement{}
+		checkDialectMetadataIsolation(t, a.DialectExtras, b.DialectExtras, a.EnsureExtras, func(x *InsertDialectFields) { x.RowAlias = "changed" })
+	})
+	t.Run("select", func(t *testing.T) {
+		a, b := &SelectStatement{}, &SelectStatement{}
+		checkDialectMetadataIsolation(t, a.DialectExtras, b.DialectExtras, a.EnsureExtras, func(x *SelectExtras) { x.LimitAll = true })
+	})
+	t.Run("update", func(t *testing.T) {
+		a, b := &UpdateStatement{}, &UpdateStatement{}
+		checkDialectMetadataIsolation(t, a.DialectExtras, b.DialectExtras, a.EnsureExtras, func(x *DMLTargetFields) { x.Only = true })
+	})
+	t.Run("delete", func(t *testing.T) {
+		a, b := &DeleteStatement{}, &DeleteStatement{}
+		checkDialectMetadataIsolation(t, a.DialectExtras, b.DialectExtras, a.EnsureExtras, func(x *DMLTargetFields) { x.Only = true })
+	})
+	t.Run("table", func(t *testing.T) {
+		a, b := &TableReference{}, &TableReference{}
+		checkDialectMetadataIsolation(t, a.DialectModifiers, b.DialectModifiers, a.EnsureModifiers, func(x *TableModifiers) { x.Values = &Values{} })
 	})
 }
 

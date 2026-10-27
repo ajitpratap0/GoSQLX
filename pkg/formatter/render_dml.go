@@ -46,7 +46,7 @@ func writeDMLTop(sb *strings.Builder, f *nodeFormatter, top *ast.TopClause) {
 }
 
 // writeDMLTargets writes the UPDATE / DELETE target list.
-func writeDMLTargets(sb *strings.Builder, f *nodeFormatter, d *ast.DMLTargetFields, name string, nameQ ast.NameQuote, alias string, aliasQ ast.NameQuote) {
+func writeDMLTargets(sb *strings.Builder, f *nodeFormatter, d ast.DMLTargetFields, name string, nameQ ast.NameQuote, alias string, aliasQ ast.NameQuote) {
 	if d.Only {
 		sb.WriteString(f.kw("ONLY"))
 		sb.WriteString(" ")
@@ -100,7 +100,7 @@ func writeDMLOutput(sb *strings.Builder, f *nodeFormatter, output []ast.Expressi
 }
 
 // writeDMLOrderLimit writes the single-table ORDER BY ... LIMIT n clauses.
-func writeDMLOrderLimit(sb *strings.Builder, f *nodeFormatter, d *ast.DMLTargetFields) {
+func writeDMLOrderLimit(sb *strings.Builder, f *nodeFormatter, d ast.DMLTargetFields) {
 	if len(d.OrderBy) > 0 {
 		sb.WriteString(f.clauseSep())
 		sb.WriteString(f.kw("ORDER BY"))

@@ -18,6 +18,8 @@
 package parser
 
 import (
+	"strings"
+
 	"github.com/ajitpratap0/GoSQLX/pkg/models"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/keywords"
@@ -72,8 +74,16 @@ func (p *Parser) parseDeleteStatement() (ast.Statement, error) {
 		if !multiFrom && p.dialect != string(keywords.DialectOracle) {
 			return nil, p.expectedError("FROM")
 		}
+		// MariaDB: DELETE `history` FROM history deletes the rows of the
+		// table history; only the bare word is the HISTORY modifier.
+		historyQuote := p.historyTableQuote()
 		if _, err := p.parseDMLTargets(&stmt.TableName, &stmt.Alias, &q, &x, p.isMySQLFamily(), nil); err != nil {
 			return nil, err
+		}
+		if historyQuote != 0 && stmt.Alias == "" && strings.EqualFold(stmt.TableName, "history") {
+			// Keep the delimiters so the statement is written back as a
+			// multi-table delete, not as DELETE HISTORY.
+			stmt.TableNameQuote = ast.QuotedName(historyQuote)
 		}
 		if p.isDMLOutputKeyword() {
 			x.Output, x.OutputInto, err = p.parseDMLOutputClause()
@@ -136,6 +146,20 @@ func (p *Parser) parseDeleteStatement() (ast.Statement, error) {
 	}
 	stmt.Extras = finishDMLExtras(&x)
 	return stmt, nil
+}
+
+// historyTableQuote returns, in MariaDB, the delimiter of a delimited
+// first DELETE target named history that FROM follows (DELETE `history`
+// FROM history), and 0 otherwise.
+func (p *Parser) historyTableQuote() rune {
+	if !p.isMariaDB() || !strings.EqualFold(p.currentToken.Token.Value, "history") ||
+		p.peekToken().Token.Type != models.TokenTypeFrom || !p.isQuotedIdentifierToken() {
+		return 0
+	}
+	if q := p.currentIdentQuote(); q != 0 {
+		return q
+	}
+	return '`'
 }
 
 // parseDeleteSources consumes FROM or USING and parses the source table list

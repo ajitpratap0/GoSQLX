@@ -48,6 +48,10 @@ func (p *Parser) parseAlterStatement() (ast.Statement, error) {
 	case p.matchType(models.TokenTypeConnector):
 		typ, parse = ast.AlterTypeConnector, p.parseAlterConnectorStatement
 	default:
+		if p.utilityWord(p.currentPos) == "DEFAULT" && p.utilityWord(p.currentPos+1) == "PRIVILEGES" &&
+			p.alterDialect(txnPostgres) {
+			return p.parseAlterDefaultPrivileges()
+		}
 		if word, ok := p.alterObjectWord(); ok {
 			return p.parseAlterVerbatim(word)
 		}

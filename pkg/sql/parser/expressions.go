@@ -92,8 +92,10 @@ func (p *Parser) parseExpression() (ast.Expression, error) {
 	}
 
 	// MySQL / MariaDB user-variable assignment: @a := expr (right-associative,
-	// the loosest operator).
-	if p.isMySQLFamily() && (p.isType(models.TokenTypeAssignment) ||
+	// the loosest operator). MySQL assigns with := in an expression only to a
+	// user variable (variable: '@' ident SET_VAR expr); f(a := 1) or
+	// arr[1:=2] is a syntax error there.
+	if p.isMySQLFamily() && isUserVariable(left) && (p.isType(models.TokenTypeAssignment) ||
 		p.isType(models.TokenTypeColon) && p.peekTypeAt(1) == models.TokenTypeEq && p.nextAdjacent(1)) {
 		opPos := p.currentLocation()
 		if !p.isType(models.TokenTypeAssignment) {

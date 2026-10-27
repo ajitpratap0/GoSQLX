@@ -1,4 +1,7 @@
-import { PROJECT } from '@/data/metrics';
+import { PROJECT, REALWORLD_CORPUS, REALWORLD_STATUS } from '@/data/metrics';
+
+/** Appends the "not released yet" qualifier while REALWORLD_CORPUS.released is false. */
+const unreleased = (text: string) => (REALWORLD_STATUS ? `${text} (${REALWORLD_STATUS})` : text);
 
 export const NAV_LINKS = [
   { href: '/docs', label: 'Docs' },
@@ -10,13 +13,38 @@ export const NAV_LINKS = [
   { href: '/compare', label: 'Compare' },
 ];
 
-export const FEATURES = [
-  { icon: 'globe', title: 'Multi-Dialect', description: 'PostgreSQL, MySQL, MariaDB, SQLite, SQL Server, Oracle, Snowflake, ClickHouse.', color: 'accent' },
+export interface Feature {
+  icon: string;
+  title: string;
+  description: string;
+  color: string;
+  /** Spans the full row from md up, so an odd card count still fills every row. */
+  wide?: boolean;
+}
+
+export const FEATURES: Feature[] = [
+  {
+    icon: 'globe',
+    title: 'Multi-Dialect',
+    description: `PostgreSQL, MySQL, MariaDB, SQLite, SQL Server, Oracle, Snowflake, ClickHouse. ${unreleased(
+      `All ${REALWORLD_CORPUS.total.toLocaleString('en-US')} statements of a real-world corpus across the ${PROJECT.dialectCount} dialects parse, format and round-trip`,
+    )}.`,
+    color: 'accent',
+  },
   { icon: 'lock', title: 'Thread-Safe', description: 'Race-detector clean in CI.', color: 'brand' },
   { icon: 'bolt', title: 'Zero-Copy', description: 'Direct byte slice operations. No unnecessary allocations.', color: 'accent-warm' },
   { icon: 'recycle', title: 'Object Pooling', description: 'sync.Pool recycling for ASTs, tokenizers, expressions.', color: 'accent' },
   { icon: 'shield', title: 'Security Scanner', description: 'SQL injection detection with severity classification.', color: 'danger' },
   { icon: 'cpu', title: 'MCP Server', description: `${PROJECT.mcpToolCount} SQL tools for Claude, Cursor, and any MCP client.`, color: 'cyan' },
+  {
+    icon: 'code',
+    title: 'Format & Transpile',
+    description: `Dialect-aware formatting and SQL transpilation between dialects, since v1.14. ${unreleased(
+      'gosqlx.Format and gosqlx format keep comments and optimizer hints',
+    )}.`,
+    color: 'brand',
+    wide: true,
+  },
 ];
 
 export interface DocsSidebarItem {

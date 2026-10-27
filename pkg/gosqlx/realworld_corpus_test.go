@@ -207,13 +207,13 @@ func assertDialectStandInsUntouched(t *testing.T) {
 		name      string
 		got, want any
 	}{
-		{"FunctionCall", *(&ast.FunctionCall{}).DialectExtras(), ast.FunctionExtras{}},
-		{"BinaryExpression", *(&ast.BinaryExpression{}).DialectExtras(), ast.BinaryExtras{}},
-		{"InsertStatement", *(&ast.InsertStatement{}).DialectExtras(), ast.InsertDialectFields{}},
-		{"UpdateStatement", *(&ast.UpdateStatement{}).DialectExtras(), ast.DMLTargetFields{}},
-		{"DeleteStatement", *(&ast.DeleteStatement{}).DialectExtras(), ast.DMLTargetFields{}},
-		{"SelectStatement", *(&ast.SelectStatement{}).DialectExtras(), ast.SelectExtras{}},
-		{"TableReference", *(&ast.TableReference{}).DialectModifiers(), ast.TableModifiers{}},
+		{"FunctionCall", (&ast.FunctionCall{}).DialectExtras(), ast.FunctionExtras{}},
+		{"BinaryExpression", (&ast.BinaryExpression{}).DialectExtras(), ast.BinaryExtras{}},
+		{"InsertStatement", (&ast.InsertStatement{}).DialectExtras(), ast.InsertDialectFields{}},
+		{"UpdateStatement", (&ast.UpdateStatement{}).DialectExtras(), ast.DMLTargetFields{}},
+		{"DeleteStatement", (&ast.DeleteStatement{}).DialectExtras(), ast.DMLTargetFields{}},
+		{"SelectStatement", (&ast.SelectStatement{}).DialectExtras(), ast.SelectExtras{}},
+		{"TableReference", (&ast.TableReference{}).DialectModifiers(), ast.TableModifiers{}},
 		{"LiteralValue", (&ast.LiteralValue{}).DialectExtras(), ast.LiteralExtras{}},
 	}
 	for _, c := range checks {

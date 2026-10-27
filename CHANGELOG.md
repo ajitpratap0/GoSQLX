@@ -45,7 +45,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   ORDER BY / LIMIT, RETURNING INTO), `FunctionCall.Extras`,
   `BinaryExpression.Extras` and `TableReference.Modifiers` (including derived
   `VALUES`). Read them through `DialectExtras()` / `DialectModifiers()`, which
-  return a shared read-only empty value when the pointer is nil, and call
+  return values for read access without shared mutable stand-ins; call
   `EnsureExtras()` / `EnsureModifiers()` before writing.
 - **Transpilation**: string literals and quoted identifiers are rendered using
   the target dialect's escape rules and delimiters. Unrepresentable literals
@@ -64,6 +64,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   in dialects without them.
 
 ### Fixed
+- Scan raw dialect statements and standalone VALUES for injection patterns, recover
+  panics at every C export, and guard unlinked tokenizer scratch calls.
 - Formatter lower-case mode covers expression and built-in function keywords;
   comments use LF endings and keep SQL Server batch boundaries. Fix MySQL join
   comma spacing, SELECT alias qualifiers, and TOP/FETCH limit transforms.

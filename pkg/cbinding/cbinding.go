@@ -207,7 +207,9 @@ func statementTypeName(stmt ast.Statement) string {
 // pointer with gosqlx_free.
 //
 //export gosqlx_parse
-func gosqlx_parse(sql *C.char) *C.char {
+func gosqlx_parse(sql *C.char) (result *C.char) {
+	defer recoverExport(&result, panicSuccessJSON)
+	checkExportPanic("gosqlx_parse")
 	return toJSON(parseResultFor(C.GoString(sql), ""))
 }
 
@@ -222,7 +224,9 @@ func gosqlx_parse(sql *C.char) *C.char {
 // pointer with gosqlx_free.
 //
 //export gosqlx_validate
-func gosqlx_validate(sql *C.char) *C.char {
+func gosqlx_validate(sql *C.char) (result *C.char) {
+	defer recoverExport(&result, panicValidationJSON)
+	checkExportPanic("gosqlx_validate")
 	return toJSON(validationResultFor(C.GoString(sql), ""))
 }
 
@@ -237,7 +241,9 @@ func gosqlx_validate(sql *C.char) *C.char {
 // pointer with gosqlx_free.
 //
 //export gosqlx_format
-func gosqlx_format(sql *C.char) *C.char {
+func gosqlx_format(sql *C.char) (result *C.char) {
+	defer recoverExport(&result, panicSuccessJSON)
+	checkExportPanic("gosqlx_format")
 	return toJSON(formatResultFor(C.GoString(sql), ""))
 }
 
@@ -252,7 +258,9 @@ func gosqlx_format(sql *C.char) *C.char {
 // pointer with gosqlx_free.
 //
 //export gosqlx_extract_tables
-func gosqlx_extract_tables(sql *C.char) *C.char {
+func gosqlx_extract_tables(sql *C.char) (result *C.char) {
+	defer recoverExport(&result, panicErrorJSON)
+	checkExportPanic("gosqlx_extract_tables")
 	return toJSON(extractListFor(C.GoString(sql), "", "tables", gosqlx.ExtractTables))
 }
 
@@ -267,7 +275,9 @@ func gosqlx_extract_tables(sql *C.char) *C.char {
 // pointer with gosqlx_free.
 //
 //export gosqlx_extract_columns
-func gosqlx_extract_columns(sql *C.char) *C.char {
+func gosqlx_extract_columns(sql *C.char) (result *C.char) {
+	defer recoverExport(&result, panicErrorJSON)
+	checkExportPanic("gosqlx_extract_columns")
 	return toJSON(extractListFor(C.GoString(sql), "", "columns", gosqlx.ExtractColumns))
 }
 
@@ -282,7 +292,9 @@ func gosqlx_extract_columns(sql *C.char) *C.char {
 // pointer with gosqlx_free.
 //
 //export gosqlx_extract_functions
-func gosqlx_extract_functions(sql *C.char) *C.char {
+func gosqlx_extract_functions(sql *C.char) (result *C.char) {
+	defer recoverExport(&result, panicErrorJSON)
+	checkExportPanic("gosqlx_extract_functions")
 	return toJSON(extractListFor(C.GoString(sql), "", "functions", gosqlx.ExtractFunctions))
 }
 
@@ -297,7 +309,9 @@ func gosqlx_extract_functions(sql *C.char) *C.char {
 // pointer with gosqlx_free.
 //
 //export gosqlx_extract_metadata
-func gosqlx_extract_metadata(sql *C.char) *C.char {
+func gosqlx_extract_metadata(sql *C.char) (result *C.char) {
+	defer recoverExport(&result, panicErrorJSON)
+	checkExportPanic("gosqlx_extract_metadata")
 	return toJSON(metadataFor(C.GoString(sql), ""))
 }
 
@@ -308,12 +322,16 @@ func gosqlx_extract_metadata(sql *C.char) *C.char {
 // *_dialect variant, gosqlx_lint, gosqlx_security_scan, gosqlx_transpile,
 // gosqlx_dialects and gosqlx_version) must be freed exactly once with this
 // function to avoid memory leaks.
+// Recoverable Go panics are contained at this boundary; this void function
+// has no error return channel.
 //
 // Parameters:
 //   - ptr: a C string pointer previously returned by a gosqlx_* function.
 //
 //export gosqlx_free
 func gosqlx_free(ptr *C.char) {
+	defer recoverExport(nil, "")
+	checkExportPanic("gosqlx_free")
 	C.free(unsafe.Pointer(ptr))
 }
 
@@ -324,9 +342,12 @@ func gosqlx_free(ptr *C.char) {
 // other gosqlx_* result, the caller owns it and must free it exactly once with
 // gosqlx_free. (Earlier releases returned a process-wide cached pointer here,
 // which made the documented free a double free on the second call.)
+// Returns NULL if a recoverable Go panic occurs.
 //
 //export gosqlx_version
-func gosqlx_version() *C.char {
+func gosqlx_version() (result *C.char) {
+	defer recoverExport(&result, "")
+	checkExportPanic("gosqlx_version")
 	return C.CString(VERSION)
 }
 

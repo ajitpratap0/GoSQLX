@@ -46,18 +46,27 @@ var impl Func
 // tokenizer's init and must not be called by anyone else.
 func Register(f Func) { impl = f }
 
+func requireImplementation() {
+	if impl == nil {
+		panic("tokscratch: tokenizer not linked")
+	}
+}
+
 // Bytes is t.Tokenize(input) into t's scratch buffer.
 func Bytes(t any, input []byte) ([]models.TokenWithSpan, error) {
+	requireImplementation()
 	return impl(context.Background(), t, input, "", false)
 }
 
 // String is t.TokenizeString(s) into t's scratch buffer.
 func String(t any, s string) ([]models.TokenWithSpan, error) {
+	requireImplementation()
 	return impl(context.Background(), t, nil, s, true)
 }
 
 // StringContext is t.TokenizeStringContext(ctx, s) into t's scratch buffer.
 func StringContext(ctx context.Context, t any, s string) ([]models.TokenWithSpan, error) {
+	requireImplementation()
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}

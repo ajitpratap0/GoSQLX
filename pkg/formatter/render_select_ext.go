@@ -27,17 +27,9 @@ import (
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
 )
 
-// noSelectExtras is the read-only stand-in selectExtras returns for a
-// statement without Extras. Nothing may write through it.
-var noSelectExtras ast.SelectExtras
-
-// selectExtras returns s.Extras, or a read-only empty SelectExtras when it is
-// nil, so the renderers can read the rarer clauses without nil checks.
-func selectExtras(s *ast.SelectStatement) *ast.SelectExtras {
-	if s.Extras != nil {
-		return s.Extras
-	}
-	return &noSelectExtras
+// selectExtras returns a copy of the optional SELECT dialect clauses.
+func selectExtras(s *ast.SelectStatement) ast.SelectExtras {
+	return s.DialectExtras()
 }
 
 // writeSelectPrologue writes the MySQL select modifiers and the TOP clause,

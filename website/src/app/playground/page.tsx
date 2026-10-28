@@ -9,7 +9,7 @@ import { PROJECT } from '@/data/metrics';
 export const metadata: Metadata = pageMeta({
   title: 'SQL Playground',
   description:
-    'Try GoSQLX in your browser: paste SQL to parse it into an AST, format, lint and analyze it across dialects, with no install and no server round trip.',
+    'Try GoSQLX in your browser: parse SQL into an AST, format, lint and analyze it, or transpile it between dialects, with no install and no server round trip.',
   path: '/playground/',
 });
 
@@ -52,10 +52,11 @@ export default function PlaygroundPage() {
           Online Go SQL Parser Playground
         </h1>
         <p className="mt-1 max-w-3xl text-sm text-fg-muted">
-          Parse, format, lint, and analyze SQL right in your browser with
-          GoSQLX compiled to WebAssembly. Pick a dialect (PostgreSQL, MySQL,
+          Parse, format, lint, analyze and transpile SQL right in your browser
+          with GoSQLX compiled to WebAssembly. Pick a dialect (PostgreSQL, MySQL,
           SQL Server, Oracle, SQLite, Snowflake, ClickHouse), paste a query, and
-          inspect the tokens and AST. Nothing leaves your machine.
+          inspect the tokens and AST, or convert it to another dialect. Nothing
+          leaves your machine.
         </p>
         <noscript>
           <p className="mt-2 text-sm text-warn">

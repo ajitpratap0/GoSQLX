@@ -64,8 +64,10 @@ func Parse(sql, dialect string) (*ast.AST, error) {
 // error); errors such as formatter.ErrUnplaceableComment, an unsupported
 // dialect or a construct the transpile target cannot express have none.
 //
-// The website reads these responses without turning "error" into an
-// exception (unlike the other exports), so the span reaches the editor.
+// ErrorSpan is part of the JSON contract for callers that want it. The
+// website's WasmLoader.parseResult treats a non-empty "error" like every other
+// export does and throws it as an exception, so the playground's Format and
+// Transpile tabs show only the error message, not the span.
 type TextResponse struct {
 	Result    string     `json:"result"`
 	Error     string     `json:"error,omitempty"`

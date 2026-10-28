@@ -92,7 +92,7 @@ gosqlx config init
 
 ### `gosqlx validate` - Ultra-Fast SQL Validation
 
-Validate SQL syntax with <10ms typical latency and 100+ files/second throughput.
+Validate SQL syntax for one or more files, a SQL string or stdin. Measured parse and validation numbers are on the [benchmarks page](/benchmarks/).
 
 #### Syntax
 
@@ -192,11 +192,6 @@ unreleased: they are on the main branch and ship in the next release.
 printf 'SELECT 1\nGO\nSELECT 2\nGO\n' | gosqlx validate --dialect mssql
 # ✅ <stdin>: Valid SQL   (exit code 0)
 ```
-
-#### Performance Target
-
-- **Latency**: <10ms for typical queries (50-500 characters)
-- **Throughput**: 100+ files/second in batch mode
 
 ---
 
@@ -815,8 +810,10 @@ gosqlx transpile --from mysql --to postgres -o out.sql "SELECT 1"
 On the main branch (unreleased, next release), strings and quoted identifiers
 are written with the target dialect's escape rules and delimiters, and
 dialect-specific operators are mapped. `^` is exponentiation in PostgreSQL and
-bitwise XOR in MySQL, MariaDB and SQL Server; PostgreSQL `@`, `|/` and `||/`
-become `ABS()`, `SQRT()` and `CBRT()`. Something the target cannot express
+bitwise XOR in MySQL, MariaDB and SQL Server; PostgreSQL `@` and `|/` become
+`ABS()` and `SQRT()`. PostgreSQL `||/` becomes `CBRT()` only for Snowflake and
+ClickHouse; other targets, MySQL included, have no `CBRT()` and return an
+error. Something the target cannot express
 returns an error and exit code 1 instead of SQL with a different meaning:
 
 ```bash
@@ -880,7 +877,15 @@ gosqlx stats --json
 
 ### `gosqlx watch` - Re-run on File Changes
 
-Watch SQL files or directories and re-process them whenever they change.
+<!-- TODO: update after watch fix -->
+
+Watch `.sql` files, directories (recursively) or glob patterns for changes.
+The watcher prints how many files and directories it is watching, then waits
+for write and create events on `.sql` files until you press Ctrl+C.
+
+The command does not yet validate or format anything: no per-file result is
+printed on start-up or when a file changes, and files are never rewritten. Run
+`gosqlx validate` or `gosqlx format` directly to check or format files.
 
 #### Syntax
 
@@ -892,21 +897,17 @@ gosqlx watch [file|dir...] [flags]
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
-| `--mode` | string | `validate` | `validate` re-runs validation; `format` re-formats the files in place |
-| `--debounce` | int | 300 | Debounce delay in milliseconds |
-| `--clear` | bool | false | Clear the screen before each re-run |
-| `--watch-verbose` | bool | false | Verbose output from the watcher |
+| `--debounce` | int | 300 | Delay in milliseconds before a change event is handled |
+| `--clear` | bool | false | Clear the screen when a change is handled |
+| `--watch-verbose` | bool | false | List the watched files and print watcher errors |
 
 #### Examples
 
 ```bash
-# Validate on every change
+# Watch the .sql files in the current directory
 gosqlx watch *.sql
 
-# Re-format a directory in place on every change
-gosqlx watch --mode format queries/
-
-# Longer debounce for editors that write in several steps
+# Watch a schema file and a directory, with a longer debounce
 gosqlx watch --debounce 500 schema.sql migrations/
 ```
 

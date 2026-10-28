@@ -27,7 +27,7 @@ export const FEATURES: Feature[] = [
     icon: 'globe',
     title: 'Multi-Dialect',
     description: `PostgreSQL, MySQL, MariaDB, SQLite, SQL Server, Oracle, Snowflake, ClickHouse. ${unreleased(
-      `All ${REALWORLD_CORPUS.total.toLocaleString('en-US')} statements of a real-world corpus across the ${PROJECT.dialectCount} dialects parse, format and round-trip`,
+      `All ${REALWORLD_CORPUS.total.toLocaleString('en-US')} statements of a production-style corpus (hand-written to imitate ORM and application SQL) across the ${PROJECT.dialectCount} dialects parse, format and round-trip`,
     )}.`,
     color: 'accent',
   },
@@ -75,7 +75,7 @@ export const DOCS_SIDEBAR: DocsSidebarCategory[] = [
     { slug: 'getting-started', file: 'GETTING_STARTED.md', label: 'Getting Started', description: 'Install GoSQLX, parse your first SQL statement in Go, and walk the AST in minutes, with copy-paste examples for the high-level API and the CLI.' },
     { slug: 'feature-tour', file: 'FEATURE_TOUR.md', label: 'Feature Tour', description: 'A guided tour of GoSQLX features: parsing, formatting, linting, security scanning, transforms, fingerprinting and transpilation, each with a short example.' },
     { slug: 'usage-guide', file: 'USAGE_GUIDE.md', label: 'Usage Guide', description: 'Practical patterns for GoSQLX in Go: high-level and low-level APIs, object pooling, dialect selection, error handling and concurrent use in services.' },
-    { slug: 'cli-guide', file: 'CLI_GUIDE.md', label: 'CLI Guide', description: 'Reference for the gosqlx command line tool: validate, format, lint, parse, analyze and lsp commands, flags, output formats and CI usage with examples.' },
+    { slug: 'cli-guide', file: 'CLI_GUIDE.md', label: 'CLI Guide', description: 'Reference for the gosqlx command line tool: validate, format, lint, parse, analyze, transpile, stats, watch and lsp commands, flags, output formats and CI use.' },
   ]},
   { category: 'Guides', summary: 'Task-focused walkthroughs with working code.', items: [
     { slug: 'guides/parse-postgresql-in-go', file: 'guides/parse-postgresql-in-go.md', label: 'Parse PostgreSQL in Go', description: 'Parse PostgreSQL queries in pure Go with GoSQLX: DISTINCT ON, JSONB operators, RETURNING and LATERAL, AST walkers, and syntax errors with positions.' },

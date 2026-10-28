@@ -6,7 +6,9 @@ This matrix documents the comprehensive SQL feature support in GoSQLX across dif
 
 ### Real-world dialect audit (October 2026, unreleased)
 
-The real-world corpus contains 2,788 statements. Every statement passes
+The real-world corpus contains 2,788 production-style statements: SQL written
+by hand to imitate what ORMs, migration tools and applications send, not SQL
+collected from production systems. Every statement passes
 split → dialect-aware parse → format → reparse → format idempotency, plus a
 check for dropped SQL words. `testdata/realworld/known_failures.txt` lists no
 failures.
@@ -28,7 +30,13 @@ retain their text rather than receiving a complete semantic AST.
 The table totals 2,788 statements and was checked with `scripts/dialect-audit`
 at commit `8d8c5272`. Reproduce one dialect's row from the repository root
 (replace `<d>` with a dialect string such as `mysql`); the last line of output
-reads, for example, `dialect=mysql total=405 passed=405 failed=0`:
+reads, for example:
+
+```text
+dialect=mysql total=405 passed=405 failed=0 stages=map[ok:405]
+```
+
+The command is:
 
 ```sh
 go run ./scripts/dialect-audit -dialect <d> testdata/realworld/<d>/*.sql
@@ -499,7 +507,7 @@ named dialect.
 | **Multi-table DELETE** | MySQL, MariaDB | ✅ Full | `DELETE a, b FROM a JOIN b ON a.id = b.id WHERE ...`; `DeleteStatement.Extras` |
 | **UPDATE / DELETE TOP** | SQL Server | ✅ Full | `UPDATE TOP (10) t SET ...`, `DELETE TOP (5) FROM t ...` |
 | **OUTPUT clause** | SQL Server | ✅ Full | `UPDATE ... OUTPUT inserted.id WHERE ...`, `DELETE ... OUTPUT deleted.id` |
-| **GO [n] batch separator** | SQL Server | ✅ Full | Kept as `ast.BatchSeparator` with its optional `RepeatCount`; repeated batches are not expanded. `SQL()` and `FormatAST` keep GO on its own line. Statement counts exclude GO. A `GO` line inside a statement is an error. Transpiling a GO script to another dialect returns an error |
+| **GO [n] batch separator** | SQL Server | ✅ Full | Kept as `ast.BatchSeparator` with its optional `RepeatCount`; repeated batches are not expanded. `SQL()` and `FormatAST` keep GO on its own line. Statement counts reported by the CLI, the MCP server and the C binding exclude GO, but `AST.Statements` contains a `BatchSeparator` node for each GO. A `GO` line inside a statement is an error. Transpiling a GO script to another dialect returns an error |
 | **RETURNING ... INTO** | Oracle | ✅ Full | `UPDATE t SET x = 1 WHERE id = 2 RETURNING x INTO :v` |
 | **ARRAY JOIN / LIMIT BY** | ClickHouse | ✅ Full | `SELECT a FROM t ARRAY JOIN arr AS x LIMIT 1 BY a`. Parsed since earlier releases; AST walkers (`ast.Inspect`, `Walk`, security scanner, linter, table extraction) now reach `ARRAY JOIN` |
 | **MERGE with a VALUES source** | PostgreSQL, SQL Server | ✅ Full | `MERGE INTO t USING (VALUES (1, 'a')) AS s (id, val) ON ...`; the source's column alias list is kept when rendering |
@@ -507,8 +515,8 @@ named dialect.
 | **CREATE / ALTER / DROP SEQUENCE** | PostgreSQL, Oracle, Snowflake | ⚠️ Partial | Parsed and kept as statement text (`UtilityStatement`); `AST.SQL()` no longer drops them. MariaDB has a full `CreateSequenceStatement` (see MariaDB-Specific Features) |
 | **EXPLAIN** | PostgreSQL, MySQL, SQLite | ✅ Full | `ExplainStatement` now retains the explained statement as an AST (`EXPLAIN ANALYZE ...`, SQLite `EXPLAIN QUERY PLAN ...`) |
 | **SQL\*Plus `/` line** | Oracle | ✅ Full | A line holding only `/` ends a statement in the parser and in `SplitStatements`; `/` with other SQL on the line is still division. Known gap: formatting drops the `/` lines |
-| **`<=>` operator** | MySQL, MariaDB, PostgreSQL | ✅ Full | Null-safe equality (MySQL family) and pgvector distance (PostgreSQL). Now rejected in every other dialect |
-| **`==` operator** | SQLite, ClickHouse | ✅ Full | Now rejected in every other dialect |
+| **`<=>` operator** | MySQL, MariaDB, PostgreSQL | ✅ Full | Null-safe equality (MySQL family) and pgvector distance (PostgreSQL). Unreleased (on main, next release): accepted only in these dialects and rejected in the others; v1.16.0 accepted `<=>` in no dialect |
+| **`==` operator** | SQLite, ClickHouse | ✅ Full | Unreleased (on main, next release): accepted only in these dialects and rejected in the others; v1.16.0 accepted `==` in no dialect |
 
 Related grammar checks on `main`: outside SQL Server, a utility statement
 (`SET`, `USE`, `GRANT`, `COPY`, `CALL`, ...) followed on the next line by

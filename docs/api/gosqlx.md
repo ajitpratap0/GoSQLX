@@ -194,7 +194,7 @@ out, err := gosqlx.Transpile(
 // CREATE TABLE t (id SERIAL PRIMARY KEY)
 ```
 
-On the main branch (unreleased, next release), string literals and quoted identifiers are written with the target dialect's escape rules and delimiters, and dialect-specific operators are mapped for the target: `^` is exponentiation in PostgreSQL and bitwise XOR in MySQL, MariaDB and SQL Server, and PostgreSQL `@`, `|/` and `||/` become `ABS()`, `SQRT()` and `CBRT()`. A literal, operator or SQL Server `GO` script the target cannot represent returns an error instead of SQL with a different meaning:
+On the main branch (unreleased, next release), string literals and quoted identifiers are written with the target dialect's escape rules and delimiters, and dialect-specific operators are mapped for the target: `^` is exponentiation in PostgreSQL and bitwise XOR in MySQL, MariaDB and SQL Server, and PostgreSQL `@` and `|/` become `ABS()` and `SQRT()`. PostgreSQL `||/` becomes `CBRT()` only for Snowflake and ClickHouse; every other target (MySQL, for example) has no `CBRT()` and returns an error. A literal, operator or SQL Server `GO` script the target cannot represent returns an error instead of SQL with a different meaning:
 
 ```go
 gosqlx.Transpile("SELECT `Order Id` FROM t WHERE n = 'it\\'s'", keywords.DialectMySQL, keywords.DialectPostgreSQL)

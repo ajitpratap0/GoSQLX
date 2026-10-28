@@ -65,7 +65,7 @@ export function DialectShowcase() {
                   <h3 className="text-sm font-semibold text-fg">{dialect.name}</h3>
                   <code className="mt-1 text-xs text-fg-subtle">&quot;{dialect.key}&quot;</code>
                   <span className="mt-3 text-xs text-fg">
-                    Real-world corpus:{' '}
+                    Production-style corpus:{' '}
                     {REALWORLD_CORPUS.perDialect[dialect.key].pass}/{REALWORLD_CORPUS.perDialect[dialect.key].total}
                     {REALWORLD_STATUS && (
                       <span className="block text-fg-muted">{REALWORLD_STATUS}</span>

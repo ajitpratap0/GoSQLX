@@ -48,6 +48,7 @@ export default function TranspileTab({ data, dialects, from, to, onFromChange, o
           ))}
         </select>
       </label>
+      <span className="text-xs text-fg-muted">Transpile does not keep comments.</span>
     </div>
   );
 

@@ -686,7 +686,7 @@ Dialect-specific clauses that most statements never use live behind optional poi
 | `BinaryExpression.Extras` | `*BinaryExtras` | `LIKE ... ESCAPE` |
 | `TableReference.Modifiers` | `*TableModifiers` | sampling, partitions, index hints, derived `VALUES` |
 
-Read them through `DialectExtras()` (or `DialectModifiers()` for a table reference). When the pointer is nil it returns a shared, read-only empty value, so callers need no nil check, but they must never write through it. Call `EnsureExtras()` (or `EnsureModifiers()`) before writing; it allocates the struct when needed and returns it:
+Read them through `DialectExtras()` (or `DialectModifiers()` for a table reference). It returns a copy of the struct by value (the zero value when the pointer is nil), so callers need no nil check, and assigning to a field of the copy does not change the node. The copy is shallow: slices and pointers inside it still refer to the node's data, so treat them as read-only. To change a node, call `EnsureExtras()` (or `EnsureModifiers()`); it allocates the struct when needed and returns a pointer to it:
 
 ```go
 sel := tree.Statements[0].(*ast.SelectStatement)

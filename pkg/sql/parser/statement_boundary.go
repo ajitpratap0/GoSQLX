@@ -222,5 +222,5 @@ func (p *Parser) parseTableNameQuoted() (string, ast.NameQuote, error) {
 		p.advance()
 		return name, 0, nil
 	}
-	return p.parseQualifiedNameQuoted()
+	return p.parseQualifiedNameWithTableRules(true)
 }

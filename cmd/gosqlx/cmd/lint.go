@@ -265,7 +265,7 @@ func lintRun(cmd *cobra.Command, args []string) error {
 
 	totalViolations := errorCount + warningCount + infoCount
 	if syntaxErrorCount > 0 {
-		return fmt.Errorf("%d file(s) contain SQL syntax errors (and %d violation(s))", syntaxErrorCount, totalViolations)
+		return silentError{fmt.Errorf("%d file(s) contain SQL syntax errors (and %d violation(s))", syntaxErrorCount, totalViolations)}
 	}
 	if totalViolations > 0 {
 		return fmt.Errorf("found %d violation(s): %d error(s), %d warning(s), %d info(s)",
@@ -413,7 +413,8 @@ func lintOutcomeError(violations []linter.Violation, synErr error) error {
 	}
 
 	if synErr != nil {
-		return fmt.Errorf("invalid SQL: %w", synErr)
+		// The report already includes the syntax error; main only needs the failure status.
+		return silentError{fmt.Errorf("invalid SQL: %w", synErr)}
 	}
 	if errorCount > 0 || (lintFailOnWarn && warningCount > 0) {
 		return fmt.Errorf("%d error(s) and %d warning(s) found", errorCount, warningCount)

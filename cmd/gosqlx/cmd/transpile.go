@@ -30,10 +30,13 @@ var transpileCmd = &cobra.Command{
 	Short: "Convert SQL from one dialect to another",
 	Long: `Transpile SQL between dialects.
 
-Supported dialect pairs:
-  mysql     → postgres
-  postgres  → mysql
-  postgres  → sqlite
+Source and target dialects:
+  mysql, postgresql (postgres), sqlite, sqlserver (mssql), oracle,
+  snowflake, clickhouse, mariadb
+
+Any source/target combination is accepted. Dialect-specific rewrites cover a
+subset of SQL features; other syntax is parsed and reformatted. Conversion
+errors are returned for constructs known to be unsafe for the target dialect.
 
 SQL can be provided as a positional argument or piped via stdin.
 

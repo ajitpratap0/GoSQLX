@@ -16,13 +16,13 @@
 // input SQL, applying a chain of rewrite rules that mutate dialect-specific
 // AST constructs in place, and then reformatting the result.
 //
-// Supported dialect pairs:
+// Additional dialect-specific rewrite sets:
 //   - MySQL → PostgreSQL
 //   - PostgreSQL → MySQL
 //   - PostgreSQL → SQLite
 //
-// For unsupported dialect pairs the SQL is parsed and reformatted without any
-// dialect-specific rewrites (passthrough with normalisation).
+// All cross-dialect pairs apply common row-limit, operator, identifier and
+// string-literal rewrites. Constructs without a safe equivalent return an error.
 //
 // Example:
 //
@@ -51,8 +51,8 @@ type RewriteRule func(stmt ast.Statement) error
 // rules for the (from → to) dialect pair, and returns the reformatted SQL.
 //
 // If from == to, the SQL is parsed and reformatted with no rewrites applied.
-// If no rules are registered for the pair, the SQL is returned normalised
-// (parsed and reformatted without dialect-specific changes).
+// All cross-dialect pairs apply common rewrites in addition to any registered
+// dialect-specific rules.
 // SQL Server GO batch scopes cannot be represented in other dialects and
 // return an error rather than dropping boundaries or repeat counts.
 // Operators and literals whose meaning depends on the dialect (^ as power or

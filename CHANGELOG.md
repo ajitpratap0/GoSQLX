@@ -79,6 +79,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   in dialects without them.
 
 ### Fixed
+- Watch now respects `--dialect`, re-validates changes and formats files in place
+  with the CLI safety checks; MCP parsing accepts a dialect and documents comment preservation.
+- Correct transpile dialect help, avoid duplicate lint syntax errors, and rewrite
+  SQL Server SELECT TOP limits across dialects, refusing PERCENT and WITH TIES.
 - Preserve dialect numeric and PostgreSQL Unicode-escape literals and quoted type names; correct JSON/power precedence and retain operator meaning during target-dialect formatting. Hand-built expression trees, including hand-built operands inserted into parsed trees, now render necessary parentheses.
 - Formatting or transpiling to another dialect rewrites PostgreSQL `#` (XOR),
   `~`, `<<`/`>>`, `&`/`|` and `||` (CONCAT in MySQL/MariaDB) into the target's

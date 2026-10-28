@@ -169,11 +169,11 @@ func (p *Parser) parseFromTableReference() (ast.TableReference, error) {
 	if (p.isIdentifier() || p.isType(models.TokenTypeAs)) && !p.isMariaDBClauseStart() && !p.isPivotKeyword() && !p.isUnpivotKeyword() && !p.isQualifyKeyword() && !p.isMinusSetOp() && !p.isSnowflakeTimeTravelStart() && !p.isSampleKeyword() && !p.isMatchRecognizeKeyword() && !p.isWindowClauseKeyword() && !p.isSettingsKeyword() && !p.isDMLReturningKeyword() && !p.isSelectExtClauseStart() && !p.isTableModifierAfterAliasStart() && !p.isTSQLStatementStart() {
 		if p.isType(models.TokenTypeAs) {
 			p.advance() // Consume AS
-			if !p.isIdentifier() {
+			if !p.isIdentifier() || p.isReservedTopName() {
 				return tableRef, p.expectedError("alias after AS")
 			}
 		}
-		if p.isIdentifier() {
+		if p.isIdentifier() && !p.isReservedTopName() {
 			tableRef.Alias = p.currentToken.Token.Value
 			tableRef.AliasQuote = p.currentNameQuote()
 			p.advance()
@@ -362,11 +362,11 @@ func (p *Parser) parseJoinedTableRef(joinType string) (ast.TableReference, error
 	if (p.isIdentifier() || p.isType(models.TokenTypeAs)) && !p.isMariaDBClauseStart() && !p.isPivotKeyword() && !p.isUnpivotKeyword() && !p.isQualifyKeyword() && !p.isMinusSetOp() && !p.isSnowflakeTimeTravelStart() && !p.isSampleKeyword() && !p.isMatchRecognizeKeyword() && !p.isWindowClauseKeyword() && !p.isSettingsKeyword() && !p.isDMLReturningKeyword() && !p.isSelectExtClauseStart() && !p.isTableModifierAfterAliasStart() && !p.isTSQLStatementStart() {
 		if p.isType(models.TokenTypeAs) {
 			p.advance()
-			if !p.isIdentifier() {
+			if !p.isIdentifier() || p.isReservedTopName() {
 				return ref, p.expectedError("alias after AS")
 			}
 		}
-		if p.isIdentifier() {
+		if p.isIdentifier() && !p.isReservedTopName() {
 			ref.Alias = p.currentToken.Token.Value
 			ref.AliasQuote = p.currentNameQuote()
 			p.advance()

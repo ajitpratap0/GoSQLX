@@ -1578,8 +1578,26 @@ func (d *DeleteStatement) writeSQL(buf *bytes.Buffer) {
 		buf.WriteString("FROM ")
 	}
 	x.writeDMLTargets(buf, d.TableName, d.TableNameQuote, d.Alias, d.AliasQuote)
+	var history DeleteHistoryOptions
+	if x.History != nil {
+		history = *x.History
+	}
+	if len(history.Partitions) > 0 {
+		buf.WriteString(" PARTITION (")
+		for i, partition := range history.Partitions {
+			if i > 0 {
+				buf.WriteString(", ")
+			}
+			partition.writeSQL(buf)
+		}
+		buf.WriteByte(')')
+	}
 	if d.BeforeSystemTime != nil {
 		buf.WriteString(" BEFORE SYSTEM_TIME ")
+		if history.BeforeSystemTimeUnit != "" {
+			buf.WriteString(history.BeforeSystemTimeUnit)
+			buf.WriteByte(' ')
+		}
 		writeExpr(buf, d.BeforeSystemTime)
 	}
 	writeDMLOutput(buf, x.Output, x.OutputInto)

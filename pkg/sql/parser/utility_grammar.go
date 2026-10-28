@@ -186,16 +186,20 @@ func (c *txnCursor) grantee() error {
 	case c.typeAt(c.i) == models.TokenTypeLBracket:
 		// [AppUser]: a bracketed name the tokenizer did not read as one
 		// outside SQL Server.
-		if c.i = c.bracketEnd(c.i); c.i < 0 {
+		end := c.bracketEnd(c.i)
+		if end < 0 {
 			return c.fail("]")
 		}
+		c.i = end
 	default:
 		c.i = p.nameEnd(c.i)
 		if c.typeAt(c.i) == models.TokenTypeLParen {
 			// CURRENT_USER(), Snowflake IDENTIFIER('r')
-			if c.i = p.groupEnd(c.i); c.i < 0 {
+			end := p.groupEnd(c.i)
+			if end < 0 {
 				return c.fail(")")
 			}
+			c.i = end
 		}
 	}
 	if c.typeAt(c.i) == models.TokenTypeAtSign {
@@ -455,9 +459,14 @@ func (c *txnCursor) mariadbAuth() error {
 			if !c.acceptString() {
 				// PASSWORD('x')
 				c.i = c.p.nameEnd(c.i)
-				if c.i = c.p.groupEnd(c.i); c.i < 0 {
+				if c.typeAt(c.i) != models.TokenTypeLParen {
 					return c.fail("string")
 				}
+				end := c.p.groupEnd(c.i)
+				if end < 0 {
+					return c.fail(")")
+				}
+				c.i = end
 			}
 		}
 		if !c.accept("OR") {
@@ -486,10 +495,11 @@ func (c *txnCursor) copyString() bool {
 func (p *Parser) copyEnd(start int) (int, error) {
 	c := txnCursor{p: p, i: start + 1, mask: p.alterMask()}
 	if c.typeAt(c.i) == models.TokenTypeLParen {
-		if c.i = p.groupEnd(c.i); c.i < 0 {
-			c.i = start + 1
+		end := p.groupEnd(c.i)
+		if end < 0 {
 			return 0, c.fail(")")
 		}
+		c.i = end
 	} else {
 		c.accept("BINARY")
 		if !p.isNamePartAt(c.i) {

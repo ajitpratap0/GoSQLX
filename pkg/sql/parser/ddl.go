@@ -202,7 +202,7 @@ func (p *Parser) parseCreateTable(temporary bool) (*ast.CreateTableStatement, er
 	}
 
 	// Parse table name (supports schema.table qualification and double-quoted identifiers)
-	createTableName, createTableQuote, err := p.parseQualifiedNameQuoted()
+	createTableName, createTableQuote, err := p.parseQualifiedNameWithTableRules(true)
 	if err != nil {
 		return nil, p.qualifiedNameError(err, "table name")
 	}

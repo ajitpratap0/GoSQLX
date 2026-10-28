@@ -155,6 +155,9 @@ func (p *Parser) isDMLOutputKeywordAt() bool {
 // isDMLTargetAlias reports whether the current token is a bare alias after
 // an UPDATE/DELETE target name rather than the clause that follows it.
 func (p *Parser) isDMLTargetAlias() bool {
+	if p.isReservedTopName() {
+		return false
+	}
 	t := p.currentToken.Token.Type
 	return (t == models.TokenTypeIdentifier || t == models.TokenTypeDoubleQuotedString) && p.isDMLTargetAliasAt()
 }
@@ -190,7 +193,7 @@ func (p *Parser) parseDMLTargetName(name *string, nameQuote *ast.NameQuote, alia
 	*name, *nameQuote = n, q
 	if p.isType(models.TokenTypeAs) {
 		p.advance() // Consume AS
-		if !p.isIdentifier() {
+		if !p.isIdentifier() || p.isReservedTopName() {
 			return p.expectedError("alias after AS")
 		}
 		*alias, *aliasQuote = p.currentToken.Token.Value, p.currentNameQuote()

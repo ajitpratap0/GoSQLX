@@ -945,11 +945,19 @@ func (t *Tokenizer) nextToken() (models.Token, error) {
 			return t.readQuotedString(r)
 		}
 
-		// Comments: "--" up to end of line, "/*" up to "*/".
+		// Comments: "--" (and MySQL/MariaDB "#") to end of line, "/*" to "*/".
+		if r == '#' && (t.dialect == keywords.DialectMySQL || t.dialect == keywords.DialectMariaDB) {
+			if err := t.skipLineComment(1); err != nil {
+				return models.Token{}, err
+			}
+			t.skipWhitespace()
+			t.tokStart = t.toSQLPosition(t.pos)
+			continue
+		}
 		if (r == '-' || r == '/') && t.pos.Index+1 < len(t.input) {
 			next := t.input[t.pos.Index+1]
 			if r == '-' && next == '-' {
-				if err := t.skipLineComment(); err != nil {
+				if err := t.skipLineComment(2); err != nil {
 					return models.Token{}, err
 				}
 				t.skipWhitespace()
@@ -971,18 +979,19 @@ func (t *Tokenizer) nextToken() (models.Token, error) {
 	}
 }
 
-// skipLineComment consumes a "--" comment starting at t.pos, up to and
+// skipLineComment consumes a line comment starting at t.pos whose opener is
+// openerLen bytes long ("--" is 2, the MySQL/MariaDB "#" is 1), up to and
 // including the next newline (or to the end of input), and records it in
 // t.Comments. The recorded text excludes the trailing newline. It returns a
 // token-limit error when the comment would exceed MaxTokens.
-func (t *Tokenizer) skipLineComment() error {
+func (t *Tokenizer) skipLineComment(openerLen int) error {
 	if err := t.commentLimitError(); err != nil {
 		return err
 	}
 	commentStartIdx := t.pos.Index
 	commentStartPos := t.toSQLPosition(t.pos)
-	t.pos.Index += 2 // "--"
-	t.pos.Column += 2
+	t.pos.Index += openerLen
+	t.pos.Column += openerLen
 	// Skip until end of line or EOF
 	for t.pos.Index < len(t.input) {
 		cr, csize := utf8.DecodeRune(t.input[t.pos.Index:])

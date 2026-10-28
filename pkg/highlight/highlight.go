@@ -289,7 +289,8 @@ func (h *classifier) lastUnclosed(limit int) int {
 	for i := 0; i < len(s); {
 		c := s[i]
 		switch {
-		case c == '-' && strings.HasPrefix(s[i:], "--"):
+		case c == '-' && strings.HasPrefix(s[i:], "--") ||
+			c == '#' && (h.dialect == keywords.DialectMySQL || h.dialect == keywords.DialectMariaDB):
 			j := strings.IndexByte(s[i:], '\n')
 			if j < 0 {
 				return -1

@@ -466,6 +466,9 @@ func (p *Parser) consumeUtilityText() (string, error) {
 
 // seek moves the parser to token index i (EOF sentinel past the end).
 func (p *Parser) seek(i int) {
+	if i < 0 {
+		i = len(p.tokens)
+	}
 	p.currentPos = i
 	if i < len(p.tokens) {
 		p.currentToken = p.tokens[i]

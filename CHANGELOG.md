@@ -44,6 +44,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   identifier delimiters through rendering.
 
 ### Changed
+- **MySQL / MariaDB `#` line comments**: with the MySQL or MariaDB dialect, `#`
+  now starts a line comment, like `--`. The tokenizer records it in `Comments`
+  (re-emitted by the formatter), `SplitStatements` no longer splits on a `;`
+  inside it, and transpiling to another dialect drops it instead of emitting `#`
+  (PostgreSQL XOR). Previously `WHERE x = 1 # c` parsed `#` as an operator and
+  `SELECT a FROM t # c` failed with E2002. Other dialects keep their `#`
+  meaning (PostgreSQL `#`, `#>`, `#>>`, `#-`; SQL Server `#temp`; Oracle `emp#`).
 - Parsed ClickHouse SAMPLE sizes and offsets now use inspectable expression
   fields, which take rendering precedence over the retained legacy string fields.
 - ClickHouse SAMPLE accepts only decimal numbers (hex such as `0x10` is
@@ -79,6 +86,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   in dialects without them.
 
 ### Fixed
+- `GRANT ... TO [`, `TO [AppUser`, `TO CURRENT_USER(`, MariaDB
+  `IDENTIFIED VIA ... USING PASSWORD(` and `COPY (` with an unclosed group no
+  longer panic with `index out of range [-1]`; they return an E2002 error
+  (expected `]` or `)`) in every dialect.
 - Watch now respects `--dialect`, re-validates changes and formats files in place
   with the CLI safety checks; MCP parsing accepts a dialect and documents comment preservation.
 - Correct transpile dialect help, avoid duplicate lint syntax errors, and rewrite

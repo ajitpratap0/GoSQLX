@@ -23,6 +23,7 @@ import (
 
 	goerrors "github.com/ajitpratap0/GoSQLX/pkg/errors"
 	"github.com/ajitpratap0/GoSQLX/pkg/models"
+	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
 )
 
 // parseDataType parses a SQL data type for CAST or :: expressions.
@@ -45,7 +46,7 @@ func (p *Parser) parseDataTypeHint(paramHint string) (string, error) {
 		return "", p.expectedError("data type")
 	}
 
-	first := p.currentToken.Token.Value
+	first := typeNameTokenSQL(p.currentToken.Token)
 	p.advance() // Consume type name
 
 	// Fast path: a single plain word, as in x::int or CAST(x AS text).
@@ -65,7 +66,7 @@ func (p *Parser) parseDataTypeHint(paramHint string) (string, error) {
 	for p.isType(models.TokenTypePeriod) && (p.peekTypeAt(1) == models.TokenTypeIdentifier || p.peekTypeAt(1) == models.TokenTypeDoubleQuotedString) {
 		p.advance() // Consume .
 		sb.WriteByte('.')
-		sb.WriteString(p.currentToken.Token.Value)
+		sb.WriteString(typeNameTokenSQL(p.currentToken.Token))
 		p.advance()
 	}
 
@@ -137,6 +138,19 @@ func (p *Parser) parseDataTypeHint(paramHint string) (string, error) {
 	}
 
 	return sb.String(), nil
+}
+
+// typeNameTokenSQL preserves every explicit type-name delimiter: PostgreSQL
+// "char", for example, names a different type from the bare CHAR keyword.
+func typeNameTokenSQL(tok models.Token) string {
+	style := tok.Quote
+	if style == 0 && tok.Type == models.TokenTypeDoubleQuotedString {
+		style = '"'
+	}
+	if style == 0 {
+		return tok.Value
+	}
+	return ast.QuoteNameWith(tok.Value, ast.QuotedName(style))
 }
 
 // typeWordClass groups first words of a data type by the words that may

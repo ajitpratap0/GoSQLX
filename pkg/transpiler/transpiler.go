@@ -104,5 +104,9 @@ func Transpile(sql string, from, to keywords.SQLDialect) (string, error) {
 	// and set-operation grouping.
 	style := ast.CompactStyle()
 	style.Dialect = string(to)
-	return formatter.FormatAST(tree, style), nil
+	out, err := formatter.FormatASTChecked(tree, style)
+	if err != nil {
+		return "", fmt.Errorf("format: %w", err)
+	}
+	return out, nil
 }

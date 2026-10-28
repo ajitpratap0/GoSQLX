@@ -30,6 +30,14 @@ import (
 
 // parsePrimaryExpression parses a primary expression (literals, identifiers, function calls)
 func (p *Parser) parsePrimaryExpression() (ast.Expression, error) {
+	if p.currentToken.Token.Quote == 'U' {
+		raw := p.currentToken.Token.Value
+		// U&"..." names arrive as decoded quoted identifiers; only
+		// U&'...' strings reach here.
+		expr := &ast.UnicodeEscapeExpression{RawSQL: raw}
+		p.advance()
+		return expr, nil
+	}
 	// Handle unary minus/plus (-6, -3.14, +x)
 	if p.isType(models.TokenTypeMinus) || p.isType(models.TokenTypePlus) {
 		unaryPos := p.currentLocation()
@@ -291,7 +299,7 @@ func (p *Parser) parsePrimaryExpression() (ast.Expression, error) {
 
 		identPos := p.currentLocation()
 		identName := p.currentToken.Token.Value
-		identQuote := p.currentIdentQuote()
+		identQuote := p.digitLeadingQuote(identName, p.currentIdentQuote())
 		var identQuotes ast.NameQuote
 		if p.nameQuoteRelevant(identQuote) {
 			identQuotes = p.appendNamePartQuoted(0, identQuote)
@@ -356,7 +364,7 @@ func (p *Parser) parsePrimaryExpression() (ast.Expression, error) {
 				// be copied from Name before Name is overwritten.
 				ident.Table = ident.Name
 				ident.Name = p.currentToken.Token.Value
-				q := p.currentIdentQuote()
+				q := p.digitLeadingQuote(ident.Name, p.currentIdentQuote())
 				ident.Quoted = q == '"'
 				if q != 0 {
 					ident.QuoteStyle = q
@@ -678,7 +686,7 @@ func (p *Parser) parseMultiPartColumnRef(ident *ast.Identifier) error {
 			}
 		case p.isQualifiedNamePart():
 			parts[n] = p.currentToken.Token.Value
-			q := p.currentIdentQuote()
+			q := p.digitLeadingQuote(parts[n], p.currentIdentQuote())
 			lastQuoted = q == '"'
 			if q != 0 {
 				ident.QuoteStyle = q
@@ -860,4 +868,15 @@ func (p *Parser) parseObjectLiteral() (ast.Expression, error) {
 	}
 	p.advance() // Consume }
 	return obj, nil
+}
+
+// digitLeadingQuote returns quote, or MySQL's backtick when quote is zero and
+// name is a bare digit-leading name: MySQL permits those (1col, t.1col), and
+// the dialect-neutral renderer must delimit them with the MySQL delimiter,
+// since "1col" is a string literal in MySQL's default mode.
+func (p *Parser) digitLeadingQuote(name string, quote rune) rune {
+	if quote == 0 && name != "" && name[0] >= '0' && name[0] <= '9' && p.isMySQLFamily() {
+		return '`'
+	}
+	return quote
 }

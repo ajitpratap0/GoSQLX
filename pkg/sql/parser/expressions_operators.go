@@ -175,6 +175,7 @@ func (p *Parser) parseComparisonSuffix(left ast.Expression, afterComparison bool
 				)
 			}
 		}
+		opPos := p.currentLocation()
 		p.advance() // Consume LIKE/ILIKE
 
 		// Snowflake LIKE ANY / LIKE ALL / ILIKE ANY / ILIKE ALL:
@@ -198,12 +199,13 @@ func (p *Parser) parseComparisonSuffix(left ast.Expression, afterComparison bool
 				Operator: operator,
 				Right:    tuple,
 				Not:      notPrefix,
+				Pos:      opPos,
 			}, suffixPredicate, nil
 		}
 
 		// Parse the pattern at the string-concatenation level so arithmetic
 		// and || bind tighter than LIKE: a LIKE b || '%' (#596).
-		return p.parsePatternMatch(left, operator, notPrefix, true)
+		return p.parsePatternMatch(left, operator, notPrefix, true, opPos)
 	}
 
 	// Check for REGEXP/RLIKE operator (MySQL)
@@ -214,35 +216,39 @@ func (p *Parser) parseComparisonSuffix(left ast.Expression, afterComparison bool
 		if strings.EqualFold(p.currentToken.Token.Value, "RLIKE") {
 			operator = "RLIKE"
 		}
+		opPos := p.currentLocation()
 		p.advance()
-		return p.parsePatternMatch(left, operator, notPrefix, false)
+		return p.parsePatternMatch(left, operator, notPrefix, false, opPos)
 	}
 
 	// SIMILAR TO (PostgreSQL, Redshift): the TO keyword makes it unambiguous.
 	if p.currentToken.Token.Type == models.TokenTypeIdentifier && equalsUpper(p.currentToken.Token.Value, "SIMILAR") && p.peekValueIs(1, "TO") {
+		opPos := p.currentLocation()
 		p.advance() // Consume SIMILAR
 		p.advance() // Consume TO
-		return p.parsePatternMatch(left, "SIMILAR TO", notPrefix, true)
+		return p.parsePatternMatch(left, "SIMILAR TO", notPrefix, true, opPos)
 	}
 
 	// SQLite GLOB and MATCH pattern operators.
 	if p.currentToken.Token.Type == models.TokenTypeIdentifier && p.IsSQLite() {
+		opPos := p.currentLocation()
 		switch {
 		case equalsUpper(p.currentToken.Token.Value, "GLOB"):
 			p.advance()
-			return p.parsePatternMatch(left, "GLOB", notPrefix, false)
+			return p.parsePatternMatch(left, "GLOB", notPrefix, false, opPos)
 		case equalsUpper(p.currentToken.Token.Value, "MATCH"):
 			p.advance()
-			return p.parsePatternMatch(left, "MATCH", notPrefix, false)
+			return p.parsePatternMatch(left, "MATCH", notPrefix, false, opPos)
 		}
 	}
 
 	// MySQL SOUNDS LIKE.
 	if p.currentToken.Token.Type == models.TokenTypeIdentifier && p.isMySQLFamily() &&
 		equalsUpper(p.currentToken.Token.Value, "SOUNDS") && p.peekTypeAt(1) == models.TokenTypeLike {
+		opPos := p.currentLocation()
 		p.advance() // Consume SOUNDS
 		p.advance() // Consume LIKE
-		return p.parsePatternMatch(left, "SOUNDS LIKE", notPrefix, false)
+		return p.parsePatternMatch(left, "SOUNDS LIKE", notPrefix, false, opPos)
 	}
 
 	// ClickHouse GLOBAL IN / GLOBAL NOT IN — GLOBAL is a distributed query modifier
@@ -369,7 +375,8 @@ func (p *Parser) parseComparisonOperatorSuffix(left ast.Expression, afterCompari
 
 // parsePatternMatch parses the pattern of a LIKE-style operator whose keyword
 // has been consumed, with an optional ESCAPE clause when allowEscape is set.
-func (p *Parser) parsePatternMatch(left ast.Expression, operator string, not, allowEscape bool) (ast.Expression, int, error) {
+// opPos is the position of the operator keyword.
+func (p *Parser) parsePatternMatch(left ast.Expression, operator string, not, allowEscape bool, opPos models.Location) (ast.Expression, int, error) {
 	pattern, err := p.parseBitwiseExpression(1)
 	if err != nil {
 		return nil, suffixNone, goerrors.InvalidSyntaxError(
@@ -390,6 +397,7 @@ func (p *Parser) parsePatternMatch(left ast.Expression, operator string, not, al
 		Operator: operator,
 		Right:    pattern,
 		Not:      not,
+		Pos:      opPos,
 	}
 	if escape != nil {
 		node.EnsureExtras().Escape = escape

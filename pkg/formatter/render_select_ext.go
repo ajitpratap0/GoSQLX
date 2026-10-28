@@ -48,10 +48,10 @@ func writeSelectPrologue(sb *strings.Builder, s *ast.SelectStatement, f *nodeFor
 	sb.WriteString(" ")
 	if ast.TopNeedsParens(s.Top) {
 		sb.WriteString("(")
-		sb.WriteString(FormatExpression(s.Top.Count, f.opts))
+		sb.WriteString(formatExpression(s.Top.Count, f.opts))
 		sb.WriteString(")")
 	} else {
-		sb.WriteString(FormatExpression(s.Top.Count, f.opts))
+		sb.WriteString(formatExpression(s.Top.Count, f.opts))
 	}
 	if s.Top.IsPercent {
 		sb.WriteString(" ")
@@ -180,13 +180,13 @@ func writeHierarchical(sb *strings.Builder, s *ast.SelectStatement, f *nodeForma
 		sb.WriteString(f.clauseSep())
 		sb.WriteString(f.kw("QUALIFY"))
 		sb.WriteString(" ")
-		sb.WriteString(FormatExpression(s.Qualify, f.opts))
+		sb.WriteString(formatExpression(s.Qualify, f.opts))
 	}
 	if s.StartWith != nil {
 		sb.WriteString(f.clauseSep())
 		sb.WriteString(f.kw("START WITH"))
 		sb.WriteString(" ")
-		sb.WriteString(FormatExpression(s.StartWith, f.opts))
+		sb.WriteString(formatExpression(s.StartWith, f.opts))
 	}
 	if s.ConnectBy != nil {
 		sb.WriteString(f.clauseSep())
@@ -196,7 +196,7 @@ func writeHierarchical(sb *strings.Builder, s *ast.SelectStatement, f *nodeForma
 			sb.WriteString(f.kw("NOCYCLE"))
 			sb.WriteString(" ")
 		}
-		sb.WriteString(FormatExpression(s.ConnectBy.Condition, f.opts))
+		sb.WriteString(formatExpression(s.ConnectBy.Condition, f.opts))
 	}
 }
 

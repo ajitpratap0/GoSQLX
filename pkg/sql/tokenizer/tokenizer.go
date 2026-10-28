@@ -1058,6 +1058,11 @@ func isIdentifierStart(r rune) bool {
 
 // readIdentifier reads an identifier (e.g. foo or foo.bar)
 func (t *Tokenizer) readIdentifier() (models.Token, error) {
+	if (t.input[t.pos.Index] == 'U' || t.input[t.pos.Index] == 'u') && t.pos.Index+2 < len(t.input) &&
+		t.input[t.pos.Index+1] == '&' && (t.input[t.pos.Index+2] == '\'' || t.input[t.pos.Index+2] == '"') &&
+		t.dialect == keywords.DialectPostgreSQL {
+		return t.readUnicodeEscape()
+	}
 	start := t.pos.Index
 	r, size := utf8.DecodeRune(t.input[t.pos.Index:])
 	t.pos.AdvanceRune(r, size)
@@ -1832,113 +1837,186 @@ func (t *Tokenizer) readTripleQuotedStringSlow(startPos Position, quote rune) (m
 	)
 }
 
-// readNumber reads an integer/float
+// readNumber reads a dialect-specific numeric literal without decoding its spelling.
 func (t *Tokenizer) readNumber(buf []byte) (models.Token, error) {
-	var start int
-	if buf == nil {
-		start = t.pos.Index
-	} else {
-		start = t.pos.Index - len(buf)
+	start := t.pos.Index - len(buf)
+	separators := t.dialect == keywords.DialectPostgreSQL || t.dialect == keywords.DialectSQLite || t.dialect == keywords.DialectClickHouse
+	mysql := t.dialect == keywords.DialectMySQL || t.dialect == keywords.DialectMariaDB
+	if t.input[t.pos.Index] == '0' && t.pos.Index+1 < len(t.input) {
+		base := byte(0)
+		switch t.input[t.pos.Index+1] {
+		case 'x', 'X':
+			// 0x hex literals are accepted in every dialect, as before
+			// per-dialect lexing (SQL Server binary, MySQL/SQLite/
+			// ClickHouse/PostgreSQL 16 hex, BigQuery hex integers).
+			base = 16
+		case 'b', 'B':
+			if t.dialect == keywords.DialectPostgreSQL || t.dialect == keywords.DialectClickHouse || mysql {
+				base = 2
+			}
+		case 'o', 'O':
+			if t.dialect == keywords.DialectPostgreSQL {
+				base = 8
+			}
+		}
+		if base != 0 {
+			t.pos.Index += 2
+			t.pos.Column += 2
+			digits := t.pos.Index
+			// PostgreSQL also permits one separator immediately after a base prefix.
+			if t.dialect == keywords.DialectPostgreSQL && t.pos.Index+1 < len(t.input) &&
+				t.input[t.pos.Index] == '_' && numericDigit(t.input[t.pos.Index+1], base) {
+				t.pos.Index++
+				t.pos.Column++
+			}
+			t.readNumericDigits(base, separators)
+			if digits == t.pos.Index {
+				if mysql {
+					t.scanIdentifierTail()
+					return models.Token{Type: models.TokenTypeIdentifier, Value: t.src[start:t.pos.Index]}, nil
+				}
+				return t.invalidNumeric(start)
+			}
+			return t.finishNumber(start, mysql)
+		}
 	}
-
-	// Hexadecimal literal: 0x1F (MySQL, MariaDB, SQLite, ClickHouse,
-	// PostgreSQL 16+). Only when a hex digit follows the prefix, so "0x" alone
-	// stays the number 0 followed by a word.
-	if t.input[t.pos.Index] == '0' && t.pos.Index+2 < len(t.input) &&
-		(t.input[t.pos.Index+1] == 'x' || t.input[t.pos.Index+1] == 'X') &&
-		isHexDigit(t.input[t.pos.Index+2]) {
-		t.pos.Index += 2
-		t.pos.Column += 2
-		for t.pos.Index < len(t.input) && isHexDigit(t.input[t.pos.Index]) {
+	t.readNumericDigits(10, separators)
+	if t.pos.Index < len(t.input) && t.input[t.pos.Index] == '.' {
+		next := t.pos.Index + 1
+		if next < len(t.input) && (t.input[next] == '.' || (nextIsWordStart(t.input[next:]) && !t.exponentAt(next))) {
+			return t.finishNumber(start, mysql)
+		}
+		t.pos.Index++
+		t.pos.Column++
+		t.readNumericDigits(10, separators)
+	}
+	if (t.dialect == keywords.DialectOracle || t.dialect == keywords.DialectGeneric) && t.storageUnitFollows(start) {
+		return models.Token{Type: models.TokenTypeNumber, Value: t.src[start:t.pos.Index]}, nil
+	}
+	if t.pos.Index < len(t.input) && (t.input[t.pos.Index] == 'e' || t.input[t.pos.Index] == 'E') {
+		if mysql && !t.exponentAt(t.pos.Index) && !strings.Contains(t.src[start:t.pos.Index], ".") {
+			return t.finishNumber(start, true)
+		}
+		t.pos.Index++
+		t.pos.Column++
+		if t.pos.Index < len(t.input) && (t.input[t.pos.Index] == '+' || t.input[t.pos.Index] == '-') {
 			t.pos.Index++
 			t.pos.Column++
 		}
-		return models.Token{Type: models.TokenTypeNumber, Value: t.src[start:t.pos.Index]}, nil
+		digits := t.pos.Index
+		t.readNumericDigits(10, separators)
+		if digits == t.pos.Index {
+			return t.invalidNumeric(start)
+		}
 	}
+	// Oracle BINARY_DOUBLE / BINARY_FLOAT literals: 1d, 1.5f, 1e5D.
+	if t.dialect == keywords.DialectOracle && t.pos.Index < len(t.input) &&
+		strings.IndexByte("dDfF", t.input[t.pos.Index]) >= 0 && !t.identCharAt(t.pos.Index+1) {
+		t.pos.Index++
+		t.pos.Column++
+	}
+	return t.finishNumber(start, mysql)
+}
 
-	// Read integer part
+// storageUnitFollows reports whether the integer just read is an Oracle
+// storage size such as 100M, 8K or 2G: one K/M/G/T/P/E unit letter that is
+// not itself followed by a name character (nor, for E, an exponent sign).
+// Oracle accepts these wherever a size is expected (SIZE, MAXSIZE, RESIZE,
+// BLOCKSIZE, QUOTA, PRIVATE_SGA, ALTER SYSTEM SET ...); the generic dialect
+// keeps accepting them too. The number and unit stay separate tokens so
+// statement rendering retains its existing spelling and spacing.
+func (t *Tokenizer) storageUnitFollows(start int) bool {
+	i := t.pos.Index
+	if i >= len(t.input) || strings.IndexByte("kKmMgGtTpPeE", t.input[i]) < 0 || t.identCharAt(i+1) {
+		return false
+	}
+	if (t.input[i] == 'e' || t.input[i] == 'E') && i+1 < len(t.input) && (t.input[i+1] == '+' || t.input[i+1] == '-') {
+		return false
+	}
+	for j := start; j < i; j++ {
+		if t.input[j] < '0' || t.input[j] > '9' {
+			return false
+		}
+	}
+	return true
+}
+
+// identCharAt reports whether the input at idx starts a name character.
+func (t *Tokenizer) identCharAt(idx int) bool {
+	if idx >= len(t.input) {
+		return false
+	}
+	r, _ := utf8.DecodeRune(t.input[idx:])
+	return isIdentifierChar(r)
+}
+
+// readNumericDigits permits a single separator only between valid digits.
+func (t *Tokenizer) readNumericDigits(base byte, separators bool) {
+	digit := false
 	for t.pos.Index < len(t.input) {
-		r, size := utf8.DecodeRune(t.input[t.pos.Index:])
-		if r < '0' || r > '9' {
+		c := t.input[t.pos.Index]
+		if numericDigit(c, base) {
+			digit = true
+		} else if separators && digit && c == '_' && t.pos.Index+1 < len(t.input) && numericDigit(t.input[t.pos.Index+1], base) {
+			digit = false
+		} else {
 			break
 		}
-		t.pos.AdvanceRune(r, size)
+		t.pos.Index++
+		t.pos.Column++
 	}
+}
 
-	if t.pos.Index >= len(t.input) {
-		return models.Token{
-			Type:  models.TokenTypeNumber,
-			Value: t.src[start:t.pos.Index],
-		}, nil
+func numericDigit(c, base byte) bool {
+	if c >= '0' && c <= '9' {
+		return c-'0' < base
 	}
+	return base == 16 && (c >= 'a' && c <= 'f' || c >= 'A' && c <= 'F')
+}
 
-	// Look for decimal point
-	r, size := utf8.DecodeRune(t.input[t.pos.Index:])
-	if r == '.' {
-		// "5." is a complete number (a trailing decimal point) unless the dot
-		// belongs to what follows: a second dot or a word ("1.foo", "1..2").
-		// An exponent after the dot ("1.e5") still belongs to the number.
-		if next := t.pos.Index + 1; next < len(t.input) &&
-			(t.input[next] == '.' || (nextIsWordStart(t.input[next:]) && !t.exponentAt(next))) {
-			return models.Token{
-				Type:  models.TokenTypeNumber,
-				Value: t.src[start:t.pos.Index],
-			}, nil
-		}
-		t.pos.AdvanceRune(r, size)
-
-		// Fractional digits are optional ("5.").
-		for t.pos.Index < len(t.input) {
-			r, size = utf8.DecodeRune(t.input[t.pos.Index:])
-			if r < '0' || r > '9' {
-				break
-			}
-			t.pos.AdvanceRune(r, size)
-		}
-	}
-
-	// Look for exponent
+func (t *Tokenizer) finishNumber(start int, mysql bool) (models.Token, error) {
 	if t.pos.Index < len(t.input) {
-		r, size = utf8.DecodeRune(t.input[t.pos.Index:])
-		if r == 'e' || r == 'E' {
-			t.pos.AdvanceRune(r, size)
-
-			// Optional sign
-			if t.pos.Index < len(t.input) {
-				r, size = utf8.DecodeRune(t.input[t.pos.Index:])
-				if r == '+' || r == '-' {
-					t.pos.AdvanceRune(r, size)
+		r, _ := utf8.DecodeRune(t.input[t.pos.Index:])
+		if isIdentifierChar(r) {
+			if mysql {
+				// MySQL names may begin with digits (1x, 1e5x), but a
+				// number with a fraction or signed exponent ends there and
+				// the name that follows is an alias: 1.5a is 1.5 AS a.
+				if strings.ContainsAny(t.src[start:t.pos.Index], ".+-") {
+					return models.Token{Type: models.TokenTypeNumber, Value: t.src[start:t.pos.Index]}, nil
 				}
+				t.scanIdentifierTail()
+				return models.Token{Type: models.TokenTypeIdentifier, Value: t.src[start:t.pos.Index]}, nil
 			}
-
-			// Must have at least one digit
-			if t.pos.Index >= len(t.input) {
-				value := t.src[start:t.pos.Index]
-				return models.Token{}, errors.InvalidNumberError(value+" (expected digit in exponent)", t.getCurrentPosition(), t.src)
+			// Oracle and SQL Server end a number at a keyword written
+			// against it (SELECT 1FROM dual, FETCH FIRST 5ROWS ONLY); the
+			// generic dialect keeps accepting that too.
+			if (t.dialect == keywords.DialectOracle || t.dialect == keywords.DialectSQLServer ||
+				t.dialect == keywords.DialectGeneric) && t.keywordAt() {
+				return models.Token{Type: models.TokenTypeNumber, Value: t.src[start:t.pos.Index]}, nil
 			}
-
-			r, _ = utf8.DecodeRune(t.input[t.pos.Index:])
-			if r < '0' || r > '9' {
-				value := t.src[start:t.pos.Index]
-				return models.Token{}, errors.InvalidNumberError(value+" (expected digit in exponent)", t.getCurrentPosition(), t.src)
-			}
-
-			// Read exponent part
-			for t.pos.Index < len(t.input) {
-				r, size = utf8.DecodeRune(t.input[t.pos.Index:])
-				if r < '0' || r > '9' {
-					_ = size // Mark as intentionally unused
-					break
-				}
-				t.pos.AdvanceRune(r, size)
-			}
+			return t.invalidNumeric(start)
 		}
 	}
+	return models.Token{Type: models.TokenTypeNumber, Value: t.src[start:t.pos.Index]}, nil
+}
 
-	return models.Token{
-		Type:  models.TokenTypeNumber,
-		Value: t.src[start:t.pos.Index],
-	}, nil
+// keywordAt reports whether the name starting at the cursor is a keyword.
+func (t *Tokenizer) keywordAt() bool {
+	save := t.pos
+	t.scanIdentifierTail()
+	word := t.src[save.Index:t.pos.Index]
+	t.pos = save
+	var kbuf [keywordKeyBufLen]byte
+	if len(word) > keywordKeyBufLen || !asciiUpper(kbuf[:len(word)], word) {
+		return false
+	}
+	_, ok := keywordTokenTypes[string(kbuf[:len(word)])]
+	return ok
+}
+
+func (t *Tokenizer) invalidNumeric(start int) (models.Token, error) {
+	return models.Token{}, errors.InvalidNumberError(t.src[start:t.pos.Index]+" (trailing junk after numeric literal)", t.getCurrentPosition(), t.src)
 }
 
 // isHexDigit reports whether c is an ASCII hexadecimal digit.
@@ -2005,10 +2083,20 @@ func (t *Tokenizer) readPunctuation() (models.Token, error) {
 		if t.dialect == keywords.DialectSQLServer || t.dialect == keywords.DialectSQLite {
 			t.pos.AdvanceRune(r, size) // Consume [
 			contentStart := t.pos.Index
+			escaped := false
 			for t.pos.Index < len(t.input) {
 				ch, chSize := utf8.DecodeRune(t.input[t.pos.Index:])
 				if ch == ']' {
+					if t.dialect == keywords.DialectSQLServer && t.pos.Index+1 < len(t.input) && t.input[t.pos.Index+1] == ']' {
+						escaped = true
+						t.pos.Index += 2
+						t.pos.Column += 2
+						continue
+					}
 					v := t.src[contentStart:t.pos.Index]
+					if escaped {
+						v = strings.ReplaceAll(v, "]]", "]")
+					}
 					t.pos.AdvanceRune(ch, chSize) // Consume ]
 					return models.Token{Type: models.TokenTypeIdentifier, Value: v, Quote: '['}, nil
 				}

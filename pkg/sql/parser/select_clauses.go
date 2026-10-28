@@ -100,7 +100,8 @@ func (p *Parser) parseFromClause() (tableName string, tables []ast.TableReferenc
 	// NOTE: FINAL only applies to the first (primary) table reference. In ClickHouse,
 	// FINAL is a per-table modifier; multi-table FROM with FINAL on a non-first
 	// table (e.g. "FROM t1, t2 FINAL") is not supported by this parser.
-	if p.dialect == string(keywords.DialectClickHouse) && p.isTokenMatch("FINAL") {
+	if p.dialect == string(keywords.DialectClickHouse) && p.isTokenMatch("FINAL") &&
+		(firstRef.Modifiers == nil || firstRef.Modifiers.Sample == nil) {
 		firstRef.Final = true
 		p.advance() // consume FINAL
 	}
@@ -680,7 +681,7 @@ func (p *Parser) parseSampleClause() (*ast.SampleClause, error) {
 	clause := &ast.SampleClause{Pos: samplePos}
 
 	// Read the primary sampling value (numerator / whole number / float)
-	if !p.isNumericLiteral() {
+	if !p.isSampleNumber() {
 		return nil, goerrors.ExpectedTokenError(
 			"numeric literal after SAMPLE",
 			p.currentToken.Token.Type.String(),
@@ -689,12 +690,13 @@ func (p *Parser) parseSampleClause() (*ast.SampleClause, error) {
 		).WithHint("SAMPLE clause requires a numeric argument (ratio, row count, or N/D fraction)")
 	}
 	clause.Value = p.currentToken.Token.Value
+	clause.Size = &ast.LiteralValue{Value: clause.Value, Type: numericLiteralType(clause.Value)}
 	p.advance()
 
 	// Check for fractional form: SAMPLE N / D
 	if p.isType(models.TokenTypeDiv) {
 		p.advance() // consume /
-		if !p.isNumericLiteral() {
+		if !p.isSampleNumber() {
 			return nil, goerrors.ExpectedTokenError(
 				"denominator after /",
 				p.currentToken.Token.Type.String(),
@@ -703,13 +705,14 @@ func (p *Parser) parseSampleClause() (*ast.SampleClause, error) {
 			).WithHint("SAMPLE N/D fraction requires an integer denominator")
 		}
 		clause.Denominator = p.currentToken.Token.Value
+		clause.Size = &ast.BinaryExpression{Left: clause.Size, Operator: "/", Right: &ast.LiteralValue{Value: clause.Denominator, Type: numericLiteralType(clause.Denominator)}}
 		p.advance()
 	}
 
 	// Optional OFFSET N/D
 	if p.isTokenMatch("OFFSET") {
 		p.advance() // Consume OFFSET
-		if !p.isNumericLiteral() {
+		if !p.isSampleNumber() {
 			return nil, goerrors.ExpectedTokenError(
 				"numeric literal after SAMPLE ... OFFSET",
 				p.currentToken.Token.Type.String(),
@@ -718,10 +721,11 @@ func (p *Parser) parseSampleClause() (*ast.SampleClause, error) {
 			).WithHint("SAMPLE OFFSET requires a numeric argument")
 		}
 		clause.Offset = p.currentToken.Token.Value
+		clause.OffsetSize = &ast.LiteralValue{Value: clause.Offset, Type: numericLiteralType(clause.Offset)}
 		p.advance()
 		if p.isType(models.TokenTypeDiv) {
 			p.advance() // consume /
-			if !p.isNumericLiteral() {
+			if !p.isSampleNumber() {
 				return nil, goerrors.ExpectedTokenError(
 					"denominator after OFFSET /",
 					p.currentToken.Token.Type.String(),
@@ -730,11 +734,19 @@ func (p *Parser) parseSampleClause() (*ast.SampleClause, error) {
 				).WithHint("SAMPLE OFFSET N/D fraction requires an integer denominator")
 			}
 			clause.OffsetDenominator = p.currentToken.Token.Value
+			clause.OffsetSize = &ast.BinaryExpression{Left: clause.OffsetSize, Operator: "/", Right: &ast.LiteralValue{Value: clause.OffsetDenominator, Type: numericLiteralType(clause.OffsetDenominator)}}
 			p.advance()
 		}
 	}
 
 	return clause, nil
+}
+
+// isSampleNumber reports whether the current token is a plain decimal
+// number (digits, '.', exponent), the only literal ClickHouse SAMPLE takes;
+// hex and other numeric spellings are rejected rather than misread.
+func (p *Parser) isSampleNumber() bool {
+	return p.isNumericLiteral() && ast.IsPlainNumberText(p.currentToken.Token.Value)
 }
 
 // parsePrewhereClause parses "PREWHERE <expr>" if present (ClickHouse-specific).
@@ -827,8 +839,7 @@ func (p *Parser) parseGroupByClause(stmt *ast.SelectStatement) ([]ast.Expression
 			expr, err = p.parseRollup()
 		case p.isType(models.TokenTypeCube):
 			expr, err = p.parseCube()
-		case p.currentToken.Token.Value == "GROUPING SETS" ||
-			(p.isType(models.TokenTypeGrouping) && strings.EqualFold(p.peekToken().Token.Value, "SETS")):
+		case p.isGroupingSetsStart():
 			expr, err = p.parseGroupingSets()
 		default:
 			expr, err = p.parseExpression()

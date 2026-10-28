@@ -319,11 +319,17 @@ func TestRender_TableReferenceRendersEveryField(t *testing.T) {
 func TestRender_TableModifiersRendersEveryField(t *testing.T) {
 	num := func(v string) *ast.LiteralValue { return &ast.LiteralValue{Value: v, Type: "int"} }
 	samples := map[string]func(*ast.TableModifiers){
+		"RowsFrom": func(m *ast.TableModifiers) {
+			m.RowsFrom = []ast.RowsFromItem{{Function: &ast.FunctionCall{Name: "generate_series", Arguments: []ast.Expression{num("1"), num("3")}}}}
+		},
 		"Values": func(m *ast.TableModifiers) {
 			m.Values = &ast.Values{Rows: [][]ast.Expression{{num("1")}}}
 		},
 		"TableSample": func(m *ast.TableModifiers) {
 			m.TableSample = &ast.TableSampleClause{Keyword: "SAMPLE", Args: []ast.Expression{num("5")}}
+		},
+		"Sample": func(m *ast.TableModifiers) {
+			m.Sample = &ast.SampleClause{Size: &ast.LiteralValue{Value: "0.5", Type: "float"}}
 		},
 		"Flashback":  func(m *ast.TableModifiers) { m.Flashback = &ast.FlashbackClause{Kind: "SCN", Point: num("9")} },
 		"DBLink":     func(m *ast.TableModifiers) { m.DBLink = "lnk" },

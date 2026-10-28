@@ -301,14 +301,15 @@ func renderSelect(s *ast.SelectStatement, opts ast.FormatOptions) string {
 		sb.WriteString(joinSQL(&j, f))
 	}
 
+	// ClickHouse writes SAMPLE with the table expression, before ARRAY JOIN.
+	if sample := ast.SampleExpressionSQL(s.Sample, f.kw); sample != "" {
+		sb.WriteString(f.clauseSep())
+		sb.WriteString(sample)
+	}
+
 	if s.ArrayJoin != nil {
 		sb.WriteString(f.clauseSep())
 		sb.WriteString(arrayJoinSQL(s.ArrayJoin, f))
-	}
-
-	if s.Sample != nil {
-		sb.WriteString(f.clauseSep())
-		sb.WriteString(sampleSQL(s.Sample, f))
 	}
 
 	if s.PrewhereClause != nil {
@@ -1179,6 +1180,8 @@ func tableRefSQL(t *ast.TableReference, f *nodeFormatter) string {
 		sb.WriteString("(")
 		sb.WriteString(f.tableSubquerySQL(t.Subquery))
 		sb.WriteString(")")
+	} else if rows := ast.RowsFromSQL(t, f.kw); rows != "" {
+		sb.WriteString(rows)
 	} else if t.TableFunc != nil {
 		sb.WriteString(f.exprSQL(t.TableFunc))
 		if t.WithOrdinality {
@@ -1237,33 +1240,6 @@ func tableRefSQL(t *ast.TableReference, f *nodeFormatter) string {
 		sb.WriteString(" ")
 		sb.WriteString(ast.QuoteTableAliasWith(t.Alias, f.nq(t.AliasQuote)))
 		sb.WriteString(ast.TableColumnAliasesSQLWith(t, f.nq))
-	}
-	return sb.String()
-}
-
-// sampleSQL renders a ClickHouse SAMPLE clause.
-func sampleSQL(s *ast.SampleClause, f *nodeFormatter) string {
-	var sb strings.Builder
-	sb.WriteString(f.kw("SAMPLE"))
-	sb.WriteString(" ")
-	// The ratio and offset parts are numeric literals; anything else can only
-	// come from a hand-built AST and is dropped rather than written raw.
-	if ast.IsPlainNumberText(s.Value) {
-		sb.WriteString(s.Value)
-		if ast.IsPlainNumberText(s.Denominator) {
-			sb.WriteString("/")
-			sb.WriteString(s.Denominator)
-		}
-	}
-	if ast.IsPlainNumberText(s.Offset) {
-		sb.WriteString(" ")
-		sb.WriteString(f.kw("OFFSET"))
-		sb.WriteString(" ")
-		sb.WriteString(s.Offset)
-		if ast.IsPlainNumberText(s.OffsetDenominator) {
-			sb.WriteString("/")
-			sb.WriteString(s.OffsetDenominator)
-		}
 	}
 	return sb.String()
 }

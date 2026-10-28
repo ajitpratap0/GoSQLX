@@ -83,6 +83,11 @@ func (p *Parser) parseAlterTableStatement(stmt *ast.AlterStatement) (*ast.AlterS
 func (p *Parser) parseAlterTableAction() (*ast.AlterTableOperation, error) {
 	op := &ast.AlterTableOperation{}
 	word := p.utilityWord(p.currentPos)
+	if p.alterDialectStrict(dialectMySQLFamily) && p.isMySQLPartitionAction() {
+		if res, ok := p.parseMySQLPartitionActionOrGeneric(op); ok {
+			return res, nil
+		}
+	}
 
 	// SQL Server: WITH CHECK | WITH NOCHECK ADD CONSTRAINT ...
 	if word == "WITH" && p.dialect == string(keywords.DialectSQLServer) {

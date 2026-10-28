@@ -45,5 +45,17 @@ func (a *AlterTableOperation) extChildren() []Node {
 	if a.Where != nil {
 		children = append(children, a.Where)
 	}
+	if a.Partitioning != nil {
+		children = append(children, a.Partitioning)
+	}
+	for i := range a.PartitionDefinitions {
+		children = append(children, &a.PartitionDefinitions[i])
+	}
+	for _, name := range a.PartitionNames {
+		children = append(children, name)
+	}
+	if a.PartitionCount != nil {
+		children = append(children, a.PartitionCount)
+	}
 	return children
 }

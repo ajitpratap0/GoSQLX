@@ -185,10 +185,7 @@ func (p *Parser) isTableSampleStart() bool {
 
 // isTableSampleStartAt is isTableSampleStart past its inline screen (a matching word is at least as long as SAMPLE).
 func (p *Parser) isTableSampleStartAt() bool {
-	if !p.isSampleKeyword() {
-		return false
-	}
-	return !(p.IsClickHouse() && p.peekToken().Token.Type == models.TokenTypeNumber)
+	return p.isSampleKeyword() && !(p.IsClickHouse() && p.peekToken().Token.Type == models.TokenTypeNumber)
 }
 
 // parseTableSample parses a row-sampling clause; the current token is SAMPLE
@@ -362,23 +359,34 @@ func (p *Parser) parseTableModifiersBeforeAlias(ref *ast.TableReference) error {
 // alias itself: index hints, SQLite INDEXED BY / NOT INDEXED, Oracle
 // flashback, FOR SYSTEM_TIME.
 func (p *Parser) isTableModifierAfterAliasStart() bool {
-	return p.isIndexHintStart() || p.isSQLiteIndexedStart() || p.isOracleFlashbackStart()
+	return (p.IsClickHouse() && p.isUnquotedWord("FINAL")) || p.isIndexHintStart() || p.isSQLiteIndexedStart() || p.isOracleFlashbackStart()
 }
 
 // parseTableModifiersAfterAlias parses the table modifiers that follow the
 // alias: TABLESAMPLE, ClickHouse FINAL, MySQL index hints, SQLite INDEXED BY
 // / NOT INDEXED and SQL Server bare table hints t (NOLOCK).
 func (p *Parser) parseTableModifiersAfterAlias(ref *ast.TableReference) error {
+	if p.IsClickHouse() && p.isUnquotedWord("FINAL") {
+		ref.Final = true
+		p.advance()
+		if p.isUnquotedWord("FINAL") {
+			return p.expectedError("a single FINAL modifier")
+		}
+	}
+	// ClickHouse SAMPLE k [OFFSET m] of this table expression.
+	if p.IsClickHouse() && p.isUnquotedWord("SAMPLE") && p.peekToken().Token.Type == models.TokenTypeNumber {
+		sample, err := p.parseSampleClause()
+		if err != nil {
+			return err
+		}
+		tableModifiers(ref).Sample = sample
+	}
 	if !hasTableSample(ref) && p.isTableSampleStart() {
 		sample, err := p.parseTableSample()
 		if err != nil {
 			return err
 		}
 		tableModifiers(ref).TableSample = sample
-	}
-	if p.IsClickHouse() && p.isTokenMatch("FINAL") {
-		ref.Final = true
-		p.advance() // Consume FINAL
 	}
 	for p.isIndexHintStart() {
 		hint, err := p.parseIndexHint()
@@ -909,6 +917,9 @@ func (p *Parser) parsePivotInSpecial(clause *ast.PivotClause) (bool, error) {
 		return false, p.expectedError(") to close PIVOT IN list")
 	}
 	p.advance() // close IN list )
+	if err := p.parsePivotDefault(clause); err != nil {
+		return false, err
+	}
 	if !p.isType(models.TokenTypeRParen) {
 		return false, p.expectedError(") to close PIVOT clause")
 	}

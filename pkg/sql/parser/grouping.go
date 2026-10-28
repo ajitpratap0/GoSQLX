@@ -18,6 +18,8 @@
 package parser
 
 import (
+	"strings"
+
 	goerrors "github.com/ajitpratap0/GoSQLX/pkg/errors"
 	"github.com/ajitpratap0/GoSQLX/pkg/models"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
@@ -98,6 +100,12 @@ func (p *Parser) parseCube() (*ast.CubeExpression, error) {
 // Allows explicit specification of grouping sets
 // Example: GROUPING SETS((a, b), (a), ()) generates exactly those three grouping sets
 func (p *Parser) parseGroupingSets() (*ast.GroupingSetsExpression, error) {
+	// GROUPING SETS nest (PostgreSQL); bound the recursion.
+	p.depth++
+	defer func() { p.depth-- }()
+	if p.depth > MaxRecursionDepth {
+		return nil, goerrors.RecursionDepthLimitError(p.depth, MaxRecursionDepth, p.currentLocation(), "")
+	}
 	// Handle both "GROUPING SETS" as compound keyword or separate tokens
 	if p.currentToken.Token.Value == "GROUPING SETS" {
 		p.advance() // Consume "GROUPING SETS" compound token
@@ -147,6 +155,26 @@ func (p *Parser) parseGroupingSets() (*ast.GroupingSetsExpression, error) {
 				}
 			}
 			p.advance() // Consume )
+		} else if p.isType(models.TokenTypeRollup) || p.isType(models.TokenTypeCube) {
+			var expr ast.Expression
+			var err error
+			if p.isType(models.TokenTypeRollup) {
+				expr, err = p.parseRollup()
+			} else {
+				expr, err = p.parseCube()
+			}
+			if err != nil {
+				return nil, err
+			}
+			set = []ast.Expression{expr}
+		} else if p.isGroupingSetsStart() {
+			// Nested GROUPING SETS (...): its sets are concatenated into the
+			// enclosing list.
+			nested, err := p.parseGroupingSets()
+			if err != nil {
+				return nil, err
+			}
+			set = []ast.Expression{nested}
 		} else {
 			// Single column without parens
 			expr, err := p.parseExpression()
@@ -171,4 +199,11 @@ func (p *Parser) parseGroupingSets() (*ast.GroupingSetsExpression, error) {
 	return &ast.GroupingSetsExpression{
 		Sets: sets,
 	}, nil
+}
+
+// isGroupingSetsStart reports whether the current token starts GROUPING SETS,
+// written as one compound token or as GROUPING followed by SETS.
+func (p *Parser) isGroupingSetsStart() bool {
+	return p.currentToken.Token.Value == "GROUPING SETS" ||
+		(p.isType(models.TokenTypeGrouping) && strings.EqualFold(p.peekToken().Token.Value, "SETS"))
 }

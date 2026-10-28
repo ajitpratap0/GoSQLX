@@ -1237,6 +1237,13 @@ func (g *GroupingSetsExpression) writeSQL(buf *bytes.Buffer) {
 		if i > 0 {
 			buf.WriteString(", ")
 		}
+		if len(set) == 1 {
+			switch set[0].(type) {
+			case *RollupExpression, *CubeExpression, *GroupingSetsExpression:
+				writeExpr(buf, set[0])
+				continue
+			}
+		}
 		buf.WriteByte('(')
 		writeExprList(buf, set)
 		buf.WriteByte(')')
@@ -1303,6 +1310,12 @@ func (s *SelectStatement) writeSQL(buf *bytes.Buffer) {
 		writeJoin(buf, &s.Joins[i])
 	}
 
+	// ClickHouse writes SAMPLE with the table expression, before ARRAY JOIN.
+	if sample := s.Sample.SQL(); sample != "" {
+		buf.WriteByte(' ')
+		buf.WriteString(sample)
+	}
+
 	if s.ArrayJoin != nil {
 		if s.ArrayJoin.Left {
 			buf.WriteString(" LEFT ARRAY JOIN ")
@@ -1319,11 +1332,6 @@ func (s *SelectStatement) writeSQL(buf *bytes.Buffer) {
 				writeName(buf, e.Alias)
 			}
 		}
-	}
-
-	if s.Sample != nil {
-		buf.WriteByte(' ')
-		buf.WriteString(s.Sample.SQL())
 	}
 
 	if s.PrewhereClause != nil {
@@ -2203,6 +2211,8 @@ func writeTableRef(buf *bytes.Buffer, t *TableReference) {
 		buf.WriteByte('(')
 		t.Subquery.writeSQL(buf)
 		buf.WriteByte(')')
+	} else if rows := RowsFromSQL(t, nil); rows != "" {
+		buf.WriteString(rows)
 	} else if t.TableFunc != nil {
 		t.TableFunc.writeSQL(buf)
 		if t.WithOrdinality {
@@ -2822,34 +2832,8 @@ func (c *ConnectByClause) ToSQL() string {
 	return b.String()
 }
 
-// writeSampleRatio writes a SAMPLE ratio or offset, n or n/d, writing each
-// part only when it is a plain number (IsPlainNumberText).
-func writeSampleRatio(buf *bytes.Buffer, n, d string) {
-	if !IsPlainNumberText(n) {
-		return
-	}
-	buf.WriteString(n)
-	if IsPlainNumberText(d) {
-		buf.WriteByte('/')
-		buf.WriteString(d)
-	}
-}
-
 // SQL renders a ClickHouse SAMPLE clause, e.g. "SAMPLE 0.1" or
 // "SAMPLE 1/10 OFFSET 2/10".
 func (s *SampleClause) SQL() string {
-	if s == nil {
-		return ""
-	}
-	sb := getBuf()
-	defer putBuf(sb)
-	sb.WriteString("SAMPLE ")
-	// The ratio and offset are numeric literals; any other text can only come
-	// from a hand-built AST and is dropped rather than written raw.
-	writeSampleRatio(sb, s.Value, s.Denominator)
-	if IsPlainNumberText(s.Offset) {
-		sb.WriteString(" OFFSET ")
-		writeSampleRatio(sb, s.Offset, s.OffsetDenominator)
-	}
-	return sb.String()
+	return SampleExpressionSQL(s, nil)
 }

@@ -539,7 +539,6 @@ func TestAlterTable_OtherActions(t *testing.T) {
 		{"options are separate actions", keywords.DialectMySQL, "ALTER TABLE t ENGINE=InnoDB, ALGORITHM=INPLACE, LOCK=NONE", 3, "", "ENGINE=InnoDB"},
 		{"default charset", keywords.DialectMySQL, "ALTER TABLE t DEFAULT CHARSET=utf8mb4", 1, "DEFAULT", "CHARSET=utf8mb4"},
 		{"convert to character set", keywords.DialectMySQL, "ALTER TABLE t CONVERT TO CHARACTER SET utf8mb4", 1, "CONVERT TO CHARACTER SET", "utf8mb4"},
-		{"drop partition list", keywords.DialectMySQL, "ALTER TABLE t DROP PARTITION p1, p2", 1, "DROP PARTITION", "p1, p2"},
 		{"order by", keywords.DialectMySQL, "ALTER TABLE t ORDER BY a, b DESC", 1, "ORDER BY", "a, b DESC"},
 		{"rename index", keywords.DialectMySQL, "ALTER TABLE t RENAME INDEX a TO b", 1, "RENAME INDEX", "a TO b"},
 		{"disable keys", keywords.DialectMySQL, "ALTER TABLE t DISABLE KEYS", 1, "DISABLE KEYS", ""},

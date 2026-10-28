@@ -306,8 +306,16 @@ func (t TableReference) Children() []Node {
 		nodes = append(nodes, t.ForSystemTime)
 	}
 	if m := t.Modifiers; m != nil {
+		for i := range m.RowsFrom {
+			if m.RowsFrom[i].Function != nil {
+				nodes = append(nodes, m.RowsFrom[i].Function)
+			}
+		}
 		if m.TableSample != nil {
 			nodes = append(nodes, m.TableSample)
+		}
+		if m.Sample != nil {
+			nodes = append(nodes, m.Sample)
 		}
 		if m.Flashback != nil {
 			nodes = append(nodes, m.Flashback)
@@ -1174,6 +1182,10 @@ type ArrayJoinElement struct {
 }
 
 type SampleClause struct {
+	// Size and OffsetSize are the parsed numeric expressions. When non-nil,
+	// they take precedence over the legacy raw token fields below.
+	Size       Expression
+	OffsetSize Expression
 	// Value is the sampling size/ratio as a raw token string (e.g., "0.1", "1000", "1/10").
 	Value string
 	// Denominator is set when the fraction form "N/D" is used (denominator part).
@@ -1187,4 +1199,13 @@ type SampleClause struct {
 
 func (s *SampleClause) expressionNode()     {}
 func (s SampleClause) TokenLiteral() string { return "SAMPLE" }
-func (s SampleClause) Children() []Node     { return nil }
+func (s SampleClause) Children() []Node {
+	var nodes []Node
+	if s.Size != nil {
+		nodes = append(nodes, s.Size)
+	}
+	if s.OffsetSize != nil {
+		nodes = append(nodes, s.OffsetSize)
+	}
+	return nodes
+}

@@ -424,6 +424,8 @@ func (w alterWriter) writeOperation(op *AlterTableOperation) {
 			w.str(columnDefSQL(op.ColumnDef))
 		}
 		w.writeColumnPosition(op)
+	case AlterPartitioning:
+		w.writePartitionAction(op)
 	case AlterTableOther:
 		w.writeKeywordText(op.Keyword, op.Text)
 	case UpdateMutation:

@@ -26,14 +26,15 @@ import "bytes"
 // SelectStatement as the parser does for A UNION B ORDER BY x (where the
 // clause is stored on the last SELECT).
 type QueryTail struct {
-	OrderBy    []OrderByExpression
-	Limit      *int
-	LimitExpr  Expression
-	LimitAll   bool
-	Offset     *int
-	OffsetExpr Expression
-	OffsetRows bool
-	Fetch      *FetchClause
+	OrderBy       []OrderByExpression
+	Limit         *int
+	LimitExpr     Expression
+	LimitAll      bool
+	LimitWithTies bool
+	Offset        *int
+	OffsetExpr    Expression
+	OffsetRows    bool
+	Fetch         *FetchClause
 }
 
 // Select returns a SelectStatement that holds only the clauses of t, so the
@@ -43,8 +44,8 @@ func (t *QueryTail) Select() *SelectStatement {
 		return nil
 	}
 	s := &SelectStatement{OrderBy: t.OrderBy, Limit: t.Limit, Offset: t.Offset, Fetch: t.Fetch}
-	if t.LimitExpr != nil || t.LimitAll || t.OffsetExpr != nil || t.OffsetRows {
-		s.Extras = &SelectExtras{LimitExpr: t.LimitExpr, LimitAll: t.LimitAll, OffsetExpr: t.OffsetExpr, OffsetRows: t.OffsetRows}
+	if t.LimitExpr != nil || t.LimitAll || t.LimitWithTies || t.OffsetExpr != nil || t.OffsetRows {
+		s.Extras = &SelectExtras{LimitExpr: t.LimitExpr, LimitAll: t.LimitAll, LimitWithTies: t.LimitWithTies, OffsetExpr: t.OffsetExpr, OffsetRows: t.OffsetRows}
 	}
 	return s
 }
@@ -53,14 +54,15 @@ func (t *QueryTail) Select() *SelectStatement {
 // from s: the parser reads them into a scratch SelectStatement first.
 func QueryTailFrom(s *SelectStatement) *QueryTail {
 	return &QueryTail{
-		OrderBy:    s.OrderBy,
-		Limit:      s.Limit,
-		LimitExpr:  s.DialectExtras().LimitExpr,
-		LimitAll:   s.DialectExtras().LimitAll,
-		Offset:     s.Offset,
-		OffsetExpr: s.DialectExtras().OffsetExpr,
-		OffsetRows: s.DialectExtras().OffsetRows,
-		Fetch:      s.Fetch,
+		OrderBy:       s.OrderBy,
+		Limit:         s.Limit,
+		LimitExpr:     s.DialectExtras().LimitExpr,
+		LimitAll:      s.DialectExtras().LimitAll,
+		LimitWithTies: s.DialectExtras().LimitWithTies,
+		Offset:        s.Offset,
+		OffsetExpr:    s.DialectExtras().OffsetExpr,
+		OffsetRows:    s.DialectExtras().OffsetRows,
+		Fetch:         s.Fetch,
 	}
 }
 
@@ -114,4 +116,7 @@ func (t *QueryTail) release(mode releaseMode) {
 	}
 	releaseExpression(t.LimitExpr, mode)
 	releaseExpression(t.OffsetExpr, mode)
+	if t.Fetch != nil {
+		releaseExpression(t.Fetch.FetchExpr, mode)
+	}
 }

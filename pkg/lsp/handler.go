@@ -161,6 +161,8 @@ func NewHandler(server *Server) *Handler {
 	}
 }
 
+var errMethodNotFound = stderrors.New("method not found")
+
 // HandleRequest processes an LSP request and returns a result
 func (h *Handler) HandleRequest(method string, params json.RawMessage) (interface{}, error) {
 	switch method {
@@ -187,7 +189,7 @@ func (h *Handler) HandleRequest(method string, params json.RawMessage) (interfac
 		}
 		return h.handleSemanticTokensFull(semParams)
 	default:
-		return nil, fmt.Errorf("method not found: %s", method)
+		return nil, fmt.Errorf("%w: %s", errMethodNotFound, method)
 	}
 }
 

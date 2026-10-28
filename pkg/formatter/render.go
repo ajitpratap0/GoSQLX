@@ -306,7 +306,7 @@ func renderSelect(s *ast.SelectStatement, opts ast.FormatOptions) string {
 	// MySQL select modifiers and TOP, between SELECT [DISTINCT] and columns.
 	writeSelectPrologue(sb, s, f)
 
-	sb.WriteString(f.exprListSQL(s.Columns))
+	sb.WriteString(selectColumnsForDialect(s.Columns, f))
 
 	if into := selectExtras(s).Into; into != nil && !into.Trailing {
 		sb.WriteString(" ")
@@ -752,6 +752,12 @@ func renderSetOperationBody(s *ast.SetOperation, opts ast.FormatOptions) string 
 	if t := s.Tail; t != nil {
 		// ORDER BY / LIMIT / OFFSET / FETCH of the whole operation.
 		view := t.Select()
+		// A set tail cannot use TOP, and SQL Server OFFSET/FETCH needs
+		// ORDER BY. Keep unsupported LIMIT visible for direct formatting;
+		// Transpile rejects this case before rendering.
+		if opts.Dialect != "sqlserver" || len(view.OrderBy) > 0 {
+			normalizeSelectForDialect(view, opts.Dialect)
+		}
 		if len(view.OrderBy) > 0 {
 			sb.WriteString(f.clauseSep())
 			sb.WriteString(f.kw("ORDER BY"))
@@ -1229,7 +1235,7 @@ func tableRefSQL(t *ast.TableReference, f *nodeFormatter) string {
 	}
 	if t.Subquery != nil {
 		sb.WriteString("(")
-		sb.WriteString(f.tableSubquerySQL(t.Subquery))
+		sb.WriteString(tableSubqueryForDialect(t.Subquery, f))
 		sb.WriteString(")")
 	} else if rows := ast.RowsFromSQL(t, f.kw); rows != "" {
 		sb.WriteString(rows)
@@ -1241,7 +1247,7 @@ func tableRefSQL(t *ast.TableReference, f *nodeFormatter) string {
 		}
 	} else if t.SetSubquery != nil {
 		sb.WriteString("(")
-		sb.WriteString(f.tableSubquerySQL(t.SetSubquery))
+		sb.WriteString(tableSubqueryForDialect(t.SetSubquery, f))
 		sb.WriteString(")")
 	} else if t.DialectModifiers().Values != nil {
 		sb.WriteString("(")

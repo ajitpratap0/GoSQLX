@@ -86,6 +86,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   in dialects without them.
 
 ### Fixed
+- **CLI security scan**: `gosqlx analyze --security` and `gosqlx lint`'s security pass now run the string scanner (`ScanSQL`) as well as the AST scan and merge the findings, so `SELECT 1; DROP TABLE users` is reported as CRITICAL instead of clean. Inline SQL that contains `/` (for example `UNION/**/SELECT` or `4 / 2`) is no longer mistaken for a missing file path.
+- **Transpile row limits**: for SQL Server, `LIMIT n OFFSET m` and bare `OFFSET` without ORDER BY add `ORDER BY (SELECT NULL)`, and `FETCH FIRST` gains the required `OFFSET 0 ROWS`. Row limits inside derived tables, JOIN operands and scalar subqueries are now rewritten for the target dialect (Oracle kept `LIMIT` there). `WITH TIES` survives set-operation tails, and targets that cannot express it return an error instead of dropping it.
+- **LSP**: requests for unknown methods are answered with `-32601` (MethodNotFound) instead of `-32603`.
 - PostgreSQL / Redshift / SQLite `VACUUM` and `ANALYZE`, and PostgreSQL `LISTEN`,
   `UNLISTEN` and `NOTIFY`, now end where their grammar ends: trailing same-line
   tokens (`VACUUM t junk`, `LISTEN c extra`) are a parse error instead of being

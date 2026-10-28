@@ -111,6 +111,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   longer panic with `index out of range [-1]`; they return an E2002 error
   (expected `]` or `)`) in every dialect.
 - **Transpile**: a LIMIT on a whole UNION/INTERSECT/EXCEPT no longer becomes `TOP` on the last branch when targeting SQL Server (that silently changed results); it is emitted as `ORDER BY ... OFFSET n ROWS FETCH NEXT m ROWS ONLY`, and without ORDER BY Transpile returns an error. Very long operator chains (for example 490,000 `OR` terms) no longer crash the process with an unrecoverable stack overflow: the operator and string-literal rewrites walk the tree iteratively, and rewrites that would nest output more than 512 levels deep return an error.
+- **Format**: with `AddSemicolon` and a comment anywhere in the input, raw-text statements (PostgreSQL `DO $$...$$`, `CREATE FUNCTION` bodies, Oracle `BEGIN ... END` blocks) lost their `;`, so the output no longer parsed or merged two statements. The comment-preserving path now adds terminators the same way as the plain path (`formatter.EnsureStatementTerminator`).
+- **Extract**: `gosqlx.Extract*` and `ExtractMetadata` (and the MCP `extract_metadata`/`analyze_sql` tools) took exponential time on nested CTEs and UNION chains because CTE, set-operation and DML children were visited twice. Each node is now visited once; nested CTEs at depth 10 took about 59 s and now finish in microseconds.
 - Watch now respects `--dialect`, re-validates changes and formats files in place
   with the CLI safety checks; MCP parsing accepts a dialect and documents comment preservation.
 - Correct transpile dialect help, avoid duplicate lint syntax errors, and rewrite

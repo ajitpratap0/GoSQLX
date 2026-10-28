@@ -694,10 +694,11 @@ func formatSQL(sql string, options FormatOptions, dialect keywords.SQLDialect) (
 		if err != nil {
 			return "", fmt.Errorf("cannot format SQL: %w", err)
 		}
+		stmts[i] = formatter.EnsureStatementTerminator(stmt, stmts[i], astOpts.AddSemicolon)
 	}
 	layout := formatter.CommentLayout{Terminator: ";", Gap: "\n", Dialect: string(dialect), Batches: formatter.BatchPositions(parsedAST), Starts: formatter.StatementPositions(parsedAST)}
 	if options.AddSemicolon {
-		layout.Terminator = "" // each rendered statement already ends with ';'
+		layout.Terminator = "" // non-batch statements already end with ';'
 	}
 	out, err := formatter.JoinWithComments(stmts, tokens, comments, layout)
 	if err != nil {

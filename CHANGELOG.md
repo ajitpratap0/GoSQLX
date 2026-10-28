@@ -86,6 +86,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   in dialects without them.
 
 ### Fixed
+- PostgreSQL / Redshift / SQLite `VACUUM` and `ANALYZE`, and PostgreSQL `LISTEN`,
+  `UNLISTEN` and `NOTIFY`, now end where their grammar ends: trailing same-line
+  tokens (`VACUUM t junk`, `LISTEN c extra`) are a parse error instead of being
+  folded into the statement text. MySQL / MariaDB / Oracle `ANALYZE TABLE` keeps
+  its as-written handling.
+- SQL Server: a delimited `[top]` / `"top"` is a plain name (also in the select
+  list, where it was read as the TOP clause) and keeps its delimiters on output;
+  bare `TOP` is rejected as a table, DML target or alias name, as T-SQL reserves it.
+- MariaDB `DELETE HISTORY FROM t [PARTITION (p, ...)] [BEFORE SYSTEM_TIME
+  [TIMESTAMP | TRANSACTION] expr]` parses and round-trips the partition list, the
+  unit keyword and any point expression (e.g. `NOW() - INTERVAL 1 DAY`), held in
+  the new `ast.DMLTargetFields.History` (`ast.DeleteHistoryOptions`).
+- **Security scanner**: `Scanner.Scan(tree)` now walks the whole AST, so time-based,
+  out-of-band and tautology patterns are detected inside CTEs, derived tables and
+  subqueries, CASE/CAST/IN/BETWEEN/ANY, ORDER BY/GROUP BY, JOIN ON, window specs,
+  FILTER, LIMIT, LATERAL/APPLY, PREWHERE, QUALIFY, CONNECT BY, RETURNING, ON CONFLICT,
+  INSERT ... SELECT, MERGE, CREATE TABLE AS, CREATE [MATERIALIZED] VIEW and EXPLAIN,
+  matching `ScanSQL`. UNION injection checks also run on set operations nested in CTEs
+  and subqueries. Qualified column comparisons such as `a.id = b.id` are no longer
+  reported as tautologies.
 - `GRANT ... TO [`, `TO [AppUser`, `TO CURRENT_USER(`, MariaDB
   `IDENTIFIED VIA ... USING PASSWORD(` and `COPY (` with an unclosed group no
   longer panic with `index out of range [-1]`; they return an E2002 error
@@ -213,6 +233,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   longer read as MariaDB's `ANALYZE <statement>`.
 
 ### Behavior changes
+- SQL Server: unquoted `top` (any case) is now a syntax error where a table
+  name, INSERT/UPDATE/DELETE/MERGE target, table alias or select-item alias is
+  expected (`SELECT * FROM top`, `INSERT INTO top ...`); quote it as `[top]`.
 - Numeric words without whitespace no longer silently become a number plus a
   column alias. Numeric spelling is retained. Differences from the previous lexer:
 

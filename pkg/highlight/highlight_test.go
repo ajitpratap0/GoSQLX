@@ -47,6 +47,34 @@ func find(t *testing.T, src string, spans []Span, text string) Category {
 	return Plain
 }
 
+func TestLastUnclosedHashComments(t *testing.T) {
+	tests := []struct {
+		name      string
+		sql       string
+		wantMySQL int
+		wantOther int
+	}{
+		{"quote in trailing comment", "SELECT 1 # '", -1, 11},
+		{"block opener in trailing comment", "SELECT 1 # /*", -1, 11},
+		{"unclosed quote after comment", "# ' ignored\nSELECT '", 19, -1},
+		{"hash inside string", "SELECT '#', '", 12, 12},
+	}
+	for _, d := range []keywords.SQLDialect{keywords.DialectMySQL, keywords.DialectMariaDB, keywords.DialectPostgreSQL, keywords.DialectGeneric} {
+		for _, tt := range tests {
+			t.Run(string(d)+"/"+tt.name, func(t *testing.T) {
+				want := tt.wantOther
+				if d == keywords.DialectMySQL || d == keywords.DialectMariaDB {
+					want = tt.wantMySQL
+				}
+				h := classifier{src: tt.sql, dialect: d}
+				if got := h.lastUnclosed(len(tt.sql)); got != want {
+					t.Errorf("lastUnclosed(%q) = %d, want %d", tt.sql, got, want)
+				}
+			})
+		}
+	}
+}
+
 func TestSpans_Classification(t *testing.T) {
 	tests := []struct {
 		name    string

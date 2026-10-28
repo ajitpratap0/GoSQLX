@@ -19,6 +19,7 @@ import (
 	stderrors "errors"
 	"fmt"
 	"regexp"
+	"runtime/debug"
 	"strconv"
 	"strings"
 	"sync"
@@ -361,6 +362,13 @@ func (h *Handler) handleDidChange(params json.RawMessage) {
 		h.debounceMu.Lock()
 		delete(h.debounceTimers, uri)
 		h.debounceMu.Unlock()
+		// Timer callbacks run outside the server loop's recover; a panic here
+		// would otherwise terminate the process.
+		defer func() {
+			if value := recover(); value != nil {
+				h.server.Logger().Printf("Panic validating %s: %v\n%s", uri, value, debug.Stack())
+			}
+		}()
 		h.validateDocument(uri, content, version)
 	})
 	h.debounceMu.Unlock()

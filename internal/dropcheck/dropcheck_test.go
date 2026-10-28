@@ -103,3 +103,31 @@ func TestDroppedWordsCorpusCases(t *testing.T) {
 		})
 	}
 }
+
+func TestWordsHashComments(t *testing.T) {
+	tests := []struct {
+		name    string
+		dialect string
+		in      string
+		want    []string
+	}{
+		{"mysql hash comment skipped", "mysql", "SELECT a # gone\nFROM t", []string{"SELECT", "A", "FROM", "T"}},
+		{"mariadb hash comment skipped", "mariadb", "SELECT a #gone", []string{"SELECT", "A"}},
+		{"mysql backtick hash kept", "mysql", "SELECT `a#b` FROM t", []string{"SELECT", "A", "B", "FROM", "T"}},
+		{"postgresql hash is an operator", "postgresql", "SELECT a # b", []string{"SELECT", "A", "B"}},
+		{"generic hash is not a comment", "", "SELECT a # b", []string{"SELECT", "A", "B"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var got []string
+			if tt.dialect == "" {
+				got = Words(tt.in)
+			} else {
+				got = Words(tt.in, tt.dialect)
+			}
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("Words(%q, %q) = %v, want %v", tt.in, tt.dialect, got, tt.want)
+			}
+		})
+	}
+}

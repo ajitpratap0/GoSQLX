@@ -236,7 +236,7 @@ type ServerInfo struct {
 
 // ServerCapabilities describes what the server can do
 type ServerCapabilities struct {
-	TextDocumentSync           *TextDocumentSyncOptions `json:"textDocumentSyncOptions,omitempty"`
+	TextDocumentSync           *TextDocumentSyncOptions `json:"textDocumentSync,omitempty"`
 	CompletionProvider         *CompletionOptions       `json:"completionProvider,omitempty"`
 	HoverProvider              bool                     `json:"hoverProvider,omitempty"`
 	DocumentFormattingProvider bool                     `json:"documentFormattingProvider,omitempty"`

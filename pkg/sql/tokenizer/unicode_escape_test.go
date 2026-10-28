@@ -50,6 +50,48 @@ func TestUnicodeEscapeNames(t *testing.T) {
 	}
 }
 
+func TestUnicodeIdentifierSpellingMetadata(t *testing.T) {
+	tk := GetTokenizer()
+	defer PutTokenizer(tk)
+	tk.SetDialect(keywords.DialectPostgreSQL)
+	for _, tc := range []struct{ source, decoded, spelling string }{
+		{`U&"d\0061t\+000061"`, "data", `U&"d\0061t\+000061"`},
+		{`u&"d!0061ta" UESCAPE '!'`, "data", `u&"d!0061ta" UESCAPE '!'`},
+		{`U&"a\000Ab"`, "a\nb", `U&"a\000Ab"`},
+		{`U&"d!0061ta" /* c */ UESCAPE '!'`, "data", `U&"d!0061ta" UESCAPE '!'`},
+	} {
+		for _, bytesAPI := range []bool{false, true} {
+			var tokens []models.TokenWithSpan
+			var err error
+			if bytesAPI {
+				tokens, err = tk.Tokenize([]byte(tc.source))
+			} else {
+				tokens, err = tk.TokenizeString(tc.source)
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(tokens) != 2 {
+				t.Fatalf("tokens: %#v", tokens)
+			}
+			tok := tokens[0].Token
+			if tok.Value != tc.decoded || tok.Type != models.TokenTypeIdentifier || tok.Quote != '"' || tok.Word == nil || tok.Word.QuoteStyle != 'U' || tok.Word.Value != tc.spelling || tok.Word.Keyword != nil {
+				t.Fatalf("bytes=%v source=%q token=%#v", bytesAPI, tc.source, tok)
+			}
+		}
+	}
+	// Reusing the tokenizer must not attach spelling metadata to ordinary names.
+	tokens, err := tk.TokenizeString(`ordinary "ordinary"`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tw := range tokens {
+		if tw.Token.Word != nil && tw.Token.Word.QuoteStyle == 'U' {
+			t.Fatalf("leaked Unicode metadata: %#v", tw.Token)
+		}
+	}
+}
+
 func TestUnicodeEscapeCommentsBeforeUESCAPE(t *testing.T) {
 	// Comments between the literal and UESCAPE are whitespace: they are
 	// recorded as comments and kept out of the literal's spelling.

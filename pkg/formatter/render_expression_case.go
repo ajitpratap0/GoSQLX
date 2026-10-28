@@ -28,11 +28,9 @@ func (f *nodeFormatter) exprSQL(e ast.Expression) string {
 		return exprSQL(e)
 	}
 	if f.expressionCase == nil {
-		scoped := *f
-		scoped.opts.NewlinePerClause = false
-		c := newExpressionCase(&scoped, exprSQL(e))
-		scoped.expressionCase = c
-		return c.restore(c.formatWith(&scoped, e))
+		opts := f.opts
+		opts.NewlinePerClause = false
+		return formatLowerExpression(e, opts)
 	}
 	c := f.expressionCase
 	switch v := e.(type) {

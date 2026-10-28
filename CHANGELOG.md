@@ -86,6 +86,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   in dialects without them.
 
 ### Fixed
+- **Formatter fidelity**: Oracle SQL*Plus `/` execute lines are kept by FormatAST, `Formatter.Format`, `FormatWithDialect` and `gosqlx format` (they were dropped, and the CLI refused such scripts). Statement counts do not change: the AST records which statements a `/` follows in `AST.ExecuteSlash`. PostgreSQL `U&"..."` identifiers keep their original spelling when formatting for PostgreSQL or no target (other targets get the decoded name; AST name fields stay decoded), so names with escaped control characters no longer produce output that fails to re-tokenize. Comments next to SQL Server `GO` lines and trailing comments of statements written without `;` stay where they were, and `GO 2 /* c */` keeps both count and comment on every entry point.
+- **Formatter performance**: lower-case keyword mode streams into a single builder instead of copying and re-rendering subtrees; it went from 3.5–10x to 1.2–1.5x the cost of upper-case output, with 5x to 500x fewer allocations.
 - PostgreSQL / Redshift / SQLite `VACUUM` and `ANALYZE`, and PostgreSQL `LISTEN`,
   `UNLISTEN` and `NOTIFY`, now end where their grammar ends: trailing same-line
   tokens (`VACUUM t junk`, `LISTEN c extra`) are a parse error instead of being

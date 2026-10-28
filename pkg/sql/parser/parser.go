@@ -438,12 +438,13 @@ func (p *Parser) parseTokens(tokens []models.TokenWithSpan) (*ast.AST, error) {
 		result.Statements = result.Statements[:0]
 	}
 	result.StatementStarts = result.StatementStarts[:0]
+	result.StatementEnds = result.StatementEnds[:0]
 
 	// Parse statements using Type (int) comparisons for speed
 	for p.currentPos < len(tokens) && !p.isType(models.TokenTypeEOF) {
 		// Skip semicolons between statements
 		if p.isType(models.TokenTypeSemicolon) {
-			if err := p.checkStrictEmptySemicolon(); err != nil {
+			if err := p.checkStrictEmptySemicolon(); !p.markExecuteSlash(result) && err != nil {
 				ast.ReleaseAST(result)
 				return nil, err
 			}
@@ -466,6 +467,10 @@ func (p *Parser) parseTokens(tokens []models.TokenWithSpan) (*ast.AST, error) {
 		return nil, goerrors.IncompleteStatementError(models.Location{}, "")
 	}
 
+	if result.ExecuteSlash != nil {
+		result.ExecuteSlash = append(result.ExecuteSlash, make([]bool, len(result.Statements)-len(result.ExecuteSlash))...)
+		result.ExecuteSlashPositions = append(result.ExecuteSlashPositions, make([]models.Location, len(result.Statements)-len(result.ExecuteSlashPositions))...)
+	}
 	return result, nil
 }
 
@@ -480,6 +485,7 @@ func (p *Parser) parseScriptItem(result *ast.AST) error {
 	if separator, ok := p.parseBatchSeparator(); ok {
 		result.Statements = append(result.Statements, separator)
 		result.StatementStarts = append(result.StatementStarts, start)
+		result.StatementEnds = append(result.StatementEnds, p.tokens[p.currentPos-1].End)
 		return nil
 	}
 	startPos := p.currentPos
@@ -487,6 +493,7 @@ func (p *Parser) parseScriptItem(result *ast.AST) error {
 	if err == nil {
 		result.Statements = append(result.Statements, stmt)
 		result.StatementStarts = append(result.StatementStarts, start)
+		p.recordUnicodeIdentifiers(result, startPos, p.currentPos)
 	}
 	if p.IsSQLServer() { // batchLineError returns err unchanged elsewhere
 		_, err = p.batchLineError(startPos, err)
@@ -494,12 +501,17 @@ func (p *Parser) parseScriptItem(result *ast.AST) error {
 	if err != nil {
 		return err
 	}
+	end := p.tokens[p.currentPos-1].End
 	// Optionally consume semicolon after statement
 	if p.isType(models.TokenTypeSemicolon) {
+		if !p.markExecuteSlash(result) {
+			end = p.currentToken.End
+		}
 		p.advance()
 	} else if !p.isType(models.TokenTypeEOF) { // noteStatementEnd has nothing to do at the end
 		p.noteStatementEnd()
 	}
+	result.StatementEnds = append(result.StatementEnds, end)
 	return nil
 }
 
@@ -656,6 +668,7 @@ func (p *Parser) parseContextTokens(ctx context.Context, tokens []models.TokenWi
 		result.Statements = result.Statements[:0]
 	}
 	result.StatementStarts = result.StatementStarts[:0]
+	result.StatementEnds = result.StatementEnds[:0]
 
 	// Parse statements using Type (int) comparisons for speed
 	for p.currentPos < len(tokens) && !p.isType(models.TokenTypeEOF) {
@@ -670,6 +683,7 @@ func (p *Parser) parseContextTokens(ctx context.Context, tokens []models.TokenWi
 
 		// Skip semicolons between statements
 		if p.isType(models.TokenTypeSemicolon) {
+			p.markExecuteSlash(result)
 			p.advance()
 			continue
 		}
@@ -686,6 +700,10 @@ func (p *Parser) parseContextTokens(ctx context.Context, tokens []models.TokenWi
 		return nil, goerrors.IncompleteStatementError(p.currentLocation(), "")
 	}
 
+	if result.ExecuteSlash != nil {
+		result.ExecuteSlash = append(result.ExecuteSlash, make([]bool, len(result.Statements)-len(result.ExecuteSlash))...)
+		result.ExecuteSlashPositions = append(result.ExecuteSlashPositions, make([]models.Location, len(result.Statements)-len(result.ExecuteSlashPositions))...)
+	}
 	return result, nil
 }
 

@@ -183,8 +183,12 @@ func (l LiteralValue) Children() []Node     { return nil }
 // SQL() returns the canonical SQL string for all statements joined by ";\n".
 // Span() returns the union of all statement spans for source-location tracking.
 type AST struct {
-	Statements []Statement
-	Comments   []models.Comment // Comments captured during tokenization, preserved during formatting
+	// UnicodeIdentifiers holds original PostgreSQL U& identifier spellings by
+	// statement index. It is nil unless Unicode identifiers occur. Entries also
+	// include ordinary name occurrences to distinguish equal decoded names.
+	UnicodeIdentifiers map[int][]UnicodeIdentifierSpelling
+	Statements         []Statement
+	Comments           []models.Comment // Comments captured during tokenization, preserved during formatting
 	// StatementStarts holds the source location of the first token of every
 	// top-level statement the parser produced: StatementStarts[i] is where
 	// Statements[i] begins (for a BatchSeparator, its GO keyword). The
@@ -192,6 +196,28 @@ type AST struct {
 	// (Parser.Parse). A tree built by hand may leave it nil; treat it as
 	// absent unless len(StatementStarts) == len(Statements).
 	StatementStarts []models.Location
+	// StatementEnds holds the last token end of each statement, including an
+	// optional semicolon but excluding SQL*Plus execute lines. Like Starts,
+	// it is absent unless its length matches Statements.
+	StatementEnds []models.Location
+	// ExecuteSlash marks statements followed by an Oracle SQL*Plus / execute
+	// line. It is parallel to Statements when present, nil otherwise, and
+	// does not add statements or change their source starts.
+	ExecuteSlash []bool
+	// ExecuteSlashPositions holds the source positions of marked execute lines,
+	// parallel to ExecuteSlash and nil for scripts without execute commands.
+	ExecuteSlashPositions []models.Location
+}
+
+// UnicodeIdentifierSpelling pairs a decoded name with its source spelling.
+// Empty Spelling denotes an ordinary name, preserved in occurrence order.
+// Semantic name fields on individual AST nodes always remain decoded.
+type UnicodeIdentifierSpelling struct {
+	Name     string
+	Spelling string
+	// Quoted reports whether rendering retains double quotes. It prevents
+	// lower-case syntax words from matching a decoded reserved identifier.
+	Quoted bool
 }
 
 // TokenLiteral implements Node. Returns an empty string - the AST root has no

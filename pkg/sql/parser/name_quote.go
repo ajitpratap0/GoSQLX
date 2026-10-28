@@ -240,3 +240,35 @@ func (p *Parser) currentColumnIdent() *ast.Identifier {
 		Quotes:     p.appendNamePartQuoted(0, q),
 	}
 }
+
+// recordUnicodeIdentifiers captures spelling only for statements that need it.
+func (p *Parser) recordUnicodeIdentifiers(tree *ast.AST, start, end int) {
+	hasUnicode := false
+	for i := start; i < end; i++ {
+		w := p.tokens[i].Token.Word
+		if w != nil && w.QuoteStyle == 'U' {
+			hasUnicode = true
+			break
+		}
+	}
+	if !hasUnicode {
+		return
+	}
+	var names []ast.UnicodeIdentifierSpelling
+	for i := start; i < end; i++ {
+		tok := p.tokens[i].Token
+		if tok.Type != models.TokenTypeIdentifier && tok.Type != models.TokenTypeDoubleQuotedString {
+			continue
+		}
+		raw := ""
+		if tok.Word != nil && tok.Word.QuoteStyle == 'U' {
+			raw = tok.Word.Value
+		}
+		quoted := (tok.Quote == '"' || tok.Type == models.TokenTypeDoubleQuotedString) && p.delimitedNameMustStayQuoted(tok.Value, '"')
+		names = append(names, ast.UnicodeIdentifierSpelling{Name: tok.Value, Spelling: raw, Quoted: quoted})
+	}
+	if tree.UnicodeIdentifiers == nil {
+		tree.UnicodeIdentifiers = make(map[int][]ast.UnicodeIdentifierSpelling)
+	}
+	tree.UnicodeIdentifiers[len(tree.Statements)-1] = names
+}

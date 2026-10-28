@@ -27,6 +27,8 @@ import (
 	pkgformatter "github.com/ajitpratap0/GoSQLX/pkg/formatter"
 	"github.com/ajitpratap0/GoSQLX/pkg/models"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
+	"github.com/ajitpratap0/GoSQLX/pkg/sql/keywords"
+	"github.com/ajitpratap0/GoSQLX/pkg/sql/parser"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/tokenizer"
 )
 
@@ -253,7 +255,12 @@ func (f *Formatter) formatSQLText(sql string) (string, error) {
 
 	// Parse to AST with proper error handling for memory management
 	p := parserForDialect(f.Opts.Dialect)
-	parsedAST, err := p.ParseFromModelTokens(tokens)
+	var parsedAST *ast.AST
+	if strings.EqualFold(f.Opts.Dialect, "oracle") {
+		parsedAST, err = parser.ParseWithDialect(sql, keywords.DialectOracle)
+	} else {
+		parsedAST, err = p.ParseFromModelTokens(tokens)
+	}
 	if err != nil {
 		// Parser failed, no AST to release
 		return "", fmt.Errorf("parsing failed: %w", err)
@@ -283,7 +290,9 @@ func (f *Formatter) formatSQLText(sql string) (string, error) {
 	// hint away from its statement's first keyword) refuses the whole file.
 	formatter := NewSQLFormatter(formatterOpts)
 	var formatted string
-	if len(comments) == 0 {
+	if len(parsedAST.ExecuteSlash) > 0 || len(parsedAST.UnicodeIdentifiers) > 0 {
+		formatted, err = formatMetadataAST(formatter, parsedAST, tokens, comments)
+	} else if len(comments) == 0 {
 		formatted, err = formatter.Format(parsedAST)
 	} else {
 		formatted, err = formatter.FormatWithComments(parsedAST, tokens, comments)
@@ -302,7 +311,11 @@ func (f *Formatter) formatSQLText(sql string) (string, error) {
 	if !formatterOpts.UppercaseKw {
 		upperOpts := formatterOpts
 		upperOpts.UppercaseKw = true
-		verifyText, err = NewSQLFormatter(upperOpts).Format(parsedAST)
+		if len(parsedAST.ExecuteSlash) > 0 || len(parsedAST.UnicodeIdentifiers) > 0 {
+			verifyText, err = formatMetadataAST(NewSQLFormatter(upperOpts), parsedAST, tokens, comments)
+		} else {
+			verifyText, err = NewSQLFormatter(upperOpts).Format(parsedAST)
+		}
 		if err != nil {
 			return "", fmt.Errorf("render for verification: %w", err)
 		}
@@ -318,6 +331,24 @@ func (f *Formatter) formatSQLText(sql string) (string, error) {
 	}
 
 	return formatted, nil
+}
+
+// formatMetadataAST retains source spelling and client execute lines that the
+// legacy per-statement CLI renderer cannot represent on its own.
+func formatMetadataAST(f *SQLFormatter, tree *ast.AST, tokens []models.TokenWithSpan, comments []models.Comment) (string, error) {
+	parts := make([]string, len(tree.Statements))
+	for i, stmt := range tree.Statements {
+		part, err := pkgformatter.FormatStatementChecked(stmt, f.style)
+		if err != nil {
+			return "", fmt.Errorf("format statement: %w", err)
+		}
+		parts[i] = pkgformatter.RestoreUnicodeIdentifiers(tree, i, part, f.style.Dialect)
+	}
+	layout := f.layout()
+	if len(tree.ExecuteSlash) > 0 {
+		layout.Gap = "\n"
+	}
+	return pkgformatter.JoinASTWithComments(tree, parts, tokens, comments, layout)
 }
 
 func normalizedComment(text string) string {
@@ -777,6 +808,9 @@ func checkFormattable(tree *ast.AST, tokens []models.TokenWithSpan, dialect ...s
 		bound, unit = tsqlStatementBound(tokens), "possible T-SQL"
 	} else {
 		bound = statementSegments(tokens)
+		if len(dialect) > 0 && strings.EqualFold(dialect[0], "oracle") && len(tree.ExecuteSlash) > 0 {
+			bound = oracleStatementSegments(tokens)
+		}
 	}
 	if got := len(tree.Statements); got > bound {
 		return fmt.Errorf("input parses as %d statements but has %d %s statements (input left unchanged)", got, bound, unit)
@@ -808,6 +842,24 @@ func statementSegments(tokens []models.TokenWithSpan) int {
 				segs++
 				inSeg = true
 			}
+		}
+	}
+	return segs
+}
+
+// oracleStatementSegments also counts SQL*Plus execute lines as boundaries.
+// It is used only after the source-aware parser identified execute commands.
+func oracleStatementSegments(tokens []models.TokenWithSpan) int {
+	segs, inSeg := 0, false
+	for i, tok := range tokens {
+		slash := tok.Token.Type == models.TokenTypeDiv && tok.Start.Line > 0 &&
+			(i == 0 || tokens[i-1].End.Line < tok.Start.Line) &&
+			(i+1 == len(tokens) || tokens[i+1].Token.Type == models.TokenTypeEOF || tokens[i+1].Start.Line > tok.End.Line)
+		if tok.Token.Type == models.TokenTypeSemicolon || slash {
+			inSeg = false
+		} else if tok.Token.Type != models.TokenTypeEOF && !inSeg {
+			segs++
+			inSeg = true
 		}
 	}
 	return segs

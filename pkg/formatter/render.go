@@ -103,6 +103,20 @@ func EnsureStatementTerminator(stmt ast.Statement, part string, addSemicolon boo
 	return part
 }
 
+// ExecuteSlashStatement appends an Oracle execute command without adding a
+// SQL statement terminator. PL/SQL blocks retain their required END semicolon.
+func ExecuteSlashStatement(stmt ast.Statement, part string) string {
+	if utility, ok := stmt.(*ast.UtilityStatement); ok && !strings.HasSuffix(part, ";") {
+		text := strings.ToUpper(utility.Text)
+		if utility.Kind == "BEGIN" || utility.Kind == "DECLARE" ||
+			utility.Kind == "CREATE PACKAGE" || utility.Kind == "CREATE PACKAGE BODY" ||
+			(strings.HasPrefix(text, "CREATE ") && strings.Contains(text, " BEGIN ")) {
+			part += ";"
+		}
+	}
+	return part + "\n/"
+}
+
 // FormatExpression renders an expression. If a target-dialect conversion is
 // unsupported, it returns an empty string and discards the error. Use
 // FormatExpressionChecked whenever the result can carry a target dialect.
@@ -118,14 +132,23 @@ func formatAST(a *ast.AST, opts ast.FormatOptions) string {
 	}
 	parts := make([]string, 0, len(a.Statements))
 	hasBatch := false
-	for _, stmt := range a.Statements {
-		part := formatStatement(stmt, opts)
+	for i, stmt := range a.Statements {
+		statementOpts := opts
+		if i < len(a.ExecuteSlash) && a.ExecuteSlash[i] {
+			statementOpts.AddSemicolon = false
+		}
+		part := RestoreUnicodeIdentifiers(a, i, formatStatement(stmt, statementOpts), statementOpts.Dialect)
 		// Renderers that keep a statement as written (UtilityStatement and
 		// the stmtSQL fallback) do not add the ";" themselves; without it the
 		// next statement would be read back as part of their text.
 		_, isBatch := stmt.(*ast.BatchSeparator)
 		hasBatch = hasBatch || isBatch
-		part = EnsureStatementTerminator(stmt, part, opts.AddSemicolon)
+		if i < len(a.ExecuteSlash) && a.ExecuteSlash[i] {
+			part = ExecuteSlashStatement(stmt, part)
+			hasBatch = true // execute commands also separate statements without a semicolon
+		} else {
+			part = EnsureStatementTerminator(stmt, part, opts.AddSemicolon)
+		}
 		parts = append(parts, part)
 	}
 	sep := ";\n"
@@ -142,7 +165,7 @@ func formatAST(a *ast.AST, opts ast.FormatOptions) string {
 			if i > 0 {
 				_, prevBatch := a.Statements[i-1].(*ast.BatchSeparator)
 				_, curBatch := a.Statements[i].(*ast.BatchSeparator)
-				if prevBatch || curBatch {
+				if prevBatch || curBatch || (i-1 < len(a.ExecuteSlash) && a.ExecuteSlash[i-1]) {
 					joined.WriteByte('\n')
 				} else {
 					joined.WriteString(sep)
@@ -243,10 +266,7 @@ func formatExpression(e ast.Expression, opts ast.FormatOptions) string {
 		return ""
 	}
 	if opts.KeywordCase == ast.KeywordLower {
-		f := newNodeFormatter(opts)
-		c := newExpressionCase(f, exprSQL(e))
-		f.expressionCase = c
-		return c.restore(c.formatWith(f, e))
+		return formatLowerExpression(e, opts)
 	}
 	switch v := e.(type) {
 	case *ast.CaseExpression:

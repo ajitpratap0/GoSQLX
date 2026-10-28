@@ -156,7 +156,12 @@ func (f *Formatter) Format(sql string) (string, error) {
 	if useDialect {
 		p.ApplyOptions(parser.WithDialect(string(dialect)))
 	}
-	parsedAST, err := p.ParseFromModelTokens(tokens)
+	var parsedAST *ast.AST
+	if useDialect && dialect == keywords.DialectOracle {
+		parsedAST, err = parser.ParseWithDialect(sql, dialect)
+	} else {
+		parsedAST, err = p.ParseFromModelTokens(tokens)
+	}
 	if err != nil {
 		return "", fmt.Errorf("parsing failed: %w", err)
 	}
@@ -181,7 +186,7 @@ func (f *Formatter) Format(sql string) (string, error) {
 	}
 	style.Dialect = f.opts.Dialect
 
-	return FormatASTChecked(parsedAST, style)
+	return formatASTCheckedWithTokens(parsedAST, style, tokens)
 }
 
 // FormatString is a convenience function that formats SQL with default options.

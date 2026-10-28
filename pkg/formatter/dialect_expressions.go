@@ -8,12 +8,17 @@ import (
 	"reflect"
 	"strings"
 
+	"github.com/ajitpratap0/GoSQLX/pkg/models"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
 )
 
 // FormatASTChecked renders an AST and reports operators that have no equivalent
 // in the requested target dialect. It never mutates the caller's tree.
 func FormatASTChecked(a *ast.AST, opts ast.FormatOptions) (string, error) {
+	return formatASTCheckedWithTokens(a, opts, nil)
+}
+
+func formatASTCheckedWithTokens(a *ast.AST, opts ast.FormatOptions, tokens []models.TokenWithSpan) (string, error) {
 	if a == nil {
 		return "", nil
 	}
@@ -24,6 +29,9 @@ func FormatASTChecked(a *ast.AST, opts ast.FormatOptions) (string, error) {
 	copy, ok := n.(*ast.AST)
 	if !ok {
 		return "", fmt.Errorf("unexpected formatted AST type %T", n)
+	}
+	if len(copy.Comments) > 0 && len(copy.StatementEnds) == len(copy.Statements) {
+		return formatASTComments(copy, opts, tokens)
 	}
 	return formatAST(copy, opts), nil
 }

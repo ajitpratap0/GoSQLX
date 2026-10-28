@@ -312,8 +312,8 @@ func TestJoinWithComments_FollowsParserBatches(t *testing.T) {
 		batches []models.Location
 		want    string
 	}{
-		{"parser positions", []string{"SELECT 1", "GO", "SELECT 2"}, []models.Location{goPos}, "SELECT 1;\n-- one\nGO\n-- two\nSELECT 2"},
-		{"recognized from tokens", []string{"SELECT 1", "GO", "SELECT 2"}, nil, "SELECT 1;\n-- one\nGO\n-- two\nSELECT 2"},
+		{"parser positions", []string{"SELECT 1", "GO", "SELECT 2"}, []models.Location{goPos}, "SELECT 1; -- one\nGO\n-- two\nSELECT 2"},
+		{"recognized from tokens", []string{"SELECT 1", "GO", "SELECT 2"}, nil, "SELECT 1; -- one\nGO\n-- two\nSELECT 2"},
 		{"parser saw no separator", []string{"SELECT 1", "GO", "SELECT 2"}, []models.Location{}, "-- one\n-- two\nSELECT 1;\nGO\nSELECT 2"},
 		{"rendered kinds differ", []string{"SELECT 1", "SELECT 9", "SELECT 2"}, []models.Location{goPos}, "-- one\n-- two\nSELECT 1;\nSELECT 9;\nSELECT 2"},
 	}

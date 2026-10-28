@@ -215,6 +215,14 @@ func (f *nodeFormatter) exprListSQL(exprs []ast.Expression) string {
 	if f.opts.KeywordCase != ast.KeywordLower {
 		return exprListSQL(exprs)
 	}
+	if f.expressionCase == nil {
+		var out strings.Builder
+		out.Grow(128)
+		scoped := *f
+		scoped.opts.NewlinePerClause = false
+		scoped.writeLowerList(&out, exprs)
+		return out.String()
+	}
 	parts := make([]string, len(exprs))
 	opts := f.opts
 	opts.NewlinePerClause = false
@@ -233,10 +241,12 @@ func (f *nodeFormatter) orderBySQL(orders []ast.OrderByExpression) string {
 		return orderBySQL(orders)
 	}
 	if f.expressionCase == nil {
+		var out strings.Builder
+		out.Grow(128)
 		scoped := *f
-		c := newExpressionCase(&scoped, orderBySQL(orders))
-		scoped.expressionCase = c
-		return c.restore(scoped.orderBySQL(orders))
+		scoped.opts.NewlinePerClause = false
+		scoped.writeLowerOrders(&out, orders)
+		return out.String()
 	}
 	return lowerSyntax(orderBySQL(f.expressionCase.orders(orders)))
 }
@@ -246,10 +256,12 @@ func (f *nodeFormatter) windowSpecSQL(w *ast.WindowSpec) string {
 		return windowSpecSQL(w)
 	}
 	if f.expressionCase == nil {
+		var out strings.Builder
+		out.Grow(128)
 		scoped := *f
-		c := newExpressionCase(&scoped, windowSpecSQL(w))
-		scoped.expressionCase = c
-		return c.restore(scoped.windowSpecSQL(w))
+		scoped.opts.NewlinePerClause = false
+		scoped.writeLowerWindow(&out, w)
+		return out.String()
 	}
 	var parts []string
 	if w.BaseWindow != "" {

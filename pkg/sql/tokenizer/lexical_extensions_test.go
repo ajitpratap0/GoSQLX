@@ -152,7 +152,8 @@ func TestLexIdentifierDollarAndHash(t *testing.T) {
 		{"postgres dollar", keywords.DialectPostgreSQL, "a$b", []lexTok{{id, "a$b"}}},
 		{"postgres hash is an operator", keywords.DialectPostgreSQL, "a#>b", []lexTok{{id, "a"}, {models.TokenTypeHashArrow, "#>"}, {id, "b"}}},
 		{"dollar cannot start a name", keywords.DialectOracle, "$1", []lexTok{{models.TokenTypePlaceholder, "$1"}}},
-		{"hash cannot continue a name outside oracle", keywords.DialectMySQL, "a #", []lexTok{{id, "a"}, {models.TokenTypeSharp, "#"}}},
+		{"mysql hash starts a comment", keywords.DialectMySQL, "a #", []lexTok{{id, "a"}}},
+		{"hash cannot continue a name outside oracle", keywords.DialectGeneric, "a #", []lexTok{{id, "a"}, {models.TokenTypeSharp, "#"}}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

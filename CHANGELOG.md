@@ -44,6 +44,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   identifier delimiters through rendering.
 
 ### Changed
+- **MySQL / MariaDB `#` line comments**: with the MySQL or MariaDB dialect, `#`
+  now starts a line comment, like `--`. The tokenizer records it in `Comments`
+  (re-emitted by the formatter), `SplitStatements` no longer splits on a `;`
+  inside it, and transpiling to another dialect drops it instead of emitting `#`
+  (PostgreSQL XOR). Previously `WHERE x = 1 # c` parsed `#` as an operator and
+  `SELECT a FROM t # c` failed with E2002. Other dialects keep their `#`
+  meaning (PostgreSQL `#`, `#>`, `#>>`, `#-`; SQL Server `#temp`; Oracle `emp#`).
 - Parsed ClickHouse SAMPLE sizes and offsets now use inspectable expression
   fields, which take rendering precedence over the retained legacy string fields.
 - ClickHouse SAMPLE accepts only decimal numbers (hex such as `0x10` is
@@ -80,6 +87,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - **LSP (`pkg/lsp`)**: `initialize` now advertises `textDocumentSync` (it sent the non-standard `textDocumentSyncOptions`, so VS Code never sent open/change/close events). A negative `Content-Length` and a `didChange` range past the end of the document no longer crash the server; oversized messages are drained so framing survives; `didChange` character offsets are read as UTF-16 code units and CRLF line ends are respected. A panic in a request handler or in background diagnostics is now logged and answered with `InternalError` instead of ending the process.
+- PostgreSQL / Redshift / SQLite `VACUUM` and `ANALYZE`, and PostgreSQL `LISTEN`,
+  `UNLISTEN` and `NOTIFY`, now end where their grammar ends: trailing same-line
+  tokens (`VACUUM t junk`, `LISTEN c extra`) are a parse error instead of being
+  folded into the statement text. MySQL / MariaDB / Oracle `ANALYZE TABLE` keeps
+  its as-written handling.
+- SQL Server: a delimited `[top]` / `"top"` is a plain name (also in the select
+  list, where it was read as the TOP clause) and keeps its delimiters on output;
+  bare `TOP` is rejected as a table, DML target or alias name, as T-SQL reserves it.
+- MariaDB `DELETE HISTORY FROM t [PARTITION (p, ...)] [BEFORE SYSTEM_TIME
+  [TIMESTAMP | TRANSACTION] expr]` parses and round-trips the partition list, the
+  unit keyword and any point expression (e.g. `NOW() - INTERVAL 1 DAY`), held in
+  the new `ast.DMLTargetFields.History` (`ast.DeleteHistoryOptions`).
+- **Security scanner**: `Scanner.Scan(tree)` now walks the whole AST, so time-based,
+  out-of-band and tautology patterns are detected inside CTEs, derived tables and
+  subqueries, CASE/CAST/IN/BETWEEN/ANY, ORDER BY/GROUP BY, JOIN ON, window specs,
+  FILTER, LIMIT, LATERAL/APPLY, PREWHERE, QUALIFY, CONNECT BY, RETURNING, ON CONFLICT,
+  INSERT ... SELECT, MERGE, CREATE TABLE AS, CREATE [MATERIALIZED] VIEW and EXPLAIN,
+  matching `ScanSQL`. UNION injection checks also run on set operations nested in CTEs
+  and subqueries. Qualified column comparisons such as `a.id = b.id` are no longer
+  reported as tautologies.
+- `GRANT ... TO [`, `TO [AppUser`, `TO CURRENT_USER(`, MariaDB
+  `IDENTIFIED VIA ... USING PASSWORD(` and `COPY (` with an unclosed group no
+  longer panic with `index out of range [-1]`; they return an E2002 error
+  (expected `]` or `)`) in every dialect.
 - Watch now respects `--dialect`, re-validates changes and formats files in place
   with the CLI safety checks; MCP parsing accepts a dialect and documents comment preservation.
 - Correct transpile dialect help, avoid duplicate lint syntax errors, and rewrite
@@ -203,6 +234,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   longer read as MariaDB's `ANALYZE <statement>`.
 
 ### Behavior changes
+- SQL Server: unquoted `top` (any case) is now a syntax error where a table
+  name, INSERT/UPDATE/DELETE/MERGE target, table alias or select-item alias is
+  expected (`SELECT * FROM top`, `INSERT INTO top ...`); quote it as `[top]`.
 - Numeric words without whitespace no longer silently become a number plus a
   column alias. Numeric spelling is retained. Differences from the previous lexer:
 

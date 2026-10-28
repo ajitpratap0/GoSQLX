@@ -96,7 +96,7 @@ func (t *Tokenizer) skipSpaceAndComments() (bool, error) {
 		}
 		switch {
 		case t.input[t.pos.Index] == '-' && t.input[t.pos.Index+1] == '-':
-			if err := t.skipLineComment(); err != nil {
+			if err := t.skipLineComment(2); err != nil {
 				return commented, err
 			}
 		case t.input[t.pos.Index] == '/' && t.input[t.pos.Index+1] == '*':

@@ -877,15 +877,14 @@ gosqlx stats --json
 
 ### `gosqlx watch` - Re-run on File Changes
 
-<!-- TODO: update after watch fix -->
+Watch `.sql` files, directories (recursively) or glob patterns. Every watched
+file is processed once at start-up, then again whenever it is written or
+created, until you press Ctrl+C.
 
-Watch `.sql` files, directories (recursively) or glob patterns for changes.
-The watcher prints how many files and directories it is watching, then waits
-for write and create events on `.sql` files until you press Ctrl+C.
-
-The command does not yet validate or format anything: no per-file result is
-printed on start-up or when a file changes, and files are never rewritten. Run
-`gosqlx validate` or `gosqlx format` directly to check or format files.
+- `validate` mode (default) parses each file and prints a timestamped `Valid`,
+  `Invalid` or error line per file.
+- `format` mode rewrites each file in place through the same checked path as
+  `gosqlx format -i`, printing `Formatted` or `No changes needed`.
 
 #### Syntax
 
@@ -897,6 +896,8 @@ gosqlx watch [file|dir...] [flags]
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
+| `--mode` | string | validate | `validate` or `format`; any other value is an error |
+| `--dialect` | string | postgresql | SQL dialect used to parse (and format) files |
 | `--debounce` | int | 300 | Delay in milliseconds before a change event is handled |
 | `--clear` | bool | false | Clear the screen when a change is handled |
 | `--watch-verbose` | bool | false | List the watched files and print watcher errors |
@@ -906,6 +907,9 @@ gosqlx watch [file|dir...] [flags]
 ```bash
 # Watch the .sql files in the current directory
 gosqlx watch *.sql
+
+# Re-format SQL Server files in place as they change
+gosqlx watch --mode format --dialect sqlserver queries/
 
 # Watch a schema file and a directory, with a longer debounce
 gosqlx watch --debounce 500 schema.sql migrations/

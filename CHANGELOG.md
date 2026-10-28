@@ -79,6 +79,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   in dialects without them.
 
 ### Fixed
+- PostgreSQL / Redshift / SQLite `VACUUM` and `ANALYZE`, and PostgreSQL `LISTEN`,
+  `UNLISTEN` and `NOTIFY`, now end where their grammar ends: trailing same-line
+  tokens (`VACUUM t junk`, `LISTEN c extra`) are a parse error instead of being
+  folded into the statement text. MySQL / MariaDB / Oracle `ANALYZE TABLE` keeps
+  its as-written handling.
 - Watch now respects `--dialect`, re-validates changes and formats files in place
   with the CLI safety checks; MCP parsing accepts a dialect and documents comment preservation.
 - Correct transpile dialect help, avoid duplicate lint syntax errors, and rewrite

@@ -84,6 +84,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   tokens (`VACUUM t junk`, `LISTEN c extra`) are a parse error instead of being
   folded into the statement text. MySQL / MariaDB / Oracle `ANALYZE TABLE` keeps
   its as-written handling.
+- SQL Server: a delimited `[top]` / `"top"` is a plain name (also in the select
+  list, where it was read as the TOP clause) and keeps its delimiters on output;
+  bare `TOP` is rejected as a table, DML target or alias name, as T-SQL reserves it.
+- MariaDB `DELETE HISTORY FROM t [PARTITION (p, ...)] [BEFORE SYSTEM_TIME
+  [TIMESTAMP | TRANSACTION] expr]` parses and round-trips the partition list, the
+  unit keyword and any point expression (e.g. `NOW() - INTERVAL 1 DAY`), held in
+  the new `ast.DMLTargetFields.History` (`ast.DeleteHistoryOptions`).
 - Watch now respects `--dialect`, re-validates changes and formats files in place
   with the CLI safety checks; MCP parsing accepts a dialect and documents comment preservation.
 - Correct transpile dialect help, avoid duplicate lint syntax errors, and rewrite
@@ -207,6 +214,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   longer read as MariaDB's `ANALYZE <statement>`.
 
 ### Behavior changes
+- SQL Server: unquoted `top` (any case) is now a syntax error where a table
+  name, INSERT/UPDATE/DELETE/MERGE target, table alias or select-item alias is
+  expected (`SELECT * FROM top`, `INSERT INTO top ...`); quote it as `[top]`.
 - Numeric words without whitespace no longer silently become a number plus a
   column alias. Numeric spelling is retained. Differences from the previous lexer:
 

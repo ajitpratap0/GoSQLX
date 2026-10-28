@@ -82,14 +82,14 @@ func (p *Parser) renderPivotValue() string {
 func (p *Parser) parsePivotAlias(ref *ast.TableReference) {
 	if p.isType(models.TokenTypeAs) {
 		p.advance() // consume AS
-		if p.isIdentifier() {
+		if p.isIdentifier() && !p.isReservedTopName() {
 			ref.Alias = p.currentToken.Token.Value
 			ref.AliasQuote = p.currentNameQuote()
 			p.advance()
 		}
 		return
 	}
-	if p.isIdentifier() {
+	if p.isIdentifier() && !p.isReservedTopName() {
 		ref.Alias = p.currentToken.Token.Value
 		ref.AliasQuote = p.currentNameQuote()
 		p.advance()

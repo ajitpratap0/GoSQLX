@@ -596,10 +596,30 @@ func renderDelete(d *ast.DeleteStatement, opts ast.FormatOptions) string {
 		sb.WriteString(" ")
 	}
 	writeDMLTargets(sb, f, x, d.TableName, d.TableNameQuote, d.Alias, d.AliasQuote)
+	var history ast.DeleteHistoryOptions
+	if x.History != nil {
+		history = *x.History
+	}
+	if len(history.Partitions) > 0 {
+		sb.WriteString(" ")
+		sb.WriteString(f.kw("PARTITION"))
+		sb.WriteString(" (")
+		for i, partition := range history.Partitions {
+			if i > 0 {
+				sb.WriteString(", ")
+			}
+			sb.WriteString(f.exprSQL(partition))
+		}
+		sb.WriteByte(')')
+	}
 	if d.BeforeSystemTime != nil {
 		sb.WriteString(" ")
 		sb.WriteString(f.kw("BEFORE SYSTEM_TIME"))
 		sb.WriteString(" ")
+		if history.BeforeSystemTimeUnit != "" {
+			sb.WriteString(f.kw(history.BeforeSystemTimeUnit))
+			sb.WriteString(" ")
+		}
 		sb.WriteString(f.exprSQL(d.BeforeSystemTime))
 	}
 	writeDMLOutput(sb, f, x.Output, x.OutputInto)

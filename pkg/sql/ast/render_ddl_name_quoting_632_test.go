@@ -87,7 +87,7 @@ func ddlNameRenderCases() []aliasRenderCase {
 			}
 			return ""
 		}},
-		{"create_table_column_type", `CREATE TABLE t (a ` + hostileQ + `)`, hostile, func(s ast.Statement) string {
+		{"create_table_column_type", `CREATE TABLE t (a ` + hostileQ + `)`, hostileQ, func(s ast.Statement) string {
 			if c := createTable(s); c != nil && len(c.Columns) > 0 {
 				return c.Columns[0].Type
 			}
@@ -221,7 +221,7 @@ func ddlNameRenderCases() []aliasRenderCase {
 			}
 			return ""
 		}},
-		{"cast_type", `SELECT a::` + hostileQ + ` FROM t`, hostile, func(s ast.Statement) string {
+		{"cast_type", `SELECT a::` + hostileQ + ` FROM t`, hostileQ, func(s ast.Statement) string {
 			if c, ok := firstColumnExpr(s).(*ast.CastExpression); ok {
 				return c.Type
 			}
@@ -353,7 +353,7 @@ func TestDDLNameRendering_Benign_PR632(t *testing.T) {
 		{"", `CREATE TABLE "Mixed" ("Col" INT)`, `CREATE TABLE "Mixed" ("Col" INT)`},
 		{"", `CREATE TABLE t ("select" INT)`, `CREATE TABLE t ("select" INT)`},
 		{"", `CREATE TABLE t (a Nullable(String), c Enum8('a' = 1, 'b' = -2), d DateTime64(3, 'UTC'))`,
-			`CREATE TABLE t (a Nullable(String), c Enum8('a' = 1, 'b' = - 2), d DateTime64(3, 'UTC'))`},
+			`CREATE TABLE t (a Nullable(String), c Enum8('a' = 1, 'b' = -2), d DateTime64(3, 'UTC'))`},
 		{"", `CREATE TABLE t (a ENUM('x', 'y'))`, `CREATE TABLE t (a ENUM('x', 'y'))`},
 		{"", `CREATE TABLE t (a INT) ENGINE = InnoDB`, `CREATE TABLE t (a INT) ENGINE=InnoDB`},
 		{keywords.DialectClickHouse, `CREATE TABLE t (a INT) ENGINE = MergeTree()`, `CREATE TABLE t (a INT) ENGINE=MergeTree()`},

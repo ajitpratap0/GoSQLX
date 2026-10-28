@@ -73,12 +73,21 @@ func (p *Parser) peekValueIs(offset int, upper string) bool {
 // | like + and -, which parseAdditiveExpression handles, so they are not
 // reported here for that dialect.
 func (p *Parser) bitwiseOperator() (op string, prec, n int) {
+	pipePrec, shiftPrec := 1, 3
+	if p.IsPostgreSQL() {
+		// PostgreSQL gives these operators the same left-associative
+		// "any other operator" precedence, below arithmetic and power.
+		if p.isJSONOperator() || p.isType(models.TokenTypeStringConcat) {
+			return p.currentToken.Token.Value, 2, 1
+		}
+		pipePrec, shiftPrec = 2, 2
+	}
 	switch p.currentToken.Token.Type {
 	case models.TokenTypePipe:
 		if p.IsSQLServer() {
 			return "", 0, 0
 		}
-		return "|", 1, 1
+		return "|", pipePrec, 1
 	case models.TokenTypeAmpersand:
 		if p.IsSQLServer() {
 			return "", 0, 0
@@ -105,7 +114,7 @@ func (p *Parser) bitwiseOperator() (op string, prec, n int) {
 		switch p.peekTypeAt(1) {
 		case models.TokenTypeLt:
 			if p.nextAdjacent(1) {
-				return "<<", 3, 2
+				return "<<", shiftPrec, 2
 			}
 		case models.TokenTypeArrow:
 			// a <-> b: the distance operator of pg_trgm and pgvector.
@@ -115,13 +124,13 @@ func (p *Parser) bitwiseOperator() (op string, prec, n int) {
 		}
 	case models.TokenTypeGt:
 		if p.peekTypeAt(1) == models.TokenTypeGt && p.nextAdjacent(1) {
-			return ">>", 3, 2
+			return ">>", shiftPrec, 2
 		}
 	// Single-token forms produced by the tokenizer.
 	case models.TokenTypeShiftLeft:
-		return "<<", 3, 1
+		return "<<", shiftPrec, 1
 	case models.TokenTypeShiftRight:
-		return ">>", 3, 1
+		return ">>", shiftPrec, 1
 	case models.TokenTypeSpaceship:
 		if p.IsPostgreSQL() {
 			return "<=>", 2, 1
@@ -250,21 +259,63 @@ func (p *Parser) parseBitwiseExpression(minPrec int) (ast.Expression, error) {
 		if n == 0 || prec < minPrec {
 			return left, nil
 		}
+		legacyJSONCast := p.IsPostgreSQL() && p.isJSONOperator()
 		opPos := p.currentLocation()
 		for i := 0; i < n; i++ {
 			p.advance() // Consume the operator token(s)
 		}
+		rightStart := p.currentPos
 		right, err := p.parseBitwiseExpression(prec + 1)
 		if err != nil {
 			return nil, err
 		}
-		left = &ast.BinaryExpression{
+		binary := &ast.BinaryExpression{
 			Left:     left,
 			Operator: op,
 			Right:    right,
 			Pos:      opPos,
 		}
+		left = binary
+		// Preserve the established JSON ::type association when its right
+		// operand is just a cast. Arithmetic and power operands retain their
+		// lower JSON precedence because their root is a binary expression.
+		if cast, ok := right.(*ast.CastExpression); legacyJSONCast && ok {
+			casts := p.topLevelCastCount(rightStart)
+			if casts == 0 {
+				continue
+			}
+			inner := cast
+			for i := 1; i < casts; i++ {
+				nested, ok := inner.Expr.(*ast.CastExpression)
+				if !ok {
+					break
+				}
+				inner = nested
+			}
+			binary.Right = inner.Expr
+			inner.Expr = binary
+			left = cast
+		}
 	}
+}
+
+// topLevelCastCount distinguishes postfix :: casts from explicit CAST calls
+// and casts within a parenthesized or subscript expression in a parsed operand.
+func (p *Parser) topLevelCastCount(start int) int {
+	depth, count := 0, 0
+	for i := start; i < p.currentPos; i++ {
+		switch p.tokens[i].Token.Type {
+		case models.TokenTypeLParen, models.TokenTypeLBracket, models.TokenTypeLBrace:
+			depth++
+		case models.TokenTypeRParen, models.TokenTypeRBracket, models.TokenTypeRBrace:
+			depth--
+		case models.TokenTypeDoubleColon:
+			if depth == 0 {
+				count++
+			}
+		}
+	}
+	return count
 }
 
 // sqlServerBitwise reports whether the current token is a T-SQL bitwise

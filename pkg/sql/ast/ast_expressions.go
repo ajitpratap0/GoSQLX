@@ -544,7 +544,10 @@ type BinaryExpression struct {
 	// that emits SQL for another dialect can keep its meaning; the
 	// transpiler rewrites it for the target.
 	BitwiseXor bool
-	CustomOp   *CustomBinaryOperator // For PostgreSQL custom operators
+	// XorAtAdditive records SQL Server's additive precedence for bitwise ^.
+	// MySQL and MariaDB instead bind bitwise ^ tighter than multiplication.
+	XorAtAdditive bool
+	CustomOp      *CustomBinaryOperator // For PostgreSQL custom operators
 	// Extras holds the optional pattern ESCAPE clause.
 	Extras *BinaryExtras
 	Pos    models.Location // Source position of the operator (1-based line and column)

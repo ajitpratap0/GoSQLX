@@ -228,12 +228,19 @@ func uppercaseSQLKeywords(sql string) string {
 }
 
 // parseSQLInternal parses a SQL string and returns statement count and types.
-func parseSQLInternal(sql string) (map[string]any, error) {
+func parseSQLInternal(sql, dialect string) (map[string]any, error) {
 	if sql == "" {
 		return nil, fmt.Errorf("parameter 'sql' is required and must not be empty")
 	}
 
-	tree, err := gosqlx.Parse(sql)
+	var tree *ast.AST
+	var err error
+	if dialect == "" {
+		tree, err = gosqlx.Parse(sql)
+	} else {
+		// ParseWithDialect validates against keywords.IsValidDialect, as validate_sql does.
+		tree, err = gosqlx.ParseWithDialect(sql, sqlkeywords.SQLDialect(dialect))
+	}
 	if err != nil {
 		return nil, fmt.Errorf("parse failed: %w", err)
 	}
@@ -550,7 +557,11 @@ func handleParseSQL(ctx context.Context, req mcpmcp.CallToolRequest) (*mcpmcp.Ca
 	if errRes != nil {
 		return errRes, nil
 	}
-	return toolOutcome(parseSQLInternal(sql))
+	dialect, err := optionalString(req, "dialect", "")
+	if err != nil {
+		return mcpmcp.NewToolResultError(err.Error()), nil
+	}
+	return toolOutcome(parseSQLInternal(sql, dialect))
 }
 
 // handleExtractMetadata is the MCP tool handler for "extract_metadata".
@@ -599,7 +610,7 @@ func handleAnalyzeSQL(ctx context.Context, req mcpmcp.CallToolRequest) (*mcpmcp.
 		fn   func() (map[string]any, error)
 	}{
 		{"validate", func() (map[string]any, error) { return validateSQLInternal(sql, "") }},
-		{"parse", func() (map[string]any, error) { return parseSQLInternal(sql) }},
+		{"parse", func() (map[string]any, error) { return parseSQLInternal(sql, "") }},
 		{"metadata", func() (map[string]any, error) { return extractMetadataInternal(sql) }},
 		{"security", func() (map[string]any, error) { return securityScanInternal(sql) }},
 		{"lint", func() (map[string]any, error) { return lintSQLInternal(sql) }},

@@ -30,6 +30,11 @@ import (
 // and the 64x bound leaves room for noisy shared CI runners. Build ASTs outside the measurement so
 // parser limits and parsing time do not conceal formatter regressions.
 func TestFormatASTExpressionLinearGrowth(t *testing.T) {
+	// Race instrumentation inflates allocation-heavy paths unevenly across
+	// input sizes, so the growth ratio is only meaningful without it.
+	if raceEnabled {
+		t.Skip("timing ratios are unreliable under the race detector")
+	}
 	for _, shape := range []struct {
 		name  string
 		small int

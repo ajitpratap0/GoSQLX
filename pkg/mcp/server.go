@@ -298,8 +298,8 @@ func newTool(name, title, description string, meta *mcp.Meta, opts ...mcp.ToolOp
 	return mcp.NewTool(name, all...)
 }
 
-// supportedDialects lists the dialect values accepted by validate_sql. It is
-// derived from keywords.DialectNames, the single source of truth, and each
+// supportedDialects lists the dialect values accepted by validate_sql and parse_sql.
+// It is derived from keywords.DialectNames, the single source of truth, and each
 // one is accepted by gosqlx.ParseWithDialect.
 var supportedDialects = sqlkeywords.DialectNames()
 
@@ -327,7 +327,8 @@ func (s *Server) registerTools() {
 	s.mcpSrv.AddTool(
 		newTool("format_sql", "Format SQL",
 			"Use this when the user wants SQL pretty-printed or reformatted: one clause per line, "+
-				"optional upper-case keywords and trailing semicolon. Comments are not kept. "+
+				"optional upper-case keywords and trailing semicolon. Comments are preserved; "+
+				"unplaceable optimizer hints are refused. "+
 				"Returns {formatted_sql, options}.",
 			toolMeta(cfg, "Formatting SQL…", "Formatted SQL", false),
 			mcp.WithString("sql",
@@ -353,11 +354,16 @@ func (s *Server) registerTools() {
 	s.mcpSrv.AddTool(
 		newTool("parse_sql", "Parse SQL",
 			"Use this when the user wants to know how SQL parses: returns an AST summary with "+
-				"the statement count and the type of each statement.",
+				"the statement count and the type of each statement, optionally for a specific dialect. "+
+				"GO batch separators are excluded from the count.",
 			toolMeta(cfg, "Parsing SQL…", "Parsed SQL", false),
 			mcp.WithString("sql",
 				mcp.Required(),
 				mcp.Description("The SQL string to parse"),
+			),
+			mcp.WithString("dialect",
+				mcp.Description("SQL dialect: "+strings.Join(supportedDialects, ", ")),
+				mcp.Enum(supportedDialects...),
 			),
 		),
 		handleParseSQL,

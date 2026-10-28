@@ -598,10 +598,9 @@ func dataTypeIsPlain(typ string) bool {
 					break
 				}
 			}
-		case (c == '"' || c == '`') && depth > 0:
-			// A delimited identifier inside an argument list (a named tuple
-			// element, an engine argument): closed, no escapes.
-			j, ok := skipDelimited(typ, i)
+		case c == '"' || c == '`' || c == '[' && i+1 < len(typ) && typ[i+1] != ']' && (typ[i+1] < '0' || typ[i+1] > '9'):
+			// A delimited type name or identifier argument: closed, no escapes.
+			j, ok := skipTypeDelimited(typ, i)
 			if !ok {
 				return false
 			}

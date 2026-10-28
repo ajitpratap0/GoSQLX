@@ -56,7 +56,7 @@ func TestLexNumbers(t *testing.T) {
 		{"hex in expression", "a = 0xFF AND b", []lexTok{
 			{models.TokenTypeIdentifier, "a"}, {models.TokenTypeEq, "="}, {num, "0xFF"},
 			{models.TokenTypeAnd, "AND"}, {models.TokenTypeIdentifier, "b"}}},
-		{"0x without digits is zero then a word", "0x", []lexTok{{num, "0"}, {models.TokenTypeIdentifier, "x"}}},
+		{"0x without digits is an identifier", "0x", []lexTok{{models.TokenTypeIdentifier, "0x"}}},
 		{"leading dot", ".5", []lexTok{{num, ".5"}}},
 		{"leading dot after operator", "a+.5", []lexTok{{models.TokenTypeIdentifier, "a"}, {models.TokenTypePlus, "+"}, {num, ".5"}}},
 		{"leading dot after comma", "(1,.25)", []lexTok{

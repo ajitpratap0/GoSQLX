@@ -50,16 +50,17 @@ func register(from, to keywords.SQLDialect, rs ...RewriteRule) {
 }
 
 // RulesFor returns the registered rewrite rules for a dialect pair.
-// Returns nil (empty) for unregistered or same-dialect pairs.
+// Cross-dialect pairs include common row-limit rules; same-dialect pairs return nil.
 // Exported for testing.
 func RulesFor(from, to keywords.SQLDialect) []RewriteRule {
 	if from == to {
 		return nil
 	}
 	rs := ruleRegistry[dialectPair{from, to}]
+	// Never append into the registry's backing array.
+	rs = append(rs[:len(rs):len(rs)], rowLimitRule(to))
 	if r := pipesRule(from, to); r != nil {
-		// Full slice expression: never append into the registry's array.
-		return append(rs[:len(rs):len(rs)], r)
+		return append(rs, r)
 	}
 	return rs
 }

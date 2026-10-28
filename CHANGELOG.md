@@ -64,6 +64,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   in dialects without them.
 
 ### Fixed
+- Watch now respects `--dialect`, re-validates changes and formats files in place
+  with the CLI safety checks; MCP parsing accepts a dialect and documents comment preservation.
+- Correct transpile dialect help, avoid duplicate lint syntax errors, and rewrite
+  SQL Server SELECT TOP limits across dialects, refusing PERCENT and WITH TIES.
 - Scan raw dialect statements and standalone VALUES for injection patterns, recover
   panics at every C export, and guard unlinked tokenizer scratch calls.
 - Formatter lower-case mode covers expression and built-in function keywords;

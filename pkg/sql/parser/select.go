@@ -114,6 +114,11 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 	if len(selectModifiers) > 0 || into != nil {
 		selectStmt.Extras = &ast.SelectExtras{SelectModifiers: selectModifiers, Into: into}
 	}
+	// The SAMPLE of a lone FROM table is the statement's SAMPLE clause.
+	if len(tables) == 1 && len(joins) == 0 && tables[0].Modifiers != nil && tables[0].Modifiers.Sample != nil {
+		selectStmt.Sample = tables[0].Modifiers.Sample
+		tables[0].Modifiers.Sample = nil
+	}
 	// No further clause starts at the end of the statement.
 	if p.atSelectEnd() {
 		return selectStmt, nil
@@ -133,7 +138,7 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 	}
 
 	// SAMPLE (ClickHouse-specific, specifies sampling rate/size; comes after FROM/FINAL)
-	if p.dialect == string(keywords.DialectClickHouse) && p.isTokenMatch("SAMPLE") {
+	if p.dialect == string(keywords.DialectClickHouse) && selectStmt.Sample == nil && p.isTokenMatch("SAMPLE") {
 		if selectStmt.Sample, err = p.parseSampleClause(); err != nil {
 			return nil, err
 		}

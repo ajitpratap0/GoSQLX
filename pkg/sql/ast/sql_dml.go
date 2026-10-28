@@ -86,7 +86,9 @@ func (d *DMLTargetFields) writeDMLTargets(buf *bytes.Buffer, name string, nameQ 
 // writeDMLJoins writes " JOIN ..." for every join.
 func writeDMLJoins(buf *bytes.Buffer, joins []JoinClause) {
 	for i := range joins {
-		buf.WriteByte(' ')
+		if !joins[i].Comma {
+			buf.WriteByte(' ')
+		}
 		writeJoin(buf, &joins[i])
 	}
 }
@@ -139,6 +141,7 @@ func writeReturning(buf *bytes.Buffer, returning, into []Expression) {
 func (i *InsertStatement) writeInsertHead(buf *bytes.Buffer) {
 	buf.WriteString("INSERT ")
 	writeDMLModifiers(buf, i.DialectExtras().Modifiers)
+	writeDMLTop(buf, i.DialectExtras().Top)
 	buf.WriteString("INTO ")
 	if i.DialectExtras().TableFunction != nil {
 		buf.WriteString("FUNCTION ")

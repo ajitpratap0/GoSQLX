@@ -95,6 +95,17 @@ const (
 	// implicitLineSchema: CREATE SCHEMA outside SQL Server, like
 	// implicitLineDDL except that its schema elements belong to it.
 	implicitLineSchema
+	// implicitLineBody: outside SQL Server, a statement whose definition
+	// may hold another statement (PREPARE ... AS, DECLARE ... CURSOR FOR,
+	// CREATE FUNCTION / PROCEDURE / TRIGGER / EVENT / RULE / TASK / VIEW).
+	// It ends where that definition ends (see lineBodyEnd).
+	implicitLineBody
+	// implicitLineOptions: outside SQL Server, a statement of names and
+	// options that may span lines (LOAD DATA, CREATE of an object without
+	// a body, a routine after its quoted body). It ends like
+	// implicitLineDDL, and also at a statement word on the same line (see
+	// sameLineStatementAt).
+	implicitLineOptions
 )
 
 // tsqlRoutineObjects are the objects whose CREATE / ALTER body runs to the
@@ -150,25 +161,15 @@ func (p *Parser) implicitEndAt(i, start int, policy implicitPolicy, blk *blockSc
 	case implicitGrant:
 		return grantee && p.startsNewStatement(i, start)
 	case implicitLine:
-		if p.startsNewLineStatement(i, start) {
-			return true
-		}
-		// SET and USE take a value or a name and nothing that looks
-		// like a statement, so one also follows them on the same line.
-		switch p.utilityWord(start) {
-		case "SET", "USE":
-			// Not SET itself (MySQL's SET CHARACTER SET utf8) nor a
-			// transaction word (Oracle's SET TRANSACTION USE ROLLBACK
-			// SEGMENT s).
-			w := p.utilityWord(i)
-			_, statement := lineStatementWords[w]
-			return statement && w != "SET" && !p.startsLine(i) && p.startsNewStatementAnywhere(i)
-		}
-		return false
+		return p.startsNewLineStatement(i, start) ||
+			(!p.startsLine(i) && p.sameLineStatementAt(i, start))
 	case implicitLineGrant:
 		return grantee && p.startsNewLineStatement(i, start)
 	case implicitLineDDL:
 		return p.startsNewLineDDL(i, start, false)
+	case implicitLineOptions:
+		return p.startsNewLineDDL(i, start, false) ||
+			(!p.startsLine(i) && p.sameLineStatementAt(i, start))
 	case implicitLineSchema:
 		return p.startsNewLineDDL(i, start, true)
 	case implicitDDL:
@@ -347,9 +348,10 @@ func (p *Parser) startsLine(i int) bool {
 
 // lineEndLeaders lists the utility statements outside SQL Server whose
 // arguments never hold a statement, so that a statement-starting word at
-// the start of a line follows them rather than belongs to them.
-// Statements with a nested query or body (PREPARE ... AS, DECLARE ... CURSOR
-// FOR, CREATE FUNCTION, LOAD DATA ... SET) run to the next ';'.
+// the start of a line follows them rather than belongs to them (and one on
+// the same line, see sameLineStatementAt). Statements with a nested query
+// or body (PREPARE ... AS, DECLARE ... CURSOR FOR, CREATE FUNCTION) end
+// with it (see lineBodyEnd).
 var lineEndLeaders = map[string]bool{
 	"SET": true, "USE": true, "CALL": true, "COPY": true, "VACUUM": true,
 	"ANALYZE": true, "LOCK": true, "UNLOCK": true, "DO": true, "KILL": true,
@@ -389,7 +391,20 @@ func (p *Parser) lineEndPolicy(start int) implicitPolicy {
 		return implicitLineGrant
 	case "DROP":
 		return implicitLineDDL
+	case "LOAD":
+		// LOAD DATA ... [SET col = expr, ...]: SET belongs to it.
+		return implicitLineOptions
+	case "PREPARE":
+		return implicitLineBody
+	case "DECLARE":
+		if p.IsOracle() {
+			return implicitNone // a PL/SQL block
+		}
+		return implicitLineBody
 	case "CREATE", "ALTER":
+		if p.lineBodyPolicy(start) {
+			return implicitLineBody
+		}
 		obj := start + 1
 		if word == "CREATE" {
 			for n := 0; n < 6 && createModifierWords[p.utilityWord(obj)]; n++ {
@@ -400,6 +415,9 @@ func (p *Parser) lineEndPolicy(start int) implicitPolicy {
 		case w == "SCHEMA" && word == "CREATE":
 			return implicitLineSchema
 		case lineClosedObjects[w]:
+			if word == "CREATE" {
+				return implicitLineOptions
+			}
 			return implicitLineDDL
 		}
 		return implicitNone
@@ -484,6 +502,73 @@ func (p *Parser) startsNewStatementAnywhere(i int) bool {
 		return false
 	}
 	return p.startsStatementInContext(i, word)
+}
+
+// sameLineStatementAt reports whether the word at token index i, on the
+// same line as the start of the utility statement that began at start
+// (policy implicitLine), begins another statement. These statements take
+// options, names and values, so a statement-starting word of the dialect
+// ends them unless the statement's own grammar uses it: SET (MySQL's SET
+// CHARACTER SET utf8, LOAD ... SET), TABLE (LOCK TABLE, OPTIMIZE TABLE),
+// a transaction word (Oracle's SET TRANSACTION USE ROLLBACK SEGMENT s),
+// VACUUM ANALYZE, DEALLOCATE PREPARE, LOCK ... SHARE UPDATE EXCLUSIVE
+// MODE, FLUSH TABLES WITH READ LOCK, Oracle's FLASHBACK TABLE t TO BEFORE
+// DROP, Snowflake's EXECUTE AS CALLER, BigQuery's GRANT TO (...), MySQL's
+// ANALYZE TABLE t {UPDATE |
+// DROP} HISTOGRAM and Oracle's ANALYZE ... DELETE STATISTICS. SHOW
+// (SHOW CREATE TABLE), ClickHouse's SYSTEM (SYSTEM DROP DNS CACHE) and XA
+// (XA COMMIT 'x') name statements in their grammar and end only at the
+// start of a line.
+func (p *Parser) sameLineStatementAt(i, start int) bool {
+	lead := p.utilityWord(start)
+	switch lead {
+	case "SHOW", "SYSTEM", "XA":
+		return false
+	}
+	w := p.utilityWord(i)
+	if _, ok := lineStatementWords[w]; !ok || w == "SET" || w == "TABLE" {
+		return false
+	}
+	switch w {
+	case "UPDATE", "DROP":
+		if p.utilityWord(i+1) == "HISTOGRAM" || p.utilityWord(i-1) == "SHARE" ||
+			p.utilityWord(i-1) == "BEFORE" {
+			return false
+		}
+	case "DELETE":
+		if n := p.utilityWord(i + 1); n == "STATISTICS" || n == "SYSTEM" {
+			return false
+		}
+	case "ANALYZE":
+		if lead == "VACUUM" {
+			return false
+		}
+	case "PREPARE":
+		if lead == "DEALLOCATE" {
+			return false
+		}
+	case "REPLACE":
+		if lead == "LOAD" {
+			return false // LOAD DATA INFILE 'f' REPLACE INTO TABLE t
+		}
+	case "WITH":
+		if p.utilityWord(i+1) == "CHECK" {
+			return false // CREATE POLICY ... WITH CHECK (cond)
+		}
+	case "EXECUTE":
+		if p.utilityWord(i+1) == "AS" {
+			return false // Snowflake CREATE PROCEDURE ... EXECUTE AS CALLER
+		}
+	case "GRANT":
+		if p.utilityWord(i+1) == "TO" {
+			return false // BigQuery CREATE ROW ACCESS POLICY ... GRANT TO (...)
+		}
+	case "LOCK":
+		if prev := p.utilityWord(i - 1); prev == "READ" || prev == "WRITE" {
+			return false
+		}
+	}
+	return p.startsNewStatementAnywhere(i)
 }
 
 // lineDDLObjects are the words after CREATE / ALTER / DROP that make it the

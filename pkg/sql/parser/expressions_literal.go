@@ -148,7 +148,14 @@ func (p *Parser) parsePrimaryExpression() (ast.Expression, error) {
 
 	if p.isType(models.TokenTypeArray) {
 		// Handle ARRAY[...] or ARRAY(SELECT ...) constructor
-		return p.parseArrayConstructor()
+		array, err := p.parseArrayConstructor()
+		if err != nil {
+			return nil, err
+		}
+		if p.isType(models.TokenTypeLBracket) {
+			return p.parseArrayAccessExpression(array)
+		}
+		return array, nil
 	}
 
 	// ClickHouse / Snowflake array literal: [expr, expr, ...] without the
@@ -265,7 +272,7 @@ func (p *Parser) parsePrimaryExpression() (ast.Expression, error) {
 		}
 		ph := &ast.LiteralValue{Value: value, Type: "placeholder"}
 		// MySQL user-variable assignment: @rownum := @rownum + 1
-		if p.isVariableAssignment() {
+		if p.isVariableAssignment() && isUserVariable(ph) {
 			return p.parseVariableAssignment(ph)
 		}
 		return ph, nil

@@ -40,7 +40,14 @@ func (p *Parser) parseFromTableReference() (ast.TableReference, error) {
 	}
 
 	// Check for derived table (subquery in parentheses)
-	if p.isType(models.TokenTypeLParen) {
+	if p.isRowsFromStart() {
+		ref, err := p.parseRowsFrom()
+		if err != nil {
+			return tableRef, err
+		}
+		tableRef = ref
+		tableRef.Lateral = isLateral
+	} else if p.isType(models.TokenTypeLParen) {
 		p.advance() // Consume (
 
 		// Check if this is a subquery (starts with SELECT, WITH, VALUES or
@@ -285,7 +292,14 @@ func (p *Parser) parseJoinedTableRef(joinType string) (ast.TableReference, error
 		return p.parseJoinGroup()
 	}
 
-	if p.isType(models.TokenTypeLParen) {
+	if p.isRowsFromStart() {
+		rows, err := p.parseRowsFrom()
+		if err != nil {
+			return ref, err
+		}
+		ref = rows
+		ref.Lateral = isLateral
+	} else if p.isType(models.TokenTypeLParen) {
 		// Derived table (subquery)
 		p.advance() // Consume (
 

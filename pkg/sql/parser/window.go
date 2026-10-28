@@ -65,9 +65,13 @@ func (p *Parser) parseFunctionCall(funcName string) (*ast.FunctionCall, error) {
 			// Named argument form: `name => expr` (Snowflake FLATTEN,
 			// BigQuery, Oracle, PostgreSQL procedural calls). Detect by a
 			// bare identifier or keyword (FLATTEN's outer => / recursive =>)
-			// immediately followed by =>.
+			// immediately followed by =>. PostgreSQL also accepts the older
+			// `name := expr`, read as the same NamedArgument (and written
+			// back with =>).
 			if (p.isIdentifier() || p.isWordToken()) &&
-				p.peekToken().Token.Type == models.TokenTypeRArrow {
+				(p.peekToken().Token.Type == models.TokenTypeRArrow ||
+					p.peekToken().Token.Type == models.TokenTypeAssignment && p.alterDialect(txnPostgres) &&
+						(p.isIdentifier() || p.isNonReservedKeyword())) {
 				namePos := p.currentLocation()
 				argName := p.currentToken.Token.Value
 				p.advance() // name

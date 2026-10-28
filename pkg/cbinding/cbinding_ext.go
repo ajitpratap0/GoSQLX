@@ -264,7 +264,9 @@ func metadataFor(sql, dialect string) MetadataResult {
 // pointer with gosqlx_free.
 //
 //export gosqlx_parse_dialect
-func gosqlx_parse_dialect(sql, dialect *C.char) *C.char {
+func gosqlx_parse_dialect(sql, dialect *C.char) (result *C.char) {
+	defer recoverExport(&result, panicSuccessJSON)
+	checkExportPanic("gosqlx_parse_dialect")
 	return toJSON(parseResultFor(C.GoString(sql), C.GoString(dialect)))
 }
 
@@ -276,7 +278,9 @@ func gosqlx_parse_dialect(sql, dialect *C.char) *C.char {
 // pointer with gosqlx_free.
 //
 //export gosqlx_validate_dialect
-func gosqlx_validate_dialect(sql, dialect *C.char) *C.char {
+func gosqlx_validate_dialect(sql, dialect *C.char) (result *C.char) {
+	defer recoverExport(&result, panicValidationJSON)
+	checkExportPanic("gosqlx_validate_dialect")
 	return toJSON(validationResultFor(C.GoString(sql), C.GoString(dialect)))
 }
 
@@ -289,7 +293,9 @@ func gosqlx_validate_dialect(sql, dialect *C.char) *C.char {
 // pointer with gosqlx_free.
 //
 //export gosqlx_format_dialect
-func gosqlx_format_dialect(sql, dialect *C.char) *C.char {
+func gosqlx_format_dialect(sql, dialect *C.char) (result *C.char) {
+	defer recoverExport(&result, panicSuccessJSON)
+	checkExportPanic("gosqlx_format_dialect")
 	return toJSON(formatResultFor(C.GoString(sql), C.GoString(dialect)))
 }
 
@@ -301,7 +307,9 @@ func gosqlx_format_dialect(sql, dialect *C.char) *C.char {
 // pointer with gosqlx_free.
 //
 //export gosqlx_extract_tables_dialect
-func gosqlx_extract_tables_dialect(sql, dialect *C.char) *C.char {
+func gosqlx_extract_tables_dialect(sql, dialect *C.char) (result *C.char) {
+	defer recoverExport(&result, panicErrorJSON)
+	checkExportPanic("gosqlx_extract_tables_dialect")
 	return toJSON(extractListFor(C.GoString(sql), C.GoString(dialect), "tables", gosqlx.ExtractTables))
 }
 
@@ -313,7 +321,9 @@ func gosqlx_extract_tables_dialect(sql, dialect *C.char) *C.char {
 // pointer with gosqlx_free.
 //
 //export gosqlx_extract_columns_dialect
-func gosqlx_extract_columns_dialect(sql, dialect *C.char) *C.char {
+func gosqlx_extract_columns_dialect(sql, dialect *C.char) (result *C.char) {
+	defer recoverExport(&result, panicErrorJSON)
+	checkExportPanic("gosqlx_extract_columns_dialect")
 	return toJSON(extractListFor(C.GoString(sql), C.GoString(dialect), "columns", gosqlx.ExtractColumns))
 }
 
@@ -326,7 +336,9 @@ func gosqlx_extract_columns_dialect(sql, dialect *C.char) *C.char {
 // pointer with gosqlx_free.
 //
 //export gosqlx_extract_functions_dialect
-func gosqlx_extract_functions_dialect(sql, dialect *C.char) *C.char {
+func gosqlx_extract_functions_dialect(sql, dialect *C.char) (result *C.char) {
+	defer recoverExport(&result, panicErrorJSON)
+	checkExportPanic("gosqlx_extract_functions_dialect")
 	return toJSON(extractListFor(C.GoString(sql), C.GoString(dialect), "functions", gosqlx.ExtractFunctions))
 }
 
@@ -339,7 +351,9 @@ func gosqlx_extract_functions_dialect(sql, dialect *C.char) *C.char {
 // pointer with gosqlx_free.
 //
 //export gosqlx_extract_metadata_dialect
-func gosqlx_extract_metadata_dialect(sql, dialect *C.char) *C.char {
+func gosqlx_extract_metadata_dialect(sql, dialect *C.char) (result *C.char) {
+	defer recoverExport(&result, panicErrorJSON)
+	checkExportPanic("gosqlx_extract_metadata_dialect")
 	return toJSON(metadataFor(C.GoString(sql), C.GoString(dialect)))
 }
 
@@ -481,7 +495,9 @@ func lintFor(sql, optionsJSON string) LintResult {
 // pointer with gosqlx_free.
 //
 //export gosqlx_lint
-func gosqlx_lint(sql, options_json *C.char) *C.char {
+func gosqlx_lint(sql, options_json *C.char) (result *C.char) {
+	defer recoverExport(&result, panicSuccessJSON)
+	checkExportPanic("gosqlx_lint")
 	return toJSON(lintFor(C.GoString(sql), C.GoString(options_json)))
 }
 
@@ -540,7 +556,9 @@ func securityScanFor(sql string) SecurityScanResult {
 // pointer with gosqlx_free.
 //
 //export gosqlx_security_scan
-func gosqlx_security_scan(sql *C.char) *C.char {
+func gosqlx_security_scan(sql *C.char) (result *C.char) {
+	defer recoverExport(&result, panicSuccessJSON)
+	checkExportPanic("gosqlx_security_scan")
 	return toJSON(securityScanFor(C.GoString(sql)))
 }
 
@@ -594,7 +612,9 @@ func transpileFor(sql, from, to string) TranspileResult {
 // pointer with gosqlx_free.
 //
 //export gosqlx_transpile
-func gosqlx_transpile(sql, from, to *C.char) *C.char {
+func gosqlx_transpile(sql, from, to *C.char) (result *C.char) {
+	defer recoverExport(&result, panicSuccessJSON)
+	checkExportPanic("gosqlx_transpile")
 	return toJSON(transpileFor(C.GoString(sql), C.GoString(from), C.GoString(to)))
 }
 
@@ -615,6 +635,8 @@ type DialectsResult struct {
 // pointer with gosqlx_free.
 //
 //export gosqlx_dialects
-func gosqlx_dialects() *C.char {
+func gosqlx_dialects() (result *C.char) {
+	defer recoverExport(&result, panicErrorJSON)
+	checkExportPanic("gosqlx_dialects")
 	return toJSON(DialectsResult{Dialects: keywords.DialectNames()})
 }

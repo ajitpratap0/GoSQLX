@@ -268,6 +268,9 @@ func (p *Parser) parsePivotClause() (*ast.PivotClause, error) {
 		return nil, p.expectedError(") to close PIVOT IN list")
 	}
 	p.advance() // close IN list )
+	if err := p.parsePivotDefault(clause); err != nil {
+		return nil, err
+	}
 
 	if !p.isType(models.TokenTypeRParen) {
 		return nil, p.expectedError(") to close PIVOT clause")

@@ -135,7 +135,16 @@ func (p *Parser) implicitStartAt(i int) bool {
 		return true
 	}
 	// Elsewhere scripts separate statements with ';'; accept only a
-	// transaction statement written at the start of its own line.
+	// transaction statement written at the start of its own line. This is
+	// reached only where the statement could not take the word: COMMIT and
+	// ROLLBACK are non-reserved in every dialect but SQL Server, so where
+	// the grammar allows an implicit alias ("SELECT 1\nCOMMIT", "SELECT a
+	// FROM t\nrollback") the statement parser has already read the word as
+	// the alias, exactly as the database does (PostgreSQL, MySQL, MariaDB,
+	// SQLite, Oracle, Snowflake and ClickHouse all accept SELECT 1 commit).
+	// After a clause that takes no alias ("... WHERE x = 1\nCOMMIT", "SELECT
+	// a AS x\nCOMMIT") it starts the next statement here. END is reserved
+	// in PostgreSQL, so there "SELECT 1\nEND" always ends the transaction.
 	if prev, cur := &p.tokens[i-1], &p.tokens[i]; cur.Start.Line == 0 || prev.End.Line >= cur.Start.Line {
 		return false
 	}

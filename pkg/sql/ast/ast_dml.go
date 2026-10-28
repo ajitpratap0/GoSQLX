@@ -52,26 +52,22 @@ type DMLTargetFields struct {
 	ReturningInto []Expression
 }
 
-// noDMLTargetFields is the read-only stand-in returned for a statement
-// without Extras. Nothing may write through it.
-var noDMLTargetFields DMLTargetFields
-
-// dmlExtras returns x, or a read-only empty DMLTargetFields when it is nil,
-// so renderers and walkers can read the fields without nil checks.
-func dmlExtras(x *DMLTargetFields) *DMLTargetFields {
+// dmlExtras returns a copy of x, or a zero value when it is nil, so renderers
+// and walkers can read the fields without nil checks.
+func dmlExtras(x *DMLTargetFields) DMLTargetFields {
 	if x != nil {
-		return x
+		return *x
 	}
-	return &noDMLTargetFields
+	return DMLTargetFields{}
 }
 
-// DialectExtras returns the optional dialect fields, or a read-only empty
-// value when absent. Call EnsureExtras before writing; never mutate this result.
-func (u *UpdateStatement) DialectExtras() *DMLTargetFields { return dmlExtras(u.Extras) }
+// DialectExtras returns a copy of the optional dialect fields, or a zero
+// value when absent. Use EnsureExtras to modify fields on this node.
+func (u *UpdateStatement) DialectExtras() DMLTargetFields { return dmlExtras(u.Extras) }
 
-// DialectExtras returns the optional dialect fields, or a read-only empty
-// value when absent. Call EnsureExtras before writing; never mutate this result.
-func (d *DeleteStatement) DialectExtras() *DMLTargetFields { return dmlExtras(d.Extras) }
+// DialectExtras returns a copy of the optional dialect fields, or a zero
+// value when absent. Use EnsureExtras to modify fields on this node.
+func (d *DeleteStatement) DialectExtras() DMLTargetFields { return dmlExtras(d.Extras) }
 
 // EnsureExtras returns u.Extras, allocating it first when it is nil. Use it
 // to set one of the DMLTargetFields.
@@ -139,6 +135,8 @@ func (o OutputInto) Children() []Node     { return nodifyExpressions(o.Columns) 
 // InsertDialectFields holds the dialect-specific parts of INSERT. It is
 // held behind InsertStatement.Extras, allocated only for dialect clauses.
 type InsertDialectFields struct {
+	// Top is the SQL Server TOP (expression) [PERCENT] row limit.
+	Top *TopClause
 	// Modifiers are the keywords between INSERT and INTO, upper-cased and in
 	// source order: MySQL IGNORE / LOW_PRIORITY / HIGH_PRIORITY / DELAYED,
 	// SQLite OR REPLACE / OR IGNORE / OR ABORT / OR FAIL / OR ROLLBACK,
@@ -202,7 +200,10 @@ func (l LogErrorsClause) Children() []Node {
 }
 
 // insertDialectChildren appends the nodes of d to children.
-func (d *InsertDialectFields) insertDialectChildren(children []Node) []Node {
+func (d InsertDialectFields) insertDialectChildren(children []Node) []Node {
+	if d.Top != nil {
+		children = append(children, d.Top)
+	}
 	if d.TableFunction != nil {
 		children = append(children, d.TableFunction)
 	}

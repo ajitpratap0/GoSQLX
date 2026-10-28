@@ -275,6 +275,18 @@ func (p *Parser) isVariableAssignment() bool {
 	return false
 }
 
+// isUserVariable reports whether e is a MySQL user variable (@name, not a
+// @@system variable or a ? placeholder): the only target MySQL's :=
+// assigns to inside an expression.
+func isUserVariable(e ast.Expression) bool {
+	lit, ok := e.(*ast.LiteralValue)
+	if !ok || lit.Type != "placeholder" {
+		return false
+	}
+	v, ok := lit.Value.(string)
+	return ok && len(v) > 1 && v[0] == '@' && v[1] != '@'
+}
+
 // parseVariableAssignment parses ":= expr" after target.
 func (p *Parser) parseVariableAssignment(target ast.Expression) (ast.Expression, error) {
 	pos := p.currentLocation()

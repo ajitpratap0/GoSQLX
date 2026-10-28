@@ -79,6 +79,9 @@ func (p *Parser) parseUtilityStatement() (stmt ast.Statement, ok bool, err error
 	if word == "" {
 		return nil, false, nil
 	}
+	if m, gated := utilityDialects[word]; gated && m&p.alterMask() == 0 {
+		return nil, false, nil // not a statement of this dialect
+	}
 	next := p.utilityWord(p.currentPos + 1)
 	switch word {
 	case "BEGIN":
@@ -119,7 +122,10 @@ func (p *Parser) parseUtilityStatement() (stmt ast.Statement, ok bool, err error
 		return p.parseCallStatement()
 	case "ANALYZE":
 		// MariaDB ANALYZE [FORMAT=JSON] <statement> runs and explains it.
-		if p.peekStatementAfterOptions() {
+		// ANALYZE TABLE t ... (MySQL, MariaDB, Oracle) is the maintenance
+		// statement, whatever words follow the table.
+		if p.alterDialect(dialectMariaDB) && next != "TABLE" && next != "LOCAL" &&
+			next != "NO_WRITE_TO_BINLOG" && p.peekStatementAfterOptions() {
 			p.advance()
 			s, err := p.parseDescribeStatement("ANALYZE")
 			return s, true, err
@@ -146,12 +152,60 @@ func (p *Parser) parseUtilityStatement() (stmt ast.Statement, ok bool, err error
 			return nil, false, nil
 		}
 		return p.parseVerbatimArgs(word)
-	case "GRANT", "REVOKE", "VACUUM", "LOCK", "UNLOCK", "KILL", "FLUSH", "OPTIMIZE",
+	case "GRANT", "REVOKE":
+		if p.IsSQLServer() {
+			return p.parseVerbatimArgs(word)
+		}
+		return p.parseGrammarStatement(word, p.grantEnd)
+	case "COPY":
+		if p.dialect == string(keywords.DialectPostgreSQL) {
+			return p.parseGrammarStatement(word, p.copyEnd)
+		}
+		if next != "INTO" {
+			// Without a dialect (and in Redshift) COPY takes the
+			// PostgreSQL grammar when it fits; Redshift's many options
+			// fall back to the verbatim form.
+			saved, savedTok := p.currentPos, p.currentToken
+			if end, err := p.copyEnd(saved); err == nil && (end >= len(p.tokens) ||
+				p.tokens[end].Token.Type == models.TokenTypeSemicolon ||
+				p.tokens[end].Token.Type == models.TokenTypeEOF ||
+				p.startsLine(end) || p.startsNewStatementAnywhere(end)) {
+				p.currentPos, p.currentToken = saved, savedTok
+				return p.parseGrammarStatement(word, p.copyEnd)
+			}
+			p.currentPos, p.currentToken = saved, savedTok
+		}
+		return p.parseVerbatimArgs(word)
+	case "DO":
+		// PostgreSQL: DO [LANGUAGE lang] 'code' (usually $$ ... $$);
+		// MySQL: DO expr [, expr], where $$ ... $$ is no expression.
+		i := p.currentPos + 1
+		pg := p.alterMask()&dialectPostgres != 0
+		if p.alterMask()&dialectMySQLFamily == 0 {
+			if next == "LANGUAGE" {
+				i += 2
+			}
+			if !p.isStringAt(i) && p.utilityWord(i) != "LANGUAGE" {
+				return nil, false, nil
+			}
+		} else if !pg && i < len(p.tokens) && p.tokens[i].Token.Type == models.TokenTypeDollarQuotedString {
+			return nil, false, nil
+		}
+		return p.parseVerbatimArgs(word)
+	case "LOAD":
+		// PostgreSQL has only LOAD 'library'; LOAD DATA is MySQL's and
+		// BigQuery's.
+		if p.alterMask() == dialectPostgres && !p.isStringAt(p.currentPos+1) ||
+			p.alterMask() == dialectBigQuery && next != "DATA" {
+			return nil, false, nil
+		}
+		return p.parseVerbatimArgs(word)
+	case "VACUUM", "LOCK", "UNLOCK", "KILL", "FLUSH", "OPTIMIZE",
 		"CHECK", "REPAIR", "CHECKSUM", "LISTEN", "NOTIFY", "UNLISTEN", "PREPARE",
-		"EXECUTE", "DEALLOCATE", "DO", "DECLARE", "LOAD", "RENAME", "REINDEX",
+		"EXECUTE", "DEALLOCATE", "DECLARE", "RENAME", "REINDEX",
 		"CLUSTER", "CHECKPOINT", "DISCARD", "RESET", "XA", "BACKUP", "FLASHBACK",
 		"PURGE", "UNDROP", "EXCHANGE", "SYSTEM", "ATTACH", "DETACH", "HANDLER",
-		"INSTALL", "UNINSTALL", "COPY":
+		"INSTALL", "UNINSTALL":
 		return p.parseVerbatimArgs(word)
 	case "TABLE":
 		// TABLE name [ORDER BY ...] [LIMIT ...] (PostgreSQL, MySQL 8).
@@ -161,6 +215,58 @@ func (p *Parser) parseUtilityStatement() (stmt ast.Statement, ok bool, err error
 		return p.parseVerbatimStatement(word)
 	}
 	return nil, false, nil
+}
+
+// utilityDialects lists, for the utility statements that only some
+// dialects have, the dialects that accept them; a parser without a dialect
+// accepts all of them. Elsewhere the word is not a statement, so the input
+// is reported as "expected statement" instead of being kept verbatim
+// (VACUUM in Oracle, LISTEN in MySQL, DO $$ ... $$ outside PostgreSQL).
+// The transaction statements (see transactionEnd) and the T-SQL statements
+// (gated in parseUtilityStatement) are not listed.
+var utilityDialects = map[string]alterDialects{
+	"GRANT":  dialectAll &^ dialectSQLite,
+	"REVOKE": dialectAll &^ dialectSQLite,
+	"VACUUM": txnPostgres | dialectSQLite,
+	"LOCK":   txnPostgres | dialectMySQLFamily | dialectOracle,
+	"UNLOCK": dialectMySQLFamily,
+	"KILL":   dialectMySQLFamily | dialectClickHouse | dialectSQLServer,
+	"FLUSH":  dialectMySQLFamily, "REPAIR": dialectMySQLFamily,
+	"CHECKSUM": dialectMySQLFamily, "HANDLER": dialectMySQLFamily,
+	"XA": dialectMySQLFamily, "INSTALL": dialectMySQLFamily,
+	"UNINSTALL": dialectMySQLFamily,
+	"OPTIMIZE":  dialectMySQLFamily | dialectClickHouse,
+	"CHECK":     dialectMySQLFamily | dialectClickHouse,
+	"LISTEN":    dialectPostgres, "NOTIFY": dialectPostgres,
+	"UNLISTEN": dialectPostgres, "DISCARD": dialectPostgres,
+	"CLUSTER": dialectPostgres,
+	"PREPARE": txnPostgres | dialectMySQLFamily,
+	"EXECUTE": txnPostgres | dialectMySQLFamily | dialectSnowflake | dialectOracle |
+		dialectBigQuery | dialectSQLServer,
+	"DEALLOCATE": txnPostgres | dialectMySQLFamily | dialectSQLServer,
+	"DO":         dialectPostgres | dialectMySQLFamily,
+	"DECLARE": txnPostgres | dialectSQLServer | dialectOracle | dialectSnowflake |
+		dialectBigQuery,
+	"LOAD": dialectMySQLFamily | dialectPostgres | // PostgreSQL: LOAD 'library'
+		dialectBigQuery, // BigQuery: LOAD DATA {INTO | OVERWRITE} t FROM FILES (...)
+	"RENAME":     dialectMySQLFamily | dialectClickHouse | dialectOracle,
+	"REINDEX":    dialectPostgres | dialectSQLite,
+	"CHECKPOINT": dialectPostgres | dialectSQLServer,
+	"RESET":      txnPostgres | dialectMySQLFamily,
+	"BACKUP":     dialectSQLServer | dialectClickHouse | dialectMariaDB,
+	"FLASHBACK":  dialectOracle,
+	"PURGE":      dialectOracle | dialectMySQLFamily,
+	"UNDROP":     dialectSnowflake,
+	"EXCHANGE":   dialectClickHouse, "SYSTEM": dialectClickHouse,
+	"ATTACH": dialectSQLite | dialectClickHouse, "DETACH": dialectSQLite | dialectClickHouse,
+	"COPY":    txnPostgres | dialectSnowflake,
+	"TABLE":   txnPostgres | dialectMySQLFamily,
+	"COMMENT": txnPostgres | dialectOracle | dialectSnowflake,
+	"CALL": txnPostgres | dialectMySQLFamily | dialectOracle | dialectSnowflake |
+		dialectBigQuery,
+	"USE":     dialectMySQLFamily | dialectSnowflake | dialectClickHouse | dialectSQLServer,
+	"ANALYZE": txnPostgres | dialectMySQLFamily | dialectOracle | dialectSQLite,
+	"SET":     dialectAll &^ dialectSQLite,
 }
 
 // atStatementBoundary reports whether the current token starts the input or
@@ -235,6 +341,13 @@ func (p *Parser) scanStatementEnd(blocks bool) (end int, open bool, err error) {
 	depth := 0
 	start := p.currentPos
 	policy := p.implicitEndPolicy(start)
+	if policy == implicitLineBody {
+		end, fallback, ok, err := p.lineBodyEnd(start)
+		if ok || err != nil {
+			return end, false, err
+		}
+		policy = fallback
+	}
 	blk := p.newBlockScan()
 	cases := 0       // open CASE expressions outside any block
 	grantee := false // a GRANT / REVOKE / DENY statement reached TO / FROM
@@ -515,14 +628,52 @@ func (p *Parser) parseUseStatement() (ast.Statement, bool, error) {
 
 // parseCallStatement parses CALL name[(args)]. Arguments are parsed as
 // expressions; a call whose arguments the expression parser does not accept
-// (named arguments, OUT parameters in some dialects) is kept verbatim.
+// (named arguments, OUT parameters in some dialects) is kept verbatim. The
+// statement ends after its argument list (and Oracle's INTO :var), so a
+// statement written after it without a ';' is an error (see
+// utilityTailError).
 func (p *Parser) parseCallStatement() (ast.Statement, bool, error) {
 	savedPos, savedTok := p.currentPos, p.currentToken
-	if stmt, err := p.parseCallStatementStructured(); err == nil {
+	saved := p.snapshotState()
+	stmt, err := p.parseCallStatementStructured()
+	if err == nil {
+		if err := p.utilityTailError(p.currentPos); err != nil {
+			return nil, true, err
+		}
 		return stmt, true, nil
 	}
+	if isQualifiedNameTooLong(err) {
+		return nil, true, err
+	}
+	p.restoreState(saved)
 	p.currentPos, p.currentToken = savedPos, savedTok
-	return p.parseVerbatimArgs("CALL")
+	switch p.peekToken().Token.Type {
+	case models.TokenTypeSemicolon, models.TokenTypeEOF:
+		p.advance()
+		return nil, true, p.expectedError("arguments after CALL")
+	}
+	return p.parseGrammarStatement("CALL", p.callEnd)
+}
+
+// callEnd returns the index after CALL name [(args)] [INTO :var] starting
+// at token index start, with the arguments taken as written.
+func (p *Parser) callEnd(start int) (int, error) {
+	i := p.nameEnd(start + 1)
+	if i == start+1 {
+		p.seek(i)
+		return 0, p.expectedError("procedure name")
+	}
+	if i < len(p.tokens) && p.tokens[i].Token.Type == models.TokenTypeLParen {
+		if i = p.groupEnd(i); i < 0 {
+			p.seek(len(p.tokens))
+			return 0, p.expectedError(")")
+		}
+	}
+	if p.utilityWord(i) == "INTO" && i+1 < len(p.tokens) &&
+		p.tokens[i+1].Token.Type == models.TokenTypePlaceholder {
+		i += 2 // Oracle CALL f() INTO :result
+	}
+	return i, nil
 }
 
 func (p *Parser) parseCallStatementStructured() (*ast.CallStatement, error) {
@@ -553,16 +704,24 @@ func (p *Parser) parseCallStatementStructured() (*ast.CallStatement, error) {
 		}
 		p.advance() // )
 	}
-	if !p.isType(models.TokenTypeSemicolon) && !p.isType(models.TokenTypeEOF) {
+	if p.utilityWord(p.currentPos) == "INTO" {
+		// CALL f() INTO :var has no structured form.
 		return nil, p.expectedError("end of CALL statement")
 	}
 	return stmt, nil
 }
 
+// showDialects are the dialects with a SHOW statement (SQLite, SQL Server
+// and Oracle have none; SQL*Plus SHOW is a client command).
+const showDialects = txnPostgres | dialectMySQLFamily | dialectSnowflake | dialectClickHouse
+
 // parseShowOrUtility parses SHOW. The forms ShowStatement models are
 // returned as such; any other SHOW (SHOW VARIABLES LIKE '...', SHOW FULL
 // PROCESSLIST, SHOW TABLES IN SCHEMA s, SHOW GRANTS FOR u) is kept verbatim.
 func (p *Parser) parseShowOrUtility() (ast.Statement, error) {
+	if p.alterMask()&showDialects == 0 {
+		return nil, p.expectedError("statement")
+	}
 	savedPos, savedTok := p.currentPos, p.currentToken
 	boundary := p.atStatementBoundary()
 	p.advance() // SHOW
@@ -769,6 +928,19 @@ func (p *Parser) backslashEscapes() bool {
 	switch p.dialect {
 	case string(keywords.DialectMySQL), string(keywords.DialectMariaDB),
 		string(keywords.DialectPostgreSQL), "":
+		return true
+	}
+	return false
+}
+
+// isStringAt reports whether the token at index i is a string literal.
+func (p *Parser) isStringAt(i int) bool {
+	if i < 0 || i >= len(p.tokens) {
+		return false
+	}
+	switch p.tokens[i].Token.Type {
+	case models.TokenTypeString, models.TokenTypeSingleQuotedString,
+		models.TokenTypeDollarQuotedString:
 		return true
 	}
 	return false

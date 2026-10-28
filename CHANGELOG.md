@@ -86,6 +86,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   in dialects without them.
 
 ### Fixed
+- **Formatter fidelity**: Oracle SQL*Plus `/` execute lines are kept by FormatAST, `Formatter.Format`, `FormatWithDialect` and `gosqlx format` (they were dropped, and the CLI refused such scripts). Statement counts do not change: the AST records which statements a `/` follows in `AST.ExecuteSlash`. PostgreSQL `U&"..."` identifiers keep their original spelling when formatting for PostgreSQL or no target (other targets get the decoded name; AST name fields stay decoded), so names with escaped control characters no longer produce output that fails to re-tokenize. Comments next to SQL Server `GO` lines and trailing comments of statements written without `;` stay where they were, and `GO 2 /* c */` keeps both count and comment on every entry point.
+- **Formatter performance**: lower-case keyword mode streams into a single builder instead of copying and re-rendering subtrees; it went from 3.5–10x to 1.2–1.5x the cost of upper-case output, with 5x to 500x fewer allocations.
 - **Security (`ScanSQL`)**: closed several ways to slip injection past the string scanner (also used by MCP, the C binding and WASM). Dollar-quote stripping no longer runs inside quoted strings or identifiers (`SELECT '$x$'; DROP TABLE users; SELECT '$x$'` was clean). Tautology and comment checks now cover the whole input instead of the first 10,000 bytes; inputs above 10 MiB get a CRITICAL `INPUT_TOO_LARGE` finding whatever the severity filter. Comments between keywords (`UNION/**/SELECT`, `SLEEP/**/(5)`, `;--\nDROP`, `#` comments, `/*/`, MySQL `1--1`) are matched through comment-free views of the text under each quoting and escaping convention, and MySQL/MariaDB `/*! */` and `/*M! */` bodies are scanned. The AST UNION NULL-padding check now matches the parser's NULL literal. The tautology check no longer allocates per candidate (1 MiB of `1=2` went from 50 MB to 1 MB).
 - **Format**: with `AddSemicolon` and a comment anywhere in the input, raw-text statements (PostgreSQL `DO $$...$$`, `CREATE FUNCTION` bodies, Oracle `BEGIN ... END` blocks) lost their `;`, so the output no longer parsed or merged two statements. The comment-preserving path now adds terminators the same way as the plain path (`formatter.EnsureStatementTerminator`).
 - **Extract**: `gosqlx.Extract*` and `ExtractMetadata` (and the MCP `extract_metadata`/`analyze_sql` tools) took exponential time on nested CTEs and UNION chains because CTE, set-operation and DML children were visited twice. Each node is now visited once; nested CTEs at depth 10 took about 59 s and now finish in microseconds.
@@ -2451,7 +2453,6 @@ The following features were identified during real-world testing and are tracked
 #### Test Coverage Enhancement - Phase 2 (Keywords, Errors, AST)
 - **Comprehensive Test Suite**: Added 3 new test files with 1,351 lines of test code
 - **Perfect Coverage Achieved**: Keywords package reaches 100% coverage
-- **Coverage Achievements**:
   - Keywords Package: 92.8% → **100.0%** (+7.2%) - Perfect Coverage
   - Errors Package: 83.8% → **95.6%** (+11.8%) - Exceeded Target
   - AST Package: 73.7% → **74.4%** (+0.7%) - Marker functions covered
@@ -2484,8 +2485,6 @@ The following features were identified during real-world testing and are tracked
 #### Combined Phase 1 + Phase 2 Impact
 - **6 packages** with comprehensive coverage improvements
 - **4,445 lines** of production-grade test code
-- **Zero race conditions** across entire codebase
-- **Production-ready** reliability validated
 
 ## [1.5.0] - 2025-11-15 - Phase 1 Test Coverage Achievement
 
@@ -2644,7 +2643,6 @@ This release positions GoSQLX as the most thoroughly tested Go SQL parser librar
 - **Comprehensive Test Suite**: Added 10 new test files with ~1,800 lines of tests
 - **Coverage Improvement**: Increased AST package coverage from 59.6% to 73.4% (+13.8 percentage points)
 - **Production Confidence**: Exceeded 70% coverage target, validating production readiness
-- **Quality Assurance**: All tests pass with race detection enabled, zero race conditions detected
 
 ### New Test Files Created
 - **data_loading_test.go** (~250 lines): Cloud data loading features (StageParamsObject, DataLoadingOptions, helpers)
@@ -2809,8 +2807,6 @@ This substantial test coverage increase provides strong confidence in the AST pa
 - **1.25M+ operations/second** peak throughput with concurrent processing
 - **<1μs latency** for complex queries with CTEs and set operations
 - **Zero performance regression** from Phase 1 - all existing functionality maintained
-- **Race-free implementation** - comprehensive concurrent testing validates thread safety
-- **Memory efficient** - object pooling preserved with 60-80% memory reduction
 
 ### 🎯 SQL Standards Compliance
 - **~70% SQL-92 compliance** achieved (up from ~40% in Phase 1)
@@ -2829,8 +2825,6 @@ This substantial test coverage increase provides strong confidence in the AST pa
 - **24+ test functions** total (9 new Phase 2 tests added)
 - **4 comprehensive CTE tests**: Simple CTE, Recursive CTE, Multiple CTEs, Column specs
 - **5 comprehensive set operation tests**: All operations, chaining, CTE combinations
-- **100% test pass rate** with race detection enabled
-- **Extensive error case coverage** with contextual error messages
 
 ### 📚 Documentation Updates
 - **Enhanced Go package documentation** with Phase 2 examples and API references
@@ -2842,7 +2836,6 @@ This substantial test coverage increase provides strong confidence in the AST pa
 - **100% backward compatible** - all existing functionality preserved
 - **API stability** - no breaking changes to public interfaces
 - **Legacy test compatibility** - all Phase 1 and prior tests continue passing
-- **Performance maintained** - no degradation in existing query parsing performance
 
 ### Goals Achieved
 - ✅ ~70% SQL-92 compliance milestone reached

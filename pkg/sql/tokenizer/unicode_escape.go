@@ -15,8 +15,10 @@ import (
 
 // readUnicodeEscape lexes a PostgreSQL U&'...' string or U&"..." name with
 // its optional UESCAPE clause. A string keeps its validated spelling in one
-// TokenTypeUnicodeStringLiteral token; a name is decoded into an ordinary
-// double-quoted identifier token so it works wherever a name does.
+// TokenTypeUnicodeStringLiteral token; a name keeps its decoded Value and
+// double-quote delimiter so it works wherever a name does. Only Unicode names
+// allocate optional Word metadata, whose Value holds their source spelling and
+// whose QuoteStyle is 'U'; ordinary identifier tokens retain their usual shape.
 func (t *Tokenizer) readUnicodeEscape() (models.Token, error) {
 	start := t.pos
 	quote := t.input[t.pos.Index+2]
@@ -73,14 +75,15 @@ func (t *Tokenizer) readUnicodeEscape() (models.Token, error) {
 	if !ok {
 		return models.Token{}, errors.UnexpectedCharError(escape, t.toSQLPosition(start), t.src)
 	}
-	if quote == '"' {
-		return models.Token{Type: models.TokenTypeIdentifier, Value: name, Quote: '"'}, nil
-	}
 	raw := t.src[start.Index:t.pos.Index]
 	if commented {
 		// Comments between the literal and UESCAPE are recorded in
 		// t.Comments; keep them out of the literal's spelling.
 		raw = t.src[start.Index:literalEnd] + " UESCAPE '" + string(escape) + "'"
+	}
+	if quote == '"' {
+		return models.Token{Type: models.TokenTypeIdentifier, Value: name, Quote: '"',
+			Word: &models.Word{Value: raw, QuoteStyle: 'U'}}, nil
 	}
 	return models.Token{Type: models.TokenTypeUnicodeStringLiteral, Value: raw, Quote: 'U'}, nil
 }

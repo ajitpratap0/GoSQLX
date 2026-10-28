@@ -394,8 +394,8 @@ func TestWPPPrefilterEquivalence(t *testing.T) {
 }
 
 func TestWPPScanSQLLinear(t *testing.T) {
-	if testing.Short() {
-		t.Skip("timing regression")
+	if testing.Short() || raceEnabled {
+		t.Skip("timing regression; skipped under -short and -race")
 	}
 	input := func(size int) string {
 		const chunk = "/**/ --x\n a = b "

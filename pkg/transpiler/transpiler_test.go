@@ -68,6 +68,31 @@ func BenchmarkTranspile(b *testing.B) {
 	}
 }
 
+func BenchmarkTranspile_WideExpression(b *testing.B) {
+	for _, op := range []string{"OR", "AND", "||"} {
+		b.Run(op, func(b *testing.B) {
+			sql := "SELECT a FROM t WHERE a" + strings.Repeat(" "+op+" a", 200)
+			b.ReportAllocs()
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				if _, err := transpiler.Transpile(sql, keywords.DialectPostgreSQL, keywords.DialectMySQL); err != nil {
+					b.Fatal(err)
+				}
+			}
+		})
+	}
+}
+
+func BenchmarkTranspile_SetOpLimit(b *testing.B) {
+	const sql = "SELECT a FROM t UNION SELECT b FROM u ORDER BY 1 LIMIT 5"
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		if _, err := transpiler.Transpile(sql, keywords.DialectPostgreSQL, keywords.DialectSQLServer); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
 // TestTranspile_SetOperationsForTarget checks that set operations are
 // written for the target dialect: MINUS becomes EXCEPT where the target has
 // no MINUS, and an Oracle chain (all operators of equal precedence, grouped

@@ -79,6 +79,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   in dialects without them.
 
 ### Fixed
+- **Security (`ScanSQL`)**: closed several ways to slip injection past the string scanner (also used by MCP, the C binding and WASM). Dollar-quote stripping no longer runs inside quoted strings or identifiers (`SELECT '$x$'; DROP TABLE users; SELECT '$x$'` was clean). Tautology and comment checks now cover the whole input instead of the first 10,000 bytes; inputs above 10 MiB get a CRITICAL `INPUT_TOO_LARGE` finding whatever the severity filter. Comments between keywords (`UNION/**/SELECT`, `SLEEP/**/(5)`, `;--\nDROP`, `#` comments, `/*/`, MySQL `1--1`) are matched through comment-free views of the text under each quoting and escaping convention, and MySQL/MariaDB `/*! */` and `/*M! */` bodies are scanned. The AST UNION NULL-padding check now matches the parser's NULL literal. The tautology check no longer allocates per candidate (1 MiB of `1=2` went from 50 MB to 1 MB).
 - Watch now respects `--dialect`, re-validates changes and formats files in place
   with the CLI safety checks; MCP parsing accepts a dialect and documents comment preservation.
 - Correct transpile dialect help, avoid duplicate lint syntax errors, and rewrite

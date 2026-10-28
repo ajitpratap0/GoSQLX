@@ -79,6 +79,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   in dialects without them.
 
 ### Fixed
+- **LSP (`pkg/lsp`)**: `initialize` now advertises `textDocumentSync` (it sent the non-standard `textDocumentSyncOptions`, so VS Code never sent open/change/close events). A negative `Content-Length` and a `didChange` range past the end of the document no longer crash the server; oversized messages are drained so framing survives; `didChange` character offsets are read as UTF-16 code units and CRLF line ends are respected. A panic in a request handler or in background diagnostics is now logged and answered with `InternalError` instead of ending the process.
 - Watch now respects `--dialect`, re-validates changes and formats files in place
   with the CLI safety checks; MCP parsing accepts a dialect and documents comment preservation.
 - Correct transpile dialect help, avoid duplicate lint syntax errors, and rewrite

@@ -152,6 +152,22 @@ func TestParser_NestedStatementBodyEnds(t *testing.T) {
 	})
 }
 
+func TestParser_UtilitySelectBoundaryRegressions(t *testing.T) {
+	pg := keywords.DialectPostgreSQL
+	runShapeCases(t, []shapeCase{
+		{"pg trigger then select", pg,
+			"CREATE TRIGGER trg AFTER INSERT ON t FOR EACH ROW EXECUTE FUNCTION f()\nSELECT 1",
+			"error: end of statement"},
+		{"pg trigger separated select", pg,
+			"CREATE TRIGGER trg AFTER INSERT ON t FOR EACH ROW EXECUTE FUNCTION f(); SELECT 1",
+			"[Utility(CREATE TRIGGER) Select]"},
+		{"prepare same line select", pg, "PREPARE p AS SELECT 1 SELECT 2", "error: end of statement"},
+		{"prepare separated select", pg, "PREPARE p AS SELECT 1; SELECT 2", "[Utility(PREPARE) Select]"},
+		{"pg grant then select", pg, "GRANT SELECT ON t TO bob SELECT 1", "error: semicolon or end of statement"},
+		{"pg copy then select", pg, "COPY t TO STDOUT SELECT 1", "error: semicolon or end of statement"},
+	})
+}
+
 // GRANT, REVOKE, COPY, CALL and the other utility statements with a closed
 // grammar end where it ends, so a statement written after them on the same
 // line without a ';' is an error rather than part of their text.

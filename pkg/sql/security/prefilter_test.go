@@ -416,6 +416,11 @@ func TestScanSQL_PrefilterEquivalence(t *testing.T) {
 	corpus := equivalenceCorpus(t)
 	for name, s := range scanners {
 		for i, in := range corpus {
+			// Equivalence is not a concurrency property; under -race check a
+			// quarter of the corpus and no large inputs. Non-race runs check all.
+			if raceEnabled && (i%4 != 0 || len(in) > 16<<10) {
+				continue
+			}
 			got := s.scanSQL(in, true)
 			want := s.scanSQL(in, false)
 			if !reflect.DeepEqual(got, want) {
@@ -447,7 +452,13 @@ func TestScanSQL_Concurrent_FoldPool(t *testing.T) {
 		want[i] = s.ScanSQL(in)
 	}
 
-	const goroutines, iterations = 32, 200
+	// The race detector makes each 64 KiB+ scan ~20x slower; fewer iterations
+	// still interleave every input across all goroutines.
+	const goroutines = 32
+	iterations := 200
+	if raceEnabled {
+		iterations = 25
+	}
 	var wg sync.WaitGroup
 	errs := make(chan string, goroutines)
 	for g := 0; g < goroutines; g++ {

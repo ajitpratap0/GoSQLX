@@ -524,6 +524,8 @@ type DeleteStatement struct {
 	// BeforeSystemTime is the point of MariaDB's DELETE HISTORY FROM t
 	// BEFORE SYSTEM_TIME point; nil when the statement has none. DELETE
 	// HISTORY itself is the HISTORY modifier.
+	// The PARTITION list and the TIMESTAMP / TRANSACTION unit of the point
+	// are in Extras.History.
 	BeforeSystemTime Expression
 	// TableNameQuote and AliasQuote record the delimiters of TableName and
 	// Alias when they must be kept (see NameQuote).
@@ -548,6 +550,11 @@ func (d DeleteStatement) Children() []Node {
 	}
 	for i := range d.From {
 		children = append(children, &d.From[i])
+	}
+	if d.Extras != nil && d.Extras.History != nil {
+		for _, partition := range d.Extras.History.Partitions {
+			children = append(children, partition)
+		}
 	}
 	if d.BeforeSystemTime != nil {
 		children = append(children, d.BeforeSystemTime)

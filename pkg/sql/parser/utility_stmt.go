@@ -130,6 +130,11 @@ func (p *Parser) parseUtilityStatement() (stmt ast.Statement, ok bool, err error
 			s, err := p.parseDescribeStatement("ANALYZE")
 			return s, true, err
 		}
+		mask := p.alterMask()
+		if mask == dialectAll && next != "TABLE" && next != "LOCAL" && next != "NO_WRITE_TO_BINLOG" ||
+			mask != dialectAll && mask&(txnPostgres|dialectSQLite) != 0 {
+			return p.parseGrammarStatement(word, p.analyzeEnd)
+		}
 		return p.parseVerbatimStatement(word)
 	case "COMMENT":
 		if next != "ON" {
@@ -200,8 +205,12 @@ func (p *Parser) parseUtilityStatement() (stmt ast.Statement, ok bool, err error
 			return nil, false, nil
 		}
 		return p.parseVerbatimArgs(word)
-	case "VACUUM", "LOCK", "UNLOCK", "KILL", "FLUSH", "OPTIMIZE",
-		"CHECK", "REPAIR", "CHECKSUM", "LISTEN", "NOTIFY", "UNLISTEN", "PREPARE",
+	case "VACUUM":
+		return p.parseGrammarStatement(word, p.vacuumEnd)
+	case "LISTEN", "UNLISTEN", "NOTIFY":
+		return p.parseGrammarStatement(word, p.listenEnd)
+	case "LOCK", "UNLOCK", "KILL", "FLUSH", "OPTIMIZE",
+		"CHECK", "REPAIR", "CHECKSUM", "PREPARE",
 		"EXECUTE", "DEALLOCATE", "DECLARE", "RENAME", "REINDEX",
 		"CLUSTER", "CHECKPOINT", "DISCARD", "RESET", "XA", "BACKUP", "FLASHBACK",
 		"PURGE", "UNDROP", "EXCHANGE", "SYSTEM", "ATTACH", "DETACH", "HANDLER",
@@ -985,6 +994,9 @@ func (p *Parser) currentIdentQuote() rune {
 // follow. Words that start a clause or a set operation are still rejected,
 // so SELECT a AS FROM t keeps its error.
 func (p *Parser) isAliasAfterAS() bool {
+	if p.isReservedTopName() {
+		return false
+	}
 	if p.isIdentifier() || p.isNonReservedKeyword() {
 		return true
 	}

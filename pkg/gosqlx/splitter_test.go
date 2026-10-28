@@ -288,6 +288,37 @@ func TestSplitStatements_NilOnEmpty(t *testing.T) {
 	}
 }
 
+func TestSplitStatements_MySQLBackslashBoundaries(t *testing.T) {
+	for _, dialect := range []string{"mysql", "mariadb"} {
+		for _, tc := range []struct {
+			name  string
+			first string
+		}{
+			{"escaped quote", `SELECT 'it\'s; here'`},
+			{"escaped backslash", `SELECT 'a\\'`},
+		} {
+			t.Run(dialect+"/"+tc.name, func(t *testing.T) {
+				want := []string{tc.first, " SELECT 2"}
+				if got := SplitStatements(tc.first+"; SELECT 2", dialect); !reflect.DeepEqual(got, want) {
+					t.Fatalf("segments = %q, want %q", got, want)
+				}
+			})
+		}
+	}
+}
+
+func TestSplitStatements_PostgreSQLRuleCommandList(t *testing.T) {
+	for _, action := range []string{"DO", "DO ALSO", "DO INSTEAD"} {
+		t.Run(action, func(t *testing.T) {
+			first := "CREATE RULE r AS ON INSERT TO t " + action + " (INSERT INTO a VALUES (1); INSERT INTO b VALUES (2))"
+			want := []string{first, " SELECT 1"}
+			if got := SplitStatements(first+"; SELECT 1", "postgresql"); !reflect.DeepEqual(got, want) {
+				t.Fatalf("segments = %q, want %q", got, want)
+			}
+		})
+	}
+}
+
 func TestSplitStatements_TilesSource(t *testing.T) {
 	root := filepath.Join("..", "..", "testdata")
 	files := 0

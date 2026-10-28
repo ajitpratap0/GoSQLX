@@ -162,7 +162,7 @@ func (c *expressionCase) formatWith(f *nodeFormatter, e ast.Expression) string {
 
 func formatExpressionChild(e ast.Expression, opts ast.FormatOptions, context ...*expressionCase) string {
 	if len(context) == 0 {
-		return FormatExpression(e, opts)
+		return formatExpression(e, opts)
 	}
 	f := *context[0].f
 	f.opts = opts
@@ -222,7 +222,7 @@ func (f *nodeFormatter) exprListSQL(exprs []ast.Expression) string {
 		if f.expressionCase != nil {
 			parts[i] = formatExpressionChild(e, opts, f.expressionCase)
 		} else {
-			parts[i] = FormatExpression(e, opts)
+			parts[i] = formatExpression(e, opts)
 		}
 	}
 	return strings.Join(parts, ", ")
@@ -281,7 +281,7 @@ func (f *nodeFormatter) tableSubquerySQL(s ast.Statement) string {
 	}
 	opts := nestedOpts(f.opts)
 	opts.NewlinePerClause = false
-	return FormatStatement(s, opts)
+	return formatStatement(s, opts)
 }
 
 func lowerDataType(typ string) string {

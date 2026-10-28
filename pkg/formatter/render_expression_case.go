@@ -250,12 +250,33 @@ func (f *nodeFormatter) exprSQL(e ast.Expression) string {
 		copy.Expressions = c.exprs(v.Expressions)
 		return c.result(&copy)
 	case *ast.GroupingSetsExpression:
-		copy := *v
-		copy.Sets = make([][]ast.Expression, len(v.Sets))
-		for i := range v.Sets {
-			copy.Sets[i] = c.exprs(v.Sets[i])
+		// Rendered here rather than through slots: SQL() leaves a set that is
+		// a lone ROLLUP, CUBE or GROUPING SETS unparenthesised, and a slot
+		// would hide that element's type from it.
+		var b strings.Builder
+		b.WriteString("grouping sets(")
+		for i, set := range v.Sets {
+			if i > 0 {
+				b.WriteString(", ")
+			}
+			if len(set) == 1 {
+				switch set[0].(type) {
+				case *ast.RollupExpression, *ast.CubeExpression, *ast.GroupingSetsExpression:
+					b.WriteString(f.exprSQL(set[0]))
+					continue
+				}
+			}
+			b.WriteByte('(')
+			for j, e := range set {
+				if j > 0 {
+					b.WriteString(", ")
+				}
+				b.WriteString(f.exprSQL(e))
+			}
+			b.WriteByte(')')
 		}
-		return c.result(&copy)
+		b.WriteByte(')')
+		return b.String()
 	case *ast.OuterJoinMarker:
 		copy := *v
 		copy.Expr = c.expr(v.Expr)

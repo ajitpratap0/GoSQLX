@@ -406,7 +406,7 @@ func (b *BinaryExpression) writeSQL(buf *bytes.Buffer) {
 	// prefix NOT, matching UnaryExpression, instead of the infix NOT form.
 	if b.Right == nil && strings.EqualFold(op, "NOT") {
 		buf.WriteString("NOT ")
-		writeExpr(buf, b.Left)
+		writeBinaryOperand(buf, b, b.Left, false)
 		return
 	}
 
@@ -414,7 +414,7 @@ func (b *BinaryExpression) writeSQL(buf *bytes.Buffer) {
 	// The parser stores the operator as "IS NULL" and uses the Not flag to
 	// disambiguate `IS NOT NULL`, so honour it here to avoid dropping NOT.
 	if strings.EqualFold(op, "IS NULL") {
-		writeExpr(buf, b.Left)
+		writeBinaryOperand(buf, b, b.Left, false)
 		if b.Not {
 			buf.WriteString(" IS NOT NULL")
 		} else {
@@ -426,25 +426,25 @@ func (b *BinaryExpression) writeSQL(buf *bytes.Buffer) {
 	// Handle special operators like LIKE, ILIKE, SIMILAR TO
 	if b.Not {
 		if canon, ok := notQualifiedOperator(op); ok {
-			writeExpr(buf, b.Left)
+			writeBinaryOperand(buf, b, b.Left, false)
 			buf.WriteString(" NOT ")
 			buf.WriteString(canon)
 			buf.WriteByte(' ')
-			writeExpr(buf, b.Right)
+			writeBinaryOperand(buf, b, b.Right, true)
 			writeEscape(buf, b.DialectExtras().Escape)
 			return
 		}
 		buf.WriteString("NOT (")
-		writeExpr(buf, b.Left)
+		writeBinaryOperand(buf, b, b.Left, false)
 		buf.WriteByte(' ')
 		writeOp()
 		buf.WriteByte(' ')
-		writeExpr(buf, b.Right)
+		writeBinaryOperand(buf, b, b.Right, true)
 		buf.WriteByte(')')
 		return
 	}
 
-	writeExpr(buf, b.Left)
+	writeBinaryOperand(buf, b, b.Left, false)
 	buf.WriteByte(' ')
 	if b.PipesOr && b.CustomOp == nil && strings.EqualFold(op, "OR") {
 		// Keep the source spelling of a MySQL / MariaDB || OR (#781).
@@ -453,7 +453,7 @@ func (b *BinaryExpression) writeSQL(buf *bytes.Buffer) {
 		writeOp()
 	}
 	buf.WriteByte(' ')
-	writeExpr(buf, b.Right)
+	writeBinaryOperand(buf, b, b.Right, true)
 	writeEscape(buf, b.DialectExtras().Escape)
 }
 
@@ -501,17 +501,17 @@ func (u *UnaryExpression) writeSQL(buf *bytes.Buffer) {
 	switch u.Operator {
 	case Not:
 		buf.WriteString("NOT ")
-		writeExpr(buf, u.Expr)
+		writeUnaryOperand(buf, u)
 	case PGPostfixFactorial:
-		writeExpr(buf, u.Expr)
+		writeUnaryOperand(buf, u)
 		buf.WriteByte('!')
 	case Plus:
 		buf.WriteByte('+')
-		writeExpr(buf, u.Expr)
+		writeUnaryOperand(buf, u)
 	case Minus:
 		buf.WriteByte('-')
 		start := buf.Len()
-		writeExpr(buf, u.Expr)
+		writeUnaryOperand(buf, u)
 		// "--" starts a line comment: separate a nested unary minus or a
 		// negative literal from this operator ("- -1", not "--1").
 		if b := buf.Bytes(); len(b) > start && b[start] == '-' {
@@ -522,19 +522,19 @@ func (u *UnaryExpression) writeSQL(buf *bytes.Buffer) {
 		}
 	case Prior:
 		buf.WriteString("PRIOR ")
-		writeExpr(buf, u.Expr)
+		writeUnaryOperand(buf, u)
 	case MySQLBinary:
 		buf.WriteString("BINARY ")
-		writeExpr(buf, u.Expr)
+		writeUnaryOperand(buf, u)
 	case PGAbs:
 		// Always separate "@" from its operand: "@a", "@t.a" and "@abs(a)"
 		// read as a placeholder or variable, and "@-5" as the operator "@-".
 		buf.WriteString("@ ")
-		writeExpr(buf, u.Expr)
+		writeUnaryOperand(buf, u)
 	default:
 		buf.WriteString(u.Operator.String())
 		start := buf.Len()
-		writeExpr(buf, u.Expr)
+		writeUnaryOperand(buf, u)
 		// A symbolic prefix operator followed by an operand that starts with
 		// an operator character would read as one longer operator ("@-5" is
 		// the operator "@-"): keep them apart.
@@ -1237,6 +1237,13 @@ func (g *GroupingSetsExpression) writeSQL(buf *bytes.Buffer) {
 		if i > 0 {
 			buf.WriteString(", ")
 		}
+		if len(set) == 1 {
+			switch set[0].(type) {
+			case *RollupExpression, *CubeExpression, *GroupingSetsExpression:
+				writeExpr(buf, set[0])
+				continue
+			}
+		}
 		buf.WriteByte('(')
 		writeExprList(buf, set)
 		buf.WriteByte(')')
@@ -1303,6 +1310,12 @@ func (s *SelectStatement) writeSQL(buf *bytes.Buffer) {
 		writeJoin(buf, &s.Joins[i])
 	}
 
+	// ClickHouse writes SAMPLE with the table expression, before ARRAY JOIN.
+	if sample := s.Sample.SQL(); sample != "" {
+		buf.WriteByte(' ')
+		buf.WriteString(sample)
+	}
+
 	if s.ArrayJoin != nil {
 		if s.ArrayJoin.Left {
 			buf.WriteString(" LEFT ARRAY JOIN ")
@@ -1319,11 +1332,6 @@ func (s *SelectStatement) writeSQL(buf *bytes.Buffer) {
 				writeName(buf, e.Alias)
 			}
 		}
-	}
-
-	if s.Sample != nil {
-		buf.WriteByte(' ')
-		buf.WriteString(s.Sample.SQL())
 	}
 
 	if s.PrewhereClause != nil {
@@ -2203,6 +2211,8 @@ func writeTableRef(buf *bytes.Buffer, t *TableReference) {
 		buf.WriteByte('(')
 		t.Subquery.writeSQL(buf)
 		buf.WriteByte(')')
+	} else if rows := RowsFromSQL(t, nil); rows != "" {
+		buf.WriteString(rows)
 	} else if t.TableFunc != nil {
 		t.TableFunc.writeSQL(buf)
 		if t.WithOrdinality {
@@ -2822,34 +2832,8 @@ func (c *ConnectByClause) ToSQL() string {
 	return b.String()
 }
 
-// writeSampleRatio writes a SAMPLE ratio or offset, n or n/d, writing each
-// part only when it is a plain number (IsPlainNumberText).
-func writeSampleRatio(buf *bytes.Buffer, n, d string) {
-	if !IsPlainNumberText(n) {
-		return
-	}
-	buf.WriteString(n)
-	if IsPlainNumberText(d) {
-		buf.WriteByte('/')
-		buf.WriteString(d)
-	}
-}
-
 // SQL renders a ClickHouse SAMPLE clause, e.g. "SAMPLE 0.1" or
 // "SAMPLE 1/10 OFFSET 2/10".
 func (s *SampleClause) SQL() string {
-	if s == nil {
-		return ""
-	}
-	sb := getBuf()
-	defer putBuf(sb)
-	sb.WriteString("SAMPLE ")
-	// The ratio and offset are numeric literals; any other text can only come
-	// from a hand-built AST and is dropped rather than written raw.
-	writeSampleRatio(sb, s.Value, s.Denominator)
-	if IsPlainNumberText(s.Offset) {
-		sb.WriteString(" OFFSET ")
-		writeSampleRatio(sb, s.Offset, s.OffsetDenominator)
-	}
-	return sb.String()
+	return SampleExpressionSQL(s, nil)
 }

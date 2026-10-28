@@ -198,6 +198,9 @@ func (p *Parser) parseAndExpression() (ast.Expression, error) {
 // operator. When || is logical OR (p.pipesAsOr, MySQL/MariaDB default) the loop
 // does not consume it, leaving it for parseExpression at OR precedence.
 func (p *Parser) parseStringConcatExpression() (ast.Expression, error) {
+	if p.IsPostgreSQL() {
+		return p.parseBitwiseExpression(1)
+	}
 	// Parse the left side using additive expression
 	left, err := p.parseAdditiveExpression()
 	if err != nil {
@@ -210,7 +213,7 @@ func (p *Parser) parseStringConcatExpression() (ast.Expression, error) {
 // left operand.
 func (p *Parser) parseStringConcatTail(left ast.Expression) (ast.Expression, error) {
 	// Handle || (string concatenation) operator (left-associative)
-	for !p.pipesAsOr && p.isType(models.TokenTypeStringConcat) {
+	for !p.pipesAsOr && p.isType(models.TokenTypeStringConcat) && !p.IsPostgreSQL() {
 		opPos := p.currentLocation()
 		operator := p.currentToken.Token.Value
 		p.advance() // Consume ||
@@ -256,11 +259,12 @@ func (p *Parser) parseAdditiveTail(left ast.Expression) (ast.Expression, error) 
 		}
 
 		left = &ast.BinaryExpression{
-			Left:       left,
-			Operator:   operator,
-			Right:      right,
-			BitwiseXor: operator == "^", // only SQL Server reaches here with ^
-			Pos:        opPos,
+			Left:          left,
+			Operator:      operator,
+			Right:         right,
+			BitwiseXor:    operator == "^", // only SQL Server reaches here with ^
+			XorAtAdditive: operator == "^",
+			Pos:           opPos,
 		}
 	}
 
@@ -389,8 +393,10 @@ func (p *Parser) parseJSONExpression() (ast.Expression, error) {
 		}
 	}
 
-	// Handle JSON operators (left-associative for chaining like data->'a'->'b')
-	for p.isJSONOperator() {
+	// PostgreSQL JSON operators share the lower "any other operator"
+	// precedence handled by parseBitwiseExpression. Other dialects keep
+	// their existing JSON precedence.
+	for p.isJSONOperator() && !p.IsPostgreSQL() {
 		opPos := p.currentLocation()
 		operator := p.currentToken.Token.Value
 		operatorType := p.currentToken.Token.Type

@@ -32,7 +32,7 @@ func cteSQL(cte *ast.CommonTableExpr, f *nodeFormatter) string {
 	var sb strings.Builder
 	// ClickHouse scalar CTE: WITH <expr> AS <name>
 	if cte.ScalarExpr != nil {
-		sb.WriteString(FormatExpression(cte.ScalarExpr, f.opts))
+		sb.WriteString(formatExpression(cte.ScalarExpr, f.opts))
 		sb.WriteString(" ")
 		sb.WriteString(f.kw("AS"))
 		sb.WriteString(" ")
@@ -57,7 +57,7 @@ func cteSQL(cte *ast.CommonTableExpr, f *nodeFormatter) string {
 		sb.WriteString(" ")
 	}
 	sb.WriteString("(")
-	sb.WriteString(FormatStatement(cte.Statement, nestedOpts(f.opts)))
+	sb.WriteString(formatStatement(cte.Statement, nestedOpts(f.opts)))
 	sb.WriteString(")")
 	sb.WriteString(ast.CTESearchCycleSQL(cte, f.kw))
 	return sb.String()

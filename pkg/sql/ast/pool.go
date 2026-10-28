@@ -642,7 +642,7 @@ func releaseStatement(stmt Statement, mode releaseMode) {
 	case *ReplaceStatement:
 		releaseReplaceStatement(s, mode)
 	case *AlterStatement:
-		PutAlterStatement(s)
+		releaseAlterStatement(s, mode)
 	case *SetOperation:
 		// Not pooled itself; its operands are. Operand links are cleared,
 		// so a second visit releases nothing.
@@ -886,11 +886,23 @@ func GetAlterStatement() *AlterStatement {
 }
 
 // PutAlterStatement returns an AlterStatement to the pool.
-// It zeroes all fields; the Operation interface value is cleared but
-// its internal allocations are not recursively pooled (they use custom types).
+// It zeroes all fields and releases structured partition expressions.
 func PutAlterStatement(stmt *AlterStatement) {
+	releaseAlterStatement(stmt, releaseAll)
+}
+
+func releaseAlterStatement(stmt *AlterStatement, mode releaseMode) {
 	if stmt == nil {
 		return
+	}
+	if len(stmt.Operations) > 0 {
+		for _, operation := range stmt.Operations {
+			if op, ok := operation.(*AlterTableOperation); ok && op != nil {
+				releaseAlterPartitionFields(op, mode)
+			}
+		}
+	} else if op, ok := stmt.Operation.(*AlterTableOperation); ok && op != nil {
+		releaseAlterPartitionFields(op, mode)
 	}
 
 	stmt.Type = 0

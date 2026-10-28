@@ -53,6 +53,9 @@ func releaseDMLTargetFields(d *DMLTargetFields, mode releaseMode) {
 // releaseInsertDialectFields releases the expressions reachable from the
 // INSERT dialect fields and zeroes them.
 func releaseInsertDialectFields(d *InsertDialectFields, mode releaseMode) {
+	if d.Top != nil {
+		releaseExpression(d.Top.Count, mode)
+	}
 	if d.OutputInto != nil {
 		for _, e := range d.OutputInto.Columns {
 			releaseExpression(e, mode)

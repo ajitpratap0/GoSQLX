@@ -139,12 +139,16 @@ func (t *Tree) Functions() []string {
 // faster and guaranteed to match the parsed structure.
 //
 // Pass zero or more FormatOption values to customize indent width and keyword
-// casing; see WithIndent and WithUppercaseKeywords.
+// casing; see WithIndent and WithUppercaseKeywords. It returns an empty string
+// on rendering errors; use FormatChecked to handle errors.
 func (t *Tree) Format(opts ...FormatOption) string {
-	if t == nil || t.ast == nil {
-		return ""
-	}
-	return FormatAST(t.ast, opts...)
+	out, _ := t.FormatChecked(opts...)
+	return out
+}
+
+// FormatChecked is Format with semantic rendering errors returned to the caller.
+func (t *Tree) FormatChecked(opts ...FormatOption) (string, error) {
+	return FormatTreeChecked(t, opts...)
 }
 
 // Release returns any pooled resources associated with the tree. It is
@@ -471,22 +475,36 @@ func applyFormatOptions(cfg formatOptions, opts []FormatOption) formatOptions {
 
 // FormatTree renders a Tree back to SQL text using the AST-based formatter.
 // It does not re-tokenize or re-parse; if you already have a Tree, prefer
-// this over the top-level Format(sql, opts) function.
+// this over the top-level Format(sql, opts) function. It returns an empty string
+// on rendering errors; use FormatTreeChecked to handle errors.
 func FormatTree(t *Tree, opts ...FormatOption) string {
-	if t == nil || t.ast == nil {
-		return ""
+	out, _ := FormatTreeChecked(t, opts...)
+	return out
+}
+
+// FormatTreeChecked is FormatTree with semantic rendering errors returned to the caller.
+func FormatTreeChecked(t *Tree, opts ...FormatOption) (string, error) {
+	if t == nil {
+		return "", nil
 	}
-	return FormatAST(t.ast, opts...)
+	return FormatASTChecked(t.ast, opts...)
 }
 
 // FormatAST renders a raw *ast.AST back to SQL text. This is the escape-hatch
 // equivalent of FormatTree for callers that hold the underlying AST directly
 // (e.g., from the low-level parser API). Internally it delegates to
-// pkg/formatter.FormatAST — it does not re-parse.
+// pkg/formatter.FormatAST — it does not re-parse. It returns an empty string
+// on rendering errors; use FormatASTChecked to handle errors.
 func FormatAST(a *ast.AST, opts ...FormatOption) string {
+	out, _ := FormatASTChecked(a, opts...)
+	return out
+}
+
+// FormatASTChecked is FormatAST with semantic rendering errors returned to the caller.
+func FormatASTChecked(a *ast.AST, opts ...FormatOption) (string, error) {
 	if a == nil {
-		return ""
+		return "", nil
 	}
 	astOpts := buildASTFormatOptions(opts)
-	return formatter.FormatAST(a, astOpts)
+	return formatter.FormatASTChecked(a, astOpts)
 }

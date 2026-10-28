@@ -33,8 +33,8 @@ func (f *nodeFormatter) ddlStyle() ast.DDLStyle {
 	opts := f.opts
 	return ast.DDLStyle{
 		Keyword:   f.kw,
-		Expr:      func(e ast.Expression) string { return FormatExpression(e, opts) },
-		Stmt:      func(s ast.Statement) string { return FormatStatement(s, nestedOpts(opts)) },
+		Expr:      func(e ast.Expression) string { return formatExpression(e, opts) },
+		Stmt:      func(s ast.Statement) string { return formatStatement(s, nestedOpts(opts)) },
 		ClauseSep: f.clauseSep(),
 		NameQuote: f.nq,
 	}

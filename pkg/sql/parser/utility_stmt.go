@@ -960,7 +960,8 @@ func (p *Parser) isIdentifierAt(i int) bool {
 }
 
 // currentIdentQuote returns the opening delimiter of the current token when
-// it is a delimited identifier ('"', '`' or '['), and 0 for a bare word.
+// it is a delimited identifier ('"', '`' or '['), and 0 for a bare word. A
+// bare digit-leading MySQL name (1col) reports '`' (see digitLeadingQuote).
 func (p *Parser) currentIdentQuote() rune {
 	if p.isType(models.TokenTypeDoubleQuotedString) {
 		return '"'
@@ -970,6 +971,9 @@ func (p *Parser) currentIdentQuote() rune {
 		if p.isType(models.TokenTypeIdentifier) {
 			return q
 		}
+	}
+	if p.isType(models.TokenTypeIdentifier) {
+		return p.digitLeadingQuote(p.currentToken.Token.Value, 0)
 	}
 	return 0
 }

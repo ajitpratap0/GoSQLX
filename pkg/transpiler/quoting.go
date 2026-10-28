@@ -43,4 +43,5 @@ func requoteIdentifiers(stmt ast.Statement, from, to keywords.SQLDialect) {
 		return
 	}
 	ast.SetNameQuoteStyle(stmt, identifierDelimiter(to), to == keywords.DialectOracle)
+	ast.RestyleDataTypes(stmt, identifierDelimiter(to))
 }

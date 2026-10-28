@@ -338,6 +338,10 @@ func putExpressionBounded(expr Expression, depth int, mode releaseMode, maxWork,
 				*e = LiteralValue{}
 				literalValuePool.Put(e)
 			}
+		case *UnicodeEscapeExpression:
+			if mode == releaseAll {
+				*e = UnicodeEscapeExpression{}
+			}
 
 		case *FunctionCall:
 			for _, arg := range e.Arguments {

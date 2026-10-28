@@ -677,7 +677,11 @@ func formatSQL(sql string, options FormatOptions, dialect keywords.SQLDialect) (
 	}
 
 	if len(comments) == 0 {
-		return formatter.FormatAST(parsedAST, astOpts), nil
+		out, err := formatter.FormatASTChecked(parsedAST, astOpts)
+		if err != nil {
+			return "", fmt.Errorf("cannot format SQL: %w", err)
+		}
+		return out, nil
 	}
 
 	// Comments go back around the statements they belonged to. A comment that
@@ -686,7 +690,10 @@ func formatSQL(sql string, options FormatOptions, dialect keywords.SQLDialect) (
 	// dropped or moved: either would change what the statement does.
 	stmts := make([]string, len(parsedAST.Statements))
 	for i, stmt := range parsedAST.Statements {
-		stmts[i] = formatter.FormatStatement(stmt, astOpts)
+		stmts[i], err = formatter.FormatStatementChecked(stmt, astOpts)
+		if err != nil {
+			return "", fmt.Errorf("cannot format SQL: %w", err)
+		}
 	}
 	layout := formatter.CommentLayout{Terminator: ";", Gap: "\n", Dialect: string(dialect), Batches: formatter.BatchPositions(parsedAST), Starts: formatter.StatementPositions(parsedAST)}
 	if options.AddSemicolon {

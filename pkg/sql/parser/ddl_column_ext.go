@@ -174,6 +174,7 @@ func (p *Parser) typeWordFollows(prev, first string) bool {
 func (p *Parser) parseColumnType() (string, error) {
 	// Use parseColumnName to accept keyword-based type names such as
 	// INTEGER, TEXT, REAL.
+	typeName := typeNameTokenSQL(p.currentToken.Token)
 	base := p.parseColumnName()
 	if base == nil {
 		return "", goerrors.ExpectedTokenError(
@@ -183,11 +184,11 @@ func (p *Parser) parseColumnType() (string, error) {
 			"",
 		)
 	}
-	typ := base.Name
+	typ := typeName
 	for p.isType(models.TokenTypePeriod) && p.peekToken().Token.Value != "" &&
 		p.peekToken().Token.Type != models.TokenTypeMul {
 		p.advance() // Consume .
-		typ += "." + p.currentToken.Token.Value
+		typ += "." + typeNameTokenSQL(p.currentToken.Token)
 		p.advance()
 	}
 	first := strings.ToUpper(typ)

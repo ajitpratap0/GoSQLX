@@ -141,6 +141,7 @@ func writeReturning(buf *bytes.Buffer, returning, into []Expression) {
 func (i *InsertStatement) writeInsertHead(buf *bytes.Buffer) {
 	buf.WriteString("INSERT ")
 	writeDMLModifiers(buf, i.DialectExtras().Modifiers)
+	writeDMLTop(buf, i.DialectExtras().Top)
 	buf.WriteString("INTO ")
 	if i.DialectExtras().TableFunction != nil {
 		buf.WriteString("FUNCTION ")

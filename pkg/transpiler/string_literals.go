@@ -129,51 +129,63 @@ type seenPtr struct {
 // reflection rather than Node.Children so a literal held by a node whose
 // Children list is incomplete is still retargeted: one missed literal would
 // keep the source escaping. seen guards against shared or cyclic pointers.
+// An explicit stack preserves pre-order without consuming the goroutine stack.
 func forEachLiteral(v reflect.Value, seen map[seenPtr]bool, f func(*ast.LiteralValue)) {
-	switch v.Kind() {
-	case reflect.Interface:
-		if !v.IsNil() {
-			forEachLiteral(v.Elem(), seen, f)
-		}
-	case reflect.Pointer:
-		if v.IsNil() {
-			return
-		}
-		key := seenPtr{v.Type(), v.Pointer()}
-		if seen[key] {
-			return
-		}
-		seen[key] = true
-		if v.Elem().Type() == literalType {
-			if lit, ok := v.Interface().(*ast.LiteralValue); ok {
-				f(lit)
+	var small [64]reflect.Value
+	stack := append(small[:0], v)
+	for len(stack) > 0 {
+		v = stack[len(stack)-1]
+		stack = stack[:len(stack)-1]
+		switch v.Kind() {
+		case reflect.Interface:
+			if !v.IsNil() {
+				stack = append(stack, v.Elem())
 			}
-			return
-		}
-		forEachLiteral(v.Elem(), seen, f)
-	case reflect.Struct:
-		if v.Type() == literalType {
-			if v.CanAddr() {
-				if lit, ok := v.Addr().Interface().(*ast.LiteralValue); ok {
+		case reflect.Pointer:
+			if v.IsNil() {
+				continue
+			}
+			key := seenPtr{v.Type(), v.Pointer()}
+			if seen[key] {
+				continue
+			}
+			seen[key] = true
+			if v.Elem().Type() == literalType {
+				if lit, ok := v.Interface().(*ast.LiteralValue); ok {
 					f(lit)
 				}
+				continue
 			}
-			return
-		}
-		t := v.Type()
-		for i := 0; i < v.NumField(); i++ {
-			if t.Field(i).IsExported() {
-				forEachLiteral(v.Field(i), seen, f)
+			stack = append(stack, v.Elem())
+		case reflect.Struct:
+			if v.Type() == literalType {
+				if v.CanAddr() {
+					if lit, ok := v.Addr().Interface().(*ast.LiteralValue); ok {
+						f(lit)
+					}
+				}
+				continue
 			}
-		}
-	case reflect.Slice, reflect.Array:
-		for i := 0; i < v.Len(); i++ {
-			forEachLiteral(v.Index(i), seen, f)
-		}
-	case reflect.Map:
-		iter := v.MapRange()
-		for iter.Next() {
-			forEachLiteral(iter.Value(), seen, f)
+			t := v.Type()
+			for i := v.NumField() - 1; i >= 0; i-- {
+				if t.Field(i).IsExported() {
+					stack = append(stack, v.Field(i))
+				}
+			}
+		case reflect.Slice, reflect.Array:
+			for i := v.Len() - 1; i >= 0; i-- {
+				stack = append(stack, v.Index(i))
+			}
+		case reflect.Map:
+			iter := v.MapRange()
+			start := len(stack)
+			for iter.Next() {
+				stack = append(stack, iter.Value())
+			}
+			// Preserve this iterator's order with a LIFO stack.
+			for i, j := start, len(stack)-1; i < j; i, j = i+1, j-1 {
+				stack[i], stack[j] = stack[j], stack[i]
+			}
 		}
 	}
 }

@@ -24,6 +24,40 @@ import (
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/parser"
 )
 
+func TestForEachLiteralDeepChain(t *testing.T) {
+	first := &ast.LiteralValue{Value: "first", Type: "string"}
+	last := &ast.LiteralValue{Value: "last", Type: "string"}
+	var expr ast.Expression = first
+	for i := 0; i < 50000; i++ {
+		expr = &ast.BinaryExpression{Left: expr, Operator: "OR", Right: last}
+	}
+	var got []string
+	forEachLiteral(reflect.ValueOf(expr), make(map[seenPtr]bool), func(l *ast.LiteralValue) {
+		if s, ok := l.Value.(string); ok {
+			got = append(got, s)
+		}
+	})
+	if !reflect.DeepEqual(got, []string{"first", "last"}) {
+		t.Fatalf("visit order = %v", got)
+	}
+}
+
+func TestForEachLiteralCycleAndMap(t *testing.T) {
+	lit := &ast.LiteralValue{Value: "shared", Type: "string"}
+	type holder struct {
+		First  *ast.LiteralValue
+		Values map[string]*ast.LiteralValue
+		Next   *holder
+	}
+	node := &holder{First: lit, Values: map[string]*ast.LiteralValue{"shared": lit}}
+	node.Next = node
+	count := 0
+	forEachLiteral(reflect.ValueOf(node), make(map[seenPtr]bool), func(*ast.LiteralValue) { count++ })
+	if count != 1 {
+		t.Fatalf("literal visits = %d, want 1", count)
+	}
+}
+
 // stringValues parses sql in d and returns the decoded value of every string
 // literal, in the order the reflective walk finds them.
 func stringValues(t *testing.T, sql string, d keywords.SQLDialect) []string {

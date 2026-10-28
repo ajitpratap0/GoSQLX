@@ -118,11 +118,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `IDENTIFIED VIA ... USING PASSWORD(` and `COPY (` with an unclosed group no
   longer panic with `index out of range [-1]`; they return an E2002 error
   (expected `]` or `)`) in every dialect.
-- **Transpile**: a LIMIT on a whole UNION/INTERSECT/EXCEPT no longer becomes `TOP` on the last branch when targeting SQL Server (that silently changed results); it is emitted as `ORDER BY ... OFFSET n ROWS FETCH NEXT m ROWS ONLY`, and without ORDER BY Transpile returns an error. Very long operator chains (for example 490,000 `OR` terms) no longer crash the process with an unrecoverable stack overflow: the operator and string-literal rewrites walk the tree iteratively, and rewrites that would nest output more than 512 levels deep return an error.
-- **Format**: with `AddSemicolon` and a comment anywhere in the input, raw-text statements (PostgreSQL `DO $$...$$`, `CREATE FUNCTION` bodies, Oracle `BEGIN ... END` blocks) lost their `;`, so the output no longer parsed or merged two statements. The comment-preserving path now adds terminators the same way as the plain path (`formatter.EnsureStatementTerminator`).
-- **Extract**: `gosqlx.Extract*` and `ExtractMetadata` (and the MCP `extract_metadata`/`analyze_sql` tools) took exponential time on nested CTEs and UNION chains because CTE, set-operation and DML children were visited twice. Each node is now visited once; nested CTEs at depth 10 took about 59 s and now finish in microseconds.
-- **LSP (`pkg/lsp`)**: `initialize` now advertises `textDocumentSync` (it sent the non-standard `textDocumentSyncOptions`, so VS Code never sent open/change/close events). A negative `Content-Length` and a `didChange` range past the end of the document no longer crash the server; oversized messages are drained so framing survives; `didChange` character offsets are read as UTF-16 code units and CRLF line ends are respected. A panic in a request handler or in background diagnostics is now logged and answered with `InternalError` instead of ending the process.
-- **Security (`ScanSQL`)**: closed several ways to slip injection past the string scanner (also used by MCP, the C binding and WASM). Dollar-quote stripping no longer runs inside quoted strings or identifiers (`SELECT '$x$'; DROP TABLE users; SELECT '$x$'` was clean). Tautology and comment checks now cover the whole input instead of the first 10,000 bytes; inputs above 10 MiB get a CRITICAL `INPUT_TOO_LARGE` finding whatever the severity filter. Comments between keywords (`UNION/**/SELECT`, `SLEEP/**/(5)`, `;--\nDROP`, `#` comments, `/*/`, MySQL `1--1`) are matched through comment-free views of the text under each quoting and escaping convention, and MySQL/MariaDB `/*! */` and `/*M! */` bodies are scanned. The AST UNION NULL-padding check now matches the parser's NULL literal. The tautology check no longer allocates per candidate (1 MiB of `1=2` went from 50 MB to 1 MB).
 - Watch now respects `--dialect`, re-validates changes and formats files in place
   with the CLI safety checks; MCP parsing accepts a dialect and documents comment preservation.
 - Correct transpile dialect help, avoid duplicate lint syntax errors, and rewrite
@@ -2459,7 +2454,6 @@ The following features were identified during real-world testing and are tracked
 #### Test Coverage Enhancement - Phase 2 (Keywords, Errors, AST)
 - **Comprehensive Test Suite**: Added 3 new test files with 1,351 lines of test code
 - **Perfect Coverage Achieved**: Keywords package reaches 100% coverage
-- **Coverage Achievements**:
   - Keywords Package: 92.8% → **100.0%** (+7.2%) - Perfect Coverage
   - Errors Package: 83.8% → **95.6%** (+11.8%) - Exceeded Target
   - AST Package: 73.7% → **74.4%** (+0.7%) - Marker functions covered
@@ -2492,8 +2486,6 @@ The following features were identified during real-world testing and are tracked
 #### Combined Phase 1 + Phase 2 Impact
 - **6 packages** with comprehensive coverage improvements
 - **4,445 lines** of production-grade test code
-- **Zero race conditions** across entire codebase
-- **Production-ready** reliability validated
 
 ## [1.5.0] - 2025-11-15 - Phase 1 Test Coverage Achievement
 
@@ -2652,7 +2644,6 @@ This release positions GoSQLX as the most thoroughly tested Go SQL parser librar
 - **Comprehensive Test Suite**: Added 10 new test files with ~1,800 lines of tests
 - **Coverage Improvement**: Increased AST package coverage from 59.6% to 73.4% (+13.8 percentage points)
 - **Production Confidence**: Exceeded 70% coverage target, validating production readiness
-- **Quality Assurance**: All tests pass with race detection enabled, zero race conditions detected
 
 ### New Test Files Created
 - **data_loading_test.go** (~250 lines): Cloud data loading features (StageParamsObject, DataLoadingOptions, helpers)
@@ -2817,8 +2808,6 @@ This substantial test coverage increase provides strong confidence in the AST pa
 - **1.25M+ operations/second** peak throughput with concurrent processing
 - **<1μs latency** for complex queries with CTEs and set operations
 - **Zero performance regression** from Phase 1 - all existing functionality maintained
-- **Race-free implementation** - comprehensive concurrent testing validates thread safety
-- **Memory efficient** - object pooling preserved with 60-80% memory reduction
 
 ### 🎯 SQL Standards Compliance
 - **~70% SQL-92 compliance** achieved (up from ~40% in Phase 1)
@@ -2837,8 +2826,6 @@ This substantial test coverage increase provides strong confidence in the AST pa
 - **24+ test functions** total (9 new Phase 2 tests added)
 - **4 comprehensive CTE tests**: Simple CTE, Recursive CTE, Multiple CTEs, Column specs
 - **5 comprehensive set operation tests**: All operations, chaining, CTE combinations
-- **100% test pass rate** with race detection enabled
-- **Extensive error case coverage** with contextual error messages
 
 ### 📚 Documentation Updates
 - **Enhanced Go package documentation** with Phase 2 examples and API references
@@ -2850,7 +2837,6 @@ This substantial test coverage increase provides strong confidence in the AST pa
 - **100% backward compatible** - all existing functionality preserved
 - **API stability** - no breaking changes to public interfaces
 - **Legacy test compatibility** - all Phase 1 and prior tests continue passing
-- **Performance maintained** - no degradation in existing query parsing performance
 
 ### Goals Achieved
 - ✅ ~70% SQL-92 compliance milestone reached

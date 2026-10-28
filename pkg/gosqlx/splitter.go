@@ -87,6 +87,7 @@ type dialectProfile struct {
 	supportsEStrings            bool
 	supportsBackslash           bool
 	supportsNestedBlockComments bool
+	hashComments                bool
 
 	// Procedural-script features (see splitter_proc.go).
 	tsql      bool // GO batches; IF/WHILE/LOOP are not delimited by END IF etc.
@@ -108,7 +109,7 @@ func profileForDialect(dialect string) dialectProfile {
 			supportsNestedBlockComments: true,
 		}
 	case "mysql", "mariadb":
-		return dialectProfile{supportsBackticks: true, delimiter: true}
+		return dialectProfile{supportsBackticks: true, delimiter: true, hashComments: true}
 	case "clickhouse":
 		return dialectProfile{supportsBackticks: true}
 	case "sqlserver", "mssql", "tsql":
@@ -285,6 +286,10 @@ func splitCore(src string, p dialectProfile) (out []string, open bool) {
 		case c == '-' && i+1 < len(src) && src[i+1] == '-':
 			inLine = true
 			i += 2
+
+		case c == '#' && p.hashComments:
+			inLine = true
+			i++
 
 		case c == '/' && i+1 < len(src) && src[i+1] == '*':
 			blockCommentDepth = 1

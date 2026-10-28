@@ -349,6 +349,7 @@ func parseQualifiedTableName(name string) QualifiedName {
 // in a single AST traversal. Maps for kinds that were not requested stay nil
 // and are never written to.
 type metadataCollector struct {
+	visits           int
 	want             extractKind
 	tables           map[string]struct{}
 	tablesQualified  map[QualifiedName]struct{}
@@ -439,6 +440,8 @@ func (c *metadataCollector) collectFromNode(node ast.Node, aliases map[string]st
 		return
 	}
 
+	c.visits++
+
 	switch n := node.(type) {
 	case *ast.Identifier:
 		c.addColumn(n.Table, n.Name, c.want, aliases)
@@ -473,9 +476,6 @@ func (c *metadataCollector) collectFromNode(node ast.Node, aliases map[string]st
 		for _, ob := range n.OrderBy {
 			c.collectFromExpression(ob.Expression, c.want, aliases)
 		}
-		if n.With != nil {
-			c.collectFromNode(n.With, nil)
-		}
 		// The generic walk also visits clause expressions. Apply aliases there
 		// too, without leaking them into SELECT, WHERE, GROUP BY or JOIN children.
 		for _, child := range node.Children() {
@@ -497,25 +497,13 @@ func (c *metadataCollector) collectFromNode(node ast.Node, aliases map[string]st
 				c.collectFromExpression(val, c.want&extractFunctions, nil)
 			}
 		}
-		if n.Query != nil {
-			c.collectFromNode(n.Query, nil)
-		}
-		if n.With != nil {
-			c.collectFromNode(n.With, nil)
-		}
 	case *ast.UpdateStatement:
 		c.addTable(n.TableName)
 		for _, from := range n.From {
 			c.addTable(from.Name)
 		}
 		c.addDMLTargetTables(n.Extras)
-		for i := range n.Assignments {
-			c.collectFromNode(&n.Assignments[i], nil)
-		}
 		c.collectFromExpression(n.Where, c.want, nil)
-		if n.With != nil {
-			c.collectFromNode(n.With, nil)
-		}
 	case *ast.DeleteStatement:
 		// In DELETE t1 FROM t1 JOIN t2 the targets name FROM entries
 		// (often by alias), so the tables are the FROM list.
@@ -536,21 +524,9 @@ func (c *metadataCollector) collectFromNode(node ast.Node, aliases map[string]st
 			}
 		}
 		c.collectFromExpression(n.Where, c.want, nil)
-		if n.With != nil {
-			c.collectFromNode(n.With, nil)
-		}
 	case *ast.UpdateExpression:
 		c.collectFromExpression(n.Column, c.want&^extractFunctions, nil)
 		c.collectFromExpression(n.Value, c.want, nil)
-	case *ast.WithClause:
-		for _, cte := range n.CTEs {
-			c.collectFromNode(cte, nil)
-		}
-	case *ast.CommonTableExpr:
-		c.collectFromNode(n.Statement, nil)
-	case *ast.SetOperation:
-		c.collectFromNode(n.Left, nil)
-		c.collectFromNode(n.Right, nil)
 	}
 
 	// Recursively collect from children

@@ -93,6 +93,16 @@ func FormatStatement(s ast.Statement, opts ast.FormatOptions) string {
 	return out
 }
 
+// EnsureStatementTerminator applies the full-AST termination rule to a rendered
+// statement. Batch separators and empty statements never receive a semicolon.
+func EnsureStatementTerminator(stmt ast.Statement, part string, addSemicolon bool) string {
+	_, isBatch := stmt.(*ast.BatchSeparator)
+	if addSemicolon && !isBatch && part != "" && !strings.HasSuffix(part, ";") {
+		return part + ";"
+	}
+	return part
+}
+
 // FormatExpression renders an expression. If a target-dialect conversion is
 // unsupported, it returns an empty string and discards the error. Use
 // FormatExpressionChecked whenever the result can carry a target dialect.
@@ -115,9 +125,7 @@ func formatAST(a *ast.AST, opts ast.FormatOptions) string {
 		// next statement would be read back as part of their text.
 		_, isBatch := stmt.(*ast.BatchSeparator)
 		hasBatch = hasBatch || isBatch
-		if opts.AddSemicolon && !isBatch && part != "" && !strings.HasSuffix(part, ";") {
-			part += ";"
-		}
+		part = EnsureStatementTerminator(stmt, part, opts.AddSemicolon)
 		parts = append(parts, part)
 	}
 	sep := ";\n"
@@ -596,10 +604,30 @@ func renderDelete(d *ast.DeleteStatement, opts ast.FormatOptions) string {
 		sb.WriteString(" ")
 	}
 	writeDMLTargets(sb, f, x, d.TableName, d.TableNameQuote, d.Alias, d.AliasQuote)
+	var history ast.DeleteHistoryOptions
+	if x.History != nil {
+		history = *x.History
+	}
+	if len(history.Partitions) > 0 {
+		sb.WriteString(" ")
+		sb.WriteString(f.kw("PARTITION"))
+		sb.WriteString(" (")
+		for i, partition := range history.Partitions {
+			if i > 0 {
+				sb.WriteString(", ")
+			}
+			sb.WriteString(f.exprSQL(partition))
+		}
+		sb.WriteByte(')')
+	}
 	if d.BeforeSystemTime != nil {
 		sb.WriteString(" ")
 		sb.WriteString(f.kw("BEFORE SYSTEM_TIME"))
 		sb.WriteString(" ")
+		if history.BeforeSystemTimeUnit != "" {
+			sb.WriteString(f.kw(history.BeforeSystemTimeUnit))
+			sb.WriteString(" ")
+		}
 		sb.WriteString(f.exprSQL(d.BeforeSystemTime))
 	}
 	writeDMLOutput(sb, f, x.Output, x.OutputInto)

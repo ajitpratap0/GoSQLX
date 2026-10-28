@@ -79,6 +79,7 @@ var ignorable = map[string]bool{"AS": true, "ASC": true, "INNER": true, "OUTER":
 
 // Words returns the upper-cased identifier-like words of s, skipping
 // comments and quoted string literals but keeping quoted identifiers' text.
+// For MySQL and MariaDB, '#' also starts a line comment (outside backticks).
 // The optional dialect uses the tokenizer's string escape rules; omitted means
 // generic SQL. PostgreSQL E-prefixed strings always allow backslash escapes.
 func Words(s string, dialect ...string) []string {
@@ -87,11 +88,21 @@ func Words(s string, dialect ...string) []string {
 		d = sqldialect.Parse(dialect[0])
 	}
 	backslash := d.StringEscape() != sqldialect.StringEscapeNone
+	mysqlFamily := d == sqldialect.MySQL || d == sqldialect.MariaDB
 	var words []string
 	for i := 0; i < len(s); {
 		c := s[i]
 		switch {
-		case c == '-' && i+1 < len(s) && s[i+1] == '-':
+		case c == '`' && mysqlFamily:
+			// A backtick identifier: keep its words, but a '#' inside it does
+			// not start a comment.
+			end := strings.IndexByte(s[i+1:], '`')
+			if end < 0 {
+				end = len(s) - i - 1
+			}
+			words = append(words, Words(s[i+1:i+1+end])...)
+			i += end + 2
+		case c == '-' && i+1 < len(s) && s[i+1] == '-', c == '#' && mysqlFamily:
 			for i < len(s) && s[i] != '\n' {
 				i++
 			}

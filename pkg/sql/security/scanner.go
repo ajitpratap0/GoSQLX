@@ -615,9 +615,88 @@ func (s *Scanner) Scan(tree *ast.AST) *ScanResult {
 		return result
 	}
 
-	for _, stmt := range tree.Statements {
-		s.scanStatement(stmt, result)
-	}
+	// Ancestry is local to the scan, so concurrent scans share no walk state.
+	// Preallocated so typical nesting depths need no regrowth.
+	ancestors := make([]ast.Node, 0, 16)
+	ast.Inspect(tree, func(node ast.Node) bool {
+		if node == nil {
+			ancestors = ancestors[:len(ancestors)-1]
+			return false
+		}
+		var parent ast.Node
+		if len(ancestors) > 0 {
+			parent = ancestors[len(ancestors)-1]
+		}
+		if join, ok := parent.(*ast.JoinClause); ok && node == &join.Left {
+			// Left repeats FROM or an earlier join's right reference,
+			// including its subquery and table function.
+			return false
+		}
+		switch n := node.(type) {
+		case *ast.FunctionCall:
+			s.scanFunctionCall(n, result)
+			s.scanCondition(n.Filter, result)
+		case *ast.TableReference:
+			s.scanTableReference(n, result)
+		case *ast.SetOperation:
+			// Direct operands are already checked by the outer operation.
+			// Operations inside CTEs and subqueries start a new check.
+			if _, nested := parent.(*ast.SetOperation); !nested {
+				s.checkUnionInjection(n, false, result)
+			}
+		case *ast.SelectStatement:
+			s.scanCondition(n.Where, result)
+			s.scanCondition(n.Having, result)
+			s.scanCondition(n.Qualify, result)
+			s.scanCondition(n.PrewhereClause, result)
+			s.scanCondition(n.StartWith, result)
+		case *ast.ConnectByClause:
+			s.scanCondition(n.Condition, result)
+		case *ast.JoinClause:
+			s.scanCondition(n.Condition, result)
+			s.scanCondition(n.MatchCondition, result)
+		case *ast.UpdateStatement:
+			s.scanCondition(n.Where, result)
+		case *ast.Update:
+			s.scanCondition(n.Where, result)
+		case *ast.DeleteStatement:
+			s.scanCondition(n.Where, result)
+		case *ast.Delete:
+			s.scanCondition(n.Where, result)
+		case *ast.MergeStatement:
+			s.scanCondition(n.OnCondition, result)
+		case *ast.MergeWhenClause:
+			s.scanCondition(n.Condition, result)
+		case *ast.MergeAction:
+			s.scanCondition(n.Where, result)
+			s.scanCondition(n.DeleteWhere, result)
+		case *ast.WhenClause:
+			s.scanCondition(n.Condition, result)
+		case *ast.OnConflict:
+			s.scanCondition(n.TargetWhere, result)
+			s.scanCondition(n.Action.Where, result)
+		case *ast.Values:
+			s.scanStatementText(n.SQL(), result)
+			return false
+		case *ast.UtilityStatement:
+			s.scanStatementText(n.Text, result)
+			return false
+		case *ast.SetStatement:
+			s.scanStatementText(n.Text, result)
+			return false
+		case *ast.TransactionStatement:
+			s.scanStatementText(n.Text, result)
+			return false
+		case *ast.UseStatement:
+			s.scanStatementText(n.Text, result)
+			return false
+		case *ast.UnsupportedStatement:
+			s.scanStatementText(n.RawSQL, result)
+			return false
+		}
+		ancestors = append(ancestors, node)
+		return true
+	})
 
 	// Update counts
 	s.updateCounts(result)
@@ -732,36 +811,6 @@ func (s *Scanner) scanSQL(sql string, prefilter bool) *ScanResult {
 	return result
 }
 
-// scanStatement analyzes a single statement for injection patterns.
-func (s *Scanner) scanStatement(stmt ast.Statement, result *ScanResult) {
-	switch st := stmt.(type) {
-	case *ast.SelectStatement:
-		s.scanSelectStatement(st, result)
-	case *ast.InsertStatement:
-		s.scanInsertStatement(st, result)
-	case *ast.UpdateStatement:
-		s.scanUpdateStatement(st, result)
-	case *ast.DeleteStatement:
-		s.scanDeleteStatement(st, result)
-	case *ast.SetOperation:
-		s.scanSetOperation(st, result)
-	case *ast.Values:
-		// The text rules cover expressions under every VALUES wrapper (CAST,
-		// CASE, subqueries, ...), without duplicating AST function findings.
-		s.scanStatementText(st.SQL(), result)
-	case *ast.UtilityStatement:
-		s.scanStatementText(st.Text, result)
-	case *ast.SetStatement:
-		s.scanStatementText(st.Text, result)
-	case *ast.TransactionStatement:
-		s.scanStatementText(st.Text, result)
-	case *ast.UseStatement:
-		s.scanStatementText(st.Text, result)
-	case *ast.UnsupportedStatement:
-		s.scanStatementText(st.RawSQL, result)
-	}
-}
-
 // scanStatementText covers statements whose bodies are retained as text rather
 // than expression nodes, including PREPARE/EXECUTE, T-SQL blocks and CREATE
 // POLICY/TRIGGER. These nodes take only the text path, so AST and text checks
@@ -771,38 +820,10 @@ func (s *Scanner) scanStatementText(text string, result *ScanResult) {
 	result.Findings = append(result.Findings, findings.Findings...)
 }
 
-// scanSelectStatement analyzes SELECT for injection patterns.
-func (s *Scanner) scanSelectStatement(stmt *ast.SelectStatement, result *ScanResult) {
-	// Check WHERE clause for tautologies
-	if stmt.Where != nil {
-		s.scanExpression(stmt.Where, result, "WHERE clause")
-	}
-
-	// Check HAVING clause
-	if stmt.Having != nil {
-		s.scanExpression(stmt.Having, result, "HAVING clause")
-	}
-
-	// Check for suspicious function calls in columns
-	for _, col := range stmt.Columns {
-		s.scanExpressionForDangerousFunctions(col, result)
-	}
-
-	// Check table-function references in FROM and JOIN. Joins[i].Left
-	// repeats a reference already in From or an earlier join, so only the
-	// right side is scanned.
-	for i := range stmt.From {
-		s.scanTableReference(&stmt.From[i], result)
-	}
-	for i := range stmt.Joins {
-		s.scanTableReference(&stmt.Joins[i].Right, result)
-	}
-}
-
 // scanTableReference checks a function-call table reference such as
 // ClickHouse FROM url(...) or PostgreSQL FROM generate_series(...): the
-// function name against the out-of-band table functions, and the call and
-// its arguments against the dangerous function lists.
+// function name is checked against the out-of-band table functions. Inspect
+// separately visits the FunctionCall and its arguments.
 func (s *Scanner) scanTableReference(ref *ast.TableReference, result *ScanResult) {
 	if ref == nil || ref.TableFunc == nil {
 		return
@@ -819,98 +840,23 @@ func (s *Scanner) scanTableReference(ref *ast.TableReference, result *ScanResult
 			result.Findings = append(result.Findings, finding)
 		}
 	}
-	s.scanFunctionCall(ref.TableFunc, result)
 }
 
-// scanInsertStatement analyzes INSERT for injection patterns.
-func (s *Scanner) scanInsertStatement(stmt *ast.InsertStatement, result *ScanResult) {
-	// Check values for suspicious patterns (multi-row support)
-	for _, row := range stmt.Values {
-		for _, val := range row {
-			s.scanExpressionForDangerousFunctions(val, result)
-		}
-	}
-}
-
-// scanUpdateStatement analyzes UPDATE for injection patterns.
-func (s *Scanner) scanUpdateStatement(stmt *ast.UpdateStatement, result *ScanResult) {
-	// Check WHERE clause
-	if stmt.Where != nil {
-		s.scanExpression(stmt.Where, result, "WHERE clause")
-	}
-
-	// Check SET values
-	for _, assignment := range stmt.Assignments {
-		s.scanExpressionForDangerousFunctions(assignment.Value, result)
-	}
-}
-
-// scanDeleteStatement analyzes DELETE for injection patterns.
-func (s *Scanner) scanDeleteStatement(stmt *ast.DeleteStatement, result *ScanResult) {
-	// Check WHERE clause
-	if stmt.Where != nil {
-		s.scanExpression(stmt.Where, result, "WHERE clause")
-	}
-}
-
-// scanSetOperation analyzes UNION/EXCEPT/INTERSECT for injection patterns.
-//
-// Parenthesized operands produce nested SetOperation trees on either side
-// (e.g. "a UNION (b UNION c)"), so the whole tree is walked once for UNION
-// operands and once for the per-statement checks of each leaf.
-func (s *Scanner) scanSetOperation(stmt *ast.SetOperation, result *ScanResult) {
-	// UNION-based injection detection over the whole set-operation tree.
-	s.checkUnionInjection(stmt, false, result)
-
-	// Scan every leaf statement of the tree.
-	s.scanSetOperationLeaves(stmt, result)
-}
-
-// scanSetOperationLeaves runs the per-statement checks on each non-set-operation
-// operand of stmt, descending into nested set operations.
-func (s *Scanner) scanSetOperationLeaves(stmt *ast.SetOperation, result *ScanResult) {
-	for _, operand := range [2]ast.Statement{stmt.Left, stmt.Right} {
-		switch op := operand.(type) {
-		case nil:
-		case *ast.SetOperation:
-			s.scanSetOperationLeaves(op, result)
-		default:
-			s.scanStatement(op, result)
-		}
-	}
-}
-
-// scanExpression analyzes an expression for injection patterns.
-func (s *Scanner) scanExpression(expr ast.Expression, result *ScanResult, context string) {
-	if expr == nil {
-		return
-	}
-
+// scanCondition checks tautologies through boolean expression structure only.
+// Inspect separately handles functions and nested statements.
+func (s *Scanner) scanCondition(expr ast.Expression, result *ScanResult) {
 	switch e := expr.(type) {
 	case *ast.BinaryExpression:
-		s.scanBinaryExpression(e, result, context)
-	case *ast.FunctionCall:
-		s.scanFunctionCall(e, result)
+		s.scanBinaryExpression(e, result)
 	case *ast.UnaryExpression:
-		if e.Expr != nil {
-			s.scanExpression(e.Expr, result, context)
-		}
+		s.scanCondition(e.Expr, result)
 	case *ast.ParenthesizedExpression:
-		s.scanExpression(e.Expr, result, context)
-	case *ast.FieldAccessExpression:
-		s.scanExpression(e.Expr, result, context)
-	case *ast.ArraySubscriptExpression, *ast.ArraySliceExpression:
-		// A subscript or slice on a call result, such as pg_sleep(5)[1].
-		s.scanExpressionForDangerousFunctions(e, result)
-	case *ast.MatchAgainstExpression, *ast.AssignmentExpression, *ast.IntervalExpression,
-		*ast.KeywordArgument, *ast.OuterJoinMarker, *ast.ConnectByRootExpression:
-		// Operands of MATCH ... AGAINST (SLEEP(5)), @v := SLEEP(5), ...
-		s.scanExpressionForDangerousFunctions(e, result)
+		s.scanCondition(e.Expr, result)
 	}
 }
 
 // scanBinaryExpression checks for tautologies and suspicious patterns.
-func (s *Scanner) scanBinaryExpression(expr *ast.BinaryExpression, result *ScanResult, context string) {
+func (s *Scanner) scanBinaryExpression(expr *ast.BinaryExpression, result *ScanResult) {
 	if expr == nil {
 		return
 	}
@@ -935,8 +881,8 @@ func (s *Scanner) scanBinaryExpression(expr *ast.BinaryExpression, result *ScanR
 	}
 
 	// Recursively check sub-expressions
-	s.scanExpression(expr.Left, result, context)
-	s.scanExpression(expr.Right, result, context)
+	s.scanCondition(expr.Left, result)
+	s.scanCondition(expr.Right, result)
 }
 
 // isTautology checks if an expression is always true.
@@ -969,7 +915,7 @@ func (s *Scanner) isTautology(expr *ast.BinaryExpression) bool {
 	rightIdent, rightIsIdent := right.(*ast.Identifier)
 
 	if leftIsIdent && rightIsIdent {
-		if leftIdent.Name == rightIdent.Name {
+		if leftIdent.Name == rightIdent.Name && leftIdent.Table == rightIdent.Table {
 			return true
 		}
 	}
@@ -1169,7 +1115,7 @@ var outOfBandTableFuncNames = map[string]string{
 	"EXECUTABLE":       "Command execution",
 }
 
-// scanFunctionCall checks for dangerous function usage.
+// scanFunctionCall checks only this call name; Inspect visits its children.
 func (s *Scanner) scanFunctionCall(fn *ast.FunctionCall, result *ScanResult) {
 	if fn == nil {
 		return
@@ -1220,56 +1166,6 @@ func (s *Scanner) scanFunctionCall(fn *ast.FunctionCall, result *ScanResult) {
 		}
 	}
 
-	// Recursively check function arguments
-	for _, arg := range fn.Arguments {
-		s.scanExpressionForDangerousFunctions(arg, result)
-	}
-}
-
-// scanExpressionForDangerousFunctions recursively checks for dangerous functions.
-func (s *Scanner) scanExpressionForDangerousFunctions(expr ast.Expression, result *ScanResult) {
-	if expr == nil {
-		return
-	}
-
-	switch e := expr.(type) {
-	case *ast.FunctionCall:
-		s.scanFunctionCall(e, result)
-	case *ast.BinaryExpression:
-		s.scanExpressionForDangerousFunctions(e.Left, result)
-		s.scanExpressionForDangerousFunctions(e.Right, result)
-	case *ast.UnaryExpression:
-		s.scanExpressionForDangerousFunctions(e.Expr, result)
-	case *ast.ParenthesizedExpression:
-		s.scanExpressionForDangerousFunctions(e.Expr, result)
-	case *ast.FieldAccessExpression:
-		s.scanExpressionForDangerousFunctions(e.Expr, result)
-	case *ast.ArraySubscriptExpression:
-		s.scanExpressionForDangerousFunctions(e.Array, result)
-		for _, idx := range e.Indices {
-			s.scanExpressionForDangerousFunctions(idx, result)
-		}
-	case *ast.ArraySliceExpression:
-		s.scanExpressionForDangerousFunctions(e.Array, result)
-		s.scanExpressionForDangerousFunctions(e.Start, result)
-		s.scanExpressionForDangerousFunctions(e.End, result)
-	case *ast.KeywordArgument:
-		// SUBSTRING(s FROM SLEEP(5)), TRIM(BOTH SLEEP(5) FROM s)
-		s.scanExpressionForDangerousFunctions(e.Value, result)
-	case *ast.MatchAgainstExpression:
-		for _, c := range e.Columns {
-			s.scanExpressionForDangerousFunctions(c, result)
-		}
-		s.scanExpressionForDangerousFunctions(e.Query, result)
-	case *ast.AssignmentExpression:
-		s.scanExpressionForDangerousFunctions(e.Value, result)
-	case *ast.IntervalExpression:
-		s.scanExpressionForDangerousFunctions(e.ValueExpr, result)
-	case *ast.OuterJoinMarker:
-		s.scanExpressionForDangerousFunctions(e.Expr, result)
-	case *ast.ConnectByRootExpression:
-		s.scanExpressionForDangerousFunctions(e.Expr, result)
-	}
 }
 
 // detectCommentPatterns checks raw SQL for comment-based injection. folded is the

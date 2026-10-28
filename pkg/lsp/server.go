@@ -424,7 +424,11 @@ func (s *Server) dispatchMessage(msg json.RawMessage) {
 		// It's a request expecting a response
 		result, err := s.handler.HandleRequest(req.Method, req.Params)
 		if err != nil {
-			s.sendError(req.ID, InternalError, err.Error())
+			code := InternalError
+			if errors.Is(err, errMethodNotFound) {
+				code = MethodNotFound
+			}
+			s.sendError(req.ID, code, err.Error())
 		} else {
 			s.sendResult(req.ID, result)
 		}

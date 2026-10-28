@@ -247,3 +247,78 @@ func TestTranspileTopSetOperandConflictingTailOrder(t *testing.T) {
 		t.Fatalf("got %v; want conflicting ORDER BY error", err)
 	}
 }
+
+func TestTranspileSQLServerOffsetFetch(t *testing.T) {
+	cases := []struct{ sql, want string }{
+		{"SELECT a FROM t LIMIT 5 OFFSET 2", "SELECT a FROM t ORDER BY (SELECT NULL) OFFSET 2 ROWS FETCH NEXT 5 ROWS ONLY"},
+		{"SELECT a FROM t ORDER BY a LIMIT 5 OFFSET 2", "SELECT a FROM t ORDER BY a OFFSET 2 ROWS FETCH NEXT 5 ROWS ONLY"},
+		{"SELECT a FROM t LIMIT 5", "SELECT TOP 5 a FROM t"},
+		{"SELECT a FROM t ORDER BY 1 FETCH FIRST 5 ROWS ONLY", "SELECT a FROM t ORDER BY 1 OFFSET 0 ROWS FETCH FIRST 5 ROWS ONLY"},
+		{"SELECT a FROM t FETCH FIRST 5 ROWS ONLY", "SELECT a FROM t ORDER BY (SELECT NULL) OFFSET 0 ROWS FETCH FIRST 5 ROWS ONLY"},
+		{"SELECT a FROM t OFFSET 3", "SELECT a FROM t ORDER BY (SELECT NULL) OFFSET 3 ROWS"},
+		{"SELECT a FROM t UNION SELECT b FROM u ORDER BY 1 FETCH FIRST 5 ROWS ONLY", "SELECT a FROM t UNION SELECT b FROM u ORDER BY 1 OFFSET 0 ROWS FETCH FIRST 5 ROWS ONLY"},
+	}
+	for _, source := range []keywords.SQLDialect{keywords.DialectPostgreSQL, keywords.DialectMySQL, keywords.DialectSQLite} {
+		for _, tc := range cases {
+			t.Run(string(source)+"/"+tc.sql, func(t *testing.T) {
+				got, err := transpiler.Transpile(tc.sql, source, keywords.DialectSQLServer)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if got != tc.want {
+					t.Fatalf("got %q, want %q", got, tc.want)
+				}
+				tree, err := parser.ParseWithDialect(got, keywords.DialectSQLServer)
+				if err != nil {
+					t.Fatalf("target SQL does not parse: %v", err)
+				}
+				defer ast.ReleaseAST(tree)
+			})
+		}
+	}
+	for _, sql := range []string{"SELECT a FROM t UNION SELECT b FROM u FETCH FIRST 5 ROWS ONLY", "SELECT a FROM t UNION (SELECT b FROM u) FETCH FIRST 5 ROWS ONLY"} {
+		if got, err := transpiler.Transpile(sql, keywords.DialectPostgreSQL, keywords.DialectSQLServer); err == nil || got != "" {
+			t.Fatalf("got %q, %v; want set operation ORDER BY refusal", got, err)
+		}
+	}
+}
+
+func TestTranspileWithTiesNeverLost(t *testing.T) {
+	for _, sql := range []string{
+		"SELECT a FROM t ORDER BY 1 LIMIT 5 WITH TIES",
+		"SELECT a FROM t ORDER BY 1 LIMIT 5 WITH TIES OFFSET 2",
+		"SELECT a FROM t UNION ALL SELECT b FROM u ORDER BY 1 LIMIT 5 WITH TIES",
+		"SELECT a FROM t UNION ALL (SELECT b FROM u) ORDER BY 1 LIMIT 5 WITH TIES",
+		"SELECT a FROM t UNION ALL (SELECT b FROM u ORDER BY b LIMIT 1) ORDER BY 1 LIMIT 5 WITH TIES",
+		"SELECT a FROM t UNION ALL (SELECT b FROM u ORDER BY b LIMIT 1) ORDER BY 1 LIMIT 5 WITH TIES OFFSET 2",
+		"SELECT a FROM t ORDER BY 1 FETCH FIRST 5 ROWS WITH TIES",
+		"SELECT a FROM t UNION ALL (SELECT b FROM u) ORDER BY 1 FETCH FIRST 5 ROWS WITH TIES",
+		"SELECT a FROM t UNION ALL (SELECT b FROM u ORDER BY b LIMIT 1) ORDER BY 1 FETCH FIRST 5 ROWS WITH TIES",
+	} {
+		for _, target := range []keywords.SQLDialect{keywords.DialectPostgreSQL, keywords.DialectOracle, keywords.DialectMySQL, keywords.DialectSQLite, keywords.DialectSQLServer} {
+			t.Run(string(target)+"/"+sql, func(t *testing.T) {
+				got, err := transpiler.Transpile(sql, keywords.DialectClickHouse, target)
+				if err != nil {
+					if target == keywords.DialectPostgreSQL || target == keywords.DialectOracle {
+						t.Fatalf("target supports FETCH WITH TIES: %v", err)
+					}
+					if got != "" {
+						t.Fatalf("output on error: %q", got)
+					}
+					return
+				}
+				if target != keywords.DialectPostgreSQL && target != keywords.DialectOracle {
+					t.Fatalf("target cannot express FETCH WITH TIES: got %q", got)
+				}
+				if !strings.Contains(got, "WITH TIES") {
+					t.Fatalf("ties lost: %s", got)
+				}
+				tree, err := parser.ParseWithDialect(got, target)
+				if err != nil {
+					t.Fatalf("target SQL does not parse: %v", err)
+				}
+				defer ast.ReleaseAST(tree)
+			})
+		}
+	}
+}

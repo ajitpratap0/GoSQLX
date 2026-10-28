@@ -31,7 +31,7 @@ import (
 // equivalenceCorpus returns a deterministic set of ScanSQL inputs used to check
 // that the literal prefilters never change findings. It combines the repository
 // SQL corpus, the fuzz seeds, case/whitespace obfuscations, Unicode case-fold
-// tricks, near-misses, structural edge cases and payloads beyond maxRegexInputLen.
+// tricks, near-misses, structural edge cases and payloads beyond the former 10,000-byte cap.
 func equivalenceCorpus(t testing.TB) []string {
 	t.Helper()
 
@@ -216,7 +216,7 @@ func equivalenceCorpus(t testing.TB) []string {
 		"\x00SLEEP(1)",
 	)
 
-	// Length edges: payloads after byte maxRegexInputLen (10_000).
+	// Length edges: payloads after the former 10,000-byte cap.
 	pad := strings.Repeat("SELECT 1 ", 1200)
 	corpus = append(corpus,
 		pad+" UNION SELECT NULL,NULL FROM information_schema.tables",

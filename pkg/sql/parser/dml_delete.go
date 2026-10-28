@@ -179,7 +179,8 @@ func (p *Parser) parseDeleteSources(dst *[]ast.TableReference, joinsDst *[]ast.J
 }
 
 // parseDeleteHistory parses the rest of MariaDB's DELETE HISTORY FROM table
-// [BEFORE SYSTEM_TIME point]; the current token is HISTORY. HISTORY is kept as
+// [PARTITION (partition_list)] [BEFORE SYSTEM_TIME [TIMESTAMP | TRANSACTION] expr];
+// the current token is HISTORY. HISTORY is kept as
 // a statement modifier.
 func (p *Parser) parseDeleteHistory(stmt *ast.DeleteStatement, x *ast.DMLTargetFields) (ast.Statement, error) {
 	x.Modifiers = append(x.Modifiers, "HISTORY")
@@ -190,12 +191,42 @@ func (p *Parser) parseDeleteHistory(stmt *ast.DeleteStatement, x *ast.DMLTargetF
 		return nil, err
 	}
 	stmt.TableName, stmt.TableNameQuote = name, quote
+	var history ast.DeleteHistoryOptions
+	if p.isType(models.TokenTypePartition) {
+		p.advance() // Consume PARTITION
+		if !p.matchType(models.TokenTypeLParen) {
+			return nil, p.expectedError("(")
+		}
+		for {
+			if !p.isIdentifier() && !p.isNonReservedKeyword() {
+				return nil, p.expectedError("partition name")
+			}
+			partition := p.parseColumnName()
+			if partition == nil {
+				return nil, p.expectedError("partition name")
+			}
+			history.Partitions = append(history.Partitions, partition)
+			if !p.matchType(models.TokenTypeComma) {
+				break
+			}
+		}
+		if !p.matchType(models.TokenTypeRParen) {
+			return nil, p.expectedError(")")
+		}
+	}
 	if p.isUnquotedWord("BEFORE") && p.peekValueIs(1, "SYSTEM_TIME") {
 		p.advance() // Consume BEFORE
 		p.advance() // Consume SYSTEM_TIME
-		if stmt.BeforeSystemTime, err = p.parseTemporalPointExpression(); err != nil {
+		if p.isUnquotedWord("TIMESTAMP") || p.isUnquotedWord("TRANSACTION") {
+			history.BeforeSystemTimeUnit = strings.ToUpper(p.currentToken.Token.Value)
+			p.advance()
+		}
+		if stmt.BeforeSystemTime, err = p.parseExpression(); err != nil {
 			return nil, err
 		}
+	}
+	if len(history.Partitions) > 0 || history.BeforeSystemTimeUnit != "" {
+		x.History = &history
 	}
 	stmt.Extras = finishDMLExtras(x)
 	return stmt, nil

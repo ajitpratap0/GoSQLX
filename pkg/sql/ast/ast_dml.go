@@ -50,6 +50,21 @@ type DMLTargetFields struct {
 	Limit   Expression
 	// ReturningInto holds the Oracle RETURNING ... INTO :bind targets.
 	ReturningInto []Expression
+	// History holds the MariaDB DELETE HISTORY partition list and BEFORE
+	// SYSTEM_TIME unit; nil for every other statement.
+	History *DeleteHistoryOptions
+}
+
+// DeleteHistoryOptions holds the optional parts of MariaDB's
+// DELETE HISTORY FROM t [PARTITION (p, ...)] [BEFORE SYSTEM_TIME [unit] point]
+// other than the point itself (DeleteStatement.BeforeSystemTime). It lives in
+// DMLTargetFields so the rarely used fields do not grow DeleteStatement.
+type DeleteHistoryOptions struct {
+	// Partitions are the PARTITION (...) names, in source order.
+	Partitions []*Identifier
+	// BeforeSystemTimeUnit is "TIMESTAMP" or "TRANSACTION" when written
+	// before the point, and "" otherwise.
+	BeforeSystemTimeUnit string
 }
 
 // dmlExtras returns a copy of x, or a zero value when it is nil, so renderers
@@ -91,7 +106,7 @@ func (d *DeleteStatement) EnsureExtras() *DMLTargetFields {
 func (d *DMLTargetFields) IsZero() bool {
 	return len(d.Modifiers) == 0 && d.Top == nil && !d.Only && len(d.Tables) == 0 &&
 		len(d.Joins) == 0 && len(d.Output) == 0 && d.OutputInto == nil &&
-		len(d.OrderBy) == 0 && d.Limit == nil && len(d.ReturningInto) == 0
+		len(d.OrderBy) == 0 && d.Limit == nil && len(d.ReturningInto) == 0 && d.History == nil
 }
 
 // dmlTargetChildren appends the nodes of d to children.

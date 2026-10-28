@@ -994,6 +994,9 @@ func (p *Parser) currentIdentQuote() rune {
 // follow. Words that start a clause or a set operation are still rejected,
 // so SELECT a AS FROM t keeps its error.
 func (p *Parser) isAliasAfterAS() bool {
+	if p.isReservedTopName() {
+		return false
+	}
 	if p.isIdentifier() || p.isNonReservedKeyword() {
 		return true
 	}

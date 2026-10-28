@@ -50,7 +50,7 @@ func (p *Parser) parseMergeStatement() (ast.Statement, error) {
 	// Parse optional target alias (AS alias or just alias)
 	if p.isType(models.TokenTypeAs) {
 		p.advance() // Consume AS
-		if !p.isIdentifier() && !p.isNonReservedKeyword() {
+		if p.isReservedTopName() || (!p.isIdentifier() && !p.isNonReservedKeyword()) {
 			return nil, p.expectedError("target alias after AS")
 		}
 		stmt.TargetAlias = p.currentToken.Token.Value
@@ -89,7 +89,7 @@ func (p *Parser) parseMergeStatement() (ast.Statement, error) {
 	// Parse optional source alias
 	if p.isType(models.TokenTypeAs) {
 		p.advance() // Consume AS
-		if !p.isIdentifier() && !p.isNonReservedKeyword() {
+		if p.isReservedTopName() || (!p.isIdentifier() && !p.isNonReservedKeyword()) {
 			return nil, p.expectedError("source alias after AS")
 		}
 		stmt.SourceAlias = p.currentToken.Token.Value

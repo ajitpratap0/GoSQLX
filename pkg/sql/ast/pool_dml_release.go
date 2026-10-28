@@ -47,6 +47,11 @@ func releaseDMLTargetFields(d *DMLTargetFields, mode releaseMode) {
 	for _, e := range d.ReturningInto {
 		releaseExpression(e, mode)
 	}
+	if d.History != nil {
+		for _, partition := range d.History.Partitions {
+			releaseExpression(partition, mode)
+		}
+	}
 	*d = DMLTargetFields{}
 }
 

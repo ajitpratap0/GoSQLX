@@ -57,7 +57,7 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 	// Reject TOP in dialects that use LIMIT/OFFSET or ROWNUM/FETCH FIRST instead.
 	// String comparison is used here because the lexer has no TokenTypeTOP constant;
 	// TOP is emitted as an identifier literal (see parseTopClause comment).
-	if p.isNonTopDialect() && equalsUpper(p.currentToken.Token.Value, "TOP") {
+	if p.isNonTopDialect() && p.isUnquotedWord("TOP") {
 		if p.dialect == string(keywords.DialectOracle) {
 			return nil, goerrors.UnsupportedFeatureError(
 				"TOP clause is not supported in Oracle; use ROWNUM or FETCH FIRST … ROWS ONLY instead",
@@ -441,16 +441,16 @@ func (p *Parser) isNonTopDialect() bool {
 // Note: "TOP" is detected via a string comparison rather than a dedicated token-type
 // constant because the lexer does not define a TokenTypeTOP - it tokenises TOP as a
 // plain identifier/keyword literal.  A future lexer enhancement could introduce
-// models.TokenTypeTop and replace the equalsUpper check below.
+// models.TokenTypeTop and replace the word check below.
 func (p *Parser) parseTopClause() (*ast.TopClause, error) {
 	switch p.dialect {
 	case string(keywords.DialectSQLServer):
-		if !equalsUpper(p.currentToken.Token.Value, "TOP") {
+		if !p.isUnquotedWord("TOP") {
 			return nil, nil
 		}
 	case string(keywords.DialectSnowflake):
 		// Snowflake TOP <n>; a column named top is left alone.
-		if !equalsUpper(p.currentToken.Token.Value, "TOP") || p.peekToken().Token.Type != models.TokenTypeNumber {
+		if !p.isUnquotedWord("TOP") || p.peekToken().Token.Type != models.TokenTypeNumber {
 			return nil, nil
 		}
 	default:

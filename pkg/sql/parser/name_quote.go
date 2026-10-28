@@ -52,7 +52,9 @@ func (p *Parser) delimitedNameMustStayQuoted(name string, quote rune) bool {
 	if quote == 0 {
 		return false
 	}
-	return ast.DelimitedNameMustStayQuoted(name, p.identifierCaseFolding()) || tokenizer.IsKeyword(name) ||
+	// TOP is a dialect keyword, absent from the tokenizer's global keyword map.
+	return (p.IsSQLServer() && equalsUpper(name, "TOP")) ||
+		ast.DelimitedNameMustStayQuoted(name, p.identifierCaseFolding()) || tokenizer.IsKeyword(name) ||
 		isContextualKeywordName(name)
 }
 
@@ -142,6 +144,18 @@ func (p *Parser) appendNamePartQuoted(q ast.NameQuote, quote rune) ast.NameQuote
 // parseQualifiedNameQuoted parses a possibly qualified object name like
 // parseQualifiedName and also returns how its parts were delimited.
 func (p *Parser) parseQualifiedNameQuoted() (string, ast.NameQuote, error) {
+	return p.parseQualifiedNameWithTableRules(false)
+}
+
+// isReservedTopName checks the dialect before inspecting the token text.
+func (p *Parser) isReservedTopName() bool {
+	return p.IsSQLServer() && p.isUnquotedWord("TOP")
+}
+
+func (p *Parser) parseQualifiedNameWithTableRules(table bool) (string, ast.NameQuote, error) {
+	if table && p.isReservedTopName() {
+		return "", 0, p.expectedError("table name (TOP is reserved in SQL Server; quote it as [top])")
+	}
 	if !p.isIdentifier() && !p.isNonReservedKeyword() {
 		return "", 0, p.expectedError("identifier")
 	}
@@ -176,7 +190,7 @@ func (p *Parser) parseQualifiedNameQuoted() (string, ast.NameQuote, error) {
 				"",
 			).WithCause(errQualifiedNameTooLong)
 		}
-		if !p.isIdentifier() && !p.isNonReservedKeyword() {
+		if (table && p.isReservedTopName()) || (!p.isIdentifier() && !p.isNonReservedKeyword()) {
 			return "", 0, p.expectedError("identifier after .")
 		}
 		parts[n] = p.currentToken.Token.Value

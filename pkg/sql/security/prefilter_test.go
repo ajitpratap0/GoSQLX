@@ -31,7 +31,7 @@ import (
 // equivalenceCorpus returns a deterministic set of ScanSQL inputs used to check
 // that the literal prefilters never change findings. It combines the repository
 // SQL corpus, the fuzz seeds, case/whitespace obfuscations, Unicode case-fold
-// tricks, near-misses, structural edge cases and payloads beyond maxRegexInputLen.
+// tricks, near-misses, structural edge cases and payloads beyond the former 10,000-byte cap.
 func equivalenceCorpus(t testing.TB) []string {
 	t.Helper()
 
@@ -216,7 +216,7 @@ func equivalenceCorpus(t testing.TB) []string {
 		"\x00SLEEP(1)",
 	)
 
-	// Length edges: payloads after byte maxRegexInputLen (10_000).
+	// Length edges: payloads after the former 10,000-byte cap.
 	pad := strings.Repeat("SELECT 1 ", 1200)
 	corpus = append(corpus,
 		pad+" UNION SELECT NULL,NULL FROM information_schema.tables",
@@ -416,6 +416,11 @@ func TestScanSQL_PrefilterEquivalence(t *testing.T) {
 	corpus := equivalenceCorpus(t)
 	for name, s := range scanners {
 		for i, in := range corpus {
+			// Equivalence is not a concurrency property; under -race check a
+			// quarter of the corpus and no large inputs. Non-race runs check all.
+			if raceEnabled && (i%4 != 0 || len(in) > 16<<10) {
+				continue
+			}
 			got := s.scanSQL(in, true)
 			want := s.scanSQL(in, false)
 			if !reflect.DeepEqual(got, want) {
@@ -447,7 +452,13 @@ func TestScanSQL_Concurrent_FoldPool(t *testing.T) {
 		want[i] = s.ScanSQL(in)
 	}
 
-	const goroutines, iterations = 32, 200
+	// The race detector makes each 64 KiB+ scan ~20x slower; fewer iterations
+	// still interleave every input across all goroutines.
+	const goroutines = 32
+	iterations := 200
+	if raceEnabled {
+		iterations = 25
+	}
 	var wg sync.WaitGroup
 	errs := make(chan string, goroutines)
 	for g := 0; g < goroutines; g++ {

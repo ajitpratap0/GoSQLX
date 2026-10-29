@@ -1,6 +1,6 @@
 # GoSQLX vs Alternatives: Comprehensive Comparison
 
-**GoSQLX Version:** v1.17.0
+**GoSQLX Version:** v1.16.0
 
 This guide helps you choose the right SQL parsing tool for your needs. We provide an honest assessment of GoSQLX's strengths and limitations compared to popular alternatives.
 

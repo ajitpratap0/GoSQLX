@@ -2,6 +2,34 @@
 
 All notable changes to the "GoSQLX" extension will be documented in this file.
 
+## [1.17.0] - 2026-10-29
+
+Bundles the GoSQLX v1.17.0 language server. See the
+[main CHANGELOG](https://github.com/ajitpratap0/GoSQLX/blob/main/CHANGELOG.md)
+for the full list.
+
+### Changed
+- **Dialect-faithful parsing and formatting**: the bundled server picks up the
+  v1.17.0 parser and formatter. Every statement of an 8-dialect real-world
+  corpus now parses and formats without losing words; formatting keeps
+  comments, optimizer hints, SQL Server `GO` lines, Oracle `/` lines and
+  PostgreSQL `U&"..."` spellings. Some SQL that parsed before is now an error,
+  for example a `GO` line inside a SQL Server statement or unquoted `top` as a
+  SQL Server name; see the main CHANGELOG's Behavior changes.
+
+### Fixed
+- **Document sync**: the server advertises the standard `textDocumentSync`
+  capability (it sent the non-standard `textDocumentSyncOptions`), so clients
+  that follow the specification send open, change and close events.
+- **Crash safety**: a malformed `Content-Length`, an out-of-range
+  `didChange` range or a panic in a request handler or background diagnostics
+  no longer stops the server.
+- **Edits with non-ASCII text**: `didChange` character offsets are read as
+  UTF-16 code units, and CRLF line endings are respected.
+- **Unknown requests** are answered with `-32601` (MethodNotFound).
+- **Outline**: the document outline no longer lists `GO` separators, and
+  statements before a `GO` line no longer extend to the end of the file.
+
 ## [1.16.0] - 2026-10-22
 
 Bundles the GoSQLX v1.16.0 language server. See the

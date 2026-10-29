@@ -66,10 +66,15 @@ How long an idle MCP session's transport state is kept before the sweeper frees 
 |------|-------------|
 | `validate_sql` | SQL syntax validation with optional dialect |
 | `format_sql` | SQL formatting (indent, keyword case, semicolon) |
-| `parse_sql` | AST summary - statement count and types |
+| `parse_sql` | AST summary with optional dialect - statement count and types |
 | `extract_metadata` | Tables, columns, functions referenced |
 | `security_scan` | Injection pattern detection with severity |
 | `lint_sql` | Style rule enforcement (L001–L010) |
 | `analyze_sql` | Concurrent composite of all 6 above |
+
+`parse_sql` accepts a required `sql` string and an optional `dialect` string (default: `generic`).
+Use `"dialect": "sqlserver"` for scripts containing `GO`. The response keys
+`statement_count` and `statement_types` exclude `GO` batch separators
+(`*ast.BatchSeparator`), including separators with repeat counts.
 
 See [MCP Server Guide](../MCP_GUIDE.md) for complete tool schemas and JSON response formats.

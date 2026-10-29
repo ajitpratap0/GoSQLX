@@ -36,6 +36,8 @@ func contractSample() any {
 		Lint      LintResponse      `json:"lint"`
 		Analyze   AnalyzeResponse   `json:"analyze"`
 		Highlight HighlightResponse `json:"highlight"`
+		Format    TextResponse      `json:"format"`
+		Transpile TextResponse      `json:"transpile"`
 	}{
 		Lint: LintResponse{
 			ParseError:     "parse error",
@@ -67,6 +69,8 @@ func contractSample() any {
 		Highlight: HighlightResponse{
 			Spans: []HighlightSpan{{Start: 0, End: 6, Category: "keyword"}},
 		},
+		Format:    TextResponse{Result: "SELECT 1", Error: "format error", ErrorSpan: sampleSpan},
+		Transpile: TextResponse{Result: "SELECT 1", Error: "transpile error", ErrorSpan: sampleSpan},
 	}
 }
 

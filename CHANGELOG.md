@@ -7,247 +7,68 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Added
-- Parse and faithfully render Snowflake PIVOT defaults, ClickHouse FINAL/SAMPLE
-  (also on joined tables, `TableModifiers.Sample`), SQL Server INSERT TOP, MySQL /
-  MariaDB ALTER TABLE partition actions (ADD/DROP [IF [NOT] EXISTS], TRUNCATE,
-  REORGANIZE, COALESCE, EXCHANGE, ANALYZE/CHECK/OPTIMIZE/REBUILD/REPAIR,
-  DISCARD/IMPORT, REMOVE/UPGRADE PARTITIONING, ALL), PostgreSQL ROWS FROM and
-  array subscripts, and ROLLUP/CUBE/nested GROUPING SETS inside GROUPING SETS;
-  cover identity constraints. Partition actions outside the structured grammar
-  still parse as as-written `AlterTableOther` text.
-- `ast.PivotClause.AggregateAlias`, `ast.PivotClause.ExtraAggregates`
-  (`[]ast.PivotAggregate`), `ast.UnpivotClause.NullHandling`,
-  `ast.UnpivotClause.ValueColumns` and `ast.UnpivotNullHandling`; rendered by
-  `SQL()` and `pkg/formatter`.
-- **Real-world dialect corpus**: `testdata/realworld/<dialect>/` holds 2,788
-  production-style statements across PostgreSQL, MySQL, MariaDB, SQL Server,
-  Oracle, SQLite, Snowflake and ClickHouse. `TestRealWorldCorpus` runs each
-  through split, parse, format, reparse, idempotency and dropped-word checks
-  against a ratchet list (`testdata/realworld/known_failures.txt`, regenerate
-  with `-update-known-failures`): a new failure fails the test, and so does a
-  listed failure that now passes. `scripts/dialect-audit` runs the same checks
-  on any SQL file; `BenchmarkRealWorldParse` and `BenchmarkRealWorldParseFormat`
-  measure the corpus.
-- **Dialect coverage**: every statement of the real-world corpus now parses,
-  formats, re-parses identically and keeps all its words; `known_failures.txt`
-  is empty (1,327 failures before).
-- **AST representation**: `ExplainStatement` retains the explained statement;
-  `BatchSeparator` retains SQL Server `GO` and its optional `RepeatCount` without
-  expanding repeated batches. `SQL()` and `FormatAST` keep GO on its own line.
-  Callers enumerating `AST.Statements` or recovery results must account for
-  batch-separator nodes.
-- **Literal and identifier metadata**: string literals retain their introducer
-  (`N`, `X`, `B`, `_utf8mb4`, ...) and escape rules (`LiteralValue.DialectExtras()`,
-  `EnsureExtras()`, `SetRawBackslash()`). `Identifier.QuoteStyle`,
-  `Identifier.Quotes` and the statement/table/column `NameQuote` fields retain
-  identifier delimiters through rendering.
+## [1.17.0] - 2026-10-29 — Real-World Dialect Corpus, Dialect-Faithful Round Trips, Security Scanner & LSP Hardening
 
-### Changed
-- **MySQL / MariaDB `#` line comments**: with the MySQL or MariaDB dialect, `#`
-  now starts a line comment, like `--`. The tokenizer records it in `Comments`
-  (re-emitted by the formatter), `SplitStatements` no longer splits on a `;`
-  inside it, and transpiling to another dialect drops it instead of emitting `#`
-  (PostgreSQL XOR). Previously `WHERE x = 1 # c` parsed `#` as an operator and
-  `SELECT a FROM t # c` failed with E2002. Other dialects keep their `#`
-  meaning (PostgreSQL `#`, `#>`, `#>>`, `#-`; SQL Server `#temp`; Oracle `emp#`).
-- Parsed ClickHouse SAMPLE sizes and offsets now use inspectable expression
-  fields, which take rendering precedence over the retained legacy string fields.
-- ClickHouse SAMPLE accepts only decimal numbers (hex such as `0x10` is
-  rejected) and renders before ARRAY JOIN; a SAMPLE clause with no valid size is
-  omitted instead of rendered as a bare `SAMPLE`.
-- A column with more than one of DEFAULT, an identity clause and a generation
-  expression is rejected; signed numbers in identity options render as `-1`.
-- **Dialect extension fields**: the new dialect-specific clauses live behind
-  optional pointers so that common statements do not carry them:
-  `SelectStatement.Extras` (`SelectExtras`: SELECT modifiers, INTO, LIMIT BY,
-  ROWS EXAMINED, INTERPOLATE, query hints, output formats),
-  `InsertStatement.Extras`, `UpdateStatement.Extras` / `DeleteStatement.Extras`
-  (`DMLTargetFields`: modifiers, TOP, ONLY, extra targets, joins, OUTPUT,
-  ORDER BY / LIMIT, RETURNING INTO), `FunctionCall.Extras`,
-  `BinaryExpression.Extras` and `TableReference.Modifiers` (including derived
-  `VALUES`). Read them through `DialectExtras()` / `DialectModifiers()`, which
-  return values for read access without shared mutable stand-ins; call
-  `EnsureExtras()` / `EnsureModifiers()` before writing.
-- **Transpilation**: string literals and quoted identifiers are rendered using
-  the target dialect's escape rules and delimiters. Unrepresentable literals
-  return an error rather than changing their value. SQL Server GO scripts
-  targeting another dialect return an error because batch scopes and repeat
-  counts cannot be represented there.
-- **Transpiling dialect-specific operators**: `^` is exponentiation in
-  PostgreSQL and bitwise XOR in MySQL, MariaDB and SQL Server (recorded as
-  `BinaryExpression.BitwiseXor`). Exponentiation is written `POWER(a, b)`
-  outside PostgreSQL; XOR keeps `^` with explicit grouping between the MySQL
-  family and SQL Server, becomes `#` in PostgreSQL, `BITXOR()` in Snowflake and
-  `bitXor()` in ClickHouse, and returns an error for Oracle, SQLite and the
-  generic dialect. PostgreSQL `@`, `|/` and `||/` become `ABS()`, `SQRT()` and
-  `CBRT()` (an error where CBRT is missing); `!!`, SQL Server money literals
-  (`$5.00`, `$5`) and Snowflake object constants (`{'a': 1}`) return an error
-  in dialects without them.
-
-### Fixed
-- **CLI security scan**: `gosqlx analyze --security` and `gosqlx lint`'s security pass now run the string scanner (`ScanSQL`) as well as the AST scan and merge the findings, so `SELECT 1; DROP TABLE users` is reported as CRITICAL instead of clean. Inline SQL that contains `/` (for example `UNION/**/SELECT` or `4 / 2`) is no longer mistaken for a missing file path.
-- **Transpile row limits**: for SQL Server, `LIMIT n OFFSET m` and bare `OFFSET` without ORDER BY add `ORDER BY (SELECT NULL)`, and `FETCH FIRST` gains the required `OFFSET 0 ROWS`. Row limits inside derived tables, JOIN operands and scalar subqueries are now rewritten for the target dialect (Oracle kept `LIMIT` there). `WITH TIES` survives set-operation tails, and targets that cannot express it return an error instead of dropping it.
-- **LSP**: requests for unknown methods are answered with `-32601` (MethodNotFound) instead of `-32603`.
-- **Formatter fidelity**: Oracle SQL*Plus `/` execute lines are kept by FormatAST, `Formatter.Format`, `FormatWithDialect` and `gosqlx format` (they were dropped, and the CLI refused such scripts). Statement counts do not change: the AST records which statements a `/` follows in `AST.ExecuteSlash`. PostgreSQL `U&"..."` identifiers keep their original spelling when formatting for PostgreSQL or no target (other targets get the decoded name; AST name fields stay decoded), so names with escaped control characters no longer produce output that fails to re-tokenize. Comments next to SQL Server `GO` lines and trailing comments of statements written without `;` stay where they were, and `GO 2 /* c */` keeps both count and comment on every entry point.
-- **Formatter performance**: lower-case keyword mode streams into a single builder instead of copying and re-rendering subtrees; it went from 3.5–10x to 1.2–1.5x the cost of upper-case output, with 5x to 500x fewer allocations.
-- **Security (`ScanSQL`)**: closed several ways to slip injection past the string scanner (also used by MCP, the C binding and WASM). Dollar-quote stripping no longer runs inside quoted strings or identifiers (`SELECT '$x$'; DROP TABLE users; SELECT '$x$'` was clean). Tautology and comment checks now cover the whole input instead of the first 10,000 bytes; inputs above 10 MiB get a CRITICAL `INPUT_TOO_LARGE` finding whatever the severity filter. Comments between keywords (`UNION/**/SELECT`, `SLEEP/**/(5)`, `;--\nDROP`, `#` comments, `/*/`, MySQL `1--1`) are matched through comment-free views of the text under each quoting and escaping convention, and MySQL/MariaDB `/*! */` and `/*M! */` bodies are scanned. The AST UNION NULL-padding check now matches the parser's NULL literal. The tautology check no longer allocates per candidate (1 MiB of `1=2` went from 50 MB to 1 MB).
-- **Format**: with `AddSemicolon` and a comment anywhere in the input, raw-text statements (PostgreSQL `DO $$...$$`, `CREATE FUNCTION` bodies, Oracle `BEGIN ... END` blocks) lost their `;`, so the output no longer parsed or merged two statements. The comment-preserving path now adds terminators the same way as the plain path (`formatter.EnsureStatementTerminator`).
-- **Extract**: `gosqlx.Extract*` and `ExtractMetadata` (and the MCP `extract_metadata`/`analyze_sql` tools) took exponential time on nested CTEs and UNION chains because CTE, set-operation and DML children were visited twice. Each node is now visited once; nested CTEs at depth 10 took about 59 s and now finish in microseconds.
-- **Transpile**: a LIMIT on a whole UNION/INTERSECT/EXCEPT no longer becomes `TOP` on the last branch when targeting SQL Server (that silently changed results); it is emitted as `ORDER BY ... OFFSET n ROWS FETCH NEXT m ROWS ONLY`, and without ORDER BY Transpile returns an error. Very long operator chains (for example 490,000 `OR` terms) no longer crash the process with an unrecoverable stack overflow: the operator and string-literal rewrites walk the tree iteratively, and rewrites that would nest output more than 512 levels deep return an error.
-- **LSP (`pkg/lsp`)**: `initialize` now advertises `textDocumentSync` (it sent the non-standard `textDocumentSyncOptions`, so VS Code never sent open/change/close events). A negative `Content-Length` and a `didChange` range past the end of the document no longer crash the server; oversized messages are drained so framing survives; `didChange` character offsets are read as UTF-16 code units and CRLF line ends are respected. A panic in a request handler or in background diagnostics is now logged and answered with `InternalError` instead of ending the process.
-- PostgreSQL / Redshift / SQLite `VACUUM` and `ANALYZE`, and PostgreSQL `LISTEN`,
-  `UNLISTEN` and `NOTIFY`, now end where their grammar ends: trailing same-line
-  tokens (`VACUUM t junk`, `LISTEN c extra`) are a parse error instead of being
-  folded into the statement text. MySQL / MariaDB / Oracle `ANALYZE TABLE` keeps
-  its as-written handling.
-- SQL Server: a delimited `[top]` / `"top"` is a plain name (also in the select
-  list, where it was read as the TOP clause) and keeps its delimiters on output;
-  bare `TOP` is rejected as a table, DML target or alias name, as T-SQL reserves it.
-- MariaDB `DELETE HISTORY FROM t [PARTITION (p, ...)] [BEFORE SYSTEM_TIME
-  [TIMESTAMP | TRANSACTION] expr]` parses and round-trips the partition list, the
-  unit keyword and any point expression (e.g. `NOW() - INTERVAL 1 DAY`), held in
-  the new `ast.DMLTargetFields.History` (`ast.DeleteHistoryOptions`).
-- **Security scanner**: `Scanner.Scan(tree)` now walks the whole AST, so time-based,
-  out-of-band and tautology patterns are detected inside CTEs, derived tables and
-  subqueries, CASE/CAST/IN/BETWEEN/ANY, ORDER BY/GROUP BY, JOIN ON, window specs,
-  FILTER, LIMIT, LATERAL/APPLY, PREWHERE, QUALIFY, CONNECT BY, RETURNING, ON CONFLICT,
-  INSERT ... SELECT, MERGE, CREATE TABLE AS, CREATE [MATERIALIZED] VIEW and EXPLAIN,
-  matching `ScanSQL`. UNION injection checks also run on set operations nested in CTEs
-  and subqueries. Qualified column comparisons such as `a.id = b.id` are no longer
-  reported as tautologies.
-- `GRANT ... TO [`, `TO [AppUser`, `TO CURRENT_USER(`, MariaDB
-  `IDENTIFIED VIA ... USING PASSWORD(` and `COPY (` with an unclosed group no
-  longer panic with `index out of range [-1]`; they return an E2002 error
-  (expected `]` or `)`) in every dialect.
-- Watch now respects `--dialect`, re-validates changes and formats files in place
-  with the CLI safety checks; MCP parsing accepts a dialect and documents comment preservation.
-- Correct transpile dialect help, avoid duplicate lint syntax errors, and rewrite
-  SQL Server SELECT TOP limits across dialects, refusing PERCENT and WITH TIES.
-- Preserve dialect numeric and PostgreSQL Unicode-escape literals and quoted type names; correct JSON/power precedence and retain operator meaning during target-dialect formatting. Hand-built expression trees, including hand-built operands inserted into parsed trees, now render necessary parentheses.
-- Formatting or transpiling to another dialect rewrites PostgreSQL `#` (XOR),
-  `~`, `<<`/`>>`, `&`/`|` and `||` (CONCAT in MySQL/MariaDB) into the target's
-  form, and refuses with an error where the target has none (for example `#`
-  in Oracle/SQLite, `@>`/`?`/regex `~` outside PostgreSQL), instead of
-  emitting them unchanged (`a # b` read as `a` plus a comment in MySQL).
-- Scan raw dialect statements and standalone VALUES for injection patterns, recover
-  panics at every C export, and guard unlinked tokenizer scratch calls.
-- Formatter lower-case mode covers expression and built-in function keywords;
-  comments use LF endings and keep SQL Server batch boundaries. Fix MySQL join
-  comma spacing, SELECT alias qualifiers, and TOP/FETCH limit transforms.
-- Lower-case expression formatting avoids repeated subtree rendering and copying.
-  Raw `JSON_TABLE`/`XMLTABLE` clauses retain their source case in either mode.
-- Statement splitting follows dialect string escapes, parenthesized bodies,
-  commented SQL Server GO lines and Oracle SQL*Plus execute lines; corpus and
-  CLI audits share a pipeline and detect repeated dropped words.
-- **AST walkers** (`ast.Inspect`, `Walk`, the security scanner, linter and
-  table extraction) reach SELECT `TOP` and ClickHouse `ARRAY JOIN`, the
-  ENGINE/ORDER BY/PARTITION BY/TTL/SETTINGS clauses of `CREATE TABLE` and
-  `CREATE MATERIALIZED VIEW`, Snowflake `CLONE ... AT`, and PostgreSQL
-  partition bounds. `AST.SQL()` no longer drops `CREATE`/`ALTER`/`DROP
-  SEQUENCE` statements, and MERGE keeps the source's column alias list
-  (`USING (VALUES ...) AS s (id, val)`).
-- PostgreSQL `@` (absolute value) is always written as `@ x`; `@a`, `@t.a` and
-  `@abs(a)` re-parsed as placeholders. `@` directly followed by operator
-  characters (`@-@`, `@-5`) is now rejected, as PostgreSQL lexes it as one
-  operator.
-- A WITH clause before nested parenthesized set operands
-  (`WITH c ... ((A UNION B) INTERSECT C) EXCEPT D`) stays in front of the whole
-  operation in `SQL()`, `FormatAST` and `Transpile`.
-- Optimizer hints in subqueries stay with their SELECT when the renderer
-  reorders clauses (Oracle `START WITH` / `CONNECT BY`); when the hinted SELECT
-  cannot be identified, formatting fails with `ErrUnplaceableComment`.
-- LSP document outline no longer lists GO separators, and statements before a
-  GO line no longer extend to the end of the file.
-- `ReleaseAST` returns the pooled nodes under standalone `VALUES` statements and
-  top-level set operations.
-- `gosqlx format --dialect sqlserver` runs the statement-count guard again,
-  counting GO lines and statements that end without `;`.
-- **`ExtractColumns` / `ExtractColumnsQualified` no longer report SELECT aliases**
-  (#849): an unqualified name in `ORDER BY` or `HAVING` that matches a
-  SELECT-list alias of the same query block is treated as the alias, not a
-  column (e.g. `... AS orders ... ORDER BY orders` no longer lists `orders`).
-  Qualified references stay columns, and aliases never cross subquery, CTE or
-  UNION boundaries. This also corrects the MCP `extract_metadata` /
-  `analyze_sql` tools.
-- **BigQuery PIVOT / UNPIVOT** (#854): the parser gated PIVOT/UNPIVOT on a
-  hard-coded SQL Server / Oracle / Snowflake list, so BigQuery rejected them
-  with E2002 although its capabilities advertise `SupportsPivotUnpivot`. The
-  gate is now `Capabilities().SupportsPivotUnpivot` (true for exactly SQL
-  Server, Oracle, Snowflake and BigQuery; the default, Generic, PostgreSQL,
-  MySQL, MariaDB, SQLite, ClickHouse and Redshift dialects still treat `pivot`
-  / `unpivot` as identifiers). Supported BigQuery forms: aggregate aliases and
-  multiple aggregates, `IN` value aliases with or without `AS`,
-  `UNPIVOT INCLUDE NULLS` / `EXCLUDE NULLS`, row-value aliases with or without
-  `AS` (string or INT64) and multi-column UNPIVOT. The extensions follow each
-  dialect's grammar: Oracle also gets aliased/multiple aggregates, the NULLS
-  modifier and multi-column UNPIVOT; Snowflake gets the NULLS modifier and
-  bare `IN` value aliases; SQL Server is unchanged.
-- PIVOT/UNPIVOT quoted aggregate aliases, UNPIVOT value columns, and
-  backtick-quoted `IN` names and aliases keep their source delimiters when
-  rendered. This preserves BigQuery backticks and Oracle alias case.
-- Numeric UNPIVOT row aliases after `AS` are limited to BigQuery and Oracle;
-  Snowflake and SQL Server reject them.
-- **SQL round trips**: preserve ALTER actions, grouped joins, set-operation
-  query tails and CTE placement, standalone VALUES, JSON_TABLE/XMLTABLE literal
-  quoting, and nested optimizer hints. Hint placement uses the source dialect's
-  lexer so a keyword inside a string or quoted identifier is never a hint slot.
-- **Pooled parsing**: internal tokenize/parse paths reuse scratch token storage
-  without retaining it in returned ASTs. Concurrent retained-tree regression
-  tests cover the public parse entry points; SELECT release clears all Extras.
-- **`SplitStatements` keeps compound statements whole**: `BEGIN ... END` blocks
-  (trigger, procedure and function bodies, T-SQL `IF ... BEGIN`, `BEGIN TRY`,
-  PostgreSQL `BEGIN ATOMIC`), `CASE ... END`, `IF`/`LOOP`/`WHILE`/`REPEAT`
-  inside a block and Oracle `DECLARE`/`IS`/`AS` sections are no longer cut at
-  the first inner `;`. Transaction statements (`BEGIN;`, `BEGIN TRANSACTION`,
-  `BEGIN IMMEDIATE`) are not blocks, and a script whose blocks do not balance
-  falls back to plain `;` splitting. Client batch separators are honoured and
-  removed from the output: a `GO [n]` line for SQL Server, `DELIMITER` for
-  MySQL/MariaDB and a lone `/` line for Oracle.
-- **`gosqlx.Lint` / `LintWithDialect` report invalid SQL**: SQL that does not
-  tokenize or parse returns an error wrapping `ErrTokenize` or `ErrSyntax`
-  together with the violations of the text and token rules. Callers that
-  ignored the error and treated an empty result as clean must now check it.
-  `linter.FileResult` gains `TokenizeError`, `ParseError` and `SyntaxError()`.
-- **`gosqlx.Format` and `gosqlx format` keep comments and optimizer hints**:
-  comments stay with their statement (a comment inside a statement moves to the
-  line above it) and `/*+ ... */` hints directly after a statement's first
-  keyword stay in place. Input whose hints or MySQL `/*! ... */` comments
-  cannot be placed faithfully is refused (`formatter.ErrUnplaceableComment`)
-  instead of being rewritten without them, and `format -i` verifies that the
-  output holds exactly the input's comments. LSP and C-binding dialect
-  formatting no longer drop comments either. New `formatter.JoinWithComments`,
-  `gosqlx.FormatWithDialect` and `gosqlx.WithComments()`.
-- **CLI**: `lint` exits 1 on syntax errors and `--auto-fix` judges the fixed
-  text; `format --no-uppercase` lower-cases keywords, keyword operators
-  and built-in function keywords (raw `JSON_TABLE`/`XMLTABLE` clauses retain source
-  case); `postgres`, `pg`, `mssql`, `tsql` and `sqlite3` are accepted by every
-  `--dialect` flag; errors are printed once and usage only for flag and
-  argument errors; `validate --quiet` exits silently; `validate` names stdin
-  `<stdin>`, validates `GO`/`DELIMITER` scripts and files over the token
-  limit statement by statement; empty and comment-only input is valid for
-  `validate`, `lint` and `format`; `-o` works for `parse` and `transpile`,
-  `-f`/`-o` map onto `validate`'s output flags and are rejected where
-  unsupported; `format` keeps a leading byte order mark.
-- **`ParseReaderMultiple`** skips segments that hold only comments.
-- **Docs**: removed `parser.NewTokenConverter`, `SetMaxTokens`,
-  `SetMaxRecursionDepth` and the `parser.max_tokens` config key, none of which
-  exist; the limits are constants.
-- **Parser**: PostgreSQL `ALTER DEFAULT PRIVILEGES [FOR ROLE r] [IN SCHEMA s]
-  GRANT | REVOKE ...` parses and round-trips; MariaDB ``DELETE `history` FROM
-  history`` stays a multi-table delete when formatted (it was written back as
-  `DELETE HISTORY`); a T-SQL `IF ... ELSE IF ...` chain of any length is one
-  statement, parsed in linear time (chains over ~100 branches hit the
-  recursion limit and swallowed the next statement); MySQL `ANALYZE TABLE t
-  UPDATE HISTOGRAM ...` and Oracle `ANALYZE TABLE t DELETE STATISTICS` are no
-  longer read as MariaDB's `ANALYZE <statement>`.
+Covers everything merged since v1.16.0, mostly the October 2026 dialect audit:
+a 2,813-statement real-world corpus across eight dialects that now parses,
+formats, re-parses identically and keeps every word, guarded by a ratchet test;
+new syntax across Snowflake, BigQuery, ClickHouse, SQL Server, MySQL/MariaDB
+and PostgreSQL; per-dialect lexing and rendering (numeric and Unicode-escape
+literals, `#` comments, quoted identifiers, SQL Server `GO` and Oracle `/`
+lines); safer transpilation; a hardened `ScanSQL` and an AST scanner that
+walks the whole tree; and an LSP server that advertises the spec's
+`textDocumentSync` key and survives malformed input.
+The release is source-compatible: exported signatures are unchanged apart from
+additions. Runtime behaviour does change (parse acceptance per dialect, SQL
+Server `GO` and `top`, statement termination, numeric lexing, fingerprints,
+statement counts, LSP capabilities), so read **Behavior changes** before
+upgrading.
 
 ### Behavior changes
-- SQL Server: unquoted `top` (any case) is now a syntax error where a table
-  name, INSERT/UPDATE/DELETE/MERGE target, table alias or select-item alias is
-  expected (`SELECT * FROM top`, `INSERT INTO top ...`); quote it as `[top]`.
-- Numeric words without whitespace no longer silently become a number plus a
-  column alias. Numeric spelling is retained. Differences from the previous lexer:
+- **SQL Server `GO` inside a statement is an error**: a line holding only
+  `GO [n]` inside a statement is now a parse error ("GO batch separator inside
+  a statement"), matching sqlcmd, instead of a column or alias named `go`.
+  `GO 0` / `GO 1.5` alone on a line report "invalid GO repeat count". (#868)
+- **`AST.Statements` holds batch separators**: SQL Server `GO` is kept as an
+  `*ast.BatchSeparator` node (with its optional `RepeatCount`; repeated batches
+  are not expanded) instead of being discarded. Code that iterates
+  `AST.Statements` or recovery results must skip these nodes. Statement counts
+  (`gosqlx analyze`, `gosqlx parse`, the MCP `parse_sql` tool and the C
+  binding's `statement_count` / statement types) exclude them. (#867)
+- **SQL Server `top` is reserved**: unquoted `top` (any case) is a syntax
+  error where a table name, INSERT/UPDATE/DELETE/MERGE target, table alias or
+  select-item alias is expected (`SELECT * FROM top`, `INSERT INTO top ...`);
+  quote it as `[top]`. (#880)
+- **Statements end at their grammar**: outside SQL Server, a utility statement
+  (`SET`, `USE`, `GRANT`, `COPY`, `CALL`, ...) followed on the next line by
+  another statement without `;` is an error; only a transaction statement on
+  its own line is accepted without a separator. Statements whose definition
+  holds a statement (`PREPARE ... AS`, `DECLARE ... CURSOR FOR`, `CREATE
+  FUNCTION`/`PROCEDURE`/`TRIGGER`/`EVENT`/`RULE`/`TASK`/`VIEW` with a
+  single-statement, `RETURN` or `BEGIN ... END` body, `LOAD DATA`) end with
+  that definition, and `GRANT`, `REVOKE`, PostgreSQL `COPY`, `CALL`, `VACUUM`,
+  `ANALYZE`, `LISTEN`, `UNLISTEN` and `NOTIFY` end with their grammar, so
+  trailing tokens or a following statement without `;` are an error on the
+  same line as well (`VACUUM t junk`, `LISTEN c extra`). MySQL / MariaDB /
+  Oracle `ANALYZE TABLE` keeps its as-written handling. (#867, #872, #878)
+- **Utility statements are gated per dialect**: they are accepted only in the
+  dialects that have them (`VACUUM` in PostgreSQL/SQLite,
+  `LISTEN`/`NOTIFY`/`CLUSTER`/`DISCARD` in PostgreSQL,
+  `FLUSH`/`OPTIMIZE`/`LOCK TABLES`/`KILL` in the MySQL family, `PRAGMA` in
+  SQLite, `DO $$ ... $$` in PostgreSQL, `LOAD DATA` in the MySQL family and
+  BigQuery, `SHOW` not in SQLite/SQL Server/Oracle, no `SET`/`GRANT` in
+  SQLite, ...); a parser without a dialect still accepts all of them. (#872)
+- **Per-dialect grammar checks**: transaction statements are checked against
+  each dialect's grammar (`BEGIN banana` is rejected); `<=>` is accepted only
+  in MySQL, MariaDB and PostgreSQL (pgvector) and `==` only in SQLite and
+  ClickHouse; an unbalanced SQL Server `BEGIN ... END` block, or an
+  `IF`/`WHILE` without a body, is an error. MySQL / MariaDB `:=` inside an
+  expression assigns only to a user variable (`SELECT @v := 1`); `f(a := 1)`
+  and `arr[1:=2]` are errors. PostgreSQL `f(a := 1)` parses as a named
+  argument, written back as `f(a => 1)`. (#867, #872)
+- **Numeric literals are lexed per dialect**: numeric words without
+  whitespace no longer silently become a number plus a column alias, and
+  numeric spelling is retained. Differences from the previous lexer (#874):
 
   | Dialect | Numeric changes | Unicode-escape changes |
   | --- | --- | --- |
@@ -261,49 +82,305 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   | generic | As Oracle for storage sizes and keywords; `1d`, `1x`, `1_000`, `0b101` error. | Unchanged. |
 
   `0x1F` remains a single hex literal in every dialect.
-- SQL Server: a line holding only `GO [n]` inside a statement is now a parse
-  error ("GO batch separator inside a statement"), matching sqlcmd, instead of
-  a column or alias named `go`. `GO 0` / `GO 1.5` alone on a line report
-  "invalid GO repeat count".
-- A raw NUL or Ctrl-Z byte inside a string literal is an error in dialects
-  whose literals cannot spell it back (NUL without backslash escapes; both
-  without a dialect; Ctrl-Z in ClickHouse; both in Snowflake). Formatting used
-  to drop or rewrite it, changing the value.
-- Statement counts (`gosqlx analyze`, `gosqlx parse`, the MCP `parse_sql`
-  tool and the C binding's `statement_count` / statement types) exclude GO
-  separators.
-- `fingerprint.Normalize` and `Fingerprint` keep identifier quoting
-  (`SELECT "A" FROM "T"` used to normalize to `SELECT A FROM T`), so
-  fingerprints of queries with quoted identifiers differ from earlier
-  releases. Re-compute stored fingerprints after upgrading.
-- Outside SQL Server, a utility statement (`SET`, `USE`, `GRANT`, `COPY`,
-  `CALL`, ...) followed on the next line by another statement without `;` is
-  an error; only a transaction statement on its own line is accepted without
-  a separator. Statements whose definition holds a statement (`PREPARE ...
-  AS`, `DECLARE ... CURSOR FOR`, `CREATE FUNCTION`/`PROCEDURE`/`TRIGGER`/
-  `EVENT`/`RULE`/`TASK`/`VIEW` with a single-statement, `RETURN` or
-  `BEGIN ... END` body, `LOAD DATA`) end with that definition, and `GRANT`,
-  `REVOKE`, PostgreSQL `COPY`, `CALL`, `VACUUM`, `ANALYZE`, `LISTEN`, ... end
-  with their grammar, so a statement after them without `;` is an error on the
-  same line as well.
-- Utility statements are accepted only in the dialects that have them
-  (`VACUUM` in PostgreSQL/SQLite, `LISTEN`/`NOTIFY`/`CLUSTER`/`DISCARD` in
-  PostgreSQL, `FLUSH`/`OPTIMIZE`/`LOCK TABLES`/`KILL` in MySQL-family, `PRAGMA`
-  in SQLite, `DO $$ ... $$` in PostgreSQL, `LOAD DATA` in MySQL-family and
-  BigQuery, `SHOW` not in SQLite/SQL Server/Oracle, no `SET`/`GRANT` in SQLite, ...); a parser
-  without a dialect still accepts all of them.
-- MySQL / MariaDB: `:=` inside an expression assigns only to a user variable
-  (`SELECT @v := 1`); `f(a := 1)` and `arr[1:=2]` are errors. PostgreSQL
-  `f(a := 1)` parses as a named argument, written back as `f(a => 1)`.
-- Transaction statements are checked against each dialect's grammar
-  (`BEGIN banana` is rejected); `<=>` is accepted only in MySQL, MariaDB and
-  PostgreSQL (pgvector), `==` only in SQLite and ClickHouse; an unbalanced
-  SQL Server `BEGIN ... END` block, or an `IF`/`WHILE` without a body, is an
-  error.
-- PIVOT / UNPIVOT `IN` lists now require commas between entries and an alias
+- **MySQL / MariaDB `#` line comments**: with the MySQL or MariaDB dialect, `#`
+  starts a line comment, like `--`. The tokenizer records it in `Comments`
+  (re-emitted by the formatter), `SplitStatements` no longer splits on a `;`
+  inside it, and transpiling to another dialect drops it instead of emitting
+  `#` (PostgreSQL XOR). Previously `WHERE x = 1 # c` parsed `#` as an operator
+  and `SELECT a FROM t # c` failed with E2002. Other dialects keep their `#`
+  meaning (PostgreSQL `#`, `#>`, `#>>`, `#-`; SQL Server `#temp`; Oracle
+  `emp#`). (#881)
+- **Unrepresentable string bytes are errors**: a raw NUL or Ctrl-Z byte inside
+  a string literal is an error in dialects whose literals cannot spell it back
+  (NUL without backslash escapes; both without a dialect; Ctrl-Z in
+  ClickHouse; both in Snowflake). Formatting used to drop or rewrite it,
+  changing the value. (#867)
+- **Fingerprints keep identifier quoting**: `fingerprint.Normalize` and
+  `Fingerprint` keep identifier quoting (`SELECT "A" FROM "T"` used to
+  normalize to `SELECT A FROM T`), so fingerprints of queries with quoted
+  identifiers differ from earlier releases. Re-compute stored fingerprints
+  after upgrading. (#867)
+- **`gosqlx.Lint` / `LintWithDialect` report invalid SQL**: SQL that does not
+  tokenize or parse returns an error wrapping `ErrTokenize` or `ErrSyntax`
+  together with the violations of the text and token rules. Callers that
+  ignored the error and treated an empty result as clean must now check it.
+  `linter.FileResult` gains `TokenizeError`, `ParseError` and `SyntaxError()`;
+  `gosqlx lint` exits 1 on syntax errors. (#867)
+- **Formatting refuses to drop comments**: `gosqlx.Format` and `gosqlx format`
+  keep comments and optimizer hints (see Fixed); input whose hints or MySQL
+  `/*! ... */` comments cannot be placed faithfully is refused with
+  `formatter.ErrUnplaceableComment` instead of being rewritten without them.
+  (#867)
+- **Transpilation refuses lossy output**: string literals and quoted
+  identifiers are rendered with the target dialect's escape rules and
+  delimiters, and unrepresentable literals return an error rather than
+  changing their value. SQL Server `GO` scripts targeting another dialect,
+  operators the target cannot express, `LIMIT` on a set operation without
+  `ORDER BY` for SQL Server, `TOP ... PERCENT` / `WITH TIES` where the target
+  has no equivalent, and rewrites nested deeper than 512 levels return an
+  error instead of emitting changed or invalid SQL. (#867, #874, #876, #883,
+  #887)
+- **PIVOT / UNPIVOT `IN` lists** require commas between entries and an alias
   after `AS` in every PIVOT dialect. Where bare aliases are supported,
   `IN (a b)` is one entry (`a AS b`); otherwise a missing comma is rejected.
-  `IN ('a' AS)` no longer silently drops the `AS`.
+  `IN ('a' AS)` no longer silently drops the `AS`. Numeric UNPIVOT row aliases
+  after `AS` are limited to BigQuery and Oracle. (#857)
+- **LSP capabilities key**: `initialize` advertises `textDocumentSync`, as the
+  LSP specification requires, instead of the non-standard
+  `textDocumentSyncOptions`; unknown methods are answered with `-32601`
+  (MethodNotFound) instead of `-32603`. Clients that read the old key must
+  switch. (#882, #887)
+
+### Security
+- **`ScanSQL` bypasses closed**: the string scanner (also used by MCP, the C
+  binding and WASM) matches comments between keywords (`UNION/**/SELECT`,
+  `SLEEP/**/(5)`, `;--\nDROP`, `#` comments, `/*/`, MySQL `1--1`) through
+  comment-free views of the text under each quoting and escaping convention,
+  and scans MySQL/MariaDB `/*! */` and `/*M! */` bodies. Dollar-quote stripping
+  no longer runs inside quoted strings or identifiers. Tautology and comment
+  checks cover the whole input instead of the first 10,000 bytes, and inputs
+  above 10 MiB get a CRITICAL `INPUT_TOO_LARGE` finding whatever the severity
+  filter. (#885)
+- **`Scanner.Scan(tree)` walks the whole AST**: time-based, out-of-band and
+  tautology patterns are detected inside CTEs, derived tables and subqueries,
+  CASE/CAST/IN/BETWEEN/ANY, ORDER BY/GROUP BY, JOIN ON, window specs, FILTER,
+  LIMIT, LATERAL/APPLY, PREWHERE, QUALIFY, CONNECT BY, RETURNING, ON CONFLICT,
+  INSERT ... SELECT, MERGE, CREATE TABLE AS, CREATE [MATERIALIZED] VIEW and
+  EXPLAIN, matching `ScanSQL`. UNION injection checks also run on set
+  operations nested in CTEs and subqueries, and the UNION NULL-padding check
+  matches the parser's NULL literal. Qualified column comparisons such as
+  `a.id = b.id` are no longer reported as tautologies. (#879, #885)
+- **Raw-text statements are scanned**: raw dialect statements and standalone
+  `VALUES` are scanned for injection patterns. (#871)
+- **CLI security scan merges both scanners**: `gosqlx analyze --security` and
+  `gosqlx lint`'s security pass run `ScanSQL` as well as the AST scan and merge
+  the findings, so `SELECT 1; DROP TABLE users` is reported as CRITICAL instead
+  of clean. (#887)
+- **C binding**: every C export recovers from panics and returns an error
+  instead of crashing the host process. (#871)
+
+### Added
+- **Real-world dialect corpus**: `testdata/realworld/<dialect>/` holds 2,813
+  production-style statements across PostgreSQL, MySQL, MariaDB, SQL Server,
+  Oracle, SQLite, Snowflake and ClickHouse. `TestRealWorldCorpus` runs each
+  through split, parse, format, reparse, idempotency and dropped-word checks
+  against a ratchet list (`testdata/realworld/known_failures.txt`, regenerate
+  with `-update-known-failures`): a new failure fails the test, and so does a
+  listed failure that now passes. Every statement now passes and the list is
+  empty (1,327 failures before). `scripts/dialect-audit` runs the same checks
+  on any SQL file; `BenchmarkRealWorldParse` and `BenchmarkRealWorldParseFormat`
+  measure the corpus. (#866, #867)
+- **New syntax**: Snowflake PIVOT `DEFAULT ON NULL`, ClickHouse FINAL/SAMPLE
+  (also on joined tables, `TableModifiers.Sample`; decimal sizes and offsets
+  only, held in inspectable expression fields), SQL Server `INSERT TOP`, MySQL
+  / MariaDB `ALTER TABLE` partition actions (ADD/DROP [IF [NOT] EXISTS],
+  TRUNCATE, REORGANIZE, COALESCE, EXCHANGE, ANALYZE/CHECK/OPTIMIZE/REBUILD/
+  REPAIR, DISCARD/IMPORT, REMOVE/UPGRADE PARTITIONING, ALL), PostgreSQL
+  `ROWS FROM` and array subscripts, ROLLUP/CUBE/nested GROUPING SETS inside
+  GROUPING SETS, and identity constraints (a column with more than one of
+  DEFAULT, an identity clause and a generation expression is rejected).
+  Partition actions outside the structured grammar still parse as as-written
+  `AlterTableOther` text. (#873)
+- **BigQuery PIVOT / UNPIVOT**: the parser gated PIVOT/UNPIVOT on a hard-coded
+  SQL Server / Oracle / Snowflake list, so BigQuery rejected them with E2002
+  although its capabilities advertise `SupportsPivotUnpivot`. The gate is now
+  `Capabilities().SupportsPivotUnpivot` (true for exactly SQL Server, Oracle,
+  Snowflake and BigQuery). Supported BigQuery forms: aggregate aliases and
+  multiple aggregates, `IN` value aliases with or without `AS`,
+  `UNPIVOT INCLUDE NULLS` / `EXCLUDE NULLS`, row-value aliases with or without
+  `AS` (string or INT64) and multi-column UNPIVOT. Oracle also gets
+  aliased/multiple aggregates, the NULLS modifier and multi-column UNPIVOT;
+  Snowflake gets the NULLS modifier and bare `IN` value aliases. New
+  `ast.PivotClause.AggregateAlias`, `ast.PivotClause.ExtraAggregates`
+  (`[]ast.PivotAggregate`), `ast.UnpivotClause.NullHandling`,
+  `ast.UnpivotClause.ValueColumns` and `ast.UnpivotNullHandling`; quoted
+  aliases and value columns keep their source delimiters when rendered.
+  (#857, fixes #854)
+- **More statements**: MariaDB `DELETE HISTORY FROM t [PARTITION (p, ...)]
+  [BEFORE SYSTEM_TIME [TIMESTAMP | TRANSACTION] expr]` (held in
+  `ast.DMLTargetFields.History`, `ast.DeleteHistoryOptions`); PostgreSQL
+  `ALTER DEFAULT PRIVILEGES [FOR ROLE r] [IN SCHEMA s] GRANT | REVOKE ...`.
+  (#872, #880)
+- **AST metadata for faithful rendering**: `ExplainStatement` retains the
+  explained statement; `ast.BatchSeparator` retains SQL Server `GO`; string
+  literals retain their introducer (`N`, `X`, `B`, `_utf8mb4`, ...) and escape
+  rules (`LiteralValue.DialectExtras()`, `EnsureExtras()`,
+  `SetRawBackslash()`); `Identifier.QuoteStyle`, `Identifier.Quotes` and the
+  statement/table/column `NameQuote` fields retain identifier delimiters.
+  `AST.StatementEnds`, `AST.ExecuteSlash` / `ExecuteSlashPositions` (Oracle
+  SQL*Plus `/` lines) and `AST.UnicodeIdentifiers` (PostgreSQL `U&"..."`
+  spellings) record source layout for the formatter. (#867, #869, #886)
+- **Dialect extension fields**: dialect-specific clauses live behind optional
+  pointers so that common statements do not carry them:
+  `SelectStatement.Extras` (`SelectExtras`: SELECT modifiers, INTO, LIMIT BY,
+  ROWS EXAMINED, INTERPOLATE, query hints, output formats),
+  `InsertStatement.Extras`, `UpdateStatement.Extras` / `DeleteStatement.Extras`
+  (`DMLTargetFields`: modifiers, TOP, ONLY, extra targets, joins, OUTPUT,
+  ORDER BY / LIMIT, RETURNING INTO), `FunctionCall.Extras`,
+  `BinaryExpression.Extras` and `TableReference.Modifiers` (including derived
+  `VALUES`). Read them through `DialectExtras()` / `DialectModifiers()`, which
+  return values for read access without shared mutable stand-ins; call
+  `EnsureExtras()` / `EnsureModifiers()` before writing. (#867)
+- **Formatter API**: `formatter.FormatASTChecked`, `FormatStatementChecked`
+  and `FormatExpressionChecked` return an error for nodes they cannot render
+  faithfully; `formatter.JoinWithComments`, `JoinASTWithComments`,
+  `CommentLayout`, `BatchPositions` and `StatementPositions` re-attach
+  comments to formatted statements; `EnsureStatementTerminator`,
+  `ExecuteSlashStatement` and `RestoreUnicodeIdentifiers` keep terminators,
+  Oracle `/` lines and `U&` spellings. `gosqlx.FormatWithDialect`,
+  `gosqlx.WithComments()`, `gosqlx.FormatASTChecked`,
+  `gosqlx.FormatTreeChecked`, `Tree.FormatChecked` and
+  `transform.FormatSQLChecked` expose the same at the higher levels.
+  (#867, #884, #886)
+- **MCP**: the `parse_sql` tool accepts an optional `dialect`. The hosted
+  server is described by `server.json`, and tagged releases publish it to the
+  MCP Registry (`publish-mcp.yml`, `docs/MCP_REGISTRY.md`). (#859, #876)
+
+### Changed
+- **Transpiling dialect-specific operators**: `^` is exponentiation in
+  PostgreSQL and bitwise XOR in MySQL, MariaDB and SQL Server (recorded as
+  `BinaryExpression.BitwiseXor`). Exponentiation is written `POWER(a, b)`
+  outside PostgreSQL; XOR keeps `^` with explicit grouping between the MySQL
+  family and SQL Server, becomes `#` in PostgreSQL, `BITXOR()` in Snowflake and
+  `bitXor()` in ClickHouse, and returns an error for Oracle, SQLite and the
+  generic dialect. PostgreSQL `@`, `|/` and `||/` become `ABS()`, `SQRT()` and
+  `CBRT()` (an error where CBRT is missing); PostgreSQL `#` (XOR), `~`,
+  `<<`/`>>`, `&`/`|` and `||` (CONCAT in MySQL/MariaDB) are rewritten into the
+  target's form; `!!`, `@>`, `?`, regex `~`, SQL Server money literals
+  (`$5.00`, `$5`) and Snowflake object constants (`{'a': 1}`) return an error
+  in dialects without them. PostgreSQL `@` (absolute value) is always written
+  as `@ x`, and `@` directly followed by operator characters (`@-@`, `@-5`) is
+  rejected, as PostgreSQL lexes it as one operator. (#867, #874)
+- **SQL Server row limits when transpiling**: `SELECT TOP` limits are
+  rewritten across dialects (refusing `PERCENT` and `WITH TIES` where the
+  target cannot express them); `LIMIT n OFFSET m` and bare `OFFSET` without
+  ORDER BY add `ORDER BY (SELECT NULL)`, and `FETCH FIRST` gains the required
+  `OFFSET 0 ROWS`. A LIMIT on a whole UNION/INTERSECT/EXCEPT is emitted as
+  `ORDER BY ... OFFSET n ROWS FETCH NEXT m ROWS ONLY` instead of `TOP` on the
+  last branch (which silently changed results). Row limits inside derived
+  tables, JOIN operands and scalar subqueries are rewritten for the target
+  dialect, and `WITH TIES` survives set-operation tails. (#876, #883, #887)
+- **SQL Server `[top]`**: a delimited `[top]` / `"top"` is a plain name (also
+  in the select list, where it was read as the TOP clause) and keeps its
+  delimiters on output. (#880)
+- **`gosqlx watch`** respects `--dialect`, re-validates changed files and
+  formats files in place with the CLI safety checks. (#876)
+- **CLI**: `lint --auto-fix` judges the fixed text; `format --no-uppercase`
+  lower-cases keywords, keyword operators and built-in function keywords;
+  `postgres`, `pg`, `mssql`, `tsql` and `sqlite3` are accepted by every
+  `--dialect` flag; errors are printed once and usage only for flag and
+  argument errors; `validate --quiet` exits silently; `validate` names stdin
+  `<stdin>` and validates `GO`/`DELIMITER` scripts and files over the token
+  limit statement by statement; empty and comment-only input is valid for
+  `validate`, `lint` and `format`; `-o` works for `parse` and `transpile`,
+  `-f`/`-o` map onto `validate`'s output flags and are rejected where
+  unsupported; `format` keeps a leading byte order mark; inline SQL that
+  contains `/` (`UNION/**/SELECT`, `4 / 2`) is no longer mistaken for a file
+  path; the transpile dialect help is corrected. (#867, #876, #887)
+
+### Fixed
+- **Formatter fidelity**: `gosqlx.Format` and `gosqlx format` keep comments
+  (a comment inside a statement moves to the line above it) and `/*+ ... */`
+  hints directly after a statement's first keyword; `format -i` verifies that
+  the output holds exactly the input's comments; LSP and C-binding dialect
+  formatting no longer drop comments. Oracle SQL*Plus `/` execute lines are
+  kept by `FormatAST`, `Formatter.Format`, `FormatWithDialect` and `gosqlx
+  format` (they were dropped, and the CLI refused such scripts). PostgreSQL
+  `U&"..."` identifiers keep their original spelling when formatting for
+  PostgreSQL or no target (other targets get the decoded name), so names with
+  escaped control characters no longer produce output that fails to
+  re-tokenize. Comments next to SQL Server `GO` lines and trailing comments of
+  statements written without `;` stay where they were, and `GO 2 /* c */`
+  keeps both count and comment. Lower-case mode covers expression and
+  built-in function keywords, and raw `JSON_TABLE`/`XMLTABLE` clauses retain
+  their source case. (#867, #870, #886)
+- **Format terminators**: with `AddSemicolon` and a comment anywhere in the
+  input, raw-text statements (PostgreSQL `DO $$...$$`, `CREATE FUNCTION`
+  bodies, Oracle `BEGIN ... END` blocks) lost their `;`, so the output no
+  longer parsed or merged two statements. The comment-preserving path now adds
+  terminators the same way as the plain path. (#884)
+- **SQL round trips**: `SQL()`, `FormatAST` and `Transpile` preserve ALTER
+  actions, grouped joins, set-operation query tails, CTE placement (a WITH
+  clause before nested parenthesized set operands stays in front of the whole
+  operation), standalone VALUES, JSON_TABLE/XMLTABLE literal quoting, quoted
+  type names, and optimizer hints in subqueries (when the hinted SELECT cannot
+  be identified, formatting fails with `ErrUnplaceableComment`). Hint
+  placement uses the source dialect's lexer, so a keyword inside a string or
+  quoted identifier is never a hint slot. `AST.SQL()` no longer drops
+  `CREATE`/`ALTER`/`DROP SEQUENCE` statements, MERGE keeps the source's column
+  alias list (`USING (VALUES ...) AS s (id, val)`), JSON/power operator
+  precedence is correct, and hand-built expression trees (including hand-built
+  operands inserted into parsed trees) render the parentheses they need.
+  Formatting fixes MySQL join comma spacing and SELECT alias qualifiers.
+  (#867, #870, #874)
+- **Statement splitting**: `SplitStatements` keeps compound statements whole:
+  `BEGIN ... END` blocks (trigger, procedure and function bodies, T-SQL
+  `IF ... BEGIN`, `BEGIN TRY`, PostgreSQL `BEGIN ATOMIC`), `CASE ... END`,
+  `IF`/`LOOP`/`WHILE`/`REPEAT` inside a block and Oracle `DECLARE`/`IS`/`AS`
+  sections are no longer cut at the first inner `;`. Transaction statements
+  (`BEGIN;`, `BEGIN TRANSACTION`, `BEGIN IMMEDIATE`) are not blocks, and a
+  script whose blocks do not balance falls back to plain `;` splitting. Client
+  batch separators are honoured and removed from the output: a `GO [n]` line
+  for SQL Server, `DELIMITER` for MySQL/MariaDB and a lone `/` line for
+  Oracle. Splitting follows dialect string escapes, parenthesized bodies and
+  commented `GO` lines, agreeing with the parser. `ParseReaderMultiple` skips
+  segments that hold only comments. (#867, #869)
+- **Parser**: a T-SQL `IF ... ELSE IF ...` chain of any length is one
+  statement, parsed in linear time (chains over ~100 branches hit the
+  recursion limit and swallowed the next statement); MariaDB ``DELETE
+  `history` FROM history`` stays a multi-table delete when formatted; MySQL
+  `ANALYZE TABLE t UPDATE HISTOGRAM ...` and Oracle `ANALYZE TABLE t DELETE
+  STATISTICS` are no longer read as MariaDB's `ANALYZE <statement>`;
+  `GRANT ... TO [`, `TO [AppUser`, `TO CURRENT_USER(`, MariaDB `IDENTIFIED VIA
+  ... USING PASSWORD(` and `COPY (` with an unclosed group return an E2002
+  error instead of panicking with `index out of range [-1]`. (#872, #880,
+  #881)
+- **`ExtractColumns` / `ExtractColumnsQualified` no longer report SELECT
+  aliases**: an unqualified name in `ORDER BY` or `HAVING` that matches a
+  SELECT-list alias of the same query block is treated as the alias, not a
+  column. Qualified references stay columns, and aliases never cross
+  subquery, CTE or UNION boundaries. This also corrects the MCP
+  `extract_metadata` / `analyze_sql` tools. (#865, fixes #849)
+- **Extract performance**: `gosqlx.Extract*` and `ExtractMetadata` (and the
+  MCP `extract_metadata` / `analyze_sql` tools) took exponential time on nested
+  CTEs and UNION chains because CTE, set-operation and DML children were
+  visited twice. Each node is now visited once; nested CTEs at depth 10 took
+  about 59 s and now finish in microseconds. (#884)
+- **AST walkers** (`ast.Inspect`, `Walk`, the security scanner, linter and
+  table extraction) reach SELECT `TOP` and ClickHouse `ARRAY JOIN`, the
+  ENGINE/ORDER BY/PARTITION BY/TTL/SETTINGS clauses of `CREATE TABLE` and
+  `CREATE MATERIALIZED VIEW`, Snowflake `CLONE ... AT`, and PostgreSQL
+  partition bounds. `ReleaseAST` returns the pooled nodes under standalone
+  `VALUES` statements and top-level set operations. (#867)
+- **Transpiler robustness**: very long operator chains (for example 490,000
+  `OR` terms) no longer crash the process with an unrecoverable stack
+  overflow; the operator and string-literal rewrites walk the tree
+  iteratively. (#883)
+- **LSP**: a negative `Content-Length` and a `didChange` range past the end
+  of the document no longer crash the server; oversized messages are drained
+  so framing survives; `didChange` character offsets are read as UTF-16 code
+  units and CRLF line ends are respected; a panic in a request handler or in
+  background diagnostics is logged and answered with `InternalError` instead
+  of ending the process. The document outline no longer lists GO separators,
+  and statements before a GO line no longer extend to the end of the file.
+  (#867, #882)
+- **CLI**: `gosqlx format --dialect sqlserver` runs the statement-count guard
+  again, counting GO lines and statements that end without `;`; `lint` no
+  longer reports a syntax error twice. (#867, #876)
+
+### Performance
+- **Lower-case formatting** streams into a single builder instead of copying
+  and re-rendering subtrees: it went from 3.5–10x to 1.2–1.5x the cost of
+  upper-case output, with 5x to 500x fewer allocations. (#870, #886)
+- **`ScanSQL` tautology check** no longer allocates per candidate (1 MiB of
+  `1=2` went from 50 MB to 1 MB). (#885)
+- **Costs of the correctness work** (Apple M4, `-count=6`, against v1.16.0):
+  `Transpile` of a short MySQL `CREATE TABLE` to PostgreSQL takes about
+  5.2 µs instead of 2.0 µs (52 instead of 32 allocations), mostly in the new
+  operator-retargeting and `||`-meaning passes that walk every statement.
+  The parse-stage baselines are about 6% slower with 8% fewer allocations and
+  about 24% more bytes per parse, from the new AST metadata; all stay within
+  the CI regression baselines.
 
 ## [1.16.0] - 2026-10-22 — Performance Audit, SQL Highlighting, Dialect-Aware LSP, Claude Code Plugin & ChatGPT App, Correctness Sweep
 

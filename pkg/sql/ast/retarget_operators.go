@@ -54,13 +54,17 @@ func RetargetOperators(stmt Statement, from, to string) error {
 	if !ok || sc == nil {
 		sc = &retargetScratch{seen: make(map[uintptr]struct{}), stack: make([]operatorWalkFrame, 0, 16)}
 	}
+	// A walk that panics leaves frames in the backing array that sc.stack no
+	// longer covers, so only scratch from a completed walk is reused.
+	completed := false
 	defer func() {
-		if sc.reset() {
+		if completed && sc.reset() {
 			retargetScratchPool.Put(sc)
 		}
 	}()
 	r := operatorRetargeter{from: normalDialect(from), to: normalDialect(to), seen: sc.seen}
 	sc.stack = r.walk(reflect.ValueOf(stmt), false, sc.stack[:0])
+	completed = true
 	return r.err
 }
 

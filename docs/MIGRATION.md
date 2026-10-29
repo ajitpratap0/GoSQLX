@@ -1,5 +1,51 @@
 # Migration Guide
 
+## v1.16.0 → v1.17.0 (2026-10-29)
+
+**Source-compatible upgrade**: exported signatures are unchanged apart from additions, so code that compiled against v1.16.0 compiles against v1.17.0. Parse acceptance, rendered SQL, security findings, transpiler errors and some CLI and LSP behaviour change. Work through the checklist below; the [CHANGELOG](../CHANGELOG.md) has the full list.
+
+### Why upgrade
+
+- **Real-world dialect corpus**: 2,813 production-style statements across all 8 dialects now parse, format, re-parse identically and keep every word (1,327 failures before).
+- **Faithful formatting**: `gosqlx.Format`, `gosqlx format`, LSP and C-binding formatting keep comments, optimizer hints, SQL Server `GO` lines, Oracle `/` lines and PostgreSQL `U&"..."` spellings.
+- **Security**: `ScanSQL` bypasses through inline comments, quoted dollar tags and input truncation are closed, `Scanner.Scan` walks the whole AST, and the CLI merges both scanners.
+- **Robustness**: the LSP server, C exports and transpiler no longer crash on malformed input, very long operator chains or panics, and metadata extraction is linear on nested CTEs.
+
+### New APIs to adopt
+
+- `gosqlx.FormatWithDialect`, `gosqlx.WithComments()`, and the `*Checked` format variants (`gosqlx.FormatASTChecked`, `gosqlx.FormatTreeChecked`, `Tree.FormatChecked`, `formatter.FormatASTChecked` / `FormatStatementChecked` / `FormatExpressionChecked`, `transform.FormatSQLChecked` / `FormatSQLWithDialectChecked`), which return an error for nodes the target dialect cannot render instead of emitting changed SQL.
+- `formatter.JoinWithComments`, `formatter.JoinASTWithComments`, `formatter.CommentLayout` and `formatter.ErrUnplaceableComment`.
+- `linter.FileResult.TokenizeError`, `ParseError` and `SyntaxError()`.
+- `security.MaxScanInputSize` and `security.PatternInputTooLarge`; `dialect.StringEscape`; `tokenizer.IsKeyword`.
+- AST: `ast.BatchSeparator` (SQL Server `GO [n]`), `AST.ExecuteSlash` / `ExecuteSlashPositions`, `AST.StatementEnds`, `AST.UnicodeIdentifiers`, identifier `NameQuote` / `QuoteStyle` fields, `LiteralValue.DialectExtras()`, `SelectStatement.Extras` / `DMLTargetFields` and the other fields listed in the CHANGELOG.
+
+### Behavior changes to act on
+
+- [ ] **SQL Server `GO`**: a line holding only `GO [n]` inside a statement is a parse error, and `GO 0` / `GO 1.5` report "invalid GO repeat count". `AST.Statements` now contains `*ast.BatchSeparator` nodes: skip them when counting or indexing statements. Statement counts in `gosqlx analyze` / `parse`, MCP `parse_sql` and the C binding exclude GO.
+- [ ] **SQL Server `top`**: unquoted `top` is rejected as a table, target or alias name. Write `[top]`.
+- [ ] **Numeric lexing** is per dialect: `1_000`, `0b101`, `1x` and similar forms are one literal or an error instead of a number plus an alias. See the table in the CHANGELOG.
+- [ ] **MySQL / MariaDB**: `#` starts a line comment; `:=` assigns only to user variables.
+- [ ] **Statement boundaries**: outside SQL Server, a utility statement (`SET`, `GRANT`, `COPY`, `VACUUM`, ...) followed by another statement without `;` is an error. Utility statements are accepted only in dialects that have them; a parser without a dialect still accepts all of them.
+- [ ] **`gosqlx.Lint` / `LintWithDialect`** return an error wrapping `ErrTokenize` or `ErrSyntax` for invalid SQL. Check `err` instead of treating an empty result as clean.
+- [ ] **Formatting** keeps comments, hints, Oracle `/` lines and `U&"..."` spellings; input whose hints cannot be placed returns `formatter.ErrUnplaceableComment`. Regenerate golden files.
+- [ ] **Fingerprints** keep identifier quoting. Recompute stored fingerprints.
+- [ ] **`ScanSQL`** reports more findings (comment-obfuscated keywords, tautology checks over the whole input) and always adds a CRITICAL `INPUT_TOO_LARGE` finding above 10 MiB. `a.id = b.id` is no longer reported as a tautology.
+- [ ] **Transpile to SQL Server**: LIMIT / OFFSET on a UNION, INTERSECT or EXCEPT becomes `ORDER BY ... OFFSET ... FETCH`; without ORDER BY it returns an error. Unrepresentable literals and operators, `TOP PERCENT` / `WITH TIES` where the target has no equivalent, and rewrites nested more than 512 levels deep return errors.
+- [ ] **LSP**: capabilities use the standard `textDocumentSync` key, so custom clients that read `textDocumentSyncOptions` must switch; unknown methods return `-32601`; `didChange` columns are UTF-16 code units.
+- [ ] **CLI**: `gosqlx lint` exits 1 on syntax errors; `analyze --security` and `lint` include `ScanSQL` findings; empty and comment-only input is valid for `validate`, `lint` and `format`; `postgres`, `pg`, `mssql`, `tsql` and `sqlite3` work for every `--dialect`.
+- [ ] **C binding**: the ABI is unchanged. A recovered panic returns a JSON `"internal error"` result, and `gosqlx_version()` returns NULL in that case, so handle NULL.
+
+### Companion release versions
+
+| Component | v1.16.0 | v1.17.0 |
+|-----------|---------|---------|
+| Library (`github.com/ajitpratap0/GoSQLX`) | 1.16.0 | **1.17.0** |
+| CLI, MCP server and LSP `serverInfo.version` | 1.16.0 | **1.17.0** |
+| VS Code extension and Claude Code plugin | 1.16.0 | **1.17.0** |
+| C binding (`libgosqlx`) | 1.16.0 exports | **1.17.0**: same exports, panic-safe |
+| Python bindings (`pygosqlx`) | 1.16.0 | **1.17.0** |
+| Integrations (`integrations/gorm`, `integrations/opentelemetry`) | 1.16.0 | updated to **1.17.0** after the tag |
+
 ## v1.15.0 → v1.16.0 (2026-10-22)
 
 **Source-compatible upgrade**: exported signatures are unchanged apart from additions, so code that compiled against v1.15.0 compiles against v1.16.0. Runtime behaviour does change in several places (token positions, rendered SQL, parse acceptance, CLI refusals, MCP HTTP limits). Read the checklist below before upgrading. The [CHANGELOG](../CHANGELOG.md) has the full list.

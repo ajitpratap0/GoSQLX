@@ -67,6 +67,31 @@ if err := server.Run(); err != nil {
 
 The GoSQLX LSP server implements the following LSP features:
 
+The initialization response advertises incremental synchronization under
+`capabilities.textDocumentSync`:
+
+```json
+{
+  "capabilities": {
+    "textDocumentSync": {
+      "openClose": true,
+      "change": 2,
+      "save": {"includeText": true}
+    }
+  }
+}
+```
+
+### Protocol error handling
+
+Unknown request methods return JSON-RPC error `-32601` (`MethodNotFound`).
+Malformed `Content-Length` headers and invalid JSON are logged without stopping
+the server; it continues processing subsequent well-framed messages.
+Incremental `textDocument/didChange` ranges use UTF-16 positions: negative
+positions are rejected, positions past the line or document end are clamped,
+and reversed ranges have their endpoints swapped. These ranges do not crash
+the server.
+
 ### **1. Text Document Synchronization**
 - `textDocument/didOpen` - Document opened notification
 - `textDocument/didChange` - Document changed notification (incremental sync)

@@ -35,7 +35,7 @@ export const DIALECT_NAMES = [
 /** Project facts (not performance). */
 export const PROJECT = {
   /** Latest released tag. */
-  version: 'v1.16.0',
+  version: 'v1.17.0',
   /** Dialects supported (PostgreSQL, MySQL, MariaDB, SQL Server, Oracle, SQLite, Snowflake, ClickHouse). */
   dialectCount: DIALECT_NAMES.length,
   /** Built-in linter rules L001-L030. */
@@ -56,6 +56,52 @@ export const QA_CORPUS = {
   snowflake: { pass: 87, total: 87 },
   clickhouse: { pass: 83, total: 83 },
 } as const;
+
+/**
+ * Real-world dialect corpus (testdata/realworld/<dialect>/*.sql), added in
+ * PR #866 and brought to zero known failures in PR #867; released in v1.17.0
+ * (CHANGELOG.md [1.17.0], Added). Every statement goes through split, parse,
+ * format, reparse, format idempotency and a dropped-word check;
+ * TestRealWorldCorpus (pkg/gosqlx/realworld_corpus_test.go) enforces it in CI
+ * against testdata/realworld/known_failures.txt as a ratchet.
+ *
+ * Counts were taken from `go run ./scripts/dialect-audit` at `sourceCommit`
+ * (each run printed failed=0). While `released` is false, every place that
+ * shows these figures must say they are not in a release yet.
+ */
+const REALWORLD_PER_DIALECT = {
+  postgresql: { pass: 305, total: 305 },
+  mysql: { pass: 414, total: 414 },
+  mariadb: { pass: 380, total: 380 },
+  sqlserver: { pass: 277, total: 277 },
+  oracle: { pass: 368, total: 368 },
+  sqlite: { pass: 348, total: 348 },
+  snowflake: { pass: 327, total: 327 },
+  clickhouse: { pass: 394, total: 394 },
+} as const;
+
+const realworldSum = (field: 'pass' | 'total') =>
+  Object.values(REALWORLD_PER_DIALECT).reduce((n, d) => n + d[field], 0);
+
+export const REALWORLD_CORPUS = {
+  released: true,
+  /** origin/main commit the counts were measured on. */
+  sourceCommit: 'fda9a5ef',
+  /** Passing and total statements per dialect; keys are the parser dialect strings. */
+  perDialect: REALWORLD_PER_DIALECT,
+  /** 2,813 at sourceCommit (sum of perDialect). */
+  total: realworldSum('total'),
+  /** Every corpus statement passes; known_failures.txt is empty. */
+  passing: realworldSum('pass'),
+  failing: realworldSum('total') - realworldSum('pass'),
+  /** Reproduce one dialect's figure from a repo checkout; replace <d> with a dialect key. */
+  command: 'go run ./scripts/dialect-audit -dialect <d> testdata/realworld/<d>/*.sql',
+} as const;
+
+export type RealWorldDialect = keyof typeof REALWORLD_CORPUS.perDialect;
+
+/** Qualifier shown next to corpus figures until they ship in a tagged release. */
+export const REALWORLD_STATUS = REALWORLD_CORPUS.released ? '' : 'on main, next release';
 
 export const BENCH_ENV = {
   hardware: 'Apple M4',

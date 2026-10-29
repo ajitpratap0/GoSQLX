@@ -9,6 +9,7 @@ import { CodeExamplesTabs, type ApiExample } from '@/components/home/CodeExample
 const EXAMPLES: { id: string; label: string }[] = [
   { id: 'parse', label: 'Parse' },
   { id: 'format', label: 'Format' },
+  { id: 'transpile', label: 'Transpile' },
   { id: 'validate', label: 'Validate' },
   { id: 'lint', label: 'Lint' },
 ];

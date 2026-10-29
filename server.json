@@ -3,7 +3,7 @@
   "name": "io.github.ajitpratap0/gosqlx",
   "title": "GoSQLX",
   "description": "SQL validation, formatting, parsing, metadata extraction, linting, and security analysis.",
-  "version": "1.16.0",
+  "version": "1.17.0",
   "repository": {
     "url": "https://github.com/ajitpratap0/GoSQLX",
     "source": "github"

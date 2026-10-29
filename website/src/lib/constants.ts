@@ -1,4 +1,7 @@
-import { PROJECT } from '@/data/metrics';
+import { PROJECT, REALWORLD_CORPUS, REALWORLD_STATUS } from '@/data/metrics';
+
+/** Appends the "not released yet" qualifier while REALWORLD_CORPUS.released is false. */
+const unreleased = (text: string) => (REALWORLD_STATUS ? `${text} (${REALWORLD_STATUS})` : text);
 
 export const NAV_LINKS = [
   { href: '/docs', label: 'Docs' },
@@ -10,13 +13,38 @@ export const NAV_LINKS = [
   { href: '/compare', label: 'Compare' },
 ];
 
-export const FEATURES = [
-  { icon: 'globe', title: 'Multi-Dialect', description: 'PostgreSQL, MySQL, MariaDB, SQLite, SQL Server, Oracle, Snowflake, ClickHouse.', color: 'accent' },
+export interface Feature {
+  icon: string;
+  title: string;
+  description: string;
+  color: string;
+  /** Spans the full row from md up, so an odd card count still fills every row. */
+  wide?: boolean;
+}
+
+export const FEATURES: Feature[] = [
+  {
+    icon: 'globe',
+    title: 'Multi-Dialect',
+    description: `PostgreSQL, MySQL, MariaDB, SQLite, SQL Server, Oracle, Snowflake, ClickHouse. ${unreleased(
+      `All ${REALWORLD_CORPUS.total.toLocaleString('en-US')} statements of a production-style corpus (hand-written to imitate ORM and application SQL) across the ${PROJECT.dialectCount} dialects parse, format and round-trip`,
+    )}.`,
+    color: 'accent',
+  },
   { icon: 'lock', title: 'Thread-Safe', description: 'Race-detector clean in CI.', color: 'brand' },
   { icon: 'bolt', title: 'Zero-Copy', description: 'Direct byte slice operations. No unnecessary allocations.', color: 'accent-warm' },
   { icon: 'recycle', title: 'Object Pooling', description: 'sync.Pool recycling for ASTs, tokenizers, expressions.', color: 'accent' },
   { icon: 'shield', title: 'Security Scanner', description: 'SQL injection detection with severity classification.', color: 'danger' },
   { icon: 'cpu', title: 'MCP Server', description: `${PROJECT.mcpToolCount} SQL tools for Claude, Cursor, and any MCP client.`, color: 'cyan' },
+  {
+    icon: 'code',
+    title: 'Format & Transpile',
+    description: `Dialect-aware formatting and SQL transpilation between dialects, since v1.14. ${unreleased(
+      'gosqlx.Format and gosqlx format keep comments and optimizer hints',
+    )}.`,
+    color: 'brand',
+    wide: true,
+  },
 ];
 
 export interface DocsSidebarItem {
@@ -47,7 +75,7 @@ export const DOCS_SIDEBAR: DocsSidebarCategory[] = [
     { slug: 'getting-started', file: 'GETTING_STARTED.md', label: 'Getting Started', description: 'Install GoSQLX, parse your first SQL statement in Go, and walk the AST in minutes, with copy-paste examples for the high-level API and the CLI.' },
     { slug: 'feature-tour', file: 'FEATURE_TOUR.md', label: 'Feature Tour', description: 'A guided tour of GoSQLX features: parsing, formatting, linting, security scanning, transforms, fingerprinting and transpilation, each with a short example.' },
     { slug: 'usage-guide', file: 'USAGE_GUIDE.md', label: 'Usage Guide', description: 'Practical patterns for GoSQLX in Go: high-level and low-level APIs, object pooling, dialect selection, error handling and concurrent use in services.' },
-    { slug: 'cli-guide', file: 'CLI_GUIDE.md', label: 'CLI Guide', description: 'Reference for the gosqlx command line tool: validate, format, lint, parse, analyze and lsp commands, flags, output formats and CI usage with examples.' },
+    { slug: 'cli-guide', file: 'CLI_GUIDE.md', label: 'CLI Guide', description: 'Reference for the gosqlx command line tool: validate, format, lint, parse, analyze, transpile, stats, watch and lsp commands, flags, output formats and CI use.' },
   ]},
   { category: 'Guides', summary: 'Task-focused walkthroughs with working code.', items: [
     { slug: 'guides/parse-postgresql-in-go', file: 'guides/parse-postgresql-in-go.md', label: 'Parse PostgreSQL in Go', description: 'Parse PostgreSQL queries in pure Go with GoSQLX: DISTINCT ON, JSONB operators, RETURNING and LATERAL, AST walkers, and syntax errors with positions.' },
@@ -73,6 +101,7 @@ export const DOCS_SIDEBAR: DocsSidebarCategory[] = [
   { category: 'Reference', summary: 'API, CLI configuration, errors, rules and dialects.', items: [
     { slug: 'reference/api', file: 'API_REFERENCE.md', label: 'API Reference', description: 'GoSQLX API reference index: every package from the high-level gosqlx API to the tokenizer, parser and AST, with pooling advice and a complete example.' },
     { slug: 'reference/api/gosqlx', file: 'api/gosqlx.md', label: 'gosqlx package', depth: 1, description: 'Reference for the gosqlx package, the high-level GoSQLX API: Parse, ParseTree, Validate, Format, Lint and metadata extraction with pooling built in.' },
+    { slug: 'reference/api/formatter', file: 'api/formatter.md', label: 'formatter package', depth: 1, description: 'Reference for the GoSQLX formatter package: SQL and AST rendering, checked dialect conversions, comment placement and script source metadata.' },
     { slug: 'reference/api/tokenizer', file: 'api/tokenizer.md', label: 'tokenizer package', depth: 1, description: 'Reference for the GoSQLX tokenizer package: the zero-copy SQL lexer, pooled tokenizer instances, token types and the spans attached to each token.' },
     { slug: 'reference/api/parser', file: 'api/parser.md', label: 'parser package', depth: 1, description: 'Reference for the GoSQLX parser package: the recursive descent parser that turns tokens into an AST, with context-aware parsing and parser reuse.' },
     { slug: 'reference/api/ast', file: 'api/ast.md', label: 'ast package', depth: 1, description: 'Reference for the GoSQLX ast package: statement and expression node types, DDL and DML nodes, window and CTE types, object pools and visitors.' },

@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Performance
+- **`Transpile`** recovers most of the v1.17.0 correctness cost: the AST walks
+  follow cached per-type reflection plans that skip fields which cannot hold a
+  rewrite target, and cheap source checks skip the `||`, string-literal and
+  identifier-requoting passes when the SQL cannot need them. A short MySQL
+  `CREATE TABLE` to PostgreSQL goes from 5.2 µs to 2.7 µs (52 to 43
+  allocations); wide `OR`/`AND` chains are about 68% faster and `||` chains
+  about 55% faster. Output and errors are unchanged on 955,476 differential
+  cases. (#889)
+
 ## [1.17.0] - 2026-10-29 — Real-World Dialect Corpus, Dialect-Faithful Round Trips, Security Scanner & LSP Hardening
 
 Covers everything merged since v1.16.0, mostly the October 2026 dialect audit:

@@ -38,10 +38,12 @@ func identifierDelimiter(d keywords.SQLDialect) rune {
 // the target dialect's (see identifierDelimiter), so a MySQL `my col` is not
 // carried into PostgreSQL output where backticks are invalid. Oracle bare
 // names with '#' (emp#) stay bare only when the target is Oracle too.
-func requoteIdentifiers(stmt ast.Statement, from, to keywords.SQLDialect) {
+func requoteIdentifiers(stmt ast.Statement, from, to keywords.SQLDialect, typeDelims bool) {
 	if from == to {
 		return
 	}
 	ast.SetNameQuoteStyle(stmt, identifierDelimiter(to), to == keywords.DialectOracle)
-	ast.RestyleDataTypes(stmt, identifierDelimiter(to))
+	if typeDelims {
+		ast.RestyleDataTypes(stmt, identifierDelimiter(to))
+	}
 }

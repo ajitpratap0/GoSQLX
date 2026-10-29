@@ -18,6 +18,9 @@ import (
 	"fmt"
 	"reflect"
 	"strings"
+	"sync"
+
+	"github.com/ajitpratap0/GoSQLX/pkg/internal/reflplan"
 )
 
 // RetargetOperators rewrites stmt in place for a target dialect. An empty
@@ -47,10 +50,46 @@ func RetargetOperators(stmt Statement, from, to string) error {
 	if (from != "" && from == to) || stmt == nil {
 		return nil
 	}
-	r := operatorRetargeter{from: normalDialect(from), to: normalDialect(to), seen: map[uintptr]struct{}{}}
-	r.walk(reflect.ValueOf(stmt), false)
+	sc, ok := retargetScratchPool.Get().(*retargetScratch)
+	if !ok || sc == nil {
+		sc = &retargetScratch{seen: make(map[uintptr]struct{}), stack: make([]operatorWalkFrame, 0, 16)}
+	}
+	// A walk that panics leaves frames in the backing array that sc.stack no
+	// longer covers, so only scratch from a completed walk is reused.
+	completed := false
+	defer func() {
+		if completed && sc.reset() {
+			retargetScratchPool.Put(sc)
+		}
+	}()
+	r := operatorRetargeter{from: normalDialect(from), to: normalDialect(to), seen: sc.seen}
+	sc.stack = r.walk(reflect.ValueOf(stmt), false, sc.stack[:0])
+	completed = true
 	return r.err
 }
+
+type retargetScratch struct {
+	seen  map[uintptr]struct{}
+	stack []operatorWalkFrame
+}
+
+// reset drops AST references before reuse. Oversized scratch is discarded
+// rather than retaining a huge chain in the pool.
+func (sc *retargetScratch) reset() bool {
+	if len(sc.seen) > 4096 || cap(sc.stack) > 4096 {
+		return false
+	}
+	clear(sc.seen)
+	// walk zeroes each frame it pops, so only frames still on the stack (an
+	// early return on error) hold reflect.Values into the AST.
+	clear(sc.stack)
+	sc.stack = sc.stack[:0]
+	return true
+}
+
+var retargetScratchPool = sync.Pool{New: func() any {
+	return &retargetScratch{seen: map[uintptr]struct{}{}, stack: make([]operatorWalkFrame, 0, 16)}
+}}
 
 // normalDialect maps the generic dialect to "" and lower-cases the name.
 func normalDialect(d string) string {
@@ -86,6 +125,7 @@ const maxRetargetNesting = 512
 
 type operatorWalkFrame struct {
 	value      reflect.Value
+	plan       *reflplan.Plan
 	slot       reflect.Value
 	inOperator bool
 	nesting    int
@@ -98,10 +138,16 @@ type operatorWalkFrame struct {
 
 // walk visits exported fields in their original order using heap frames. Each
 // settable expression slot is rewritten after its children; map copies are
-// written back only after their complete subtree has been rewritten.
-func (r *operatorRetargeter) walk(v reflect.Value, inOperator bool) {
-	stack := make([]operatorWalkFrame, 1, 16)
-	stack[0] = operatorWalkFrame{value: v, inOperator: inOperator}
+// written back only after their complete subtree has been rewritten. Fields,
+// elements and map values whose static type cannot hold an interface (see
+// reflplan) are skipped: they hold no expression slot to rewrite. Pruning
+// interface-free pointers also removes them from address-only seen sets; this
+// can only visit more, never fewer, so output differs from an unpruned walk
+// only if a pruned value aliased the address of a rewrite-bearing node, which
+// the parser does not produce. stack is reused scratch (nil is fine); the
+// returned slice is the stack for the next call.
+func (r *operatorRetargeter) walk(v reflect.Value, inOperator bool, stack []operatorWalkFrame) []operatorWalkFrame {
+	stack = append(stack, operatorWalkFrame{value: v, plan: reflplan.Of(v.Type()), inOperator: inOperator})
 	for len(stack) > 0 && r.err == nil {
 		f := &stack[len(stack)-1]
 		if !f.entered {
@@ -118,58 +164,64 @@ func (r *operatorRetargeter) walk(v reflect.Value, inOperator bool) {
 						break
 					}
 					r.seen[ptr] = struct{}{}
+					f.value = f.value.Elem()
+					f.plan = f.plan.Elem
+				} else {
+					f.value = f.value.Elem()
+					f.plan = reflplan.Of(f.value.Type())
 				}
-				f.value = f.value.Elem()
 			}
 			if f.value.Kind() == reflect.Struct && r.nestsOutput(f.value) {
 				f.nesting++
 				if f.nesting > maxRetargetNesting {
 					r.err = fmt.Errorf("expression nesting too deep to transpile")
-					return
+					return stack
 				}
 			}
 		}
 		var child reflect.Value
+		var childPlan *reflplan.Plan
 		operands := false
 		switch f.value.Kind() {
 		case reflect.Struct:
-			t := f.value.Type()
-			operands = t == binaryExprType || t == unaryExprType
-			for f.index < f.value.NumField() {
-				i := f.index
+			if f.index < len(f.plan.Fields) {
+				t := f.plan.Type
+				operands = t == binaryExprType || t == unaryExprType
+				fp := f.plan.Fields[f.index]
 				f.index++
-				if t.Field(i).IsExported() {
-					child = f.value.Field(i)
-					break
-				}
+				child, childPlan = f.value.Field(fp.Index), fp.Plan
 			}
 		case reflect.Slice, reflect.Array:
-			if f.index < f.value.Len() {
-				child = f.value.Index(f.index)
+			if f.plan.Elem.Reach && f.index < f.value.Len() {
+				child, childPlan = f.value.Index(f.index), f.plan.Elem
 				f.index++
 			}
 		case reflect.Map:
-			if f.iter == nil {
-				f.iter = f.value.MapRange()
-			}
-			if f.iter.Next() {
-				child = reflect.New(f.value.Type().Elem()).Elem()
-				child.Set(f.iter.Value())
-				frame := operatorWalkFrame{value: child, slot: child, nesting: f.nesting, mapValue: f.value, mapKey: f.iter.Key()}
-				stack = append(stack, frame)
-				continue
+			if f.plan.Elem.Reach {
+				if f.iter == nil {
+					f.iter = f.value.MapRange()
+				}
+				if f.iter.Next() {
+					child = reflect.New(f.value.Type().Elem()).Elem()
+					child.Set(f.iter.Value())
+					frame := operatorWalkFrame{value: child, plan: f.plan.Elem, slot: child, nesting: f.nesting, mapValue: f.value, mapKey: f.iter.Key()}
+					stack = append(stack, frame)
+					continue
+				}
 			}
 		}
 		if child.IsValid() {
-			stack = append(stack, operatorWalkFrame{value: child, slot: child, inOperator: operands, nesting: f.nesting})
+			stack = append(stack, operatorWalkFrame{value: child, plan: childPlan, slot: child, inOperator: operands, nesting: f.nesting})
 			continue
 		}
 		r.slot(f.slot, f.inOperator)
 		if r.err == nil && f.mapValue.IsValid() {
 			f.mapValue.SetMapIndex(f.mapKey, f.slot)
 		}
+		stack[len(stack)-1] = operatorWalkFrame{}
 		stack = stack[:len(stack)-1]
 	}
+	return stack
 }
 
 // nestsOutput identifies expression boundaries rendered recursively. Ordinary

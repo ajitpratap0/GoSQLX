@@ -52,7 +52,7 @@ func TestRetargetOperatorsPostOrderAndMap(t *testing.T) {
 	power := &BinaryExpression{Left: &BinaryExpression{Left: a, Operator: "^", Right: b}, Operator: "^", Right: c}
 	values := map[string]Expression{"concat": concat, "power": power}
 	r := operatorRetargeter{from: "postgresql", to: "mysql", seen: map[uintptr]struct{}{}}
-	r.walk(reflect.ValueOf(values), false)
+	r.walk(reflect.ValueOf(values), false, nil)
 	if r.err != nil {
 		t.Fatal(r.err)
 	}

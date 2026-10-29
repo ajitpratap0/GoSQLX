@@ -8,7 +8,7 @@
   "description": "SQL parsing, formatting, linting, security scanning and metadata extraction, built on the GoSQLX Go SDK. 7 MCP tools: validate_sql, format_sql, parse_sql, extract_metadata, security_scan, lint_sql and analyze_sql. Dialect-aware validation for PostgreSQL, MySQL, MariaDB, SQL Server, Oracle, SQLite, Snowflake, BigQuery, Redshift and ClickHouse. Zero-copy tokenizer, race-free, with object pooling.",
   "repository": "https://github.com/ajitpratap0/GoSQLX",
   "homepage": "https://gosqlx.dev",
-  "version": "1.16.0",
+  "version": "1.17.0",
   "license": "Apache-2.0",
   "author": {
     "name": "Ajit Pratap Singh",

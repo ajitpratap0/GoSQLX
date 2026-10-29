@@ -31,6 +31,14 @@ import (
 // This version tracks feature releases and compatibility.
 // Format: MAJOR.MINOR.PATCH (Semantic Versioning 2.0.0)
 //
+// Version 1.17.0 includes:
+//   - Real-world dialect corpus: 2,788 statements across 8 dialects checked for parse, format and round trip
+//   - Dialect-faithful formatting: Oracle / lines, U& identifiers, T-SQL GO comments, lower-case keywords
+//   - Transpiler fixes: SQL Server set-operation LIMIT to OFFSET/FETCH, nested operator rewrites
+//   - ScanSQL hardening against comment, quoting and dollar-quote bypasses; analyze and lint report its findings
+//   - LSP hardening: spec textDocumentSync key, malformed-message and didChange safety, -32601 for unknown methods
+//   - A GO line inside a SQL Server statement is now a parse error
+//
 // Version 1.16.0 includes:
 //   - SQL syntax highlighting (pkg/highlight) for API, CLI (gosqlx highlight), LSP, WASM and playground
 //   - Dialect-aware LSP (diagnostics, formatting, completion, didChangeConfiguration)

@@ -35,7 +35,7 @@ export const DIALECT_NAMES = [
 /** Project facts (not performance). */
 export const PROJECT = {
   /** Latest released tag. */
-  version: 'v1.16.0',
+  version: 'v1.17.0',
   /** Dialects supported (PostgreSQL, MySQL, MariaDB, SQL Server, Oracle, SQLite, Snowflake, ClickHouse). */
   dialectCount: DIALECT_NAMES.length,
   /** Built-in linter rules L001-L030. */

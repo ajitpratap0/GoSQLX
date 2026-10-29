@@ -287,6 +287,7 @@
 //
 // # Version History
 //
+// v1.17.0: Real-world dialect corpus, dialect-faithful formatting, ScanSQL and LSP hardening
 // v1.16.0: Performance audit, SQL highlighting, dialect-aware LSP, Claude Code plugin and ChatGPT app, pygosqlx on PyPI
 // v1.15.0: ParseTree opaque Tree API, typed walkers
 // v1.14.0: Dialect-aware transforms, Snowflake and ClickHouse coverage, schema introspection

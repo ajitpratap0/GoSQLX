@@ -58,7 +58,7 @@ metrics    → (no deps)
 keywords   → (no deps)
 token      → (no deps)
 tokenizer  → models, errors, metrics, keywords
-ast        → models, metrics
+ast        → models, metrics, internal/reflplan
 parser     → models, errors, keywords, token, tokenizer, ast
 
 # Higher-level / product packages

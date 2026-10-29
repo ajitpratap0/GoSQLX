@@ -30,8 +30,8 @@ func (p *Parser) parseWithSource(tokens []models.TokenWithSpan, in sqlText) (*as
 // commands. ParseWithDialect checks the original line, matching SplitStatements.
 // Token-only entry points have only SQL token positions, so they cannot resolve
 // comment-only neighbours; positionless streams cannot represent commands at all.
-// A slash after ';' is consumed, not rewritten to an extra empty statement (also
-// in strict mode). Commands delimit scripts; they do not reexecute prior SQL.
+// A slash after ';' remains a marked terminator, not an extra statement (also
+// in strict mode). Its spelling lets the parser retain execute-line metadata.
 // Only the parser-owned buffer changes, and source lines are scanned once.
 func (p *Parser) oracleExecuteLines(source string) {
 	if p.DialectTyped() != dialect.Oracle {
@@ -64,15 +64,29 @@ func (p *Parser) oracleExecuteLines(source string) {
 			alone = strings.Trim(text, " \t\r") == "/"
 		}
 		if alone {
-			if n > 0 && p.tokenBuf[n-1].Token.Type == models.TokenTypeSemicolon {
-				continue
-			}
 			t.Token.Type = models.TokenTypeSemicolon
-			t.Token.Value = ";"
+			t.Token.Value = "/"
 		}
 		p.tokenBuf[n] = t
 		n++
 	}
 	clear(p.tokenBuf[n:])
 	p.tokenBuf = p.tokenBuf[:n]
+}
+
+// markExecuteSlash records a normalized execute command without changing the
+// statement list. Allocate only for Oracle scripts containing execute lines.
+func (p *Parser) markExecuteSlash(result *ast.AST) bool {
+	if !p.isType(models.TokenTypeSemicolon) || p.currentToken.Token.Value != "/" || p.DialectTyped() != dialect.Oracle {
+		return false
+	}
+	if len(result.Statements) > 0 {
+		if len(result.ExecuteSlash) < len(result.Statements) {
+			result.ExecuteSlash = append(result.ExecuteSlash, make([]bool, len(result.Statements)-len(result.ExecuteSlash))...)
+			result.ExecuteSlashPositions = append(result.ExecuteSlashPositions, make([]models.Location, len(result.Statements)-len(result.ExecuteSlashPositions))...)
+		}
+		result.ExecuteSlash[len(result.Statements)-1] = true
+		result.ExecuteSlashPositions[len(result.Statements)-1] = p.currentToken.Start
+	}
+	return true
 }

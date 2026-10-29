@@ -52,7 +52,9 @@ func (p *Parser) delimitedNameMustStayQuoted(name string, quote rune) bool {
 	if quote == 0 {
 		return false
 	}
-	return ast.DelimitedNameMustStayQuoted(name, p.identifierCaseFolding()) || tokenizer.IsKeyword(name) ||
+	// TOP is a dialect keyword, absent from the tokenizer's global keyword map.
+	return (p.IsSQLServer() && equalsUpper(name, "TOP")) ||
+		ast.DelimitedNameMustStayQuoted(name, p.identifierCaseFolding()) || tokenizer.IsKeyword(name) ||
 		isContextualKeywordName(name)
 }
 
@@ -142,6 +144,18 @@ func (p *Parser) appendNamePartQuoted(q ast.NameQuote, quote rune) ast.NameQuote
 // parseQualifiedNameQuoted parses a possibly qualified object name like
 // parseQualifiedName and also returns how its parts were delimited.
 func (p *Parser) parseQualifiedNameQuoted() (string, ast.NameQuote, error) {
+	return p.parseQualifiedNameWithTableRules(false)
+}
+
+// isReservedTopName checks the dialect before inspecting the token text.
+func (p *Parser) isReservedTopName() bool {
+	return p.IsSQLServer() && p.isUnquotedWord("TOP")
+}
+
+func (p *Parser) parseQualifiedNameWithTableRules(table bool) (string, ast.NameQuote, error) {
+	if table && p.isReservedTopName() {
+		return "", 0, p.expectedError("table name (TOP is reserved in SQL Server; quote it as [top])")
+	}
 	if !p.isIdentifier() && !p.isNonReservedKeyword() {
 		return "", 0, p.expectedError("identifier")
 	}
@@ -176,7 +190,7 @@ func (p *Parser) parseQualifiedNameQuoted() (string, ast.NameQuote, error) {
 				"",
 			).WithCause(errQualifiedNameTooLong)
 		}
-		if !p.isIdentifier() && !p.isNonReservedKeyword() {
+		if (table && p.isReservedTopName()) || (!p.isIdentifier() && !p.isNonReservedKeyword()) {
 			return "", 0, p.expectedError("identifier after .")
 		}
 		parts[n] = p.currentToken.Token.Value
@@ -225,4 +239,36 @@ func (p *Parser) currentColumnIdent() *ast.Identifier {
 		QuoteStyle: q,
 		Quotes:     p.appendNamePartQuoted(0, q),
 	}
+}
+
+// recordUnicodeIdentifiers captures spelling only for statements that need it.
+func (p *Parser) recordUnicodeIdentifiers(tree *ast.AST, start, end int) {
+	hasUnicode := false
+	for i := start; i < end; i++ {
+		w := p.tokens[i].Token.Word
+		if w != nil && w.QuoteStyle == 'U' {
+			hasUnicode = true
+			break
+		}
+	}
+	if !hasUnicode {
+		return
+	}
+	var names []ast.UnicodeIdentifierSpelling
+	for i := start; i < end; i++ {
+		tok := p.tokens[i].Token
+		if tok.Type != models.TokenTypeIdentifier && tok.Type != models.TokenTypeDoubleQuotedString {
+			continue
+		}
+		raw := ""
+		if tok.Word != nil && tok.Word.QuoteStyle == 'U' {
+			raw = tok.Word.Value
+		}
+		quoted := (tok.Quote == '"' || tok.Type == models.TokenTypeDoubleQuotedString) && p.delimitedNameMustStayQuoted(tok.Value, '"')
+		names = append(names, ast.UnicodeIdentifierSpelling{Name: tok.Value, Spelling: raw, Quoted: quoted})
+	}
+	if tree.UnicodeIdentifiers == nil {
+		tree.UnicodeIdentifiers = make(map[int][]ast.UnicodeIdentifierSpelling)
+	}
+	tree.UnicodeIdentifiers[len(tree.Statements)-1] = names
 }

@@ -438,8 +438,9 @@ func runSecurityScan(sql string, filename string, outWriter io.Writer) int {
 		fmt.Fprintf(outWriter, "  [WARN] %s: could not parse for security scan: %v\n", filename, err)
 		return 0
 	}
+	defer ast.ReleaseAST(tree)
 	scanner := sqlsecurity.NewScanner()
-	result := scanner.Scan(tree)
+	result := mergeSecurityFindings(scanner.Scan(tree), scanner.ScanSQL(sql))
 	for _, f := range result.Findings {
 		fmt.Fprintf(outWriter, "  [%s] %s:%d:%d - %s (%s)\n",
 			f.Severity, filename, f.Line, f.Column, f.Description, f.Pattern)

@@ -18,10 +18,12 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
 	"os"
+	"runtime/debug"
 	"strconv"
 	"strings"
 	"sync"
@@ -204,6 +206,7 @@ func NewServer(reader io.Reader, writer io.Writer, logger *log.Logger) *Server {
 		verboseLog: logger.Writer() != io.Discard,
 	}
 	s.handler = NewHandler(s)
+	s.documents.logger = logger
 	return s
 }
 
@@ -283,7 +286,7 @@ func (s *Server) Run() error {
 	for {
 		msg, err := s.readMessage()
 		if err != nil {
-			if err == io.EOF {
+			if errors.Is(err, io.EOF) {
 				s.logger.Println("EOF received, shutting down")
 				return nil
 			}
@@ -322,17 +325,23 @@ func (s *Server) readMessage() (json.RawMessage, error) {
 			value := strings.TrimSpace(strings.TrimPrefix(line, "Content-Length:"))
 			contentLength, err = strconv.Atoi(value)
 			if err != nil {
-				return nil, fmt.Errorf("invalid Content-Length: %v", err)
+				return nil, fmt.Errorf("invalid Content-Length: %w", err)
 			}
 		}
 	}
 
-	if contentLength == 0 {
-		return nil, fmt.Errorf("missing Content-Length header")
+	if contentLength <= 0 {
+		return nil, fmt.Errorf("missing or non-positive Content-Length: %d", contentLength)
 	}
 
 	// Validate content length against maximum
 	if contentLength > MaxContentLength {
+		if _, err := io.CopyN(io.Discard, s.reader, int64(contentLength)); err != nil {
+			if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
+				return nil, fmt.Errorf("incomplete oversized message: %w", io.EOF)
+			}
+			return nil, fmt.Errorf("discard oversized message: %w", err)
+		}
 		return nil, fmt.Errorf("content length %d exceeds maximum allowed %d", contentLength, MaxContentLength)
 	}
 
@@ -340,7 +349,7 @@ func (s *Server) readMessage() (json.RawMessage, error) {
 	content := make([]byte, contentLength)
 	_, err := io.ReadFull(s.reader, content)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read content: %v", err)
+		return nil, fmt.Errorf("failed to read content: %w", err)
 	}
 
 	return json.RawMessage(content), nil
@@ -348,6 +357,25 @@ func (s *Server) readMessage() (json.RawMessage, error) {
 
 // handleMessage processes a single message
 func (s *Server) handleMessage(msg json.RawMessage) {
+	s.handleMessageWithRecovery(msg, s.dispatchMessage)
+}
+
+// handleMessageWithRecovery isolates a failing handler to its current message.
+// Parse the request only on failure so normal dispatch does not decode twice.
+func (s *Server) handleMessageWithRecovery(msg json.RawMessage, handle func(json.RawMessage)) {
+	defer func() {
+		if value := recover(); value != nil {
+			s.logger.Printf("Panic handling message: %v\n%s", value, debug.Stack())
+			var req Request
+			if err := json.Unmarshal(msg, &req); err == nil && req.ID != nil && req.Method != "" {
+				s.sendError(req.ID, InternalError, "internal server error")
+			}
+		}
+	}()
+	handle(msg)
+}
+
+func (s *Server) dispatchMessage(msg json.RawMessage) {
 	// Enforce rate limiting
 	if !s.checkRateLimit() {
 		// For requests with IDs, send rate limit error response
@@ -396,7 +424,11 @@ func (s *Server) handleMessage(msg json.RawMessage) {
 		// It's a request expecting a response
 		result, err := s.handler.HandleRequest(req.Method, req.Params)
 		if err != nil {
-			s.sendError(req.ID, InternalError, err.Error())
+			code := InternalError
+			if errors.Is(err, errMethodNotFound) {
+				code = MethodNotFound
+			}
+			s.sendError(req.ID, code, err.Error())
 		} else {
 			s.sendResult(req.ID, result)
 		}

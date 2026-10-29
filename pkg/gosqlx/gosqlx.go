@@ -655,7 +655,14 @@ func formatSQL(sql string, options FormatOptions, dialect keywords.SQLDialect) (
 	if dialect != "" {
 		p.ApplyOptions(parser.WithDialect(string(dialect)))
 	}
-	parsedAST, err := p.ParseFromModelTokens(tokens)
+	var parsedAST *ast.AST
+	if dialect == keywords.DialectOracle {
+		// Only the source-aware parser can distinguish an execute line from
+		// a slash whose line also contains a SQL comment.
+		parsedAST, err = parser.ParseWithDialect(sql, dialect)
+	} else {
+		parsedAST, err = p.ParseFromModelTokens(tokens)
+	}
 	if err != nil {
 		return "", fmt.Errorf("cannot format invalid SQL: %w: %w", ErrSyntax, err)
 	}
@@ -690,16 +697,22 @@ func formatSQL(sql string, options FormatOptions, dialect keywords.SQLDialect) (
 	// dropped or moved: either would change what the statement does.
 	stmts := make([]string, len(parsedAST.Statements))
 	for i, stmt := range parsedAST.Statements {
-		stmts[i], err = formatter.FormatStatementChecked(stmt, astOpts)
+		localOpts := astOpts
+		if i < len(parsedAST.ExecuteSlash) && parsedAST.ExecuteSlash[i] {
+			localOpts.AddSemicolon = false
+		}
+		stmts[i], err = formatter.FormatStatementChecked(stmt, localOpts)
 		if err != nil {
 			return "", fmt.Errorf("cannot format SQL: %w", err)
 		}
+		stmts[i] = formatter.RestoreUnicodeIdentifiers(parsedAST, i, stmts[i], localOpts.Dialect)
+		stmts[i] = formatter.EnsureStatementTerminator(stmt, stmts[i], localOpts.AddSemicolon)
 	}
 	layout := formatter.CommentLayout{Terminator: ";", Gap: "\n", Dialect: string(dialect), Batches: formatter.BatchPositions(parsedAST), Starts: formatter.StatementPositions(parsedAST)}
 	if options.AddSemicolon {
-		layout.Terminator = "" // each rendered statement already ends with ';'
+		layout.Terminator = "" // non-batch statements already end with ';'
 	}
-	out, err := formatter.JoinWithComments(stmts, tokens, comments, layout)
+	out, err := formatter.JoinASTWithComments(parsedAST, stmts, tokens, comments, layout)
 	if err != nil {
 		return "", fmt.Errorf("cannot format SQL: %w", err)
 	}

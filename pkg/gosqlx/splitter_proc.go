@@ -54,6 +54,7 @@ type procState struct {
 	on, tsql, oracle bool
 	depth            int
 	declMask         uint64
+	hashComments     bool
 	// stmtStart is true while the next word begins a statement (after ';',
 	// BEGIN, THEN, ELSE, LOOP, a label, …). IF/WHILE/FOR/REPEAT only open a
 	// block there, which keeps "DROP TABLE IF EXISTS" and IF() calls out.
@@ -66,6 +67,7 @@ type procState struct {
 
 func (s *procState) init(p dialectProfile) {
 	s.on = !p.noBlocks
+	s.hashComments = p.hashComments
 	s.tsql = p.tsql
 	s.oracle = p.oracle
 	s.stmtStart = true
@@ -73,7 +75,7 @@ func (s *procState) init(p dialectProfile) {
 
 // reset discards any open block (a batch separator ends them all).
 func (s *procState) reset() {
-	*s = procState{on: s.on, tsql: s.tsql, oracle: s.oracle, stmtStart: true}
+	*s = procState{on: s.on, tsql: s.tsql, oracle: s.oracle, stmtStart: true, hashComments: s.hashComments}
 }
 
 func (s *procState) semicolon() {
@@ -161,7 +163,7 @@ func (s *procState) word(src string, i, j int) int {
 			s.stmtStart = true
 			return j
 		}
-		if beginNamesColumn(src, i) || !beginIsBlock(src, j) {
+		if beginNamesColumn(src, i) || !beginIsBlock(src, j, s.hashComments) {
 			return j
 		}
 		s.push(false)
@@ -169,7 +171,7 @@ func (s *procState) word(src string, i, j int) int {
 
 	case kwEnd:
 		s.pop()
-		w, _, end := peekWord(src, j)
+		w, _, end := peekWordWithHash(src, j, s.hashComments)
 		var b [12]byte
 		switch string(foldWord(&b, w)) {
 		case "try", "catch":
@@ -252,7 +254,7 @@ func (s *procState) word(src string, i, j int) int {
 	case kwIsAs:
 		if s.oracle && s.routineHdr {
 			s.routineHdr = false
-			w, _, _ := peekWord(src, j)
+			w, _, _ := peekWordWithHash(src, j, s.hashComments)
 			var b [12]byte
 			switch string(foldWord(&b, w)) {
 			case "language", "external":
@@ -328,8 +330,8 @@ func foldWord(buf *[12]byte, w string) []byte {
 // beginIsBlock reports whether the BEGIN ending at j opens a block rather
 // than starting a transaction (BEGIN; BEGIN TRANSACTION; BEGIN IMMEDIATE …)
 // or being a column or alias that happens to be called begin.
-func beginIsBlock(src string, j int) bool {
-	w, c, end := peekWord(src, j)
+func beginIsBlock(src string, j int, hashComments bool) bool {
+	w, c, end := peekWordWithHash(src, j, hashComments)
 	if w == "" {
 		// BEGIN :NEW.x := ..., BEGIN <<label>>, BEGIN "x" := ... open a
 		// PL/SQL block; BEGIN; and BEGIN at the end do not.
@@ -354,7 +356,7 @@ func beginIsBlock(src string, j int) bool {
 	case "not":
 		// BEGIN NOT ATOMIC (MariaDB) is a block; BEGIN NOT DEFERRABLE (PG)
 		// is a transaction.
-		w2, _, _ := peekWord(src, end)
+		w2, _, _ := peekWordWithHash(src, end, hashComments)
 		var b2 [12]byte
 		return string(foldWord(&b2, w2)) == "atomic"
 	}
@@ -393,13 +395,17 @@ func beginNamesColumn(src string, i int) bool {
 // follows (empty when the next token is not a word), the byte found there
 // (0 at end of input) and the index just past the word.
 func peekWord(src string, j int) (w string, c byte, end int) {
+	return peekWordWithHash(src, j, false)
+}
+
+func peekWordWithHash(src string, j int, hashComments bool) (w string, c byte, end int) {
 	for j < len(src) {
 		c = src[j]
 		switch {
 		case c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\f' || c == '\v':
 			j++
 			continue
-		case c == '-' && j+1 < len(src) && src[j+1] == '-':
+		case (c == '-' && j+1 < len(src) && src[j+1] == '-') || (c == '#' && hashComments):
 			for j < len(src) && src[j] != '\n' {
 				j++
 			}

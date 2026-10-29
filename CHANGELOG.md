@@ -44,6 +44,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   identifier delimiters through rendering.
 
 ### Changed
+- **MySQL / MariaDB `#` line comments**: with the MySQL or MariaDB dialect, `#`
+  now starts a line comment, like `--`. The tokenizer records it in `Comments`
+  (re-emitted by the formatter), `SplitStatements` no longer splits on a `;`
+  inside it, and transpiling to another dialect drops it instead of emitting `#`
+  (PostgreSQL XOR). Previously `WHERE x = 1 # c` parsed `#` as an operator and
+  `SELECT a FROM t # c` failed with E2002. Other dialects keep their `#`
+  meaning (PostgreSQL `#`, `#>`, `#>>`, `#-`; SQL Server `#temp`; Oracle `emp#`).
 - Parsed ClickHouse SAMPLE sizes and offsets now use inspectable expression
   fields, which take rendering precedence over the retained legacy string fields.
 - ClickHouse SAMPLE accepts only decimal numbers (hex such as `0x10` is
@@ -79,6 +86,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   in dialects without them.
 
 ### Fixed
+- **CLI security scan**: `gosqlx analyze --security` and `gosqlx lint`'s security pass now run the string scanner (`ScanSQL`) as well as the AST scan and merge the findings, so `SELECT 1; DROP TABLE users` is reported as CRITICAL instead of clean. Inline SQL that contains `/` (for example `UNION/**/SELECT` or `4 / 2`) is no longer mistaken for a missing file path.
+- **Transpile row limits**: for SQL Server, `LIMIT n OFFSET m` and bare `OFFSET` without ORDER BY add `ORDER BY (SELECT NULL)`, and `FETCH FIRST` gains the required `OFFSET 0 ROWS`. Row limits inside derived tables, JOIN operands and scalar subqueries are now rewritten for the target dialect (Oracle kept `LIMIT` there). `WITH TIES` survives set-operation tails, and targets that cannot express it return an error instead of dropping it.
+- **LSP**: requests for unknown methods are answered with `-32601` (MethodNotFound) instead of `-32603`.
+- **Formatter fidelity**: Oracle SQL*Plus `/` execute lines are kept by FormatAST, `Formatter.Format`, `FormatWithDialect` and `gosqlx format` (they were dropped, and the CLI refused such scripts). Statement counts do not change: the AST records which statements a `/` follows in `AST.ExecuteSlash`. PostgreSQL `U&"..."` identifiers keep their original spelling when formatting for PostgreSQL or no target (other targets get the decoded name; AST name fields stay decoded), so names with escaped control characters no longer produce output that fails to re-tokenize. Comments next to SQL Server `GO` lines and trailing comments of statements written without `;` stay where they were, and `GO 2 /* c */` keeps both count and comment on every entry point.
+- **Formatter performance**: lower-case keyword mode streams into a single builder instead of copying and re-rendering subtrees; it went from 3.5–10x to 1.2–1.5x the cost of upper-case output, with 5x to 500x fewer allocations.
+- **Security (`ScanSQL`)**: closed several ways to slip injection past the string scanner (also used by MCP, the C binding and WASM). Dollar-quote stripping no longer runs inside quoted strings or identifiers (`SELECT '$x$'; DROP TABLE users; SELECT '$x$'` was clean). Tautology and comment checks now cover the whole input instead of the first 10,000 bytes; inputs above 10 MiB get a CRITICAL `INPUT_TOO_LARGE` finding whatever the severity filter. Comments between keywords (`UNION/**/SELECT`, `SLEEP/**/(5)`, `;--\nDROP`, `#` comments, `/*/`, MySQL `1--1`) are matched through comment-free views of the text under each quoting and escaping convention, and MySQL/MariaDB `/*! */` and `/*M! */` bodies are scanned. The AST UNION NULL-padding check now matches the parser's NULL literal. The tautology check no longer allocates per candidate (1 MiB of `1=2` went from 50 MB to 1 MB).
+- **Format**: with `AddSemicolon` and a comment anywhere in the input, raw-text statements (PostgreSQL `DO $$...$$`, `CREATE FUNCTION` bodies, Oracle `BEGIN ... END` blocks) lost their `;`, so the output no longer parsed or merged two statements. The comment-preserving path now adds terminators the same way as the plain path (`formatter.EnsureStatementTerminator`).
+- **Extract**: `gosqlx.Extract*` and `ExtractMetadata` (and the MCP `extract_metadata`/`analyze_sql` tools) took exponential time on nested CTEs and UNION chains because CTE, set-operation and DML children were visited twice. Each node is now visited once; nested CTEs at depth 10 took about 59 s and now finish in microseconds.
+- **Transpile**: a LIMIT on a whole UNION/INTERSECT/EXCEPT no longer becomes `TOP` on the last branch when targeting SQL Server (that silently changed results); it is emitted as `ORDER BY ... OFFSET n ROWS FETCH NEXT m ROWS ONLY`, and without ORDER BY Transpile returns an error. Very long operator chains (for example 490,000 `OR` terms) no longer crash the process with an unrecoverable stack overflow: the operator and string-literal rewrites walk the tree iteratively, and rewrites that would nest output more than 512 levels deep return an error.
+- **LSP (`pkg/lsp`)**: `initialize` now advertises `textDocumentSync` (it sent the non-standard `textDocumentSyncOptions`, so VS Code never sent open/change/close events). A negative `Content-Length` and a `didChange` range past the end of the document no longer crash the server; oversized messages are drained so framing survives; `didChange` character offsets are read as UTF-16 code units and CRLF line ends are respected. A panic in a request handler or in background diagnostics is now logged and answered with `InternalError` instead of ending the process.
+- PostgreSQL / Redshift / SQLite `VACUUM` and `ANALYZE`, and PostgreSQL `LISTEN`,
+  `UNLISTEN` and `NOTIFY`, now end where their grammar ends: trailing same-line
+  tokens (`VACUUM t junk`, `LISTEN c extra`) are a parse error instead of being
+  folded into the statement text. MySQL / MariaDB / Oracle `ANALYZE TABLE` keeps
+  its as-written handling.
+- SQL Server: a delimited `[top]` / `"top"` is a plain name (also in the select
+  list, where it was read as the TOP clause) and keeps its delimiters on output;
+  bare `TOP` is rejected as a table, DML target or alias name, as T-SQL reserves it.
+- MariaDB `DELETE HISTORY FROM t [PARTITION (p, ...)] [BEFORE SYSTEM_TIME
+  [TIMESTAMP | TRANSACTION] expr]` parses and round-trips the partition list, the
+  unit keyword and any point expression (e.g. `NOW() - INTERVAL 1 DAY`), held in
+  the new `ast.DMLTargetFields.History` (`ast.DeleteHistoryOptions`).
+- **Security scanner**: `Scanner.Scan(tree)` now walks the whole AST, so time-based,
+  out-of-band and tautology patterns are detected inside CTEs, derived tables and
+  subqueries, CASE/CAST/IN/BETWEEN/ANY, ORDER BY/GROUP BY, JOIN ON, window specs,
+  FILTER, LIMIT, LATERAL/APPLY, PREWHERE, QUALIFY, CONNECT BY, RETURNING, ON CONFLICT,
+  INSERT ... SELECT, MERGE, CREATE TABLE AS, CREATE [MATERIALIZED] VIEW and EXPLAIN,
+  matching `ScanSQL`. UNION injection checks also run on set operations nested in CTEs
+  and subqueries. Qualified column comparisons such as `a.id = b.id` are no longer
+  reported as tautologies.
+- `GRANT ... TO [`, `TO [AppUser`, `TO CURRENT_USER(`, MariaDB
+  `IDENTIFIED VIA ... USING PASSWORD(` and `COPY (` with an unclosed group no
+  longer panic with `index out of range [-1]`; they return an E2002 error
+  (expected `]` or `)`) in every dialect.
 - Watch now respects `--dialect`, re-validates changes and formats files in place
   with the CLI safety checks; MCP parsing accepts a dialect and documents comment preservation.
 - Correct transpile dialect help, avoid duplicate lint syntax errors, and rewrite
@@ -202,6 +243,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   longer read as MariaDB's `ANALYZE <statement>`.
 
 ### Behavior changes
+- SQL Server: unquoted `top` (any case) is now a syntax error where a table
+  name, INSERT/UPDATE/DELETE/MERGE target, table alias or select-item alias is
+  expected (`SELECT * FROM top`, `INSERT INTO top ...`); quote it as `[top]`.
 - Numeric words without whitespace no longer silently become a number plus a
   column alias. Numeric spelling is retained. Differences from the previous lexer:
 
@@ -2412,7 +2456,6 @@ The following features were identified during real-world testing and are tracked
 #### Test Coverage Enhancement - Phase 2 (Keywords, Errors, AST)
 - **Comprehensive Test Suite**: Added 3 new test files with 1,351 lines of test code
 - **Perfect Coverage Achieved**: Keywords package reaches 100% coverage
-- **Coverage Achievements**:
   - Keywords Package: 92.8% → **100.0%** (+7.2%) - Perfect Coverage
   - Errors Package: 83.8% → **95.6%** (+11.8%) - Exceeded Target
   - AST Package: 73.7% → **74.4%** (+0.7%) - Marker functions covered
@@ -2445,8 +2488,6 @@ The following features were identified during real-world testing and are tracked
 #### Combined Phase 1 + Phase 2 Impact
 - **6 packages** with comprehensive coverage improvements
 - **4,445 lines** of production-grade test code
-- **Zero race conditions** across entire codebase
-- **Production-ready** reliability validated
 
 ## [1.5.0] - 2025-11-15 - Phase 1 Test Coverage Achievement
 
@@ -2605,7 +2646,6 @@ This release positions GoSQLX as the most thoroughly tested Go SQL parser librar
 - **Comprehensive Test Suite**: Added 10 new test files with ~1,800 lines of tests
 - **Coverage Improvement**: Increased AST package coverage from 59.6% to 73.4% (+13.8 percentage points)
 - **Production Confidence**: Exceeded 70% coverage target, validating production readiness
-- **Quality Assurance**: All tests pass with race detection enabled, zero race conditions detected
 
 ### New Test Files Created
 - **data_loading_test.go** (~250 lines): Cloud data loading features (StageParamsObject, DataLoadingOptions, helpers)
@@ -2770,8 +2810,6 @@ This substantial test coverage increase provides strong confidence in the AST pa
 - **1.25M+ operations/second** peak throughput with concurrent processing
 - **<1μs latency** for complex queries with CTEs and set operations
 - **Zero performance regression** from Phase 1 - all existing functionality maintained
-- **Race-free implementation** - comprehensive concurrent testing validates thread safety
-- **Memory efficient** - object pooling preserved with 60-80% memory reduction
 
 ### 🎯 SQL Standards Compliance
 - **~70% SQL-92 compliance** achieved (up from ~40% in Phase 1)
@@ -2790,8 +2828,6 @@ This substantial test coverage increase provides strong confidence in the AST pa
 - **24+ test functions** total (9 new Phase 2 tests added)
 - **4 comprehensive CTE tests**: Simple CTE, Recursive CTE, Multiple CTEs, Column specs
 - **5 comprehensive set operation tests**: All operations, chaining, CTE combinations
-- **100% test pass rate** with race detection enabled
-- **Extensive error case coverage** with contextual error messages
 
 ### 📚 Documentation Updates
 - **Enhanced Go package documentation** with Phase 2 examples and API references
@@ -2803,7 +2839,6 @@ This substantial test coverage increase provides strong confidence in the AST pa
 - **100% backward compatible** - all existing functionality preserved
 - **API stability** - no breaking changes to public interfaces
 - **Legacy test compatibility** - all Phase 1 and prior tests continue passing
-- **Performance maintained** - no degradation in existing query parsing performance
 
 ### Goals Achieved
 - ✅ ~70% SQL-92 compliance milestone reached

@@ -102,6 +102,10 @@ func JoinWithComments(stmts []string, tokens []models.TokenWithSpan, comments []
 		return joinPlain(stmts, layout), nil
 	}
 	items := splitItems(tokens, layout)
+	return joinWithCommentItems(stmts, tokens, comments, layout, items)
+}
+
+func joinWithCommentItems(stmts []string, tokens []models.TokenWithSpan, comments []models.Comment, layout CommentLayout, items []item) (string, error) {
 	var nStmt int
 	for _, it := range items {
 		if !it.empty {
@@ -200,7 +204,7 @@ func JoinWithComments(stmts []string, tokens []models.TokenWithSpan, comments []
 				}
 			}
 			chunk.WriteString(stmt)
-			if i < len(items)-1 && !it.batch {
+			if i < len(items)-1 && !it.batch && !items[i+1].execute {
 				chunk.WriteString(layout.Terminator)
 			}
 		}
@@ -312,6 +316,7 @@ type item struct {
 	term        int // index of the terminating ';' token, -1 when absent
 	empty       bool
 	batch       bool
+	execute     bool // SQL*Plus execute line, without a separate AST statement
 	// start and end bound the item in the source: start is the first token
 	// (or, for an empty item, its ';'), end is just past the terminator (or
 	// the last token).
@@ -326,7 +331,7 @@ func batchesAgree(items []item, stmts []string, dialect string) bool {
 		if it.empty {
 			continue
 		}
-		if it.batch != isBatchText(stmts[si], dialect) {
+		if it.batch != (isBatchText(stmts[si], dialect) || (it.execute && stmts[si] == "/")) {
 			return false
 		}
 		si++
@@ -628,8 +633,7 @@ func locateComment(items []item, c models.Comment) (int, commentRole) {
 		it := items[i]
 		if before(c.Start, it.start) {
 			// Between the previous item and this one (or before the first).
-			if i > 0 && !it.empty && c.Start.Line == items[i-1].end.Line &&
-				(items[i-1].term >= 0 || items[i-1].batch) {
+			if i > 0 && !it.empty && c.Start.Line == items[i-1].end.Line {
 				return i - 1, roleTrailing
 			}
 			return i, roleLeading

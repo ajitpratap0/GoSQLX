@@ -67,65 +67,159 @@ type operatorRetargeter struct {
 	// concats holds the CONCAT() calls made for || so an enclosing ||
 	// splices their arguments instead of nesting calls.
 	concats map[*FunctionCall]struct{}
-	err     error
+	// consumedConcats prevents reuse of a shared child backing array twice.
+	consumedConcats map[*FunctionCall]struct{}
+	err             error
 }
 
 var (
 	binaryExprType = reflect.TypeOf(BinaryExpression{})
 	unaryExprType  = reflect.TypeOf(UnaryExpression{})
+	funcCallType   = reflect.TypeOf(FunctionCall{})
+	parenExprType  = reflect.TypeOf(ParenthesizedExpression{})
 )
 
-// walk visits every exported field reachable from v. inOperator reports that
-// v is an operand of a binary or unary operator expression.
+// maxRetargetNesting bounds wrappers introduced by rewriting. The formatter
+// renders function arguments and explicit parentheses recursively, even though
+// it can render a long binary chain iteratively.
+const maxRetargetNesting = 512
+
+type operatorWalkFrame struct {
+	value      reflect.Value
+	slot       reflect.Value
+	inOperator bool
+	nesting    int
+	entered    bool
+	index      int
+	iter       *reflect.MapIter
+	mapValue   reflect.Value
+	mapKey     reflect.Value
+}
+
+// walk visits exported fields in their original order using heap frames. Each
+// settable expression slot is rewritten after its children; map copies are
+// written back only after their complete subtree has been rewritten.
 func (r *operatorRetargeter) walk(v reflect.Value, inOperator bool) {
-	if r.err != nil {
-		return
-	}
-	switch v.Kind() {
-	case reflect.Pointer:
-		if v.IsNil() {
-			return
-		}
-		ptr := v.Pointer()
-		if _, ok := r.seen[ptr]; ok {
-			return
-		}
-		r.seen[ptr] = struct{}{}
-		r.walk(v.Elem(), inOperator)
-	case reflect.Interface:
-		if !v.IsNil() {
-			r.walk(v.Elem(), inOperator)
-		}
-	case reflect.Struct:
-		t := v.Type()
-		operands := t == binaryExprType || t == unaryExprType
-		for i := 0; i < v.NumField(); i++ {
-			if t.Field(i).IsExported() {
-				r.slot(v.Field(i), operands)
+	stack := make([]operatorWalkFrame, 1, 16)
+	stack[0] = operatorWalkFrame{value: v, inOperator: inOperator}
+	for len(stack) > 0 && r.err == nil {
+		f := &stack[len(stack)-1]
+		if !f.entered {
+			f.entered = true
+			for f.value.Kind() == reflect.Pointer || f.value.Kind() == reflect.Interface {
+				if f.value.IsNil() {
+					f.value = reflect.Value{}
+					break
+				}
+				if f.value.Kind() == reflect.Pointer {
+					ptr := f.value.Pointer()
+					if _, ok := r.seen[ptr]; ok {
+						f.value = reflect.Value{}
+						break
+					}
+					r.seen[ptr] = struct{}{}
+				}
+				f.value = f.value.Elem()
+			}
+			if f.value.Kind() == reflect.Struct && r.nestsOutput(f.value) {
+				f.nesting++
+				if f.nesting > maxRetargetNesting {
+					r.err = fmt.Errorf("expression nesting too deep to transpile")
+					return
+				}
 			}
 		}
-	case reflect.Slice, reflect.Array:
-		for i := 0; i < v.Len(); i++ {
-			r.slot(v.Index(i), false)
-		}
-	case reflect.Map:
-		iter := v.MapRange()
-		for iter.Next() {
-			value := reflect.New(v.Type().Elem()).Elem()
-			value.Set(iter.Value())
-			r.slot(value, false)
-			if r.err != nil {
-				return
+		var child reflect.Value
+		operands := false
+		switch f.value.Kind() {
+		case reflect.Struct:
+			t := f.value.Type()
+			operands = t == binaryExprType || t == unaryExprType
+			for f.index < f.value.NumField() {
+				i := f.index
+				f.index++
+				if t.Field(i).IsExported() {
+					child = f.value.Field(i)
+					break
+				}
 			}
-			v.SetMapIndex(iter.Key(), value)
+		case reflect.Slice, reflect.Array:
+			if f.index < f.value.Len() {
+				child = f.value.Index(f.index)
+				f.index++
+			}
+		case reflect.Map:
+			if f.iter == nil {
+				f.iter = f.value.MapRange()
+			}
+			if f.iter.Next() {
+				child = reflect.New(f.value.Type().Elem()).Elem()
+				child.Set(f.iter.Value())
+				frame := operatorWalkFrame{value: child, slot: child, nesting: f.nesting, mapValue: f.value, mapKey: f.iter.Key()}
+				stack = append(stack, frame)
+				continue
+			}
 		}
+		if child.IsValid() {
+			stack = append(stack, operatorWalkFrame{value: child, slot: child, inOperator: operands, nesting: f.nesting})
+			continue
+		}
+		r.slot(f.slot, f.inOperator)
+		if r.err == nil && f.mapValue.IsValid() {
+			f.mapValue.SetMapIndex(f.mapKey, f.slot)
+		}
+		stack = stack[:len(stack)-1]
 	}
 }
 
-// slot rewrites the expression held by a settable interface slot after
-// rewriting its subtree.
+// nestsOutput identifies expression boundaries rendered recursively. Ordinary
+// binary chains and flattened CONCAT chains do not consume this depth budget.
+func (r *operatorRetargeter) nestsOutput(v reflect.Value) bool {
+	// Most visited structs are not expressions; skip the interface conversion.
+	switch v.Type() {
+	case funcCallType, parenExprType, unaryExprType, binaryExprType:
+	default:
+		return false
+	}
+	if !v.CanAddr() || !v.Addr().CanInterface() {
+		return false
+	}
+	switch x := v.Addr().Interface().(type) {
+	case *FunctionCall, *ParenthesizedExpression:
+		return true
+	case *UnaryExpression:
+		return true
+	case *BinaryExpression:
+		if x.CustomOp != nil || x.Not {
+			return false
+		}
+		if x.Operator == "^" {
+			if !x.BitwiseXor {
+				return r.to != "postgresql" && r.to != ""
+			}
+			from := r.from
+			if from == "" {
+				from = "mysql"
+				if x.XorAtAdditive {
+					from = "sqlserver"
+				}
+			}
+			return xorFamily(from) != xorFamily(r.to)
+		}
+		form, _ := binaryTargetForm(x.Operator, x.PipesOr, r.to)
+		if form == formFunc || form == formXorOp {
+			return true
+		}
+		return form == formKeep && retargetExpressionPrecedence(x) >= 6 &&
+			(targetOperandNeedsParens(x, x.Left, false, r.to) || targetOperandNeedsParens(x, x.Right, true, r.to))
+	}
+	return false
+}
+
+// slot rewrites a settable expression interface after walk has visited its
+// subtree. Keeping this separate also preserves repeated interface-slot rewrites
+// when pointers are shared and their subtree has already been seen.
 func (r *operatorRetargeter) slot(slot reflect.Value, inOperator bool) {
-	r.walk(slot, inOperator)
 	if r.err != nil || slot.Kind() != reflect.Interface || slot.IsNil() || !slot.CanSet() {
 		return
 	}
@@ -143,6 +237,39 @@ func (r *operatorRetargeter) slot(slot reflect.Value, inOperator bool) {
 	}
 }
 
+// rewriteConcat reuses a generated left CONCAT's argument capacity once. Each
+// append preserves the child's prefix and length, and later shared uses copy,
+// so flattening a left-associative chain takes linear rather than quadratic
+// time without changing expressions that share the original child.
+func (r *operatorRetargeter) rewriteConcat(x *BinaryExpression) Expression {
+	left := x.Left
+	if p, ok := left.(*ParenthesizedExpression); ok && p != nil {
+		left = p.Expr
+	}
+	var args []Expression
+	if call, ok := left.(*FunctionCall); ok && call != nil {
+		if _, made := r.concats[call]; made {
+			if _, used := r.consumedConcats[call]; !used {
+				args = call.Arguments
+				if r.consumedConcats == nil {
+					r.consumedConcats = map[*FunctionCall]struct{}{}
+				}
+				r.consumedConcats[call] = struct{}{}
+			}
+		}
+	}
+	if args == nil {
+		args = r.concatArgs(x.Left, nil)
+	}
+	args = r.concatArgs(x.Right, args)
+	call := &FunctionCall{Name: "CONCAT", Arguments: args}
+	if r.concats == nil {
+		r.concats = map[*FunctionCall]struct{}{}
+	}
+	r.concats[call] = struct{}{}
+	return call
+}
+
 // rewrite returns the replacement for e, or nil to keep it.
 func (r *operatorRetargeter) rewrite(e Expression, inOperator bool) (Expression, error) {
 	switch x := e.(type) {
@@ -155,6 +282,9 @@ func (r *operatorRetargeter) rewrite(e Expression, inOperator bool) (Expression,
 				return r.rewriteXor(x, inOperator)
 			}
 			return r.rewritePower(x)
+		}
+		if form, _ := binaryTargetForm(x.Operator, x.PipesOr, r.to); form == formConcat {
+			return r.rewriteConcat(x), nil
 		}
 		if repl, handled, err := r.rewriteBitwise(x, inOperator); handled {
 			return repl, err

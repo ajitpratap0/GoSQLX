@@ -21,6 +21,7 @@
 package formatter
 
 import (
+	"reflect"
 	"strconv"
 	"strings"
 
@@ -475,4 +476,91 @@ func normalizeLimitForDialect(s *ast.SelectStatement, dialect string) {
 		moveOffset(s.Fetch, false)
 		clearLimit()
 	}
+}
+
+// tableSubqueryForDialect uses the same renderer as a top-level statement so
+// derived tables and JOIN operands receive target-dialect row-limit syntax.
+func tableSubqueryForDialect(s ast.Statement, f *nodeFormatter) string {
+	if f.opts.Dialect == "" {
+		return f.tableSubquerySQL(s)
+	}
+	return dialectSubquerySQL(s, f.opts)
+}
+
+// dialectSubquerySQL takes options by value so callers' closures need not
+// capture (and heap-allocate) the node formatter.
+func dialectSubquerySQL(s ast.Statement, parent ast.FormatOptions) string {
+	opts := nestedOpts(parent)
+	opts.NewlinePerClause = false
+	return formatStatement(s, opts)
+}
+
+// selectColumnsForDialect preserves expression SQL's parentheses and aliases
+// while routing embedded scalar queries through target-dialect rendering.
+// Only expressions containing a query need copying; the caller's AST stays intact.
+func selectColumnsForDialect(columns []ast.Expression, f *nodeFormatter) string {
+	plain := f.exprListSQL(columns)
+	// A scalar subquery always renders a SELECT keyword; without one the
+	// plain rendering is already correct and costs nothing extra.
+	if f.opts.Dialect == "" || !containsFoldASCII(plain, "select") {
+		return plain
+	}
+	hasQuery := false
+	visit := func(n ast.Node) bool {
+		if _, ok := n.(*ast.SubqueryExpression); ok {
+			hasQuery = true
+		}
+		return !hasQuery
+	}
+	queries := make([]bool, len(columns))
+	for i, column := range columns {
+		hasQuery = false
+		ast.Inspect(column, visit)
+		queries[i] = hasQuery
+	}
+	rendered := make([]string, len(columns))
+	for i, column := range columns {
+		if !queries[i] {
+			rendered[i] = f.exprSQL(column)
+			continue
+		}
+		value := copyRenderValue(reflect.ValueOf(column), make(map[uintptr]reflect.Value))
+		copy, ok := value.Interface().(ast.Expression)
+		if !ok {
+			rendered[i] = f.exprSQL(column)
+			continue
+		}
+		opts := f.opts
+		ast.Inspect(copy, func(n ast.Node) bool {
+			query, ok := n.(*ast.SubqueryExpression)
+			if !ok {
+				return true
+			}
+			query.Subquery = &ast.UtilityStatement{Text: dialectSubquerySQL(query.Subquery, opts)}
+			return false
+		})
+		rendered[i] = f.exprSQL(copy)
+	}
+	return strings.Join(rendered, ", ")
+}
+
+// containsFoldASCII reports whether s contains the lower-case ASCII word sub,
+// ignoring ASCII case, without allocating.
+func containsFoldASCII(s, sub string) bool {
+	for i := 0; i+len(sub) <= len(s); i++ {
+		j := 0
+		for ; j < len(sub); j++ {
+			c := s[i+j]
+			if 'A' <= c && c <= 'Z' {
+				c += 'a' - 'A'
+			}
+			if c != sub[j] {
+				break
+			}
+		}
+		if j == len(sub) {
+			return true
+		}
+	}
+	return false
 }

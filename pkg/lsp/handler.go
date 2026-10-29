@@ -19,6 +19,7 @@ import (
 	stderrors "errors"
 	"fmt"
 	"regexp"
+	"runtime/debug"
 	"strconv"
 	"strings"
 	"sync"
@@ -160,6 +161,8 @@ func NewHandler(server *Server) *Handler {
 	}
 }
 
+var errMethodNotFound = stderrors.New("method not found")
+
 // HandleRequest processes an LSP request and returns a result
 func (h *Handler) HandleRequest(method string, params json.RawMessage) (interface{}, error) {
 	switch method {
@@ -186,7 +189,7 @@ func (h *Handler) HandleRequest(method string, params json.RawMessage) (interfac
 		}
 		return h.handleSemanticTokensFull(semParams)
 	default:
-		return nil, fmt.Errorf("method not found: %s", method)
+		return nil, fmt.Errorf("%w: %s", errMethodNotFound, method)
 	}
 }
 
@@ -361,6 +364,13 @@ func (h *Handler) handleDidChange(params json.RawMessage) {
 		h.debounceMu.Lock()
 		delete(h.debounceTimers, uri)
 		h.debounceMu.Unlock()
+		// Timer callbacks run outside the server loop's recover; a panic here
+		// would otherwise terminate the process.
+		defer func() {
+			if value := recover(); value != nil {
+				h.server.Logger().Printf("Panic validating %s: %v\n%s", uri, value, debug.Stack())
+			}
+		}()
 		h.validateDocument(uri, content, version)
 	})
 	h.debounceMu.Unlock()

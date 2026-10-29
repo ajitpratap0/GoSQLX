@@ -190,6 +190,7 @@ var (
 			b := &astBlock{}
 			b.ast.Statements = b.stmts[:0]
 			b.ast.StatementStarts = b.starts[:0]
+			b.ast.StatementEnds = b.ends[:0]
 			return &b.ast
 		},
 	}
@@ -440,6 +441,7 @@ type astBlock struct {
 	ast    AST
 	stmts  [2]Statement
 	starts [2]models.Location
+	ends   [2]models.Location
 }
 
 // maxPooledComments is the largest AST.Comments capacity ReleaseAST keeps
@@ -561,6 +563,10 @@ func ReleaseAST(ast *AST) {
 	// Reset slice but keep capacity
 	ast.Statements = ast.Statements[:0]
 	ast.StatementStarts = ast.StatementStarts[:0]
+	ast.StatementEnds = ast.StatementEnds[:0]
+	ast.ExecuteSlash = nil
+	ast.ExecuteSlashPositions = nil
+	ast.UnicodeIdentifiers = nil
 
 	// Reset comments but keep capacity; clear drops the Text strings so the
 	// pooled AST does not retain them (clear on nil is a no-op). A slice

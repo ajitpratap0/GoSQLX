@@ -79,26 +79,10 @@
   },
   "format": {
     "result": "SELECT 1",
-    "error": "format error",
-    "error_span": {
-      "code": "E2002",
-      "message": "message",
-      "line": 1,
-      "column": 14,
-      "end_line": 1,
-      "end_column": 14
-    }
+    "error": "format error"
   },
   "transpile": {
     "result": "SELECT 1",
-    "error": "transpile error",
-    "error_span": {
-      "code": "E2002",
-      "message": "message",
-      "line": 1,
-      "column": 14,
-      "end_line": 1,
-      "end_column": 14
-    }
+    "error": "transpile error"
   }
 }

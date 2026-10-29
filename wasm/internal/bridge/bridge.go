@@ -59,24 +59,16 @@ func Parse(sql, dialect string) (*ast.AST, error) {
 // TextResponse is the result of Format and Transpile: the rewritten SQL, or
 // the reason there is none.
 //
-// Exactly one of Result and Error is set. ErrorSpan locates Error in the
-// submitted SQL when the error carries a position (a tokenizer or parser
-// error); errors such as formatter.ErrUnplaceableComment, an unsupported
-// dialect or a construct the transpile target cannot express have none.
-//
-// ErrorSpan is part of the JSON contract for callers that want it. The
-// website's WasmLoader.parseResult treats a non-empty "error" like every other
-// export does and throws it as an exception, so the playground's Format and
-// Transpile tabs show only the error message, not the span.
+// Exactly one of Result and Error is set. Parse-error positions are reported
+// separately by Lint and Analyze through their ParseErrorSpan fields.
 type TextResponse struct {
-	Result    string     `json:"result"`
-	Error     string     `json:"error,omitempty"`
-	ErrorSpan *ErrorSpan `json:"error_span,omitempty"`
+	Result string `json:"result"`
+	Error  string `json:"error,omitempty"`
 }
 
-func textResponse(sql, result string, err error) TextResponse {
+func textResponse(result string, err error) TextResponse {
 	if err != nil {
-		return TextResponse{Error: err.Error(), ErrorSpan: errorSpan(sql, err)}
+		return TextResponse{Error: err.Error()}
 	}
 	return TextResponse{Result: result}
 }
@@ -88,7 +80,7 @@ func textResponse(sql, result string, err error) TextResponse {
 // faithfully is refused with an error wrapping formatter.ErrUnplaceableComment.
 func Format(sql, dialect string) TextResponse {
 	out, err := gosqlx.FormatWithDialect(sql, gosqlx.DefaultFormatOptions(), Dialect(dialect))
-	return textResponse(sql, out, err)
+	return textResponse(out, err)
 }
 
 // transpileDialect resolves a transpile source or target. Unlike Dialect, an
@@ -110,14 +102,14 @@ func transpileDialect(role, name string) (sqlkeywords.SQLDialect, error) {
 func Transpile(sql, from, to string) TextResponse {
 	src, err := transpileDialect("source", from)
 	if err != nil {
-		return textResponse(sql, "", err)
+		return textResponse("", err)
 	}
 	dst, err := transpileDialect("target", to)
 	if err != nil {
-		return textResponse(sql, "", err)
+		return textResponse("", err)
 	}
 	out, err := gosqlx.Transpile(sql, src, dst)
-	return textResponse(sql, out, err)
+	return textResponse(out, err)
 }
 
 // LintViolation is one lint finding as the playground renders it.

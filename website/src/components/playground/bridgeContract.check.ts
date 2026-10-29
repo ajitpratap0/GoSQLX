@@ -43,9 +43,7 @@ export const contractChecks: Record<string, true> = {
   highlight: true satisfies SameKeys<GoHighlight, HighlightData>,
   highlightSpan: true satisfies SameKeys<GoHighlight["spans"][number], HighlightSpan>,
   format: true satisfies SameKeys<GoFormat, TextData>,
-  formatErrorSpan: true satisfies SameKeys<GoFormat["error_span"], ErrorSpan>,
   transpile: true satisfies SameKeys<GoTranspile, TextData>,
-  transpileErrorSpan: true satisfies SameKeys<GoTranspile["error_span"], ErrorSpan>,
 };
 
 // Values must also be assignable, not just share key names.

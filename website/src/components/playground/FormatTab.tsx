@@ -1,5 +1,6 @@
 'use client';
-import { useState, useCallback, type ReactNode } from "react";
+import { useCopyFeedback } from "./useCopyFeedback";
+import { useCallback, type ReactNode } from "react";
 import SqlEditor from "./SqlEditor";
 import { ErrorNotice } from "./ResultParts";
 import type { TextData } from "./bridgeTypes";
@@ -21,8 +22,7 @@ interface SqlOutputProps {
 
 /** Read-only SQL output with a copy button, shared by the Format and Transpile tabs. */
 export function SqlOutput({ data, label, errorTitle, emptyText, toolbar }: SqlOutputProps) {
-  const [copied, setCopied] = useState(false);
-  const [copyFailed, setCopyFailed] = useState(false);
+  const { copied, copyFailed, flash } = useCopyFeedback();
 
   const text = data ? (typeof data === "string" ? data : data.result ?? null) : null;
   const error = data && typeof data !== "string" ? data.error : undefined;
@@ -30,13 +30,11 @@ export function SqlOutput({ data, label, errorTitle, emptyText, toolbar }: SqlOu
   const handleCopy = useCallback(() => {
     if (!text) return;
     navigator.clipboard.writeText(text).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+      flash("copied");
     }).catch(() => {
-      setCopyFailed(true);
-      setTimeout(() => setCopyFailed(false), 2000);
+      flash("failed");
     });
-  }, [text]);
+  }, [text, flash]);
 
   let body: ReactNode;
   if (!data) {

@@ -49,8 +49,9 @@ func parse(_ js.Value, args []js.Value) any {
 }
 
 // format formats the SQL for the selected dialect, keeping comments and
-// optimizer hints. It returns {"result": "..."} or {"error": "...",
-// "error_span": {...}} (bridge.TextResponse).
+// optimizer hints. Unknown or omitted dialects use generic rules, as do parse,
+// lint, analyze and highlight. It returns {"result": "..."} on success or
+// {"result": "", "error": "..."} on failure (bridge.TextResponse).
 func format(_ js.Value, args []js.Value) any {
 	if len(args) == 0 {
 		return jsonError("no SQL provided")
@@ -59,7 +60,9 @@ func format(_ js.Value, args []js.Value) any {
 }
 
 // transpile rewrites the SQL from the dialect in the second argument to the
-// one in the third. It returns the same envelope as format.
+// one in the third. It returns the same envelope as format. Unlike the other
+// dialect-aware exports, an unknown source or target dialect returns an error
+// containing unsupported source|target dialect "x". An empty string means generic.
 func transpile(_ js.Value, args []js.Value) any {
 	if len(args) < 3 {
 		return jsonError("transpile needs SQL, a source dialect and a target dialect")

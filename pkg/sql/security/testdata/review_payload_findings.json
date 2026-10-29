@@ -1,0 +1,881 @@
+[
+  [
+    {
+      "severity": "CRITICAL",
+      "pattern": "TAUTOLOGY",
+      "description": "Always-true condition detected (tautology): 1=1",
+      "risk": "Authentication bypass via always-true condition",
+      "suggestion": "Use parameterized queries to prevent tautology injection"
+    }
+  ],
+  [
+    {
+      "severity": "CRITICAL",
+      "pattern": "TAUTOLOGY",
+      "description": "Always-true condition detected (tautology): '1'='1'",
+      "risk": "Authentication bypass via always-true condition",
+      "suggestion": "Use parameterized queries to prevent tautology injection"
+    }
+  ],
+  [
+    {
+      "severity": "MEDIUM",
+      "pattern": "COMMENT_BYPASS",
+      "description": "Trailing SQL comment may indicate injection",
+      "risk": "SQL injection via comment-based bypass",
+      "suggestion": "Sanitize input to remove SQL comments"
+    },
+    {
+      "severity": "CRITICAL",
+      "pattern": "TAUTOLOGY",
+      "description": "Always-true condition detected (tautology): 1=1",
+      "risk": "Authentication bypass via always-true condition",
+      "suggestion": "Use parameterized queries to prevent tautology injection"
+    }
+  ],
+  [
+    {
+      "severity": "CRITICAL",
+      "pattern": "TAUTOLOGY",
+      "description": "Pattern detected: OR TRUE",
+      "risk": "Authentication bypass via always-true condition",
+      "suggestion": "Use parameterized queries to prevent tautology injection"
+    }
+  ],
+  [],
+  [
+    {
+      "severity": "CRITICAL",
+      "pattern": "TAUTOLOGY",
+      "description": "Always-true condition detected (tautology): 1=1",
+      "risk": "Authentication bypass via always-true condition",
+      "suggestion": "Use parameterized queries to prevent tautology injection"
+    }
+  ],
+  [
+    {
+      "severity": "CRITICAL",
+      "pattern": "TAUTOLOGY",
+      "description": "Always-true condition detected (tautology): 1=1",
+      "risk": "Authentication bypass via always-true condition",
+      "suggestion": "Use parameterized queries to prevent tautology injection"
+    }
+  ],
+  [
+    {
+      "severity": "CRITICAL",
+      "pattern": "TAUTOLOGY",
+      "description": "Always-true condition detected (tautology): 1=1",
+      "risk": "Authentication bypass via always-true condition",
+      "suggestion": "Use parameterized queries to prevent tautology injection"
+    }
+  ],
+  [
+    {
+      "severity": "CRITICAL",
+      "pattern": "TAUTOLOGY",
+      "description": "Always-true condition detected (tautology): 1=1",
+      "risk": "Authentication bypass via always-true condition",
+      "suggestion": "Use parameterized queries to prevent tautology injection"
+    }
+  ],
+  [
+    {
+      "severity": "CRITICAL",
+      "pattern": "TAUTOLOGY",
+      "description": "Always-true condition detected (tautology): 1=1",
+      "risk": "Authentication bypass via always-true condition",
+      "suggestion": "Use parameterized queries to prevent tautology injection"
+    }
+  ],
+  [
+    {
+      "severity": "CRITICAL",
+      "pattern": "TAUTOLOGY",
+      "description": "Always-true condition detected (tautology): 1=1",
+      "risk": "Authentication bypass via always-true condition",
+      "suggestion": "Use parameterized queries to prevent tautology injection"
+    }
+  ],
+  [
+    {
+      "severity": "HIGH",
+      "pattern": "UNION_GENERIC",
+      "description": "Pattern detected: UNION SELECT",
+      "risk": "Possible UNION-based data extraction; review for legitimacy",
+      "suggestion": "Verify UNION is intentional and all inputs are parameterized"
+    }
+  ],
+  [
+    {
+      "severity": "CRITICAL",
+      "pattern": "UNION_INJECTION",
+      "description": "Pattern detected: UNION ALL SELECT table_name, NULL FROM information_schema",
+      "risk": "UNION-based SQL injection with injection fingerprint (system table or NULL padding)",
+      "suggestion": "Use parameterized queries and block system table access"
+    },
+    {
+      "severity": "CRITICAL",
+      "pattern": "UNION_INJECTION",
+      "description": "Pattern detected: information_schema",
+      "risk": "UNION-based SQL injection with injection fingerprint (system table or NULL padding)",
+      "suggestion": "Use parameterized queries and block system table access"
+    },
+    {
+      "severity": "HIGH",
+      "pattern": "UNION_GENERIC",
+      "description": "Pattern detected: UNION ALL SELECT",
+      "risk": "Possible UNION-based data extraction; review for legitimacy",
+      "suggestion": "Verify UNION is intentional and all inputs are parameterized"
+    }
+  ],
+  [],
+  [
+    {
+      "severity": "CRITICAL",
+      "pattern": "UNION_INJECTION",
+      "description": "Pattern detected: UNION SELECT name FROM sys.",
+      "risk": "UNION-based SQL injection with injection fingerprint (system table or NULL padding)",
+      "suggestion": "Use parameterized queries and block system table access"
+    },
+    {
+      "severity": "HIGH",
+      "pattern": "UNION_GENERIC",
+      "description": "Pattern detected: UNION SELECT",
+      "risk": "Possible UNION-based data extraction; review for legitimacy",
+      "suggestion": "Verify UNION is intentional and all inputs are parameterized"
+    }
+  ],
+  [
+    {
+      "severity": "HIGH",
+      "pattern": "UNION_GENERIC",
+      "description": "Pattern detected: UNION SELECT",
+      "risk": "Possible UNION-based data extraction; review for legitimacy",
+      "suggestion": "Verify UNION is intentional and all inputs are parameterized"
+    }
+  ],
+  [
+    {
+      "severity": "HIGH",
+      "pattern": "UNION_GENERIC",
+      "description": "Pattern detected: UNION SELECT",
+      "risk": "Possible UNION-based data extraction; review for legitimacy",
+      "suggestion": "Verify UNION is intentional and all inputs are parameterized"
+    }
+  ],
+  [
+    {
+      "severity": "CRITICAL",
+      "pattern": "UNION_INJECTION",
+      "description": "Pattern detected: UNION SELECT usename FROM pg_catalog",
+      "risk": "UNION-based SQL injection with injection fingerprint (system table or NULL padding)",
+      "suggestion": "Use parameterized queries and block system table access"
+    },
+    {
+      "severity": "HIGH",
+      "pattern": "UNION_GENERIC",
+      "description": "Pattern detected: UNION SELECT",
+      "risk": "Possible UNION-based data extraction; review for legitimacy",
+      "suggestion": "Verify UNION is intentional and all inputs are parameterized"
+    }
+  ],
+  [
+    {
+      "severity": "CRITICAL",
+      "pattern": "STACKED_QUERY",
+      "description": "Pattern detected: ; DROP",
+      "risk": "Stacked query injection with destructive operations",
+      "suggestion": "Block semicolons in user input or use parameterized queries"
+    }
+  ],
+  [
+    {
+      "severity": "HIGH",
+      "pattern": "TIME_BASED",
+      "description": "Pattern detected: SLEEP(",
+      "risk": "Time-based blind SQL injection",
+      "suggestion": "Review and sanitize SQL input"
+    }
+  ],
+  [
+    {
+      "severity": "HIGH",
+      "pattern": "TIME_BASED",
+      "description": "Pattern detected: SLEEP(",
+      "risk": "Time-based blind SQL injection",
+      "suggestion": "Review and sanitize SQL input"
+    }
+  ],
+  [
+    {
+      "severity": "HIGH",
+      "pattern": "TIME_BASED",
+      "description": "Pattern detected: pg_sleep(",
+      "risk": "Time-based blind SQL injection",
+      "suggestion": "Review and sanitize SQL input"
+    }
+  ],
+  [
+    {
+      "severity": "HIGH",
+      "pattern": "TIME_BASED",
+      "description": "Pattern detected: pg_sleep(",
+      "risk": "Time-based blind SQL injection",
+      "suggestion": "Review and sanitize SQL input"
+    }
+  ],
+  [
+    {
+      "severity": "HIGH",
+      "pattern": "TIME_BASED",
+      "description": "Pattern detected: BENCHMARK(",
+      "risk": "Time-based blind SQL injection",
+      "suggestion": "Review and sanitize SQL input"
+    }
+  ],
+  [
+    {
+      "severity": "HIGH",
+      "pattern": "TIME_BASED",
+      "description": "Pattern detected: WAITFOR DELAY",
+      "risk": "Time-based blind SQL injection",
+      "suggestion": "Review and sanitize SQL input"
+    }
+  ],
+  [
+    {
+      "severity": "CRITICAL",
+      "pattern": "OUT_OF_BAND",
+      "description": "Pattern detected: xp_cmdshell",
+      "risk": "Out-of-band data exfiltration or command execution",
+      "suggestion": "Review and sanitize SQL input"
+    },
+    {
+      "severity": "CRITICAL",
+      "pattern": "STACKED_QUERY",
+      "description": "Pattern detected: ; EXEC",
+      "risk": "Stacked query injection with destructive operations",
+      "suggestion": "Block semicolons in user input or use parameterized queries"
+    }
+  ],
+  [
+    {
+      "severity": "CRITICAL",
+      "pattern": "OUT_OF_BAND",
+      "description": "Pattern detected: LOAD_FILE(",
+      "risk": "Out-of-band data exfiltration or command execution",
+      "suggestion": "Review and sanitize SQL input"
+    }
+  ],
+  [
+    {
+      "severity": "CRITICAL",
+      "pattern": "TAUTOLOGY",
+      "description": "Always-true condition detected (tautology): 1=1",
+      "risk": "Authentication bypass via always-true condition",
+      "suggestion": "Use parameterized queries to prevent tautology injection"
+    }
+  ],
+  [
+    {
+      "severity": "CRITICAL",
+      "pattern": "OUT_OF_BAND",
+      "description": "Pattern detected: UTL_HTTP",
+      "risk": "Out-of-band data exfiltration or command execution",
+      "suggestion": "Review and sanitize SQL input"
+    }
+  ],
+  [
+    {
+      "severity": "HIGH",
+      "pattern": "TIME_BASED",
+      "description": "Pattern detected: SLEEP(",
+      "risk": "Time-based blind SQL injection",
+      "suggestion": "Review and sanitize SQL input"
+    },
+    {
+      "severity": "HIGH",
+      "pattern": "TIME_BASED",
+      "description": "Pattern detected: DBMS_LOCK.SLEEP(",
+      "risk": "Time-based blind SQL injection",
+      "suggestion": "Review and sanitize SQL input"
+    }
+  ],
+  [
+    {
+      "severity": "CRITICAL",
+      "pattern": "OUT_OF_BAND",
+      "description": "Pattern detected: FROM url(",
+      "risk": "Out-of-band data exfiltration or command execution",
+      "suggestion": "Review and sanitize SQL input"
+    }
+  ],
+  [
+    {
+      "severity": "HIGH",
+      "pattern": "TIME_BASED",
+      "description": "Pattern detected: pg_sleep(",
+      "risk": "Time-based blind SQL injection",
+      "suggestion": "Review and sanitize SQL input"
+    }
+  ],
+  [
+    {
+      "severity": "CRITICAL",
+      "pattern": "TAUTOLOGY",
+      "description": "Always-true condition detected (tautology): 1=1",
+      "risk": "Authentication bypass via always-true condition",
+      "suggestion": "Use parameterized queries to prevent tautology injection"
+    }
+  ],
+  [
+    {
+      "severity": "CRITICAL",
+      "pattern": "TAUTOLOGY",
+      "description": "Always-true condition detected (tautology): 1=1",
+      "risk": "Authentication bypass via always-true condition",
+      "suggestion": "Use parameterized queries to prevent tautology injection"
+    }
+  ],
+  [
+    {
+      "severity": "HIGH",
+      "pattern": "TIME_BASED",
+      "description": "Pattern detected: SLEEP(",
+      "risk": "Time-based blind SQL injection",
+      "suggestion": "Review and sanitize SQL input"
+    }
+  ],
+  [
+    {
+      "severity": "CRITICAL",
+      "pattern": "TAUTOLOGY",
+      "description": "Always-true condition detected (tautology): 1=1",
+      "risk": "Authentication bypass via always-true condition",
+      "suggestion": "Use parameterized queries to prevent tautology injection"
+    }
+  ],
+  [
+    {
+      "severity": "CRITICAL",
+      "pattern": "TAUTOLOGY",
+      "description": "Always-true condition detected (tautology): 1=1",
+      "risk": "Authentication bypass via always-true condition",
+      "suggestion": "Use parameterized queries to prevent tautology injection"
+    }
+  ],
+  [
+    {
+      "severity": "CRITICAL",
+      "pattern": "TAUTOLOGY",
+      "description": "Always-true condition detected (tautology): 1=1",
+      "risk": "Authentication bypass via always-true condition",
+      "suggestion": "Use parameterized queries to prevent tautology injection"
+    }
+  ],
+  [
+    {
+      "severity": "CRITICAL",
+      "pattern": "TAUTOLOGY",
+      "description": "Always-true condition detected (tautology): 1=1",
+      "risk": "Authentication bypass via always-true condition",
+      "suggestion": "Use parameterized queries to prevent tautology injection"
+    }
+  ],
+  [
+    {
+      "severity": "CRITICAL",
+      "pattern": "TAUTOLOGY",
+      "description": "Always-true condition detected (tautology): 1=1",
+      "risk": "Authentication bypass via always-true condition",
+      "suggestion": "Use parameterized queries to prevent tautology injection"
+    }
+  ],
+  [
+    {
+      "severity": "CRITICAL",
+      "pattern": "TAUTOLOGY",
+      "description": "Always-true condition detected (tautology): 1=1",
+      "risk": "Authentication bypass via always-true condition",
+      "suggestion": "Use parameterized queries to prevent tautology injection"
+    }
+  ],
+  [
+    {
+      "severity": "CRITICAL",
+      "pattern": "TAUTOLOGY",
+      "description": "Always-true condition detected (tautology): 1=1",
+      "risk": "Authentication bypass via always-true condition",
+      "suggestion": "Use parameterized queries to prevent tautology injection"
+    }
+  ],
+  [
+    {
+      "severity": "CRITICAL",
+      "pattern": "TAUTOLOGY",
+      "description": "Always-true condition detected (tautology): 1=1",
+      "risk": "Authentication bypass via always-true condition",
+      "suggestion": "Use parameterized queries to prevent tautology injection"
+    }
+  ],
+  [
+    {
+      "severity": "CRITICAL",
+      "pattern": "TAUTOLOGY",
+      "description": "Always-true condition detected (tautology): 1=1",
+      "risk": "Authentication bypass via always-true condition",
+      "suggestion": "Use parameterized queries to prevent tautology injection"
+    }
+  ],
+  [
+    {
+      "severity": "CRITICAL",
+      "pattern": "TAUTOLOGY",
+      "description": "Always-true condition detected (tautology): 1=1",
+      "risk": "Authentication bypass via always-true condition",
+      "suggestion": "Use parameterized queries to prevent tautology injection"
+    }
+  ],
+  [
+    {
+      "severity": "CRITICAL",
+      "pattern": "TAUTOLOGY",
+      "description": "Always-true condition detected (tautology): 1=1",
+      "risk": "Authentication bypass via always-true condition",
+      "suggestion": "Use parameterized queries to prevent tautology injection"
+    }
+  ],
+  [
+    {
+      "severity": "CRITICAL",
+      "pattern": "TAUTOLOGY",
+      "description": "Always-true condition detected (tautology): 1=1",
+      "risk": "Authentication bypass via always-true condition",
+      "suggestion": "Use parameterized queries to prevent tautology injection"
+    }
+  ],
+  [
+    {
+      "severity": "HIGH",
+      "pattern": "TIME_BASED",
+      "description": "Pattern detected: SLEEP(",
+      "risk": "Time-based blind SQL injection",
+      "suggestion": "Review and sanitize SQL input"
+    }
+  ],
+  [
+    {
+      "severity": "HIGH",
+      "pattern": "TIME_BASED",
+      "description": "Pattern detected: pg_sleep(",
+      "risk": "Time-based blind SQL injection",
+      "suggestion": "Review and sanitize SQL input"
+    }
+  ],
+  [
+    {
+      "severity": "HIGH",
+      "pattern": "TIME_BASED",
+      "description": "Pattern detected: SLEEP(",
+      "risk": "Time-based blind SQL injection",
+      "suggestion": "Review and sanitize SQL input"
+    }
+  ],
+  [
+    {
+      "severity": "HIGH",
+      "pattern": "TIME_BASED",
+      "description": "Pattern detected: SLEEP(",
+      "risk": "Time-based blind SQL injection",
+      "suggestion": "Review and sanitize SQL input"
+    }
+  ],
+  [
+    {
+      "severity": "HIGH",
+      "pattern": "TIME_BASED",
+      "description": "Pattern detected: SLEEP(",
+      "risk": "Time-based blind SQL injection",
+      "suggestion": "Review and sanitize SQL input"
+    }
+  ],
+  [
+    {
+      "severity": "CRITICAL",
+      "pattern": "TAUTOLOGY",
+      "description": "Always-true condition detected (tautology): 1=1",
+      "risk": "Authentication bypass via always-true condition",
+      "suggestion": "Use parameterized queries to prevent tautology injection"
+    }
+  ],
+  [
+    {
+      "severity": "CRITICAL",
+      "pattern": "TAUTOLOGY",
+      "description": "Always-true condition detected (tautology): 1=1",
+      "risk": "Authentication bypass via always-true condition",
+      "suggestion": "Use parameterized queries to prevent tautology injection"
+    }
+  ],
+  [
+    {
+      "severity": "CRITICAL",
+      "pattern": "TAUTOLOGY",
+      "description": "Always-true condition detected (tautology): 1=1",
+      "risk": "Authentication bypass via always-true condition",
+      "suggestion": "Use parameterized queries to prevent tautology injection"
+    }
+  ],
+  [
+    {
+      "severity": "CRITICAL",
+      "pattern": "TAUTOLOGY",
+      "description": "Always-true condition detected (tautology): 1=1",
+      "risk": "Authentication bypass via always-true condition",
+      "suggestion": "Use parameterized queries to prevent tautology injection"
+    }
+  ],
+  [
+    {
+      "severity": "CRITICAL",
+      "pattern": "TAUTOLOGY",
+      "description": "Always-true condition detected (tautology): 1=1",
+      "risk": "Authentication bypass via always-true condition",
+      "suggestion": "Use parameterized queries to prevent tautology injection"
+    }
+  ],
+  [
+    {
+      "severity": "CRITICAL",
+      "pattern": "TAUTOLOGY",
+      "description": "Always-true condition detected (tautology): 1=1",
+      "risk": "Authentication bypass via always-true condition",
+      "suggestion": "Use parameterized queries to prevent tautology injection"
+    }
+  ],
+  [
+    {
+      "severity": "CRITICAL",
+      "pattern": "TAUTOLOGY",
+      "description": "Always-true condition detected (tautology): 1=1",
+      "risk": "Authentication bypass via always-true condition",
+      "suggestion": "Use parameterized queries to prevent tautology injection"
+    },
+    {
+      "severity": "CRITICAL",
+      "pattern": "OUT_OF_BAND",
+      "description": "Pattern detected: INTO OUTFILE",
+      "risk": "Out-of-band data exfiltration or command execution",
+      "suggestion": "Review and sanitize SQL input"
+    }
+  ],
+  [
+    {
+      "severity": "CRITICAL",
+      "pattern": "TAUTOLOGY",
+      "description": "Always-true condition detected (tautology): 1=1",
+      "risk": "Authentication bypass via always-true condition",
+      "suggestion": "Use parameterized queries to prevent tautology injection"
+    }
+  ],
+  [
+    {
+      "severity": "CRITICAL",
+      "pattern": "TAUTOLOGY",
+      "description": "Always-true condition detected (tautology): 1=1",
+      "risk": "Authentication bypass via always-true condition",
+      "suggestion": "Use parameterized queries to prevent tautology injection"
+    }
+  ],
+  [
+    {
+      "severity": "CRITICAL",
+      "pattern": "TAUTOLOGY",
+      "description": "Always-true condition detected (tautology): 1=1",
+      "risk": "Authentication bypass via always-true condition",
+      "suggestion": "Use parameterized queries to prevent tautology injection"
+    }
+  ],
+  [
+    {
+      "severity": "CRITICAL",
+      "pattern": "TAUTOLOGY",
+      "description": "Always-true condition detected (tautology): 1=1",
+      "risk": "Authentication bypass via always-true condition",
+      "suggestion": "Use parameterized queries to prevent tautology injection"
+    }
+  ],
+  [
+    {
+      "severity": "CRITICAL",
+      "pattern": "TAUTOLOGY",
+      "description": "Always-true condition detected (tautology): 1=1",
+      "risk": "Authentication bypass via always-true condition",
+      "suggestion": "Use parameterized queries to prevent tautology injection"
+    }
+  ],
+  [
+    {
+      "severity": "CRITICAL",
+      "pattern": "TAUTOLOGY",
+      "description": "Always-true condition detected (tautology): 1=1",
+      "risk": "Authentication bypass via always-true condition",
+      "suggestion": "Use parameterized queries to prevent tautology injection"
+    }
+  ],
+  [
+    {
+      "severity": "CRITICAL",
+      "pattern": "TAUTOLOGY",
+      "description": "Always-true condition detected (tautology): 1=1",
+      "risk": "Authentication bypass via always-true condition",
+      "suggestion": "Use parameterized queries to prevent tautology injection"
+    }
+  ],
+  [
+    {
+      "severity": "CRITICAL",
+      "pattern": "TAUTOLOGY",
+      "description": "Always-true condition detected (tautology): 1=1",
+      "risk": "Authentication bypass via always-true condition",
+      "suggestion": "Use parameterized queries to prevent tautology injection"
+    }
+  ],
+  [
+    {
+      "severity": "CRITICAL",
+      "pattern": "TAUTOLOGY",
+      "description": "Always-true condition detected (tautology): 1=1",
+      "risk": "Authentication bypass via always-true condition",
+      "suggestion": "Use parameterized queries to prevent tautology injection"
+    }
+  ],
+  [
+    {
+      "severity": "CRITICAL",
+      "pattern": "TAUTOLOGY",
+      "description": "Always-true condition detected (tautology): 1=1",
+      "risk": "Authentication bypass via always-true condition",
+      "suggestion": "Use parameterized queries to prevent tautology injection"
+    }
+  ],
+  [
+    {
+      "severity": "CRITICAL",
+      "pattern": "TAUTOLOGY",
+      "description": "Always-true condition detected (tautology): 1=1",
+      "risk": "Authentication bypass via always-true condition",
+      "suggestion": "Use parameterized queries to prevent tautology injection"
+    }
+  ],
+  [
+    {
+      "severity": "CRITICAL",
+      "pattern": "TAUTOLOGY",
+      "description": "Always-true condition detected (tautology): 1=1",
+      "risk": "Authentication bypass via always-true condition",
+      "suggestion": "Use parameterized queries to prevent tautology injection"
+    }
+  ],
+  [
+    {
+      "severity": "CRITICAL",
+      "pattern": "TAUTOLOGY",
+      "description": "Always-true condition detected (tautology): 1=1",
+      "risk": "Authentication bypass via always-true condition",
+      "suggestion": "Use parameterized queries to prevent tautology injection"
+    }
+  ],
+  [
+    {
+      "severity": "CRITICAL",
+      "pattern": "TAUTOLOGY",
+      "description": "Always-true condition detected (tautology): 1=1",
+      "risk": "Authentication bypass via always-true condition",
+      "suggestion": "Use parameterized queries to prevent tautology injection"
+    }
+  ],
+  [
+    {
+      "severity": "CRITICAL",
+      "pattern": "TAUTOLOGY",
+      "description": "Always-true condition detected (tautology): 1=1",
+      "risk": "Authentication bypass via always-true condition",
+      "suggestion": "Use parameterized queries to prevent tautology injection"
+    }
+  ],
+  [
+    {
+      "severity": "CRITICAL",
+      "pattern": "TAUTOLOGY",
+      "description": "Always-true condition detected (tautology): 1=1",
+      "risk": "Authentication bypass via always-true condition",
+      "suggestion": "Use parameterized queries to prevent tautology injection"
+    }
+  ],
+  [
+    {
+      "severity": "CRITICAL",
+      "pattern": "TAUTOLOGY",
+      "description": "Always-true condition detected (tautology): 1=1",
+      "risk": "Authentication bypass via always-true condition",
+      "suggestion": "Use parameterized queries to prevent tautology injection"
+    }
+  ],
+  [
+    {
+      "severity": "CRITICAL",
+      "pattern": "TAUTOLOGY",
+      "description": "Always-true condition detected (tautology): 1=1",
+      "risk": "Authentication bypass via always-true condition",
+      "suggestion": "Use parameterized queries to prevent tautology injection"
+    }
+  ],
+  [
+    {
+      "severity": "HIGH",
+      "pattern": "TIME_BASED",
+      "description": "Pattern detected: SLEEP(",
+      "risk": "Time-based blind SQL injection",
+      "suggestion": "Review and sanitize SQL input"
+    }
+  ],
+  [
+    {
+      "severity": "HIGH",
+      "pattern": "UNION_GENERIC",
+      "description": "Pattern detected: UNION SELECT",
+      "risk": "Possible UNION-based data extraction; review for legitimacy",
+      "suggestion": "Verify UNION is intentional and all inputs are parameterized"
+    }
+  ],
+  [],
+  [
+    {
+      "severity": "HIGH",
+      "pattern": "UNION_GENERIC",
+      "description": "Pattern detected: UNION SELECT",
+      "risk": "Possible UNION-based data extraction; review for legitimacy",
+      "suggestion": "Verify UNION is intentional and all inputs are parameterized"
+    }
+  ],
+  [
+    {
+      "severity": "HIGH",
+      "pattern": "UNION_GENERIC",
+      "description": "Pattern detected: UNION SELECT",
+      "risk": "Possible UNION-based data extraction; review for legitimacy",
+      "suggestion": "Verify UNION is intentional and all inputs are parameterized"
+    }
+  ],
+  [
+    {
+      "severity": "CRITICAL",
+      "pattern": "TAUTOLOGY",
+      "description": "Always-true condition detected (tautology): 1=1",
+      "risk": "Authentication bypass via always-true condition",
+      "suggestion": "Use parameterized queries to prevent tautology injection"
+    }
+  ],
+  [
+    {
+      "severity": "CRITICAL",
+      "pattern": "TAUTOLOGY",
+      "description": "Always-true condition detected (tautology): 1=1",
+      "risk": "Authentication bypass via always-true condition",
+      "suggestion": "Use parameterized queries to prevent tautology injection"
+    },
+    {
+      "severity": "HIGH",
+      "pattern": "TIME_BASED",
+      "description": "Pattern detected: WAITFOR DELAY",
+      "risk": "Time-based blind SQL injection",
+      "suggestion": "Review and sanitize SQL input"
+    }
+  ],
+  [
+    {
+      "severity": "CRITICAL",
+      "pattern": "TAUTOLOGY",
+      "description": "Always-true condition detected (tautology): 1=1",
+      "risk": "Authentication bypass via always-true condition",
+      "suggestion": "Use parameterized queries to prevent tautology injection"
+    },
+    {
+      "severity": "HIGH",
+      "pattern": "TIME_BASED",
+      "description": "Pattern detected: SLEEP(",
+      "risk": "Time-based blind SQL injection",
+      "suggestion": "Review and sanitize SQL input"
+    }
+  ],
+  [
+    {
+      "severity": "CRITICAL",
+      "pattern": "TAUTOLOGY",
+      "description": "Always-true condition detected (tautology): 1=1",
+      "risk": "Authentication bypass via always-true condition",
+      "suggestion": "Use parameterized queries to prevent tautology injection"
+    },
+    {
+      "severity": "HIGH",
+      "pattern": "TIME_BASED",
+      "description": "Pattern detected: SLEEP(",
+      "risk": "Time-based blind SQL injection",
+      "suggestion": "Review and sanitize SQL input"
+    }
+  ],
+  [
+    {
+      "severity": "HIGH",
+      "pattern": "TIME_BASED",
+      "description": "Pattern detected: SLEEP(",
+      "risk": "Time-based blind SQL injection",
+      "suggestion": "Review and sanitize SQL input"
+    }
+  ],
+  [
+    {
+      "severity": "CRITICAL",
+      "pattern": "TAUTOLOGY",
+      "description": "Always-true condition detected (tautology): 'a' = 'a'",
+      "risk": "Authentication bypass via always-true condition",
+      "suggestion": "Use parameterized queries to prevent tautology injection"
+    }
+  ],
+  [
+    {
+      "severity": "CRITICAL",
+      "pattern": "TAUTOLOGY",
+      "description": "Always-true condition detected (tautology): 1=1",
+      "risk": "Authentication bypass via always-true condition",
+      "suggestion": "Use parameterized queries to prevent tautology injection"
+    }
+  ],
+  [
+    {
+      "severity": "CRITICAL",
+      "pattern": "TAUTOLOGY",
+      "description": "Always-true condition detected (tautology): 1 = 1",
+      "risk": "Authentication bypass via always-true condition",
+      "suggestion": "Use parameterized queries to prevent tautology injection"
+    }
+  ],
+  [
+    {
+      "severity": "CRITICAL",
+      "pattern": "TAUTOLOGY",
+      "description": "Always-true condition detected (tautology): 1=1",
+      "risk": "Authentication bypass via always-true condition",
+      "suggestion": "Use parameterized queries to prevent tautology injection"
+    },
+    {
+      "severity": "HIGH",
+      "pattern": "TIME_BASED",
+      "description": "Pattern detected: SLEEP(",
+      "risk": "Time-based blind SQL injection",
+      "suggestion": "Review and sanitize SQL input"
+    }
+  ]
+]

@@ -22,6 +22,10 @@
 // If pkg/formatter has not been imported the methods fall back to SQL() output.
 // All methods are marked deprecated; callers should migrate to
 // pkg/formatter.FormatStatement(), FormatExpression() or FormatAST() directly.
+//
+// These legacy string-returning methods cannot report target-dialect rendering
+// errors and return an empty string on failure. Error-aware callers must use
+// pkg/formatter.FormatStatementChecked, FormatExpressionChecked or FormatASTChecked.
 package ast
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
@@ -52,7 +56,9 @@ func callFormatExpr(e Expression, opts FormatOptions) string {
 
 // Format returns the formatted SQL for the full AST.
 //
-// Deprecated: use pkg/formatter.FormatAST() instead.
+// Rendering errors return an empty string; use the checked API to report them.
+//
+// Deprecated: use pkg/formatter.FormatASTChecked() instead.
 func (a AST) Format(opts FormatOptions) string {
 	if FormatASTFunc != nil {
 		return FormatASTFunc(&a, opts)
@@ -64,98 +70,126 @@ func (a AST) Format(opts FormatOptions) string {
 
 // Format returns the formatted SQL for this SELECT statement.
 //
-// Deprecated: use pkg/formatter.FormatStatement() instead.
+// Rendering errors return an empty string; use the checked API to report them.
+//
+// Deprecated: use pkg/formatter.FormatStatementChecked() instead.
 func (s *SelectStatement) Format(opts FormatOptions) string {
 	return callFormatStmt(s, opts)
 }
 
 // Format returns the formatted SQL for this INSERT statement.
 //
-// Deprecated: use pkg/formatter.FormatStatement() instead.
+// Rendering errors return an empty string; use the checked API to report them.
+//
+// Deprecated: use pkg/formatter.FormatStatementChecked() instead.
 func (i *InsertStatement) Format(opts FormatOptions) string {
 	return callFormatStmt(i, opts)
 }
 
 // Format returns the formatted SQL for this UPDATE statement.
 //
-// Deprecated: use pkg/formatter.FormatStatement() instead.
+// Rendering errors return an empty string; use the checked API to report them.
+//
+// Deprecated: use pkg/formatter.FormatStatementChecked() instead.
 func (u *UpdateStatement) Format(opts FormatOptions) string {
 	return callFormatStmt(u, opts)
 }
 
 // Format returns the formatted SQL for this DELETE statement.
 //
-// Deprecated: use pkg/formatter.FormatStatement() instead.
+// Rendering errors return an empty string; use the checked API to report them.
+//
+// Deprecated: use pkg/formatter.FormatStatementChecked() instead.
 func (d *DeleteStatement) Format(opts FormatOptions) string {
 	return callFormatStmt(d, opts)
 }
 
 // Format returns the formatted SQL for this CREATE TABLE statement.
 //
-// Deprecated: use pkg/formatter.FormatStatement() instead.
+// Rendering errors return an empty string; use the checked API to report them.
+//
+// Deprecated: use pkg/formatter.FormatStatementChecked() instead.
 func (c *CreateTableStatement) Format(opts FormatOptions) string {
 	return callFormatStmt(c, opts)
 }
 
 // Format returns the formatted SQL for this ALTER TABLE statement.
 //
-// Deprecated: use pkg/formatter.FormatStatement() instead.
+// Rendering errors return an empty string; use the checked API to report them.
+//
+// Deprecated: use pkg/formatter.FormatStatementChecked() instead.
 func (a *AlterTableStatement) Format(opts FormatOptions) string {
 	return callFormatStmt(a, opts)
 }
 
 // Format returns the formatted SQL for this CREATE INDEX statement.
 //
-// Deprecated: use pkg/formatter.FormatStatement() instead.
+// Rendering errors return an empty string; use the checked API to report them.
+//
+// Deprecated: use pkg/formatter.FormatStatementChecked() instead.
 func (c *CreateIndexStatement) Format(opts FormatOptions) string {
 	return callFormatStmt(c, opts)
 }
 
 // Format returns the formatted SQL for this MERGE statement.
 //
-// Deprecated: use pkg/formatter.FormatStatement() instead.
+// Rendering errors return an empty string; use the checked API to report them.
+//
+// Deprecated: use pkg/formatter.FormatStatementChecked() instead.
 func (m *MergeStatement) Format(opts FormatOptions) string {
 	return callFormatStmt(m, opts)
 }
 
 // Format returns the formatted SQL for this CREATE VIEW statement.
 //
-// Deprecated: use pkg/formatter.FormatStatement() instead.
+// Rendering errors return an empty string; use the checked API to report them.
+//
+// Deprecated: use pkg/formatter.FormatStatementChecked() instead.
 func (c *CreateViewStatement) Format(opts FormatOptions) string {
 	return callFormatStmt(c, opts)
 }
 
 // Format returns the formatted SQL for this CREATE MATERIALIZED VIEW statement.
 //
-// Deprecated: use pkg/formatter.FormatStatement() instead.
+// Rendering errors return an empty string; use the checked API to report them.
+//
+// Deprecated: use pkg/formatter.FormatStatementChecked() instead.
 func (c *CreateMaterializedViewStatement) Format(opts FormatOptions) string {
 	return callFormatStmt(c, opts)
 }
 
 // Format returns the formatted SQL for this REFRESH MATERIALIZED VIEW statement.
 //
-// Deprecated: use pkg/formatter.FormatStatement() instead.
+// Rendering errors return an empty string; use the checked API to report them.
+//
+// Deprecated: use pkg/formatter.FormatStatementChecked() instead.
 func (r *RefreshMaterializedViewStatement) Format(opts FormatOptions) string {
 	return callFormatStmt(r, opts)
 }
 
 // Format returns the formatted SQL for this DROP statement.
 //
-// Deprecated: use pkg/formatter.FormatStatement() instead.
+// Rendering errors return an empty string; use the checked API to report them.
+//
+// Deprecated: use pkg/formatter.FormatStatementChecked() instead.
 func (d *DropStatement) Format(opts FormatOptions) string {
 	return callFormatStmt(d, opts)
 }
 
 // Format returns the formatted SQL for this TRUNCATE statement.
 //
-// Deprecated: use pkg/formatter.FormatStatement() instead.
+// Rendering errors return an empty string; use the checked API to report them.
+//
+// Deprecated: use pkg/formatter.FormatStatementChecked() instead.
 func (t *TruncateStatement) Format(opts FormatOptions) string {
 	return callFormatStmt(t, opts)
 }
 
 // Format returns the formatted SQL for this SET operation.
 //
-// Deprecated: use pkg/formatter.FormatStatement() instead.
+// Rendering errors return an empty string; use the checked API to report them.
+//
+// Deprecated: use pkg/formatter.FormatStatementChecked() instead.
 func (s *SetOperation) Format(opts FormatOptions) string {
 	return callFormatStmt(s, opts)
 }
@@ -164,35 +198,45 @@ func (s *SetOperation) Format(opts FormatOptions) string {
 
 // Format returns the formatted SQL for this CASE expression.
 //
-// Deprecated: use pkg/formatter.FormatExpression() instead.
+// Rendering errors return an empty string; use the checked API to report them.
+//
+// Deprecated: use pkg/formatter.FormatExpressionChecked() instead.
 func (c *CaseExpression) Format(opts FormatOptions) string {
 	return callFormatExpr(c, opts)
 }
 
 // Format returns the formatted SQL for this BETWEEN expression.
 //
-// Deprecated: use pkg/formatter.FormatExpression() instead.
+// Rendering errors return an empty string; use the checked API to report them.
+//
+// Deprecated: use pkg/formatter.FormatExpressionChecked() instead.
 func (b *BetweenExpression) Format(opts FormatOptions) string {
 	return callFormatExpr(b, opts)
 }
 
 // Format returns the formatted SQL for this IN expression.
 //
-// Deprecated: use pkg/formatter.FormatExpression() instead.
+// Rendering errors return an empty string; use the checked API to report them.
+//
+// Deprecated: use pkg/formatter.FormatExpressionChecked() instead.
 func (i *InExpression) Format(opts FormatOptions) string {
 	return callFormatExpr(i, opts)
 }
 
 // Format returns the formatted SQL for this EXISTS expression.
 //
-// Deprecated: use pkg/formatter.FormatExpression() instead.
+// Rendering errors return an empty string; use the checked API to report them.
+//
+// Deprecated: use pkg/formatter.FormatExpressionChecked() instead.
 func (e *ExistsExpression) Format(opts FormatOptions) string {
 	return callFormatExpr(e, opts)
 }
 
 // Format returns the formatted SQL for this subquery expression.
 //
-// Deprecated: use pkg/formatter.FormatExpression() instead.
+// Rendering errors return an empty string; use the checked API to report them.
+//
+// Deprecated: use pkg/formatter.FormatExpressionChecked() instead.
 func (s *SubqueryExpression) Format(opts FormatOptions) string {
 	return callFormatExpr(s, opts)
 }

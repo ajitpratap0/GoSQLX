@@ -76,9 +76,10 @@ func TestSplitStatements_Table(t *testing.T) {
 		// Same dollar-quote input with no dialect should split naively and
 		// produce MORE segments — confirming the feature is gated.
 		// Input has three top-level semicolons under ANSI rules (after
-		// `RETURN 1`, `END`, and `plpgsql`), yielding 4 segments.
+		// `SELECT 1`, `SELECT 2`, and `sql`), yielding 4 segments. (The body
+		// deliberately avoids BEGIN … END, which the splitter now keeps whole.)
 		{"ansi/dollar-not-recognised",
-			"CREATE FUNCTION f() RETURNS int AS $$ BEGIN RETURN 1; END; $$ LANGUAGE plpgsql; SELECT 1",
+			"CREATE FUNCTION f() RETURNS int AS $$ SELECT 1; SELECT 2; $$ LANGUAGE sql; SELECT 1",
 			"", 4},
 
 		// ─── PostgreSQL E-strings ───────────────────────────────────────
@@ -204,12 +205,23 @@ var splitterDialects = []string{
 	"clickhouse", "sqlserver", "mssql", "tsql", "oracle", "unknown",
 }
 
-// checkTiling asserts the structural invariants of a split: the segments are
-// the exact byte ranges of src between top-level semicolons, so joining them
-// with ';' reproduces src (a single trailing top-level ';' is consumed and not
-// represented), and the segment count never exceeds the number of ';' bytes
-// plus one.
-func checkTiling(src string, segs []string) (string, bool) {
+// checkTilingFor asserts that segments exactly tile the source between
+// top-level semicolons, allowing a consumed trailing semicolon. Dialects with
+// client directives (GO, DELIMITER, a lone "/") consume those lines, so their
+// segments must instead be ordered substrings of src.
+func checkTilingFor(src string, segs []string, dialect string) (string, bool) {
+	switch strings.ToLower(strings.TrimSpace(dialect)) {
+	case "sqlserver", "mssql", "tsql", "mysql", "mariadb", "oracle":
+		pos := 0
+		for _, seg := range segs {
+			at := strings.Index(src[pos:], seg)
+			if at < 0 {
+				return "segment is not an in-order substring of the source", false
+			}
+			pos += at + len(seg)
+		}
+		return "", true
+	}
 	joined := strings.Join(segs, ";")
 	if joined != src && !(strings.HasSuffix(src, ";") && joined == src[:len(src)-1]) {
 		return "segments do not tile the source", false
@@ -276,6 +288,37 @@ func TestSplitStatements_NilOnEmpty(t *testing.T) {
 	}
 }
 
+func TestSplitStatements_MySQLBackslashBoundaries(t *testing.T) {
+	for _, dialect := range []string{"mysql", "mariadb"} {
+		for _, tc := range []struct {
+			name  string
+			first string
+		}{
+			{"escaped quote", `SELECT 'it\'s; here'`},
+			{"escaped backslash", `SELECT 'a\\'`},
+		} {
+			t.Run(dialect+"/"+tc.name, func(t *testing.T) {
+				want := []string{tc.first, " SELECT 2"}
+				if got := SplitStatements(tc.first+"; SELECT 2", dialect); !reflect.DeepEqual(got, want) {
+					t.Fatalf("segments = %q, want %q", got, want)
+				}
+			})
+		}
+	}
+}
+
+func TestSplitStatements_PostgreSQLRuleCommandList(t *testing.T) {
+	for _, action := range []string{"DO", "DO ALSO", "DO INSTEAD"} {
+		t.Run(action, func(t *testing.T) {
+			first := "CREATE RULE r AS ON INSERT TO t " + action + " (INSERT INTO a VALUES (1); INSERT INTO b VALUES (2))"
+			want := []string{first, " SELECT 1"}
+			if got := SplitStatements(first+"; SELECT 1", "postgresql"); !reflect.DeepEqual(got, want) {
+				t.Fatalf("segments = %q, want %q", got, want)
+			}
+		})
+	}
+}
+
 func TestSplitStatements_TilesSource(t *testing.T) {
 	root := filepath.Join("..", "..", "testdata")
 	files := 0
@@ -294,7 +337,7 @@ func TestSplitStatements_TilesSource(t *testing.T) {
 		src := string(data)
 		for _, dialect := range splitterDialects {
 			segs := SplitStatements(src, dialect)
-			if msg, ok := checkTiling(src, segs); !ok {
+			if msg, ok := checkTilingFor(src, segs, dialect); !ok {
 				t.Errorf("%s (dialect %q): %s", path, dialect, msg)
 			}
 		}

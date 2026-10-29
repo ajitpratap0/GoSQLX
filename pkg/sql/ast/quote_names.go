@@ -17,10 +17,12 @@
 // references and INSERT/UPDATE/DELETE targets, select-item, table and
 // ARRAY JOIN aliases, window names, DDL object, column and constraint names,
 // function names) and for the free-text positions rendered next to them
-// (column data types, table option and PRAGMA values). Those positions record
-// no quote information, so a name is quoted whenever a bare rendering could
-// not re-parse as the same name, and a free-text value that is not plainly
-// shaped is quoted as a whole.
+// (column data types, table option and PRAGMA values). A name is quoted
+// whenever a bare rendering could not re-parse as the same name, and a
+// free-text value that is not plainly shaped is quoted as a whole. Where the
+// parser records how a name was delimited (NameQuote, see name_quote.go), the
+// *Q / *With variants also keep the quotes the source needed for letter case
+// or a keyword, in the source's delimiters.
 package ast
 
 import (
@@ -32,8 +34,9 @@ import (
 
 // reservedNameWords lists the words the parser rejects as a bare name, keyed
 // in upper case. A true value means the word is rejected bare in every name
-// position, including FROM/JOIN table names; false means it is rejected only
-// in CTE names and CTE/view column lists.
+// position, including FROM/JOIN table names and CTE names (which take the
+// same words as a table alias); false means it is rejected only in CTE/view
+// column lists.
 //
 // The lists were derived by parsing every keyword bare in each of these
 // positions across all nine supported dialects. A word belongs here only if
@@ -51,7 +54,7 @@ var reservedNameWords = map[string]bool{
 	"CURRENT": true, "DELETE": true, "DESC": true, "DESCRIBE": true, "DISTINCT": true,
 	"DROP": true, "ELSE": true, "END": true, "EXCEPT": true, "EXCLUDE": true,
 	"EXISTS": true, "EXPLAIN": true, "FALSE": true, "FETCH": true, "FILTER": true,
-	"FINAL": true, "FIRST": true, "FOLLOWING": true, "FOR": true, "FOREIGN": true,
+	"FIRST": true, "FOLLOWING": true, "FOR": true, "FOREIGN": true,
 	"FROM": true, "FULL": true, "GROUP": true, "GROUPING": true, "GROUPS": true,
 	"HASH": true, "HAVING": true, "IF": true, "ILIKE": true, "IN": true,
 	"INNER": true, "INSERT": true, "INTERSECT": true, "INTERVAL": true, "INTO": true,
@@ -69,7 +72,7 @@ var reservedNameWords = map[string]bool{
 	"UNBOUNDED": true, "UNION": true, "UNIQUE": true, "UPDATE": true, "USING": true,
 	"VALUES": true, "WHEN": true, "WHERE": true, "WITH": true, "WITHIN": true,
 
-	// Reserved only in CTE names and CTE/view column lists.
+	// Reserved only in CTE/view column lists.
 	"COLUMN": false, "DATABASES": false, "DEFAULT": false, "INDEX": false, "KEY": false,
 	"MATCHED": false, "PARTITION": false, "ROWS": false, "SOURCE": false, "TABLE": false,
 	"TABLES": false, "TARGET": false, "VIEW": false,
@@ -154,6 +157,10 @@ func isBareNameChars(name string, leadingHash bool) bool {
 		if c == '_' || (c|0x20 >= 'a' && c|0x20 <= 'z') || (c >= '0' && c <= '9') {
 			continue
 		}
+		if c == '$' && i > 0 {
+			// Not a first character: Oracle v$session, Snowflake SYSTEM$TYPEOF.
+			continue
+		}
 		return false
 	}
 	if i == len(name) {
@@ -161,6 +168,9 @@ func isBareNameChars(name string, leadingHash bool) bool {
 	}
 	for j, r := range name[i:] {
 		if r == '_' || unicode.IsLetter(r) {
+			continue
+		}
+		if r == '$' && i+j > 0 {
 			continue
 		}
 		if unicode.IsDigit(r) {
@@ -248,16 +258,6 @@ func writeTableAlias(buf *bytes.Buffer, name string) {
 	buf.WriteString(name)
 }
 
-// writeNameList writes names separated by ", ", quoting each as needed.
-func writeNameList(buf *bytes.Buffer, names []string) {
-	for i, n := range names {
-		if i > 0 {
-			buf.WriteString(", ")
-		}
-		writeName(buf, n)
-	}
-}
-
 // writeQualifiedName writes a possibly dotted table or view name, quoting
 // each dot-separated part on its own as needed. A dot is always treated as a
 // part separator (the same convention as writeDottedIdentifier). An empty
@@ -271,15 +271,20 @@ func writeQualifiedName(buf *bytes.Buffer, name string) {
 		buf.WriteString(name)
 		return
 	}
-	for {
+	for prevEmpty := true; ; {
 		dot := strings.IndexByte(name, '.')
 		part := name
 		if dot >= 0 {
 			part = name[:dot]
 		}
-		if part == "" || nameNeedsQuoting(part, true) {
+		if part == "" && !prevEmpty && isEmptyMiddlePart(name, dot) {
+			// SQL Server db..t: an empty schema part is written as nothing.
+			prevEmpty = true
+		} else if part == "" || nameNeedsQuoting(part, true) {
+			prevEmpty = part == ""
 			writeQuotedIdentifier(buf, part)
 		} else {
+			prevEmpty = false
 			buf.WriteString(part)
 		}
 		if dot < 0 {
@@ -290,17 +295,30 @@ func writeQualifiedName(buf *bytes.Buffer, name string) {
 	}
 }
 
+// isEmptyMiddlePart reports whether the empty part ending at dot (the index
+// of the "." after it in the remaining name, -1 for the last part) lies
+// between two non-empty parts, as the schema of SQL Server db..t does.
+func isEmptyMiddlePart(rest string, dot int) bool {
+	return dot == 0 && len(rest) > 1 && rest[1] != '.'
+}
+
 // qualifiedNameNeedsQuoting reports whether writeQualifiedName would quote
 // some part of the non-empty name.
 func qualifiedNameNeedsQuoting(name string) bool {
 	if isStageReference(name) {
 		return false
 	}
-	for {
+	for first := true; ; first = false {
 		dot := strings.IndexByte(name, '.')
 		part := name
 		if dot >= 0 {
 			part = name[:dot]
+		}
+		if part == "" && !first && isEmptyMiddlePart(name, dot) {
+			// db..t: the empty part sits between two non-empty parts (an
+			// empty part before it was reported already).
+			name = name[dot+1:]
+			continue
 		}
 		if part == "" || nameNeedsQuoting(part, true) {
 			return true
@@ -403,7 +421,7 @@ func QuoteColumnName(name string) string {
 // there). TestConstraintNameWords keeps the list in step with the parser.
 var constraintNameWords = map[string]bool{
 	"ANY": true, "AUTO_INCREMENT": true, "CONNECTOR": true, "DCPROPERTIES": true,
-	"MEMBER": true, "NOCREATEDB": true, "NOCREATEROLE": true, "NOLOGIN": true,
+	"FINAL": true, "MEMBER": true, "NOCREATEDB": true, "NOCREATEROLE": true, "NOLOGIN": true,
 	"NOSUPERUSER": true, "OWNER": true, "POLICY": true, "RESET": true,
 	"SOME": true, "UNTIL": true, "URL": true, "VALID": true,
 }
@@ -412,9 +430,9 @@ var constraintNameWords = map[string]bool{
 // written double-quoted: it is not plain (ASCII letters, digits and '_', not
 // starting with a digit), or it is a keyword (KEY, INDEX, DEFAULT, TABLE, ...)
 // the parser does not accept bare in that position. Case alone does not force
-// quotes: the AST does not record whether a name was quoted, and quoting an
-// unquoted PK_USERS would change the name in case-folding dialects. This
-// matches Identifier.SQL(), which renders names quoted only for case bare.
+// quotes: constraint names do not record whether they were quoted, and
+// quoting an unquoted PK_USERS would change the name in case-folding
+// dialects.
 func constraintNameNeedsQuoting(name string) bool {
 	if name == "" || (name[0] >= '0' && name[0] <= '9') {
 		return true
@@ -464,7 +482,7 @@ func functionNamePartNeedsQuoting(part string, single bool) bool {
 }
 
 // keywordFunctionNames lists the words in reservedNameWords that the parser
-// still accepts bare as a function name (IF(a, b, c), REPLACE(s, x, y),
+// still accepts bare as a function name (IF(a, b, c), REPLACE(s, x, y), LEFT(s, 2),
 // VALUES(col) in ON DUPLICATE KEY UPDATE, FIRST/LAST, and the ClickHouse
 // table functions merge(...) and null(...)). Any other reserved word written
 // as a function name must have been quoted in the source.
@@ -472,6 +490,11 @@ func functionNamePartNeedsQuoting(part string, single bool) bool {
 var keywordFunctionNames = map[string]bool{
 	"FIRST": true, "IF": true, "LAST": true, "MERGE": true, "NULL": true,
 	"REPLACE": true, "VALUES": true,
+	// Keyword-named functions: LEFT(s, 2), RIGHT(s, 2), GROUPING(a),
+	// ROW(1, 2), TRUNCATE(x, 1), INSERT(s, 1, 2, 'x'), ClickHouse range(n)
+	// and Snowflake HASH(a), and MySQL INTERVAL(n, n1, n2).
+	"GROUPING": true, "HASH": true, "INSERT": true, "INTERVAL": true, "LEFT": true, "RANGE": true,
+	"RIGHT": true, "ROW": true, "TRUNCATE": true,
 }
 
 // writeFunctionName writes a possibly schema-qualified function name, quoting
@@ -480,6 +503,13 @@ var keywordFunctionNames = map[string]bool{
 // written unchanged. An empty name writes nothing.
 func writeFunctionName(buf *bytes.Buffer, name string) {
 	if name == "" {
+		return
+	}
+	if isStageReference(name) {
+		// Snowflake stage read with options: @stage/path (FILE_FORMAT => ...).
+		// The space keeps "(" out of the stage path.
+		buf.WriteString(name)
+		buf.WriteByte(' ')
 		return
 	}
 	multi := strings.IndexByte(name, '.') >= 0
@@ -522,12 +552,31 @@ func dataTypeIsPlain(typ string) bool {
 		c := typ[i]
 		switch {
 		case c == ' ' && depth == 0:
+			if i == 0 {
+				return false // a modifier word cannot start a type
+			}
 			j := i + 1
 			for j < len(typ) && (typ[j]|0x20 >= 'a' && typ[j]|0x20 <= 'z') {
 				j++
 			}
 			w := typ[i+1 : j]
-			if !isTypeModifierWord(w) {
+			if strings.EqualFold(w, "SET") || strings.EqualFold(w, "CHARSET") {
+				// MySQL CHARACTER SET name / CHARSET name: a bare charset
+				// name follows the word.
+				m := j + 1
+				if j >= len(typ) || typ[j] != ' ' {
+					return false
+				}
+				for m < len(typ) && (typ[m] == '_' || typ[m] >= '0' && typ[m] <= '9' || typ[m]|0x20 >= 'a' && typ[m]|0x20 <= 'z') {
+					m++
+				}
+				if m == j+1 {
+					return false
+				}
+				i = m - 1
+				continue
+			}
+			if !isTypeModifierWord(w) && !(isSignednessInt(w) && prevWordIsSignedness(typ, i)) {
 				return false
 			}
 			// The ClickHouse column CODEC the parser appends to the type is
@@ -549,6 +598,13 @@ func dataTypeIsPlain(typ string) bool {
 					break
 				}
 			}
+		case c == '"' || c == '`' || c == '[' && i+1 < len(typ) && typ[i+1] != ']' && (typ[i+1] < '0' || typ[i+1] > '9'):
+			// A delimited type name or identifier argument: closed, no escapes.
+			j, ok := skipTypeDelimited(typ, i)
+			if !ok {
+				return false
+			}
+			i = j
 		case c == '(':
 			depth++
 		case c == ')':
@@ -594,7 +650,26 @@ var typeModifierWords = map[string]bool{
 	"PRECISION": true, "VARYING": true, "CHARACTER": true, "CHAR": true, "VARCHAR": true,
 	"WITH": true, "WITHOUT": true, "LOCAL": true, "TIME": true, "ZONE": true,
 	"UNSIGNED": true, "SIGNED": true, "ZEROFILL": true, "LARGE": true, "OBJECT": true,
-	"RAW": true, "BINARY": true, "CODEC": true,
+	"RAW": true, "BINARY": true, "CODEC": true, "INTEGER": true, "INT": true,
+	"BIG": true, "VARBINARY": true, "ARRAY": true, "TO": true,
+	"YEAR": true, "MONTH": true, "DAY": true, "HOUR": true, "MINUTE": true, "SECOND": true,
+}
+
+// isSignednessInt reports whether w is INT or INTEGER, the optional word that
+// follows MySQL's SIGNED and UNSIGNED in a cast type (SIGNED INTEGER).
+func isSignednessInt(w string) bool {
+	return strings.EqualFold(w, "INT") || strings.EqualFold(w, "INTEGER")
+}
+
+// prevWordIsSignedness reports whether the word of typ that ends just before
+// index end (the space) is SIGNED or UNSIGNED.
+func prevWordIsSignedness(typ string, end int) bool {
+	start := end
+	for start > 0 && typ[start-1]|0x20 >= 'a' && typ[start-1]|0x20 <= 'z' {
+		start--
+	}
+	w := typ[start:end]
+	return strings.EqualFold(w, "SIGNED") || strings.EqualFold(w, "UNSIGNED")
 }
 
 // maxTypeModifierLen bounds the stack buffer isTypeModifierWord upper-cases
@@ -825,13 +900,12 @@ func QuoteOperator(op string) string {
 
 // columnRefNeedsQuoting reports whether e is an identifier whose name is a
 // word the parser rejects bare in every name position but which Identifier
-// rendering would leave bare (it was not recorded as Quoted, for example a
-// MySQL `select` or SQL Server [select]). Such a name is quoted where it is
-// a write target: an INSERT column, a SET or DO UPDATE SET target, an ON
-// CONFLICT target.
+// rendering would leave bare (it was not recorded as delimited in the
+// source). Such a name is quoted where it is a write target: an INSERT
+// column, a SET or DO UPDATE SET target, an ON CONFLICT target.
 func columnRefNeedsQuoting(e Expression) (*Identifier, bool) {
 	id, ok := e.(*Identifier)
-	if !ok || id == nil || id.Quoted || !isReservedName(id.Name, true) {
+	if !ok || id == nil || id.Quoted || id.QuoteStyle != 0 || id.Quotes.Part(0) || !isReservedName(id.Name, true) {
 		return nil, false
 	}
 	return id, true
@@ -845,11 +919,9 @@ func writeColumnRef(buf *bytes.Buffer, e Expression) {
 		writeExpr(buf, e)
 		return
 	}
-	if id.Table != "" {
-		writeDottedIdentifier(buf, id.Table)
-		buf.WriteByte('.')
-	}
-	writeQuotedIdentifier(buf, id.Name)
+	forced := *id
+	forced.Quotes = forced.Quotes.WithPart(0)
+	forced.writeSQL(buf)
 }
 
 // writeColumnRefList writes exprs separated by ", ", each via writeColumnRef.
@@ -945,6 +1017,7 @@ var (
 		"IS NULL", "IS NOT NULL", "IS", "IS NOT",
 		"IS DISTINCT FROM", "IS NOT DISTINCT FROM",
 		"IN", "NOT IN", "AGAINST", "DIV", "MOD", "OVERLAPS", "GLOB",
+		"NOT GLOB", "MATCH", "NOT MATCH", "SOUNDS LIKE",
 	}
 	// columnConstraintKeywords: the constraint kinds columnConstraintSQL
 	// writes as bare keyword text (the parser stores NULL, AUTO_INCREMENT and
@@ -952,8 +1025,14 @@ var (
 	columnConstraintKeywords = []string{
 		"NOT NULL", "NULL", "UNIQUE", "PRIMARY KEY", "AUTO_INCREMENT",
 		"GENERATED ALWAYS AS ROW START", "GENERATED ALWAYS AS ROW END",
+		"INVISIBLE", "VISIBLE", "DEFERRABLE", "NOT DEFERRABLE",
+		"INITIALLY DEFERRED", "INITIALLY IMMEDIATE", "NOT FOR REPLICATION",
+		"WITH SYSTEM VERSIONING", "WITHOUT SYSTEM VERSIONING",
 	}
-	partitionByKeywords = []string{"RANGE", "LIST", "HASH", "KEY", "LINEAR HASH", "LINEAR KEY"}
+	partitionByKeywords = []string{
+		"RANGE", "LIST", "HASH", "KEY", "LINEAR HASH", "LINEAR KEY",
+		"RANGE COLUMNS", "LIST COLUMNS", "SYSTEM_TIME",
+	}
 	// alterTableActionKeywords: the legacy AlterTableStatement (never produced
 	// by the parser) writes an action other than its explicit cases as bare
 	// keyword text.
@@ -966,6 +1045,26 @@ var (
 	tableOptionNames = []string{
 		"ENGINE", "CHARSET", "DEFAULT CHARSET", "CHARACTER SET", "DEFAULT CHARACTER SET",
 		"COLLATE", "DEFAULT COLLATE", "COMMENT", "AUTO_INCREMENT", "ROW_FORMAT",
+		// Further MySQL / MariaDB options.
+		"KEY_BLOCK_SIZE", "AVG_ROW_LENGTH", "MAX_ROWS", "MIN_ROWS", "PACK_KEYS",
+		"CHECKSUM", "DELAY_KEY_WRITE", "STATS_PERSISTENT", "STATS_AUTO_RECALC",
+		"STATS_SAMPLE_PAGES", "COMPRESSION", "ENCRYPTION", "PAGE_CHECKSUM",
+		"TRANSACTIONAL", "INSERT_METHOD", "DATA DIRECTORY", "INDEX DIRECTORY",
+		// PostgreSQL, Oracle and SQL Server storage options.
+		"TABLESPACE", "USING", "PCTFREE", "PCTUSED", "INITRANS", "MAXTRANS", "PARALLEL",
+		"WITH", "ON COMMIT DELETE ROWS", "ON COMMIT PRESERVE ROWS", "ON COMMIT DROP",
+		"WITHOUT OIDS", "LOGGING", "NOLOGGING", "COMPRESS", "NOCOMPRESS", "NOCACHE",
+		"NOPARALLEL", "ROWDEPENDENCIES", "NOROWDEPENDENCIES", "MONITORING", "NOMONITORING",
+		"ENABLE ROW MOVEMENT", "DISABLE ROW MOVEMENT", "SEGMENT CREATION IMMEDIATE",
+		"SEGMENT CREATION DEFERRED", "ORGANIZATION HEAP", "ORGANIZATION INDEX",
+		// SQLite.
+		"STRICT", "WITHOUT ROWID",
+		// Snowflake.
+		"DATA_RETENTION_TIME_IN_DAYS", "MAX_DATA_EXTENSION_TIME_IN_DAYS", "CHANGE_TRACKING",
+		"DEFAULT_DDL_COLLATION", "ENABLE_SCHEMA_EVOLUTION", "CLUSTER BY", "COPY GRANTS",
+		// CREATE INDEX options.
+		"NULLS NOT DISTINCT", "NULLS DISTINCT", "ALGORITHM", "LOCK", "LOCAL", "GLOBAL",
+		"ONLINE", "REVERSE", "VISIBLE", "INVISIBLE",
 	}
 	viewWithOptionKeywords = []string{"CHECK OPTION", "CASCADED CHECK OPTION", "LOCAL CHECK OPTION"}
 	// mergeWhenKeywords: the parser stores MATCHED, NOT_MATCHED and
@@ -1102,7 +1201,7 @@ func keywordOneOf(s string, allowed []string) string {
 // renderers write such a field only when it is one of these (see the *Text
 // functions below), so even plain words outside the set are dropped.
 var (
-	cascadeKeywords           = []string{"CASCADE", "RESTRICT"}
+	cascadeKeywords           = []string{"CASCADE", "RESTRICT", "CASCADE CONSTRAINTS"}
 	sortDirectionKeywords     = []string{"ASC", "DESC"}
 	fetchTypeKeywords         = []string{"FIRST", "NEXT"}
 	lockTypeKeywords          = []string{"UPDATE", "SHARE", "NO KEY UPDATE", "KEY SHARE"}
@@ -1225,4 +1324,71 @@ func ShowTakesFrom(showType string) bool {
 		return true
 	}
 	return false
+}
+
+// writeDottedIdentifierStyle is writeDottedIdentifier quoting with the
+// delimiters of style (see writeDelimitedIdentifier).
+func writeDottedIdentifierStyle(buf *bytes.Buffer, name string, style rune) {
+	for {
+		dot := strings.IndexByte(name, '.')
+		part := name
+		if dot >= 0 {
+			part = name[:dot]
+		}
+		if isReservedName(part, true) || identifierNeedsQuoting(part) {
+			writeDelimitedIdentifier(buf, part, style)
+		} else {
+			buf.WriteString(part)
+		}
+		if dot < 0 {
+			return
+		}
+		buf.WriteByte('.')
+		name = name[dot+1:]
+	}
+}
+
+// writeDelimitedIdentifier writes name as a delimited identifier using the
+// delimiters of style: `name` for '`', [name] for '[', and ANSI "name"
+// otherwise. The closing delimiter is doubled inside the name.
+func writeDelimitedIdentifier(buf *bytes.Buffer, name string, style rune) {
+	var open, closing byte
+	switch style {
+	case '`':
+		open, closing = '`', '`'
+	case '[':
+		open, closing = '[', ']'
+	default:
+		writeQuotedIdentifier(buf, name)
+		return
+	}
+	buf.WriteByte(open)
+	for i := 0; i < len(name); i++ {
+		if name[i] == closing {
+			buf.WriteByte(closing)
+		}
+		buf.WriteByte(name[i])
+	}
+	buf.WriteByte(closing)
+}
+
+// isVariableName reports whether name is a session or system variable
+// reference that is written bare: '@' or '@@' followed by letters, digits,
+// '_', '$' and '.' (@x, @@VERSION, @@session.sql_mode). Quoting it would
+// turn the variable into an identifier.
+func isVariableName(name string) bool {
+	i := 0
+	for i < len(name) && i < 2 && name[i] == '@' {
+		i++
+	}
+	if i == 0 || i == len(name) || name[i] == '.' {
+		return false
+	}
+	for ; i < len(name); i++ {
+		c := name[i]
+		if c != '_' && c != '$' && c != '.' && (c < '0' || c > '9') && (c|0x20 < 'a' || c|0x20 > 'z') {
+			return false
+		}
+	}
+	return true
 }

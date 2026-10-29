@@ -93,23 +93,13 @@ func parseForDialect(sql string, d keywords.SQLDialect) (*ast.AST, error) {
 }
 
 // formatForDialect formats sql like gosqlx.Format, but parses it with the
-// dialect-aware API for d. The FormatAST options reproduce the
-// ast.FormatOptions that gosqlx.Format derives from opts (LineWidth, the only
-// field that differs, is not used by the formatter). opts.AddSemicolon is not
-// honoured on this path; the LSP formatter never sets it.
+// dialect-aware API for d and renders dialect-specific constructs for d.
+// Comments and optimizer hints are preserved. opts.AddSemicolon is honoured.
 func formatForDialect(sql string, opts gosqlx.FormatOptions, d keywords.SQLDialect) (string, error) {
 	if usesDefaultPipeline(d) {
 		return gosqlx.Format(sql, opts)
 	}
-	parsed, err := gosqlx.ParseWithDialect(sql, d)
-	if err != nil {
-		return "", fmt.Errorf("cannot format invalid SQL: %w", err)
-	}
-	formatted := gosqlx.FormatAST(parsed,
-		gosqlx.WithIndent(opts.IndentSize),
-		gosqlx.WithUppercaseKeywords(opts.UppercaseKeywords),
-	)
-	return formatted, nil
+	return gosqlx.FormatWithDialect(sql, opts, d)
 }
 
 // dialectDisplayNames are the human-readable dialect names used in

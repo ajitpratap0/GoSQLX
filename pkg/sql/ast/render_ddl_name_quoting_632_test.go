@@ -87,7 +87,7 @@ func ddlNameRenderCases() []aliasRenderCase {
 			}
 			return ""
 		}},
-		{"create_table_column_type", `CREATE TABLE t (a ` + hostileQ + `)`, hostile, func(s ast.Statement) string {
+		{"create_table_column_type", `CREATE TABLE t (a ` + hostileQ + `)`, hostileQ, func(s ast.Statement) string {
 			if c := createTable(s); c != nil && len(c.Columns) > 0 {
 				return c.Columns[0].Type
 			}
@@ -221,7 +221,7 @@ func ddlNameRenderCases() []aliasRenderCase {
 			}
 			return ""
 		}},
-		{"cast_type", `SELECT a::` + hostileQ + ` FROM t`, hostile, func(s ast.Statement) string {
+		{"cast_type", `SELECT a::` + hostileQ + ` FROM t`, hostileQ, func(s ast.Statement) string {
 			if c, ok := firstColumnExpr(s).(*ast.CastExpression); ok {
 				return c.Type
 			}
@@ -350,10 +350,10 @@ func TestDDLNameRendering_Benign_PR632(t *testing.T) {
 			`CREATE TABLE s.t (id INT PRIMARY KEY, name VARCHAR(100) NOT NULL, owner_id INT REFERENCES users (id))`},
 		{"", `CREATE TABLE t (a INT, b INT, PRIMARY KEY (a, b), FOREIGN KEY (b) REFERENCES r (id))`,
 			`CREATE TABLE t (a INT, b INT, PRIMARY KEY (a, b), FOREIGN KEY (b) REFERENCES r (id))`},
-		{"", `CREATE TABLE "Mixed" ("Col" INT)`, `CREATE TABLE Mixed (Col INT)`},
+		{"", `CREATE TABLE "Mixed" ("Col" INT)`, `CREATE TABLE "Mixed" ("Col" INT)`},
 		{"", `CREATE TABLE t ("select" INT)`, `CREATE TABLE t ("select" INT)`},
 		{"", `CREATE TABLE t (a Nullable(String), c Enum8('a' = 1, 'b' = -2), d DateTime64(3, 'UTC'))`,
-			`CREATE TABLE t (a Nullable(String), c Enum8('a'= 1, 'b'= - 2), d DateTime64(3, 'UTC'))`},
+			`CREATE TABLE t (a Nullable(String), c Enum8('a' = 1, 'b' = -2), d DateTime64(3, 'UTC'))`},
 		{"", `CREATE TABLE t (a ENUM('x', 'y'))`, `CREATE TABLE t (a ENUM('x', 'y'))`},
 		{"", `CREATE TABLE t (a INT) ENGINE = InnoDB`, `CREATE TABLE t (a INT) ENGINE=InnoDB`},
 		{keywords.DialectClickHouse, `CREATE TABLE t (a INT) ENGINE = MergeTree()`, `CREATE TABLE t (a INT) ENGINE=MergeTree()`},
@@ -368,10 +368,10 @@ func TestDDLNameRendering_Benign_PR632(t *testing.T) {
 		{"", `MERGE INTO t USING s ON t.id = s.id WHEN MATCHED THEN UPDATE SET t.a = s.a WHEN NOT MATCHED THEN INSERT (id, a) VALUES (s.id, s.a)`,
 			`MERGE INTO t USING s ON t.id = s.id WHEN MATCHED THEN UPDATE SET t.a = s.a WHEN NOT MATCHED THEN INSERT (id, a) VALUES (s.id, s.a)`},
 		{"", `SELECT COUNT(*), COALESCE(a, 1), NOW(), IF(a, 1, 2), "Fn"(1) FROM t`,
-			`SELECT COUNT(*), COALESCE(a, 1), NOW(), IF(a, 1, 2), Fn(1) FROM t`},
+			`SELECT COUNT(*), COALESCE(a, 1), NOW(), IF(a, 1, 2), "Fn"(1) FROM t`},
 		{keywords.DialectClickHouse, `SELECT quantile(0.5)(x) FROM t`, `SELECT quantile(0.5)(x) FROM t`},
 		{"", `SELECT * FROM t FOR UPDATE OF t`, `SELECT * FROM t FOR UPDATE OF t`},
-		{"", `SELECT INTERVAL '1 day', INTERVAL 5 DAY FROM t`, `SELECT INTERVAL '1 day', INTERVAL '5 DAY' FROM t`},
+		{"", `SELECT INTERVAL '1 day', INTERVAL 5 DAY FROM t`, `SELECT INTERVAL '1 day', INTERVAL 5 DAY FROM t`},
 		{"", `SELECT EXTRACT(YEAR FROM d) FROM t`, `SELECT EXTRACT(YEAR FROM d) FROM t`},
 		{"", `SELECT CAST(a AS VARCHAR(10)), CAST(b AS DECIMAL(10, 2)), c::TEXT FROM t`,
 			`SELECT CAST(a AS VARCHAR(10)), CAST(b AS DECIMAL(10,2)), CAST(c AS TEXT) FROM t`},
@@ -505,14 +505,18 @@ func TestHandBuiltHostileDDLNames_NoStatementBreak_PR632(t *testing.T) {
 // only as the leading SQL Server temp-table marker and '@' only as a
 // Snowflake stage reference made of path characters: anywhere else the
 // tokenizer does not accept them bare (and MySQL treats '#' as a comment),
-// so the part is quoted.
+// so the part is quoted. '$' is a bare identifier character, but never the
+// first one (Oracle v$session, Snowflake SYSTEM$TYPEOF).
 func TestQualifiedName_SpecialCharsOnlyLeading_PR632(t *testing.T) {
 	cases := []struct{ in, want string }{
 		{"#tmp", "#tmp"},
 		{"##global", "##global"},
 		{"db.#tmp", "db.#tmp"},
 		{"a#b", `"a#b"`},
-		{"a$b", `"a$b"`},
+		{"a$b", "a$b"},
+		{"v$session", "v$session"},
+		{"$a", `"$a"`},
+		{"1$a", `"1$a"`},
 		{"a@b", `"a@b"`},
 		{"@stage", "@stage"},
 		{"@db.sch.stage/path/file.csv", "@db.sch.stage/path/file.csv"},

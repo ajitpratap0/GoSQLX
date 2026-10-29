@@ -33,6 +33,11 @@ func (p *Parser) isMariaDB() bool {
 // MariaDB or Oracle hierarchical-query clause (CONNECT BY or START WITH) rather
 // than a table alias. Used to guard alias parsing in FROM and JOIN table references.
 func (p *Parser) isMariaDBClauseStart() bool {
+	return (p.isMariaDB() || p.dialect == string(keywords.DialectOracle)) && p.isMariaDBClauseStartAt()
+}
+
+// isMariaDBClauseStartAt is isMariaDBClauseStart past its inline screen (MariaDB and Oracle only).
+func (p *Parser) isMariaDBClauseStartAt() bool {
 	if !p.isMariaDB() && p.dialect != string(keywords.DialectOracle) {
 		return false
 	}
@@ -256,12 +261,8 @@ func (p *Parser) parseNumericLit() (*ast.LiteralValue, error) {
 		return nil, p.expectedError("numeric literal")
 	}
 	value := p.currentToken.Token.Value
-	litType := "int"
-	if strings.ContainsAny(value, ".eE") {
-		litType = "float"
-	}
 	p.advance()
-	return &ast.LiteralValue{Value: value, Type: litType}, nil
+	return &ast.LiteralValue{Value: value, Type: numericLiteralType(value)}, nil
 }
 
 // parseForSystemTimeClause parses the FOR SYSTEM_TIME clause that follows a table reference.
@@ -348,6 +349,36 @@ func (p *Parser) parseForSystemTimeClause() (*ast.ForSystemTimeClause, error) {
 	case "ALL":
 		p.advance()
 		clause.Type = ast.SystemTimeAll
+	case "CONTAINED":
+		// SQL Server: CONTAINED IN (start, end)
+		if !p.IsSQLServer() || !strings.EqualFold(p.peekToken().Token.Value, "IN") {
+			return nil, p.expectedError("AS OF, BETWEEN, FROM, or ALL after FOR SYSTEM_TIME")
+		}
+		p.advance() // Consume CONTAINED
+		p.advance() // Consume IN
+		if !p.isType(models.TokenTypeLParen) {
+			return nil, p.expectedError("( after CONTAINED IN")
+		}
+		p.advance() // Consume (
+		start, err := p.parseTemporalPointExpression()
+		if err != nil {
+			return nil, err
+		}
+		if !p.isType(models.TokenTypeComma) {
+			return nil, p.expectedError(", in CONTAINED IN")
+		}
+		p.advance() // Consume ,
+		end, err := p.parseTemporalPointExpression()
+		if err != nil {
+			return nil, err
+		}
+		if !p.isType(models.TokenTypeRParen) {
+			return nil, p.expectedError(") after CONTAINED IN")
+		}
+		p.advance() // Consume )
+		clause.Type = ast.SystemTimeContainedIn
+		clause.Start = start
+		clause.End = end
 	default:
 		return nil, goerrors.ExpectedTokenError(
 			"AS OF, BETWEEN, FROM, or ALL after FOR SYSTEM_TIME",

@@ -60,7 +60,11 @@ func TestQuoteQualifiedName(t *testing.T) {
 		{"@mystage/data", "@mystage/data"},
 		{"@db.sch.mystage/data", "@db.sch.mystage/data"},
 		{"DUAL", "DUAL"},
-		{"db..t", `db."".t`},
+		// SQL Server db..t: the empty default-schema part is kept empty.
+		{"db..t", "db..t"},
+		{".t", `"".t`},
+		{"t.", `t.""`},
+		{"a...b", `a.""."".b`},
 		{"उपयोगकर्ता", "उपयोगकर्ता"},
 		{"db.उपयोगकर्ता", "db.उपयोगकर्ता"},
 		{"Cafe\u0301", "Cafe\u0301"},
@@ -81,9 +85,9 @@ func TestQuoteQualifiedName(t *testing.T) {
 
 func TestWriteNameList(t *testing.T) {
 	var buf bytes.Buffer
-	writeNameList(&buf, []string{"a", "select", "a b", "Mixed"})
+	writeNameListQ(&buf, []string{"a", "select", "a b", "Mixed"}, nil)
 	if got, want := buf.String(), `a, "select", "a b", Mixed`; got != want {
-		t.Errorf("writeNameList = %s, want %s", got, want)
+		t.Errorf("writeNameListQ = %s, want %s", got, want)
 	}
 }
 

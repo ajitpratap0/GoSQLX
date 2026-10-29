@@ -16,6 +16,8 @@ package transform
 
 import (
 	"testing"
+
+	"github.com/ajitpratap0/GoSQLX/pkg/sql/keywords"
 )
 
 func TestReplaceTable(t *testing.T) {
@@ -122,4 +124,42 @@ func TestReplaceTable_ThroughParentheses(t *testing.T) {
 	out := format(stmt)
 	assertContains(t, out, "accounts")
 	assertNotContains(t, out, "users")
+}
+
+// TestQualifyColumns_OperatorNodes checks that the expression walker reaches
+// the operands of COLLATE, AT TIME ZONE, ANY/ALL/SOME over arrays, the LIKE
+// ESCAPE expression and the ClickHouse conditional operator.
+func TestQualifyColumns_OperatorNodes(t *testing.T) {
+	stmt := mustParse(t, `SELECT name COLLATE "C", ts AT TIME ZONE tz FROM users WHERE id = ANY(ids) AND a LIKE b ESCAPE esc`)
+	if err := Apply(stmt, QualifyColumns("users")); err != nil {
+		t.Fatal(err)
+	}
+	out := format(stmt)
+	for _, want := range []string{"users.name", "users.ts", "users.tz", "users.id", "users.ids", "users.a", "users.b", "users.esc"} {
+		assertContains(t, out, want)
+	}
+
+	tree, err := ParseSQLWithDialect("SELECT c ? x : y FROM users", keywords.DialectClickHouse)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := Apply(tree.Statements[0], QualifyColumns("users")); err != nil {
+		t.Fatal(err)
+	}
+	out = format(tree.Statements[0])
+	for _, want := range []string{"users.c", "users.x", "users.y"} {
+		assertContains(t, out, want)
+	}
+}
+
+// TestReplaceTable_SomeSubquery checks that = SOME (SELECT ...), kept as an
+// AnyAllExpression, has its subquery tables replaced.
+func TestReplaceTable_SomeSubquery(t *testing.T) {
+	stmt := mustParse(t, "SELECT * FROM users WHERE id = SOME (SELECT user_id FROM orders)")
+	if err := Apply(stmt, ReplaceTable("orders", "purchases")); err != nil {
+		t.Fatal(err)
+	}
+	out := format(stmt)
+	assertContains(t, out, "purchases")
+	assertNotContains(t, out, "orders")
 }

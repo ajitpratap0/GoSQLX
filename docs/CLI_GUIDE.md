@@ -174,6 +174,13 @@ cat query.sql | gosqlx validate && echo "Valid SQL"
 | 0 | Valid SQL - no syntax errors |
 | 1 | Invalid SQL - syntax errors detected |
 
+Input with no statements (empty, whitespace only, or only comments) is valid.
+A file that fails as a whole is checked again statement by statement, so
+scripts that use the T-SQL `GO` batch separator or the MySQL `DELIMITER`
+directive validate, and a file over the tokenizer's 1,000,000 token limit
+validates when every statement is under it. Results read from stdin are named
+`<stdin>`.
+
 #### Performance Target
 
 - **Latency**: <10ms for typical queries (50-500 characters)
@@ -199,10 +206,13 @@ gosqlx format [file...] [flags]
 | `--dialect` | string | postgresql | SQL dialect (generic, postgresql, mysql, mariadb, sqlserver, oracle, sqlite, snowflake, bigquery, redshift, clickhouse); unknown names are rejected |
 | `--indent` | int | 2 | Indentation size in spaces (0-8) |
 | `--uppercase` | bool | true | Uppercase SQL keywords |
-| `--no-uppercase` | bool | false | Keep original keyword case |
+| `--no-uppercase` | bool | false | Write all keywords, including keyword operators and built-in function keywords, in lower case (cannot be combined with `--uppercase`) |
 | `--compact` | bool | false | Compact format (minimal whitespace) |
 | `--check` | bool | false | Check if formatting is needed (CI mode) |
 | `--max-line` | int | 80 | Maximum line length (0-500) |
+
+Dialect clauses stored verbatim inside `JSON_TABLE` and `XMLTABLE` retain their
+source case, including their `COLUMNS` definitions, to preserve names and literals.
 
 #### Examples
 
@@ -534,10 +544,14 @@ gosqlx lint -
 | Code | Meaning |
 |------|---------|
 | 0 | No violations found |
-| 1 | Any violation found (error, warning, or info) - usable as CI gate |
+| 1 | Any violation found (error, warning, or info), or the SQL has a syntax error - usable as CI gate |
 
 > Since v1.9.0, `gosqlx lint` exits 1 whenever any violation is found (error, warning, or info).
 > `--fail-on-warn` is therefore redundant for exit codes.
+>
+> SQL that does not tokenize or parse is reported as a syntax error and also exits 1; the style
+> rules that need no parse tree still report their violations. With `--auto-fix` the exit code
+> reflects what is left after the fixes.
 
 ---
 

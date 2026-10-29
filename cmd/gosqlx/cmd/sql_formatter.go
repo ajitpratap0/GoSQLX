@@ -16,16 +16,18 @@ package cmd
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 
 	pkgformatter "github.com/ajitpratap0/GoSQLX/pkg/formatter"
+	"github.com/ajitpratap0/GoSQLX/pkg/models"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
 )
 
 // SQLFormatter renders a parsed AST as SQL text for the format command.
 //
 // It is a thin adapter over pkg/formatter: every statement is rendered with
-// pkgformatter.FormatStatement, so the CLI and the library share a single
+// pkgformatter.FormatStatementChecked, so the CLI and the library share a single
 // renderer and the CLI has no renderer of its own to fall out of sync (#599).
 // Rendering gaps in pkg/formatter are caught, where detectable, by
 // verifyFormattedSQL.
@@ -78,19 +80,45 @@ func NewSQLFormatter(opts FormatterOptions) *SQLFormatter {
 // Format renders every statement of astObj, separated by "; " in compact mode
 // and ";\n\n" otherwise. No trailing semicolon is added.
 func (f *SQLFormatter) Format(astObj *ast.AST) (string, error) {
+	stmts, err := f.formatStatements(astObj)
+	if err != nil {
+		return "", err
+	}
+	return pkgformatter.JoinWithComments(stmts, nil, nil, f.layout())
+}
+
+// FormatWithComments is Format for input that had comments: tokens and
+// comments are those of the source text, and the comments are put back around
+// the statements they belonged to (see pkgformatter.JoinWithComments).
+func (f *SQLFormatter) FormatWithComments(astObj *ast.AST, tokens []models.TokenWithSpan, comments []models.Comment) (string, error) {
+	stmts, err := f.formatStatements(astObj)
+	if err != nil {
+		return "", err
+	}
+	layout := f.layout()
+	layout.Batches = pkgformatter.BatchPositions(astObj)
+	layout.Starts = pkgformatter.StatementPositions(astObj)
+	return pkgformatter.JoinWithComments(stmts, tokens, comments, layout)
+}
+
+func (f *SQLFormatter) formatStatements(astObj *ast.AST) ([]string, error) {
 	if astObj == nil {
-		return "", errors.New("cannot format a nil AST")
+		return nil, errors.New("cannot format a nil AST")
 	}
-	sep := ";\n\n"
-	if f.compact {
-		sep = "; "
-	}
-	var sb strings.Builder
+	stmts := make([]string, len(astObj.Statements))
 	for i, stmt := range astObj.Statements {
-		if i > 0 {
-			sb.WriteString(sep)
+		formatted, err := pkgformatter.FormatStatementChecked(stmt, f.style)
+		if err != nil {
+			return nil, fmt.Errorf("cannot format statement %d: %w", i+1, err)
 		}
-		sb.WriteString(pkgformatter.FormatStatement(stmt, f.style))
+		stmts[i] = formatted
 	}
-	return sb.String(), nil
+	return stmts, nil
+}
+
+func (f *SQLFormatter) layout() pkgformatter.CommentLayout {
+	if f.compact {
+		return pkgformatter.CommentLayout{Terminator: ";", Gap: " ", Dialect: f.style.Dialect}
+	}
+	return pkgformatter.CommentLayout{Terminator: ";", Gap: "\n\n", Dialect: f.style.Dialect}
 }

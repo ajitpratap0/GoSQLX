@@ -1,0 +1,27 @@
+-- Deeply nested and many-join enterprise queries (ERP / finance / HR)
+WITH sales_q AS (SELECT region_id, TRUNC(sale_date, 'Q') AS qtr, SUM(amount) AS amt FROM sales GROUP BY region_id, TRUNC(sale_date, 'Q')), ranked AS (SELECT region_id, qtr, amt, RANK() OVER (PARTITION BY qtr ORDER BY amt DESC) AS rk FROM sales_q), top3 AS (SELECT * FROM ranked WHERE rk <= 3), named AS (SELECT t.qtr, r.region_name, t.amt, t.rk FROM top3 t JOIN regions r ON r.region_id = t.region_id), final AS (SELECT n.*, SUM(n.amt) OVER (PARTITION BY n.qtr) AS qtr_total FROM named n) SELECT qtr, region_name, amt, ROUND(amt / qtr_total * 100, 1) AS pct FROM final ORDER BY qtr, rk;
+SELECT * FROM (SELECT a.*, ROWNUM AS rnum FROM (SELECT o.order_id, o.order_date, c.last_name, SUM(oi.quantity * oi.unit_price) AS total FROM orders o JOIN customers c ON c.customer_id = o.customer_id JOIN order_items oi ON oi.order_id = o.order_id WHERE o.order_date >= TRUNC(SYSDATE) - 90 GROUP BY o.order_id, o.order_date, c.last_name ORDER BY total DESC) a WHERE ROWNUM <= :max_row) WHERE rnum >= :min_row;
+SELECT e.employee_id, e.last_name, d.department_name, j.job_title, l.city, c.country_name, r.region_name, m.last_name AS mgr, (SELECT COUNT(*) FROM employees x WHERE x.manager_id = e.employee_id) AS reports FROM employees e JOIN departments d ON e.department_id = d.department_id JOIN jobs j ON e.job_id = j.job_id JOIN locations l ON d.location_id = l.location_id JOIN countries c ON l.country_id = c.country_id JOIN regions r ON c.region_id = r.region_id LEFT JOIN employees m ON e.manager_id = m.employee_id WHERE e.salary BETWEEN 3000 AND 12000 AND r.region_name IN ('Europe', 'Americas');
+SELECT department_id, (SELECT AVG(salary) FROM employees WHERE department_id = d.department_id) AS avg_sal, (SELECT COUNT(*) FROM (SELECT DISTINCT job_id FROM employees WHERE department_id = d.department_id)) AS distinct_jobs FROM departments d WHERE d.department_id IN (SELECT department_id FROM employees GROUP BY department_id HAVING AVG(salary) > (SELECT AVG(salary) FROM employees));
+SELECT * FROM employees WHERE salary > (SELECT AVG(salary) FROM employees WHERE department_id IN (SELECT department_id FROM departments WHERE location_id IN (SELECT location_id FROM locations WHERE country_id IN (SELECT country_id FROM countries WHERE region_id = 1))));
+SELECT CASE WHEN x.a > 0 THEN CASE WHEN x.b > 0 THEN 'PP' ELSE 'PN' END ELSE CASE WHEN x.b > 0 THEN 'NP' ELSE 'NN' END END AS quad FROM x;
+SELECT a.acct_id, a.balance + NVL((SELECT SUM(t.amount) FROM txns t WHERE t.acct_id = a.acct_id AND t.posted = 'N'), 0) AS available FROM accounts a WHERE a.status = 'OPEN';
+SELECT ((a + b) * (c - d)) / NULLIF((e + (f * (g - (h + i)))), 0) AS ratio FROM calc;
+SELECT * FROM t WHERE (a = 1 AND (b = 2 OR (c = 3 AND (d = 4 OR e = 5)))) OR (f IS NULL AND NOT (g > 10 AND h < 20));
+SELECT * FROM t WHERE a = 1 OR b = 2 AND c = 3;
+SELECT * FROM t WHERE NOT a = 1 AND b = 2;
+SELECT 1 + 2 * 3 - 4 / 2 FROM dual;
+SELECT * FROM t WHERE a BETWEEN 1 AND 5 AND b NOT BETWEEN 10 AND 20 AND c NOT LIKE 'x%' AND d NOT IN (1, 2);
+SELECT NVL((SELECT MAX(x) FROM t1), (SELECT MIN(x) FROM t2)) FROM dual;
+SELECT d.department_name, (SELECT LISTAGG(e.last_name, ', ') WITHIN GROUP (ORDER BY e.last_name) FROM employees e WHERE e.department_id = d.department_id) AS emps FROM departments d;
+WITH bom (part_id, parent_id, qty, lvl) AS (SELECT part_id, parent_id, qty, 1 FROM parts WHERE parent_id IS NULL UNION ALL SELECT p.part_id, p.parent_id, p.qty * b.qty, b.lvl + 1 FROM parts p JOIN bom b ON p.parent_id = b.part_id) SEARCH DEPTH FIRST BY part_id SET ord CYCLE part_id SET is_cycle TO 'Y' DEFAULT 'N' SELECT * FROM bom ORDER BY ord;
+WITH t1 AS (SELECT /*+ MATERIALIZE */ * FROM big_table WHERE flag = 'Y') SELECT COUNT(*) FROM t1 a JOIN t1 b ON a.id = b.parent_id;
+SELECT * FROM orders o WHERE o.total_amount = (SELECT MAX(total_amount) KEEP (DENSE_RANK LAST ORDER BY order_date) FROM orders o2 WHERE o2.customer_id = o.customer_id);
+SELECT customer_id, order_id, total_amount, SUM(total_amount) OVER (PARTITION BY customer_id ORDER BY order_date, order_id ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS cum, ROW_NUMBER() OVER (PARTITION BY customer_id ORDER BY order_date DESC) AS recency FROM orders;
+SELECT t.* FROM (SELECT DISTINCT customer_id FROM orders) o, TABLE(get_recs(o.customer_id)) t;
+SELECT * FROM (SELECT e.*, DENSE_RANK() OVER (ORDER BY salary DESC) AS dr FROM employees e) WHERE dr = 3;
+SELECT e.employee_id FROM employees e WHERE e.department_id = (SELECT d.department_id FROM departments d WHERE d.department_name = 'Sales') AND e.hire_date = (SELECT MIN(hire_date) FROM employees WHERE department_id = e.department_id);
+SELECT a.id FROM a WHERE a.id IN (SELECT b.id FROM b UNION SELECT c.id FROM c) AND a.id NOT IN (SELECT d.id FROM d WHERE d.id IS NOT NULL);
+(SELECT id FROM a) UNION ALL (SELECT id FROM b) ORDER BY 1;
+SELECT id FROM (SELECT id FROM a UNION ALL SELECT id FROM b) ORDER BY id;
+SELECT * FROM a, b, c, d, e WHERE a.id = b.a_id AND b.id = c.b_id AND c.id = d.c_id AND d.id = e.d_id;

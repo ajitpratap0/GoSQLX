@@ -19,7 +19,9 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/ajitpratap0/GoSQLX/internal/tokscratch"
 	"github.com/ajitpratap0/GoSQLX/pkg/formatter"
+	"github.com/ajitpratap0/GoSQLX/pkg/models"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/keywords"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/parser"
@@ -137,12 +139,16 @@ func (t *Tree) Functions() []string {
 // faster and guaranteed to match the parsed structure.
 //
 // Pass zero or more FormatOption values to customize indent width and keyword
-// casing; see WithIndent and WithUppercaseKeywords.
+// casing; see WithIndent and WithUppercaseKeywords. It returns an empty string
+// on rendering errors; use FormatChecked to handle errors.
 func (t *Tree) Format(opts ...FormatOption) string {
-	if t == nil || t.ast == nil {
-		return ""
-	}
-	return FormatAST(t.ast, opts...)
+	out, _ := t.FormatChecked(opts...)
+	return out
+}
+
+// FormatChecked is Format with semantic rendering errors returned to the caller.
+func (t *Tree) FormatChecked(opts ...FormatOption) (string, error) {
+	return FormatTreeChecked(t, opts...)
 }
 
 // Release returns any pooled resources associated with the tree. It is
@@ -318,7 +324,7 @@ func parseWithConfig(ctx context.Context, sql string, cfg parseOptions) (*ast.AS
 	if cfg.dialect != "" {
 		tkz.SetDialect(keywords.SQLDialect(cfg.dialect))
 	}
-	tokens, tokErr := tkz.TokenizeStringContext(ctx, sql)
+	tokens, tokErr := tokscratch.StringContext(ctx, tkz, sql)
 	if tokErr != nil {
 		if ctxErr := ctx.Err(); ctxErr != nil {
 			return nil, wrapContextErr(ctxErr)
@@ -346,7 +352,11 @@ func parseWithConfig(ctx context.Context, sql string, cfg parseOptions) (*ast.AS
 			joined := errors.Join(errs...)
 			return &ast.AST{Statements: stmts}, fmt.Errorf("%w: %w", ErrSyntax, joined)
 		}
-		return &ast.AST{Statements: stmts}, nil
+		recovered := &ast.AST{Statements: stmts}
+		if cfg.comments {
+			attachComments(recovered, tkz.Comments)
+		}
+		return recovered, nil
 	}
 
 	astNode, err := p.ParseContextFromModelTokens(ctx, tokens)
@@ -356,7 +366,19 @@ func parseWithConfig(ctx context.Context, sql string, cfg parseOptions) (*ast.AS
 		}
 		return nil, fmt.Errorf("%w: %w", ErrSyntax, err)
 	}
+	if cfg.comments {
+		attachComments(astNode, tkz.Comments)
+	}
 	return astNode, nil
+}
+
+// attachComments copies the tokenizer's comments onto a. The tokenizer reuses
+// its slice, so the AST gets its own.
+func attachComments(a *ast.AST, comments []models.Comment) {
+	if len(comments) == 0 {
+		return
+	}
+	a.Comments = append(a.Comments[:0], comments...)
 }
 
 // wrapContextErr returns the context error wrapped in ErrTimeout so callers
@@ -419,11 +441,8 @@ func WithUppercaseKeywords(on bool) FormatOption {
 // concrete ast.FormatOptions the formatter consumes.
 func buildASTFormatOptions(opts []FormatOption) ast.FormatOptions {
 	cfg := defaultFormatOptions()
-	for _, opt := range opts {
-		if opt == nil {
-			continue
-		}
-		opt(&cfg)
+	if len(opts) > 0 {
+		cfg = applyFormatOptions(cfg, opts)
 	}
 
 	kwCase := ast.KeywordPreserve
@@ -441,24 +460,51 @@ func buildASTFormatOptions(opts []FormatOption) ast.FormatOptions {
 	}
 }
 
+// applyFormatOptions applies opts to cfg. It is separate from
+// buildASTFormatOptions because passing &cfg to an option moves cfg to the
+// heap; this way only calls that pass options pay for that allocation.
+func applyFormatOptions(cfg formatOptions, opts []FormatOption) formatOptions {
+	for _, opt := range opts {
+		if opt == nil {
+			continue
+		}
+		opt(&cfg)
+	}
+	return cfg
+}
+
 // FormatTree renders a Tree back to SQL text using the AST-based formatter.
 // It does not re-tokenize or re-parse; if you already have a Tree, prefer
-// this over the top-level Format(sql, opts) function.
+// this over the top-level Format(sql, opts) function. It returns an empty string
+// on rendering errors; use FormatTreeChecked to handle errors.
 func FormatTree(t *Tree, opts ...FormatOption) string {
-	if t == nil || t.ast == nil {
-		return ""
+	out, _ := FormatTreeChecked(t, opts...)
+	return out
+}
+
+// FormatTreeChecked is FormatTree with semantic rendering errors returned to the caller.
+func FormatTreeChecked(t *Tree, opts ...FormatOption) (string, error) {
+	if t == nil {
+		return "", nil
 	}
-	return FormatAST(t.ast, opts...)
+	return FormatASTChecked(t.ast, opts...)
 }
 
 // FormatAST renders a raw *ast.AST back to SQL text. This is the escape-hatch
 // equivalent of FormatTree for callers that hold the underlying AST directly
 // (e.g., from the low-level parser API). Internally it delegates to
-// pkg/formatter.FormatAST — it does not re-parse.
+// pkg/formatter.FormatAST — it does not re-parse. It returns an empty string
+// on rendering errors; use FormatASTChecked to handle errors.
 func FormatAST(a *ast.AST, opts ...FormatOption) string {
+	out, _ := FormatASTChecked(a, opts...)
+	return out
+}
+
+// FormatASTChecked is FormatAST with semantic rendering errors returned to the caller.
+func FormatASTChecked(a *ast.AST, opts ...FormatOption) (string, error) {
 	if a == nil {
-		return ""
+		return "", nil
 	}
 	astOpts := buildASTFormatOptions(opts)
-	return formatter.FormatAST(a, astOpts)
+	return formatter.FormatASTChecked(a, astOpts)
 }

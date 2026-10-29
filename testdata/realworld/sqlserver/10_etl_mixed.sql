@@ -1,0 +1,32 @@
+-- Misc production patterns: data cleansing, pagination, search, temporal tables, 2022 functions
+SELECT Id, LTRIM(RTRIM(Name)) AS Name, TRY_CONVERT(INT, Age) AS Age FROM dbo.RawImport WHERE TRY_CONVERT(INT, Age) IS NOT NULL;
+SELECT CONVERT(DATETIME, '2024-03-15 10:30:00', 120) AS D1, CONVERT(NVARCHAR(30), GETDATE(), 112) AS D2, CONVERT(VARCHAR, GETDATE(), 101) AS D3, CONVERT(DECIMAL(10, 2), N'123.45') AS D4;
+SELECT CAST(GETDATE() AS DATE) AS Today, CAST(1 AS BIT) AS B, CAST(N'x' AS VARCHAR(MAX)) AS V;
+SELECT DATEFROMPARTS(2024, 1, 31) AS D, DATETIMEFROMPARTS(2024, 1, 31, 12, 0, 0, 0) AS DT, EOMONTH(DATEFROMPARTS(2024, 2, 1)) AS E;
+SELECT DATEDIFF_BIG(SECOND, '1970-01-01', GETUTCDATE()) AS Epoch, DATE_BUCKET(WEEK, 1, GETDATE()) AS Wk;
+SELECT GREATEST(1, 2, 3) AS G, LEAST(1, 2, 3) AS L;
+SELECT DATETRUNC(MONTH, GETDATE()) AS MonthStart;
+SELECT IIF(a IS NULL, 0, a) + IIF(b > 0, b, 0) AS Sum2 FROM dbo.T;
+SELECT p.* FROM dbo.Products p WHERE p.IsDeleted = 0 AND (p.Name LIKE N'%' + @search + N'%' OR p.Sku = @search) ORDER BY p.Name OFFSET (@page - 1) * @size ROWS FETCH NEXT @size ROWS ONLY;
+SELECT COUNT(*) OVER () AS Total, Id, Name FROM dbo.Products ORDER BY Id OFFSET 0 ROWS FETCH FIRST 25 ROWS ONLY;
+SELECT * FROM dbo.Employees FOR SYSTEM_TIME AS OF '2024-01-01';
+SELECT * FROM dbo.Employees FOR SYSTEM_TIME BETWEEN '2024-01-01' AND '2024-06-30' WHERE Id = 1;
+SELECT * FROM dbo.Employees FOR SYSTEM_TIME ALL ORDER BY ValidFrom;
+SELECT * FROM OPENQUERY(LinkedSrv, 'SELECT * FROM remote.dbo.T');
+SELECT * FROM OPENROWSET(BULK 'C:\data\file.csv', SINGLE_CLOB) AS x;
+BULK INSERT dbo.Staging FROM 'C:\data\file.csv' WITH (FIELDTERMINATOR = ',', ROWTERMINATOR = '\n', FIRSTROW = 2);
+SELECT HASHBYTES('SHA2_256', CONCAT(a, b)) AS H, CHECKSUM(a, b) AS CS, ABS(CHECKSUM(NEWID())) % 100 AS Rnd FROM dbo.T;
+SELECT Id, Name, ROW_NUMBER() OVER (ORDER BY (SELECT NULL)) AS RowNum FROM dbo.T;
+SELECT Id FROM dbo.T TABLESAMPLE (10 PERCENT);
+SELECT Name, Email FROM dbo.Customers WHERE CONTAINS(Name, N'"smith*"');
+SELECT Name FROM dbo.Customers WHERE FREETEXT(Notes, N'late delivery');
+SELECT COALESCE(NULLIF(LTRIM(RTRIM(a)), ''), N'N/A') FROM dbo.T;
+SELECT ISNULL(SUM(Total), 0) FROM dbo.Orders WHERE CustomerId = @cid;
+SELECT ROUND(Price * 1.0825, 2) AS WithTax, CEILING(Qty / 10.0) AS Boxes, FLOOR(Price) AS FP, POWER(2, 10) AS P, SQRT(16) AS S FROM dbo.Products;
+SELECT TOP (1) WITH TIES CustomerId, Total FROM dbo.Orders ORDER BY Total DESC;
+SELECT [Group], [Order], [Select] FROM dbo.[Table];
+SELECT u.[User Name] AS [Display Name] FROM dbo.[User Accounts] AS u;
+SELECT x = 1, y = Name FROM dbo.T;
+SELECT 'It''s' AS S1, N'Ünïcödé ✓' AS S2, N'日本語' AS S3;
+SELECT /* inline comment */ 1 AS a -- trailing comment
+;

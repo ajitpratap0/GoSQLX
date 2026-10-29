@@ -16,8 +16,10 @@ package lsp
 
 import (
 	"encoding/json"
+	stderrors "errors"
 	"fmt"
 	"regexp"
+	"runtime/debug"
 	"strconv"
 	"strings"
 	"sync"
@@ -159,6 +161,8 @@ func NewHandler(server *Server) *Handler {
 	}
 }
 
+var errMethodNotFound = stderrors.New("method not found")
+
 // HandleRequest processes an LSP request and returns a result
 func (h *Handler) HandleRequest(method string, params json.RawMessage) (interface{}, error) {
 	switch method {
@@ -185,7 +189,7 @@ func (h *Handler) HandleRequest(method string, params json.RawMessage) (interfac
 		}
 		return h.handleSemanticTokensFull(semParams)
 	default:
-		return nil, fmt.Errorf("method not found: %s", method)
+		return nil, fmt.Errorf("%w: %s", errMethodNotFound, method)
 	}
 }
 
@@ -360,6 +364,13 @@ func (h *Handler) handleDidChange(params json.RawMessage) {
 		h.debounceMu.Lock()
 		delete(h.debounceTimers, uri)
 		h.debounceMu.Unlock()
+		// Timer callbacks run outside the server loop's recover; a panic here
+		// would otherwise terminate the process.
+		defer func() {
+			if value := recover(); value != nil {
+				h.server.Logger().Printf("Panic validating %s: %v\n%s", uri, value, debug.Stack())
+			}
+		}()
 		h.validateDocument(uri, content, version)
 	})
 	h.debounceMu.Unlock()
@@ -803,8 +814,10 @@ func (h *Handler) handleFormatting(params json.RawMessage) ([]TextEdit, error) {
 	}
 	formatted, err := formatForDialect(content, opts, h.currentDialect())
 	if err != nil {
-		// If parsing fails, fall back to basic formatting
-		formatted = formatSQL(content, p.Options)
+		formatted, err = formattingFallback(content, p.Options, err)
+		if err != nil {
+			return nil, err
+		}
 	}
 	if formatted == content {
 		return []TextEdit{}, nil
@@ -823,6 +836,15 @@ func (h *Handler) handleFormatting(params json.RawMessage) ([]TextEdit, error) {
 			NewText: formatted,
 		},
 	}, nil
+}
+
+// formattingFallback tolerates incomplete SQL while preserving semantic
+// rendering errors, which must reach the client rather than yield a misleading edit.
+func formattingFallback(content string, opts FormattingOptions, err error) (string, error) {
+	if !stderrors.Is(err, gosqlx.ErrSyntax) && !stderrors.Is(err, gosqlx.ErrTokenize) {
+		return "", fmt.Errorf("formatting failed: %w", err)
+	}
+	return formatSQL(content, opts), nil
 }
 
 // formatSQL provides basic SQL formatting
@@ -1272,6 +1294,11 @@ func (h *Handler) handleDocumentSymbol(params json.RawMessage) ([]DocumentSymbol
 	// at the whole file.
 	starts := computeStatementStarts(parsed.Statements, lines)
 	for i, stmt := range parsed.Statements {
+		if _, ok := stmt.(*ast.BatchSeparator); ok {
+			// A GO line is a client directive, not an outline entry; its
+			// position still bounds the statement before it (see starts).
+			continue
+		}
 		symbol := h.extractStatementSymbol(stmt, i, lines, content, starts)
 		if symbol != nil {
 			symbols = append(symbols, *symbol)
@@ -1543,6 +1570,8 @@ func statementStartLocation(stmt ast.Statement) models.Location {
 	case *ast.DropSequenceStatement:
 		return s.Pos
 	case *ast.AlterSequenceStatement:
+		return s.Pos
+	case *ast.BatchSeparator:
 		return s.Pos
 	}
 	// Statement has no declared Pos; fall back to first child position.

@@ -24,6 +24,8 @@ import (
 )
 
 // parseMatchAgainst parses MySQL MATCH(...) AGAINST('text' [IN NATURAL LANGUAGE MODE | IN BOOLEAN MODE | WITH QUERY EXPANSION])
+// into an *ast.MatchAgainstExpression. matchFunc holds the already parsed
+// MATCH(col, ...) column list; the current token is AGAINST.
 func (p *Parser) parseMatchAgainst(matchFunc *ast.FunctionCall) (ast.Expression, error) {
 	p.advance() // Consume AGAINST
 	if !p.isType(models.TokenTypeLParen) {
@@ -31,8 +33,9 @@ func (p *Parser) parseMatchAgainst(matchFunc *ast.FunctionCall) (ast.Expression,
 	}
 	p.advance() // Consume (
 
-	// Parse search expression (just the primary - not full expression, to avoid IN being eaten)
-	searchExpr, err := p.parsePrimaryExpression()
+	// Parse the search expression below the comparison level so that the
+	// IN of IN BOOLEAN MODE is not read as an IN predicate.
+	searchExpr, err := p.parseStringConcatExpression()
 	if err != nil {
 		return nil, goerrors.InvalidSyntaxError(
 			fmt.Sprintf("failed to parse AGAINST expression: %v", err),
@@ -41,11 +44,22 @@ func (p *Parser) parseMatchAgainst(matchFunc *ast.FunctionCall) (ast.Expression,
 		).WithCause(err)
 	}
 
-	// Consume optional mode keywords until we hit )
-	mode := ""
+	// Optional search modifier words up to the closing parenthesis.
+	var words []string
 	for !p.isType(models.TokenTypeRParen) && !p.isType(models.TokenTypeEOF) {
-		mode += " " + p.currentToken.Token.Value
+		if p.currentToken.Token.Quote != 0 || !isBareWord(p.currentToken.Token.Value) {
+			return nil, p.expectedError("search modifier or )")
+		}
+		words = append(words, strings.ToUpper(p.currentToken.Token.Value))
 		p.advance()
+	}
+	modifier := strings.Join(words, " ")
+	if modifier != "" && ast.MatchModifierText(modifier) == "" {
+		return nil, goerrors.InvalidSyntaxError(
+			fmt.Sprintf("unknown MATCH ... AGAINST search modifier %q", modifier),
+			p.currentLocation(),
+			"",
+		).WithHint("Use IN NATURAL LANGUAGE MODE, IN BOOLEAN MODE or WITH QUERY EXPANSION")
 	}
 
 	if !p.isType(models.TokenTypeRParen) {
@@ -53,23 +67,11 @@ func (p *Parser) parseMatchAgainst(matchFunc *ast.FunctionCall) (ast.Expression,
 	}
 	p.advance() // Consume )
 
-	// Represent as a binary expression: MATCH(cols) AGAINST(expr)
-	// Store the search expr and mode as a function call named "AGAINST"
-	againstFunc := &ast.FunctionCall{
-		Name:      "AGAINST",
-		Arguments: []ast.Expression{searchExpr},
-	}
-	if mode != "" {
-		againstFunc.Arguments = append(againstFunc.Arguments, &ast.LiteralValue{
-			Value: strings.TrimSpace(mode),
-			Type:  "STRING",
-		})
-	}
-
-	return &ast.BinaryExpression{
-		Left:     matchFunc,
-		Operator: "AGAINST",
-		Right:    againstFunc,
+	return &ast.MatchAgainstExpression{
+		Columns:  matchFunc.Arguments,
+		Query:    searchExpr,
+		Modifier: modifier,
+		Pos:      matchFunc.Pos,
 	}, nil
 }
 
@@ -150,25 +152,28 @@ func (p *Parser) parseShowStatement() (ast.Statement, error) {
 	return show, nil
 }
 
-// parseDescribeStatement parses DESCRIBE/DESC/EXPLAIN table_name
-func (p *Parser) parseDescribeStatement() (ast.Statement, error) {
-	// For EXPLAIN SELECT ..., defer to parseStatement for the SELECT
-	// For DESCRIBE table_name, just parse the table name
-	if p.isType(models.TokenTypeSelect) {
-		// EXPLAIN SELECT ... - treat as describe with the query text
-		// For now, just skip to parse the select
-		p.advance()
-		stmt, err := p.parseSelectWithSetOperations()
+// parseDescribeStatement parses DESCRIBE/DESC/EXPLAIN. When a statement
+// follows (optionally after options such as ANALYZE, "(FORMAT JSON)",
+// "QUERY PLAN" or "PLAN FOR") it returns an ExplainStatement wrapping it;
+// otherwise it parses DESCRIBE [object kind] table_name.
+func (p *Parser) parseDescribeStatement(keyword string) (ast.Statement, error) {
+	if n := p.explainOptionTokens(); n >= 0 {
+		explain := &ast.ExplainStatement{Keyword: keyword}
+		parts := make([]string, 0, n)
+		for i := 0; i < n; i++ {
+			parts = append(parts, explainTokenText(p.currentToken.Token))
+			p.advance()
+		}
+		explain.Options = joinExplainOptions(parts)
+		stmt, err := p.parseStatement()
 		if err != nil {
 			return nil, err
 		}
-		// Wrap in a describe
-		_ = stmt
-		desc := ast.GetDescribeStatement()
-		desc.TableName = "SELECT"
-		return desc, nil
+		explain.Statement = stmt
+		return explain, nil
 	}
 
+	kind := ""
 	// Snowflake: DESCRIBE TABLE <name>, DESCRIBE VIEW <name>, DESCRIBE STAGE
 	// <name>, etc. Also MySQL's DESCRIBE <db>.<table>. Accept and consume a
 	// leading object-kind keyword (TABLE, VIEW, DATABASE, SCHEMA) before the
@@ -183,7 +188,12 @@ func (p *Parser) parseDescribeStatement() (ast.Statement, error) {
 		strings.EqualFold(p.currentToken.Token.Value, "FUNCTION") ||
 		strings.EqualFold(p.currentToken.Token.Value, "PROCEDURE") ||
 		strings.EqualFold(p.currentToken.Token.Value, "WAREHOUSE") {
-		p.advance()
+		// A name follows the kind; DESCRIBE table (a table named "table")
+		// has nothing after it.
+		if next := p.peekToken().Token.Type; next != models.TokenTypeEOF && next != models.TokenTypeSemicolon {
+			kind = strings.ToUpper(p.currentToken.Token.Value)
+			p.advance()
+		}
 	}
 
 	name, err := p.parseQualifiedName()
@@ -192,91 +202,57 @@ func (p *Parser) parseDescribeStatement() (ast.Statement, error) {
 	}
 	desc := ast.GetDescribeStatement()
 	desc.TableName = name
+	desc.Keyword = keyword
+	desc.ObjectKind = kind
 	return desc, nil
 }
 
-// parseReplaceStatement parses MySQL REPLACE INTO statement
-func (p *Parser) parseReplaceStatement() (ast.Statement, error) {
-	// Expect INTO
-	if !p.isType(models.TokenTypeInto) {
-		return nil, p.expectedError("INTO")
-	}
-	p.advance()
+// maxExplainOptionTokens bounds the lookahead for an explained statement.
+const maxExplainOptionTokens = 64
 
-	// Parse table name
-	tableName, err := p.parseQualifiedName()
-	if err != nil {
-		return nil, p.qualifiedNameError(err, "table name")
-	}
-
-	// Parse column list if present
-	columns := make([]ast.Expression, 0)
-	if p.isType(models.TokenTypeLParen) {
-		p.advance()
-		for {
-			if !p.isIdentifier() {
-				return nil, p.expectedError("column name")
+// explainOptionTokens reports how many option tokens sit between EXPLAIN /
+// DESCRIBE and the statement being explained, or -1 if no statement follows
+// (DESCRIBE table_name). Parenthesised option lists are skipped as a unit.
+func (p *Parser) explainOptionTokens() int {
+	depth := 0
+	for i := 0; i < maxExplainOptionTokens && p.currentPos+i < len(p.tokens); i++ {
+		switch p.tokens[p.currentPos+i].Token.Type {
+		case models.TokenTypeLParen:
+			depth++
+		case models.TokenTypeRParen:
+			depth--
+		case models.TokenTypeSemicolon, models.TokenTypeEOF:
+			return -1
+		case models.TokenTypeSelect, models.TokenTypeWith, models.TokenTypeInsert,
+			models.TokenTypeUpdate, models.TokenTypeDelete, models.TokenTypeMerge,
+			models.TokenTypeReplace:
+			if depth == 0 {
+				return i
 			}
-			columns = append(columns, &ast.Identifier{Name: p.currentToken.Token.Value})
-			p.advance()
-			if !p.isType(models.TokenTypeComma) {
-				break
-			}
-			p.advance()
 		}
-		if !p.isType(models.TokenTypeRParen) {
-			return nil, p.expectedError(")")
-		}
-		p.advance()
 	}
+	return -1
+}
 
-	// Parse VALUES
-	if !p.isType(models.TokenTypeValues) {
-		return nil, p.expectedError("VALUES")
+// explainTokenText renders an EXPLAIN option token back to SQL text; option
+// words are keywords, so they are upper-cased.
+func explainTokenText(tok models.Token) string {
+	switch tok.Type {
+	case models.TokenTypeSingleQuotedString, models.TokenTypeString:
+		return "'" + strings.ReplaceAll(tok.Value, "'", "''") + "'"
 	}
-	p.advance()
+	return strings.ToUpper(tok.Value)
+}
 
-	values := make([][]ast.Expression, 0)
-	for {
-		if !p.isType(models.TokenTypeLParen) {
-			if len(values) == 0 {
-				return nil, p.expectedError("(")
-			}
-			break
+// joinExplainOptions joins option tokens with single spaces, except inside
+// parentheses and before commas: "(FORMAT JSON, ANALYZE)".
+func joinExplainOptions(parts []string) string {
+	var sb strings.Builder
+	for i, part := range parts {
+		if i > 0 && part != ")" && part != "," && parts[i-1] != "(" {
+			sb.WriteByte(' ')
 		}
-		p.advance()
-
-		row := make([]ast.Expression, 0)
-		for {
-			expr, err := p.parseExpression()
-			if err != nil {
-				return nil, goerrors.InvalidSyntaxError(
-					fmt.Sprintf("failed to parse value in REPLACE: %v", err),
-					p.currentLocation(),
-					"",
-				).WithCause(err)
-			}
-			row = append(row, expr)
-			if !p.isType(models.TokenTypeComma) {
-				break
-			}
-			p.advance()
-		}
-		if !p.isType(models.TokenTypeRParen) {
-			return nil, p.expectedError(")")
-		}
-		p.advance()
-		values = append(values, row)
-
-		if !p.isType(models.TokenTypeComma) {
-			break
-		}
-		p.advance()
+		sb.WriteString(part)
 	}
-
-	replStmt := ast.GetReplaceStatement()
-	replStmt.TableName = tableName
-	replStmt.Columns = append(replStmt.Columns, columns...)
-	replStmt.Values = append(replStmt.Values, values...)
-	return replStmt, nil
+	return sb.String()
 }

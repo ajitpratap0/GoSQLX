@@ -14,63 +14,60 @@
 
 package security
 
-import (
-	"regexp"
-	"strings"
-)
+import "strings"
 
-// dollarQuotePattern matches PostgreSQL dollar-quoted strings: $$...$$ or $tag$...$tag$
-// Tags must be valid identifiers (letters, digits, underscore; cannot start with digit).
-var dollarQuotePattern = regexp.MustCompile(`\$([A-Za-z_][A-Za-z0-9_]*)?\$`)
-
-// stripDollarQuotedStrings replaces the content of dollar-quoted strings with empty
-// strings (preserving the delimiters) so that injection patterns inside string literals
-// don't cause false positives, and injection patterns that use dollar-quoting to evade
-// detection are neutralized.
+// stripDollarQuotedStrings removes bodies of PostgreSQL ($$ and $tag$) and
+// Snowflake ($$) quotes outside strings, identifiers and comments. Ambiguous
+// escapes, block nesting and bracket identifiers must permit an opener in every
+// interpretation before text
+// is hidden. ScanSQL has no dialect: MySQL can use $x$ as an identifier, so a
+// MySQL-only payload of that shape is still stripped.
 func stripDollarQuotedStrings(sql string) string {
-	// Every dollar-quote starts with '$'; skip the regex on the common path.
 	if strings.IndexByte(sql, '$') < 0 {
 		return sql
 	}
-
-	// Find all potential opening dollar-quote tags
-	matches := dollarQuotePattern.FindAllStringIndex(sql, -1)
-	if len(matches) == 0 {
+	// Cross product of escapes, nesting, bracket identifiers, hash comments and
+	// PostgreSQL E-string-only escapes.
+	var states [32]sqlLexState
+	resetDollarStates(&states)
+	var out strings.Builder
+	start := 0
+	for i := 0; i < len(sql); i++ {
+		code := true
+		for j := range states {
+			code = code && states[j].code()
+		}
+		if code && sql[i] == '$' && (i == 0 || !identifierByte(sql[i-1])) {
+			if end := dollarTagEnd(sql, i); end != 0 {
+				tag := sql[i:end]
+				closeAt := strings.Index(sql[end:], tag)
+				if closeAt < 0 {
+					break
+				}
+				if start == 0 {
+					out.Grow(len(sql))
+				}
+				out.WriteString(sql[start:end])
+				out.WriteString(tag)
+				i = end + closeAt + len(tag) - 1
+				start = i + 1
+				resetDollarStates(&states)
+				continue
+			}
+		}
+		for j := range states {
+			states[j].step(sql, i, j&1 != 0, j&2 != 0, j&8 != 0, j&4 != 0)
+		}
+	}
+	if start == 0 {
 		return sql
 	}
+	out.WriteString(sql[start:])
+	return out.String()
+}
 
-	var result strings.Builder
-	result.Grow(len(sql))
-	pos := 0
-
-	for pos < len(sql) {
-		// Find next dollar-quote opening from current position
-		loc := dollarQuotePattern.FindStringIndex(sql[pos:])
-		if loc == nil {
-			result.WriteString(sql[pos:])
-			break
-		}
-
-		// Write everything before this match
-		openStart := pos + loc[0]
-		openEnd := pos + loc[1]
-		result.WriteString(sql[pos:openStart])
-
-		openTag := sql[openStart:openEnd]
-
-		// Find the matching closing tag
-		closeIdx := strings.Index(sql[openEnd:], openTag)
-		if closeIdx == -1 {
-			// No closing tag - write the rest as-is (unterminated)
-			result.WriteString(sql[openStart:])
-			break
-		}
-
-		// Write opening tag, skip content, write closing tag
-		result.WriteString(openTag)
-		result.WriteString(openTag)
-		pos = openEnd + closeIdx + len(openTag)
+func resetDollarStates(states *[32]sqlLexState) {
+	for j := range states {
+		states[j] = sqlLexState{eOnly: j&16 != 0}
 	}
-
-	return result.String()
 }

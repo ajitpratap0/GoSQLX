@@ -25,6 +25,7 @@ import (
 	"sync/atomic"
 
 	"github.com/ajitpratap0/GoSQLX/pkg/metrics"
+	"github.com/ajitpratap0/GoSQLX/pkg/models"
 )
 
 // poolLeakCount counts expressions that exceeded PutExpression's iterative
@@ -183,11 +184,14 @@ var (
 	// AST node pools
 	astPool = sync.Pool{
 		New: func() interface{} {
-			return &AST{
-				// Covers the parser's 1-2 statement estimate so a fresh AST
-				// needs no second allocation; ReleaseAST keeps any grown capacity.
-				Statements: make([]Statement, 0, 2),
-			}
+			// One allocation holds the AST and backing arrays covering the
+			// parser's 1-2 statement estimate, so a fresh AST needs no further
+			// allocation; ReleaseAST keeps any grown capacity.
+			b := &astBlock{}
+			b.ast.Statements = b.stmts[:0]
+			b.ast.StatementStarts = b.starts[:0]
+			b.ast.StatementEnds = b.ends[:0]
+			return &b.ast
 		},
 	}
 
@@ -431,6 +435,15 @@ var (
 // the pool never pins a large backing array nor makes later Puts pay for it.
 const maxPooledWorkQueueCap = 1024
 
+// astBlock lays out a pooled AST together with the initial backing arrays of
+// its Statements and StatementStarts slices.
+type astBlock struct {
+	ast    AST
+	stmts  [2]Statement
+	starts [2]models.Location
+	ends   [2]models.Location
+}
+
 // maxPooledComments is the largest AST.Comments capacity ReleaseAST keeps
 // (64 KiB of models.Comment); larger slices are dropped.
 const maxPooledComments = 1024
@@ -549,6 +562,11 @@ func ReleaseAST(ast *AST) {
 
 	// Reset slice but keep capacity
 	ast.Statements = ast.Statements[:0]
+	ast.StatementStarts = ast.StatementStarts[:0]
+	ast.StatementEnds = ast.StatementEnds[:0]
+	ast.ExecuteSlash = nil
+	ast.ExecuteSlashPositions = nil
+	ast.UnicodeIdentifiers = nil
 
 	// Reset comments but keep capacity; clear drops the Text strings so the
 	// pooled AST does not retain them (clear on nil is a no-op). A slice
@@ -588,7 +606,7 @@ func ReleaseStatements(stmts []Statement) {
 // releaseStatement returns a single Statement to its pool.
 // This is the central dispatch used by both ReleaseAST and ReleaseStatements
 // (mode releaseDrawn) and by PutCreateView/MaterializedViewStatement
-// (mode releaseAll). Only Select/Insert/Update/Delete honour mode; every other
+// (mode releaseAll). Only Select/Insert/Update/Delete/Merge/Replace/CreateTable honour mode; every other
 // pooled statement is always Put.
 func releaseStatement(stmt Statement, mode releaseMode) {
 	if stmt == nil {
@@ -604,13 +622,13 @@ func releaseStatement(stmt Statement, mode releaseMode) {
 	case *DeleteStatement:
 		releaseDeleteStatement(s, mode)
 	case *CreateTableStatement:
-		PutCreateTableStatement(s)
+		releaseCreateTableStatement(s, mode)
 	case *AlterTableStatement:
 		PutAlterTableStatement(s)
 	case *CreateIndexStatement:
 		PutCreateIndexStatement(s)
 	case *MergeStatement:
-		PutMergeStatement(s)
+		releaseMergeStatement(s, mode)
 	case *CreateViewStatement:
 		PutCreateViewStatement(s)
 	case *CreateMaterializedViewStatement:
@@ -628,9 +646,15 @@ func releaseStatement(stmt Statement, mode releaseMode) {
 	case *UnsupportedStatement:
 		PutUnsupportedStatement(s)
 	case *ReplaceStatement:
-		PutReplaceStatement(s)
+		releaseReplaceStatement(s, mode)
 	case *AlterStatement:
-		PutAlterStatement(s)
+		releaseAlterStatement(s, mode)
+	case *SetOperation:
+		// Not pooled itself; its operands are. Operand links are cleared,
+		// so a second visit releases nothing.
+		releaseSetOperationOperands(s, mode)
+	case *Values:
+		releaseValues(s, mode)
 	// Sequence statements are pooled via NewXxx/ReleaseXxx helpers.
 	// Without a dispatch here, a CTE or subquery that contained one
 	// would silently leak it (the stmt type audit found these three
@@ -665,12 +689,11 @@ func PutCreateIndexStatement(stmt *CreateIndexStatement) {
 	PutExpression(stmt.Where)
 
 	for i := range stmt.Columns {
-		stmt.Columns[i].Column = ""
-		stmt.Columns[i].Collate = ""
-		stmt.Columns[i].Direction = ""
-		stmt.Columns[i].NullsLast = false
+		PutExpression(stmt.Columns[i].Expr)
+		stmt.Columns[i] = IndexColumn{}
 	}
 	stmt.Columns = stmt.Columns[:0]
+	resetCreateIndexExtras(&stmt.CreateIndexExtras, releaseAll)
 
 	stmt.Where = nil
 	stmt.Unique = false
@@ -678,6 +701,8 @@ func PutCreateIndexStatement(stmt *CreateIndexStatement) {
 	stmt.Name = ""
 	stmt.Table = ""
 	stmt.Using = ""
+	stmt.NameQuote = 0
+	stmt.TableQuote = 0
 
 	createIndexStmtPool.Put(stmt)
 }
@@ -706,6 +731,9 @@ func PutCreateViewStatement(stmt *CreateViewStatement) {
 	stmt.Columns = stmt.Columns[:0]
 	stmt.Query = nil
 	stmt.WithOption = ""
+	resetViewExtras(&stmt.ViewExtras, releaseAll)
+	stmt.NameQuote = 0
+	stmt.ColumnQuotes = nil
 
 	createViewStmtPool.Put(stmt)
 }
@@ -733,6 +761,10 @@ func PutCreateMaterializedViewStatement(stmt *CreateMaterializedViewStatement) {
 	stmt.Query = nil
 	stmt.WithData = nil
 	stmt.Tablespace = ""
+	stmt.OrReplace = false
+	resetViewExtras(&stmt.ViewExtras, releaseAll)
+	stmt.NameQuote = 0
+	stmt.ColumnQuotes = nil
 
 	createMaterializedViewStmtPool.Put(stmt)
 }
@@ -772,6 +804,8 @@ func PutDropStatement(stmt *DropStatement) {
 	stmt.IfExists = false
 	stmt.Names = stmt.Names[:0]
 	stmt.CascadeType = ""
+	stmt.DropExtras = DropExtras{}
+	stmt.NameQuotes = nil
 
 	dropStmtPool.Put(stmt)
 }
@@ -793,6 +827,8 @@ func PutTruncateStatement(stmt *TruncateStatement) {
 	stmt.RestartIdentity = false
 	stmt.ContinueIdentity = false
 	stmt.CascadeType = ""
+	stmt.Storage = ""
+	stmt.TableQuotes = nil
 
 	truncateStmtPool.Put(stmt)
 }
@@ -827,6 +863,8 @@ func PutDescribeStatement(stmt *DescribeStatement) {
 	}
 
 	stmt.TableName = ""
+	stmt.Keyword = ""
+	stmt.ObjectKind = ""
 
 	describeStmtPool.Put(stmt)
 }
@@ -854,16 +892,37 @@ func GetAlterStatement() *AlterStatement {
 }
 
 // PutAlterStatement returns an AlterStatement to the pool.
-// It zeroes all fields; the Operation interface value is cleared but
-// its internal allocations are not recursively pooled (they use custom types).
+// It zeroes all fields and releases structured partition expressions.
 func PutAlterStatement(stmt *AlterStatement) {
+	releaseAlterStatement(stmt, releaseAll)
+}
+
+func releaseAlterStatement(stmt *AlterStatement, mode releaseMode) {
 	if stmt == nil {
 		return
+	}
+	if len(stmt.Operations) > 0 {
+		for _, operation := range stmt.Operations {
+			if op, ok := operation.(*AlterTableOperation); ok && op != nil {
+				releaseAlterPartitionFields(op, mode)
+			}
+		}
+	} else if op, ok := stmt.Operation.(*AlterTableOperation); ok && op != nil {
+		releaseAlterPartitionFields(op, mode)
 	}
 
 	stmt.Type = 0
 	stmt.Name = ""
 	stmt.Operation = nil
+	stmt.IfExists = false
+	stmt.Only = false
+	stmt.Modifiers = nil
+	stmt.OnCluster = ""
+	for i := range stmt.Operations {
+		stmt.Operations[i] = nil
+	}
+	stmt.Operations = stmt.Operations[:0]
+	stmt.NameQuote = 0
 
 	alterStmtPool.Put(stmt)
 }

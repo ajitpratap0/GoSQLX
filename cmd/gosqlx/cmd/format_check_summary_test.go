@@ -28,11 +28,11 @@ func TestFormat_CheckSummaryOmitsFailedFiles(t *testing.T) {
 	dir := t.TempDir()
 	good := filepath.Join(dir, "good.sql")
 	bad := filepath.Join(dir, "bad.sql")
-	// EXPLAIN is refused by the formatter, so bad.sql always fails.
+	// DESCRIBE is refused by the formatter, so bad.sql always fails.
 	if err := os.WriteFile(good, []byte("SELECT a FROM t"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(bad, []byte("EXPLAIN VERBOSE DELETE FROM users"), 0600); err != nil {
+	if err := os.WriteFile(bad, []byte("DESCRIBE users"), 0600); err != nil {
 		t.Fatal(err)
 	}
 

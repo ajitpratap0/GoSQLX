@@ -58,12 +58,13 @@ type quotedCase struct {
 }
 
 var (
-	backslashDialects   = []keywords.SQLDialect{"", keywords.DialectPostgreSQL, keywords.DialectMySQL, keywords.DialectMariaDB}
-	noBackslashDialects = []keywords.SQLDialect{keywords.DialectSQLServer, keywords.DialectOracle, keywords.DialectSQLite, keywords.DialectSnowflake, keywords.DialectClickHouse}
+	backslashDialects   = []keywords.SQLDialect{"", keywords.DialectMySQL, keywords.DialectMariaDB, keywords.DialectSnowflake, keywords.DialectClickHouse}
+	noBackslashDialects = []keywords.SQLDialect{keywords.DialectPostgreSQL, keywords.DialectSQLServer, keywords.DialectOracle, keywords.DialectSQLite}
 )
 
 func quotedCases() []quotedCase {
 	pg := keywords.DialectPostgreSQL
+	bq := keywords.DialectBigQuery
 	str := models.TokenTypeSingleQuotedString
 	ident := models.TokenTypeDoubleQuotedString
 	bt := models.TokenTypeIdentifier
@@ -77,8 +78,12 @@ func quotedCases() []quotedCase {
 		{name: "empty", dialect: pg, sql: `''`, typ: str, value: "", quote: '\'', quoteStyle: noWord, end: loc(1, 3)},
 		{name: "doubled quote", dialect: pg, sql: `'it''s'`, typ: str, value: "it's", quote: '\'', quoteStyle: noWord, end: loc(1, 8), alias: aliasNo},
 		{name: "trailing doubled quote", dialect: pg, sql: `'a'''`, typ: str, value: "a'", quote: '\'', quoteStyle: noWord, alias: aliasNo},
-		{name: "escaped backslash", dialect: pg, sql: `'a\\'`, typ: str, value: `a\`, quote: '\'', quoteStyle: noWord, alias: aliasNo},
-		{name: "invalid escape", dialect: pg, sql: `'a\q'`, errCode: gerrors.ErrCodeInvalidSyntax, errLoc: loc(1, 4)},
+		{name: "escaped backslash", dialect: keywords.DialectMySQL, sql: `'a\\'`, typ: str, value: `a\`, quote: '\'', quoteStyle: noWord, alias: aliasNo},
+		{name: "unknown escape mysql drops the backslash", dialect: keywords.DialectMySQL, sql: `'a\q'`, typ: str, value: `aq`, quote: '\'', quoteStyle: noWord, alias: aliasNo},
+		{name: "unknown escape keeps the backslash", dialect: keywords.DialectClickHouse, sql: `'a\q'`, typ: str, value: `a\q`, quote: '\'', quoteStyle: noWord, alias: aliasNo},
+		{name: "like escapes keep the backslash", dialect: keywords.DialectMySQL, sql: `'50\%\_'`, typ: str, value: `50\%\_`, quote: '\'', quoteStyle: noWord, alias: aliasNo},
+		{name: "backslash quote does not close", dialect: keywords.DialectClickHouse, sql: `'a\'b'`, typ: str, value: `a'b`, quote: '\'', quoteStyle: noWord, alias: aliasNo},
+		{name: "standard string ends at backslash quote", dialect: pg, sql: `'a\' x`, typ: str, value: `a\`, quote: '\'', quoteStyle: noWord, end: loc(1, 5), alias: aliasYes},
 		{name: "multi-line", dialect: pg, sql: "'a\nb' x", typ: str, value: "a\nb", quote: '\'', quoteStyle: noWord, end: loc(2, 3), alias: aliasYes},
 		{name: "unterminated at EOF", dialect: pg, sql: "'abc", errCode: gerrors.ErrCodeUnterminatedString, errLoc: loc(1, 1)},
 		{name: "unterminated after newline", dialect: pg, sql: "x 'abc\n", errCode: gerrors.ErrCodeUnterminatedString, errLoc: loc(1, 3)},
@@ -135,11 +140,11 @@ func quotedCases() []quotedCase {
 		{name: "backtick unterminated", dialect: keywords.DialectMySQL, sql: "`abc", errCode: gerrors.ErrCodeUnterminatedString, errLoc: loc(1, 1)},
 
 		// Triple-quoted strings.
-		{name: "triple clean", dialect: pg, sql: "'''abc'''", typ: triple, value: "abc", quote: '\'', quoteStyle: noWord, alias: aliasYes},
-		{name: "triple with quote inside", dialect: pg, sql: "'''a'b'''", typ: triple, value: "a'b", quote: '\'', quoteStyle: noWord, alias: aliasYes},
-		{name: "triple multi-line", dialect: pg, sql: "'''a\nb''' x", typ: triple, value: "a\nb", quote: '\'', quoteStyle: noWord, end: loc(2, 5), alias: aliasYes},
-		{name: "triple unterminated", dialect: pg, sql: "'''abc", errCode: gerrors.ErrCodeUnterminatedString, errLoc: loc(1, 1)},
-		{name: "triple invalid UTF-8", dialect: pg, sql: "'''a\xffb'''", typ: triple, value: "a�b", quote: '\'', quoteStyle: noWord, alias: aliasNo},
+		{name: "triple clean", dialect: bq, sql: "'''abc'''", typ: triple, value: "abc", quote: '\'', quoteStyle: noWord, alias: aliasYes},
+		{name: "triple with quote inside", dialect: bq, sql: "'''a'b'''", typ: triple, value: "a'b", quote: '\'', quoteStyle: noWord, alias: aliasYes},
+		{name: "triple multi-line", dialect: bq, sql: "'''a\nb''' x", typ: triple, value: "a\nb", quote: '\'', quoteStyle: noWord, end: loc(2, 5), alias: aliasYes},
+		{name: "triple unterminated", dialect: bq, sql: "'''abc", errCode: gerrors.ErrCodeUnterminatedString, errLoc: loc(1, 1)},
+		{name: "triple invalid UTF-8", dialect: bq, sql: "'''a\xffb'''", typ: triple, value: "a�b", quote: '\'', quoteStyle: noWord, alias: aliasNo},
 
 		// SQL Server national strings.
 		{name: "national clean", dialect: keywords.DialectSQLServer, sql: "N'abc'", typ: nat, value: "abc", quote: 'N', quoteStyle: noWord, end: loc(1, 7), alias: aliasYes},
@@ -448,7 +453,7 @@ func readQuotedSlowRef(tkz *Tokenizer, kind string) (models.Token, error) {
 	default: // "string"
 		quote, _ := utf8.DecodeRune(tkz.input[tkz.pos.Index:])
 		startPos := tkz.pos
-		if tkz.pos.Index+2 < len(tkz.input) {
+		if tkz.dialect == keywords.DialectBigQuery && tkz.pos.Index+2 < len(tkz.input) {
 			next1, _ := utf8.DecodeRune(tkz.input[tkz.pos.Index+1:])
 			next2, _ := utf8.DecodeRune(tkz.input[tkz.pos.Index+2:])
 			if next1 == quote && next2 == quote {

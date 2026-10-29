@@ -94,6 +94,11 @@ func (p *Parser) Parse(input string) (*ParserResult, error) {
 		return result, nil
 	}
 
+	if !hasStatementTokens(tokens) {
+		result.Error = errNoStatements
+		return result, result.Error
+	}
+
 	// Parse to AST with proper error handling for memory management
 	pr := parserForDialect(p.Opts.Dialect)
 	defer pr.Release()
@@ -198,8 +203,12 @@ func (p *Parser) displayAST(result *ParserResult) error {
 	}
 
 	var statements []StatementDisplay
+	stmtCount := 0 // GO separators are listed but not counted, as in analyze
 	for _, stmt := range result.AST.Statements {
 		statements = append(statements, convertStatement(stmt))
+		if _, isBatch := stmt.(*ast.BatchSeparator); !isBatch {
+			stmtCount++
+		}
 	}
 
 	display := ASTDisplay{
@@ -225,7 +234,7 @@ func (p *Parser) displayAST(result *ParserResult) error {
 	default:
 		fmt.Fprintf(p.Out, "AST Structure:\n")
 		fmt.Fprintf(p.Out, "  Type: %s\n", display.Type)
-		fmt.Fprintf(p.Out, "  Statements: %d\n", len(display.Statements))
+		fmt.Fprintf(p.Out, "  Statements: %d\n", stmtCount)
 		fmt.Fprintf(p.Out, "  Token Count: %d\n", display.TokenCount)
 		fmt.Fprintf(p.Out, "  SQL Compliance: %s\n", display.Metadata["sql_compliance"])
 		fmt.Fprintf(p.Out, "\nStatements:\n")
@@ -292,7 +301,7 @@ func (p *Parser) displayTree(astObj *ast.AST) error {
 			if len(s.OrderBy) > 0 {
 				fmt.Fprintf(p.Out, "%s├── OrderBy\n", childPrefix)
 			}
-			if s.Limit != nil {
+			if s.HasLimit() {
 				fmt.Fprintf(p.Out, "%s└── Limit\n", childPrefix)
 			}
 		}
@@ -331,7 +340,7 @@ func convertStatement(stmt ast.Statement) StatementDisplay {
 		if len(s.OrderBy) > 0 {
 			details["has_order_by"] = true
 		}
-		if s.Limit != nil {
+		if s.HasLimit() {
 			details["has_limit"] = true
 		}
 		if s.With != nil {

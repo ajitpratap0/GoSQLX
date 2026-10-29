@@ -143,11 +143,14 @@ type FunctionCall struct {
 	Parameters    []Expression // ClickHouse parametric aggregates: quantile(0.5)(x) — params before args
 	Over          *WindowSpec  // For window functions
 	Distinct      bool
+	NameQuote     NameQuote           // Delimited parts of Name to keep, as in s."select"(1) (see NameQuote); shares Distinct's padding
 	Filter        Expression          // WHERE clause for aggregate functions
 	OrderBy       []OrderByExpression // ORDER BY clause for aggregate functions (STRING_AGG, ARRAY_AGG, etc.)
 	WithinGroup   []OrderByExpression // ORDER BY clause for ordered-set aggregates (PERCENTILE_CONT, etc.)
 	NullTreatment string              // "IGNORE NULLS" or "RESPECT NULLS" on window functions (Snowflake, Oracle, BigQuery, SQL:2016)
 	Pos           models.Location     // Source position of the function name (1-based line and column)
+	// Extras holds the optional SEPARATOR and KEEP clauses.
+	Extras *FunctionExtras
 }
 
 func (f *FunctionCall) expressionNode()     {}
@@ -179,7 +182,7 @@ func (f FunctionCall) Children() []Node {
 	for i := range f.WithinGroup {
 		children = append(children, &f.WithinGroup[i])
 	}
-	return children
+	return f.appendClauseChildren(children)
 }
 
 // CaseExpression represents a CASE expression
@@ -253,7 +256,15 @@ type InExpression struct {
 	List     []Expression // For value list: IN (1, 2, 3)
 	Subquery Statement    // For subquery: IN (SELECT ...)
 	Not      bool
-	Pos      models.Location // Source position of the IN keyword (1-based line and column)
+	// Global records the ClickHouse GLOBAL modifier (a GLOBAL IN (...)),
+	// which makes a distributed query evaluate the right side once on the
+	// initiator rather than on every shard.
+	Global bool
+	// Bare records a right side written without parentheses (SQLite
+	// "a IN tbl", "a IN fn(1)"). List then holds the single table or
+	// table-function reference.
+	Bare bool
+	Pos  models.Location // Source position of the IN keyword (1-based line and column)
 }
 
 func (i *InExpression) expressionNode()     {}
@@ -274,6 +285,9 @@ func (i InExpression) Children() []Node {
 type SubqueryExpression struct {
 	Subquery Statement
 	Pos      models.Location // Source position of the opening parenthesis (1-based line and column)
+	// Bare marks a query that is the whole argument of CURSOR(...) or
+	// MULTISET(...) (Oracle) and is written without parentheses of its own.
+	Bare bool
 }
 
 func (s *SubqueryExpression) expressionNode()     {}
@@ -312,6 +326,11 @@ type FieldAccessExpression struct {
 	Field  string
 	Quoted bool
 	Pos    models.Location // Source position of the dot
+	// IsCall marks a method call on the value, (expr).name(args), as SQL
+	// Server writes on xml values: (SELECT ... FOR XML PATH(''), TYPE).value(
+	// '.', 'NVARCHAR(MAX)'). Field is the method name and Args its arguments.
+	IsCall bool
+	Args   []Expression
 }
 
 func (f *FieldAccessExpression) expressionNode() {}
@@ -324,7 +343,14 @@ func (f FieldAccessExpression) Children() []Node {
 	if f.Expr == nil {
 		return nil
 	}
-	return []Node{f.Expr}
+	nodes := make([]Node, 0, 1+len(f.Args))
+	nodes = append(nodes, f.Expr)
+	for _, a := range f.Args {
+		if a != nil {
+			nodes = append(nodes, a)
+		}
+	}
+	return nodes
 }
 
 // AnyExpression represents expr op ANY (subquery)
@@ -512,9 +538,19 @@ type BinaryExpression struct {
 	// formatting does not change the meaning for servers running with
 	// PIPES_AS_CONCAT. Code that emits SQL for a dialect where || is
 	// concatenation must clear it first (the transpiler does).
-	PipesOr  bool
-	CustomOp *CustomBinaryOperator // For PostgreSQL custom operators
-	Pos      models.Location       // Source position of the operator (1-based line and column)
+	PipesOr bool
+	// BitwiseXor records that an Operator "^" is bitwise XOR (MySQL,
+	// MariaDB, SQL Server) rather than exponentiation (PostgreSQL), so code
+	// that emits SQL for another dialect can keep its meaning; the
+	// transpiler rewrites it for the target.
+	BitwiseXor bool
+	// XorAtAdditive records SQL Server's additive precedence for bitwise ^.
+	// MySQL and MariaDB instead bind bitwise ^ tighter than multiplication.
+	XorAtAdditive bool
+	CustomOp      *CustomBinaryOperator // For PostgreSQL custom operators
+	// Extras holds the optional pattern ESCAPE clause.
+	Extras *BinaryExtras
+	Pos    models.Location // Source position of the operator (1-based line and column)
 }
 
 func (b *BinaryExpression) expressionNode() {}
@@ -533,6 +569,9 @@ func (b BinaryExpression) Children() []Node {
 	}
 	if b.Right != nil {
 		nodes = append(nodes, b.Right)
+	}
+	if b.DialectExtras().Escape != nil {
+		nodes = append(nodes, b.DialectExtras().Escape)
 	}
 	return nodes
 }
@@ -567,6 +606,13 @@ func (t TupleExpression) Children() []Node     { return nodifyExpressions(t.Expr
 type ArrayConstructorExpression struct {
 	Elements []Expression     // Elements inside ARRAY[...]
 	Subquery *SelectStatement // For ARRAY(SELECT ...) syntax (optional)
+	// Bracket reports a bare bracket literal [1, 2] (ClickHouse, Snowflake,
+	// and nested PostgreSQL ARRAY[[1, 2], [3, 4]] rows); SQL() then omits the
+	// ARRAY keyword.
+	Bracket bool
+	// Query is the body of ARRAY(<query>) when it is not a plain SELECT,
+	// e.g. ARRAY(SELECT 1 UNION SELECT 2); Subquery is nil then.
+	Query Statement
 }
 
 func (a *ArrayConstructorExpression) expressionNode()     {}
@@ -574,6 +620,9 @@ func (a ArrayConstructorExpression) TokenLiteral() string { return "ARRAY" }
 func (a ArrayConstructorExpression) Children() []Node {
 	if a.Subquery != nil {
 		return []Node{a.Subquery}
+	}
+	if a.Query != nil {
+		return append(nodifyExpressions(a.Elements), a.Query)
 	}
 	return nodifyExpressions(a.Elements)
 }
@@ -660,6 +709,9 @@ type CastExpression struct {
 	Expr Expression
 	Type string
 	Try  bool
+	// TypeAsString reports the ClickHouse form CAST(expr, 'Type'), where the
+	// target type is a string argument; Type holds its unquoted value.
+	TypeAsString bool
 }
 
 func (c *CastExpression) expressionNode() {}
@@ -680,6 +732,9 @@ func (c CastExpression) Children() []Node {
 type AliasedExpression struct {
 	Expr  Expression
 	Alias string
+	// AliasQuote records the delimiters the source wrote around Alias when
+	// they must be kept (see NameQuote).
+	AliasQuote NameQuote
 }
 
 func (a *AliasedExpression) expressionNode()     {}
@@ -752,15 +807,27 @@ type IntervalExpression struct {
 	// "YEAR_MONTH". Empty for INTERVAL '1 day' and for the MySQL numeric form
 	// INTERVAL 30 DAY, whose unit stays in Value.
 	Qualifier string
+	// ValueExpr is the unquoted value of INTERVAL <expr> <unit> (MySQL,
+	// MariaDB, ClickHouse, Oracle): INTERVAL 30 DAY, INTERVAL n DAY,
+	// INTERVAL -1 HOUR. When it is set, Unit holds the upper-cased unit, Value
+	// keeps the legacy "<expr> <UNIT>" text, and SQL() writes the value
+	// unquoted so the output parses in those dialects.
+	ValueExpr Expression
+	// Unit is the unit after an unquoted ValueExpr (DAY, YEAR_MONTH).
+	Unit string
 }
 
 func (i *IntervalExpression) expressionNode()     {}
 func (i IntervalExpression) TokenLiteral() string { return "INTERVAL" }
 
-// Children implements Node. IntervalExpression stores its value as a raw
-// string (not an Expression), so it has no child nodes. Returns nil for
-// consistency with other leaf nodes.
-func (i IntervalExpression) Children() []Node { return nil }
+// Children implements Node and returns the unquoted value expression, if
+// any; a quoted INTERVAL '1 day' has no child nodes.
+func (i IntervalExpression) Children() []Node {
+	if i.ValueExpr == nil {
+		return nil
+	}
+	return []Node{i.ValueExpr}
+}
 
 // ArraySubscriptExpression represents array element access syntax.
 // Supports single and multi-dimensional array subscripting.

@@ -15,6 +15,8 @@
 package cmd
 
 import (
+	"errors"
+
 	"github.com/spf13/cobra"
 
 	"github.com/ajitpratap0/GoSQLX/cmd/gosqlx/internal/actioncmd"
@@ -175,6 +177,19 @@ func Execute() error {
 	return rootCmd.Execute()
 }
 
+// silentError is a failure whose exit status matters but whose message the
+// user asked not to see (validate --quiet).
+type silentError struct{ error }
+
+func (e silentError) Unwrap() error { return e.error }
+
+// IsSilentError reports whether err must be turned into an exit status
+// without printing anything (the caller prints every other error once).
+func IsSilentError(err error) bool {
+	var s silentError
+	return errors.As(err, &s)
+}
+
 // init initializes the root command and registers global flags.
 //
 // This function is called automatically during package initialization.
@@ -193,6 +208,15 @@ func init() {
 	// A plain `go build` reports the library's gosqlx.Version, so the CLI and
 	// the library (and the LSP, which reports gosqlx.Version) cannot drift.
 	rootCmd.Version = Version
+
+	// Errors are returned to main, which prints each one exactly once, so
+	// cobra must not print them as well. Usage is printed for flag and
+	// argument errors (cobra validates those before this hook runs) but not
+	// for failures of the work itself, e.g. a syntax error in the input.
+	rootCmd.SilenceErrors = true
+	rootCmd.PersistentPreRun = func(cmd *cobra.Command, _ []string) {
+		cmd.SilenceUsage = true
+	}
 
 	// Global flags available to all subcommands
 	rootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "enable verbose output")

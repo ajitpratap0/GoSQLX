@@ -434,7 +434,7 @@ func TestInsertGrammarGapsErrors(t *testing.T) {
 		{"bare default", "", "INSERT INTO t1 (a) DEFAULT", "VALUES, SELECT, or WITH"},
 		{"unclosed paren source", "", "INSERT INTO t (SELECT * FROM s", ")"},
 		{"paren non-query source", "", "INSERT INTO t (a) (1)", "VALUES, SELECT, or WITH"},
-		{"update from join", "postgresql", "UPDATE t SET a = s.b FROM s JOIN u ON s.id = u.id WHERE t.id = s.id", "JOIN in UPDATE ... FROM"},
+		{"update joined target then from", "mysql", "UPDATE t JOIN u ON t.id = u.id SET a = 1 FROM s", "FROM after a joined UPDATE target"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

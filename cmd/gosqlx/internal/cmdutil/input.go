@@ -83,7 +83,7 @@ func DetectAndReadInput(input string) (*InputResult, error) {
 		}, nil
 	}
 
-	if strings.Contains(input, string(filepath.Separator)) || strings.HasSuffix(strings.ToLower(input), ".sql") {
+	if !LooksLikeSQL(input) && (strings.Contains(input, string(filepath.Separator)) || strings.HasSuffix(strings.ToLower(input), ".sql")) {
 		return nil, fmt.Errorf("invalid file path: %w", statErr)
 	}
 

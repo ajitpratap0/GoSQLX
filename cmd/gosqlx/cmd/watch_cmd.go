@@ -15,6 +15,8 @@
 package cmd
 
 import (
+	"fmt"
+
 	"github.com/spf13/cobra"
 )
 
@@ -38,26 +40,7 @@ Examples:
 			return cmd.Help()
 		}
 
-		modeStr, _ := cmd.Flags().GetString("mode")
-		debounce, _ := cmd.Flags().GetInt("debounce")
-		clear, _ := cmd.Flags().GetBool("clear")
-		watchVerbose, _ := cmd.Flags().GetBool("watch-verbose")
-
-		mode := WatchModeValidate
-		if modeStr == "format" {
-			mode = WatchModeFormat
-		}
-
-		opts := WatchOptions{
-			Mode:        mode,
-			DebounceMs:  debounce,
-			ClearScreen: clear,
-			Verbose:     watchVerbose,
-			Out:         cmd.OutOrStdout(),
-			Err:         cmd.ErrOrStderr(),
-		}
-
-		fw, err := NewFileWatcher(opts)
+		fw, err := newWatcherFromCommand(cmd)
 		if err != nil {
 			return err
 		}
@@ -65,7 +48,59 @@ Examples:
 	},
 }
 
+// newWatcherFromCommand keeps command options separate from the blocking watch loop.
+func newWatcherFromCommand(cmd *cobra.Command) (*FileWatcher, error) {
+	modeStr, err := cmd.Flags().GetString("mode")
+	if err != nil {
+		return nil, err
+	}
+	debounce, err := cmd.Flags().GetInt("debounce")
+	if err != nil {
+		return nil, err
+	}
+	clear, err := cmd.Flags().GetBool("clear")
+	if err != nil {
+		return nil, err
+	}
+	watchVerbose, err := cmd.Flags().GetBool("watch-verbose")
+	if err != nil {
+		return nil, err
+	}
+	dialect, err := cmd.Flags().GetString("dialect")
+	if err != nil {
+		return nil, err
+	}
+	if err := normalizeDialectFlag(&dialect); err != nil {
+		return nil, err
+	}
+
+	var mode WatchMode
+	switch modeStr {
+	case "validate":
+		mode = WatchModeValidate
+	case "format":
+		mode = WatchModeFormat
+	default:
+		return nil, fmt.Errorf("invalid --mode %q: want validate or format", modeStr)
+	}
+	fw, err := NewFileWatcher(WatchOptions{
+		Mode:        mode,
+		DebounceMs:  debounce,
+		ClearScreen: clear,
+		Verbose:     watchVerbose,
+		Out:         cmd.OutOrStdout(),
+		Err:         cmd.ErrOrStderr(),
+	})
+	if err != nil {
+		return nil, err
+	}
+	fw.opts.ValidatorOpts.Dialect = dialect
+	fw.opts.FormatterOpts.Dialect = dialect
+	return fw, nil
+}
+
 func init() {
+	watchCmd.Flags().String("dialect", "", dialectFlagUsage("default: postgresql"))
 	watchCmd.Flags().String("mode", "validate", "watch mode: validate or format")
 	watchCmd.Flags().Int("debounce", 300, "debounce delay in milliseconds")
 	watchCmd.Flags().Bool("clear", false, "clear screen before each re-run")

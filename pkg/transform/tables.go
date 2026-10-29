@@ -27,7 +27,10 @@ import (
 //   - Function-call table references whose function name matches, such as
 //     FROM my_udtf(1) or ClickHouse FROM numbers(10); the arguments are kept
 //   - Column qualifiers (table.column identifiers in SELECT list, WHERE, ORDER BY)
-//   - The table name field of UPDATE and DELETE statements
+//   - The table name field of UPDATE and DELETE statements, and everything
+//     else those statements name tables in: further targets and JOINs
+//     (MySQL multi-table forms), UPDATE ... FROM, DELETE ... FROM / USING,
+//     and column qualifiers in SET, OUTPUT, ORDER BY and RETURNING
 //   - Subquery FROM/JOIN references (recursively)
 //
 // Matching is case-insensitive. This is useful for renaming tables, routing
@@ -53,16 +56,10 @@ func ReplaceTable(oldName, newName string) Rule {
 			}
 			return nil
 		case *ast.UpdateStatement:
-			if strings.EqualFold(s.TableName, oldName) {
-				s.TableName = newName
-			}
-			s.Where = replaceTableInExpr(s.Where, oldName, newName)
+			replaceTableInUpdate(s, oldName, newName)
 			return nil
 		case *ast.DeleteStatement:
-			if strings.EqualFold(s.TableName, oldName) {
-				s.TableName = newName
-			}
-			s.Where = replaceTableInExpr(s.Where, oldName, newName)
+			replaceTableInDelete(s, oldName, newName)
 			return nil
 		default:
 			return &ErrUnsupportedStatement{Transform: "ReplaceTable", Got: stmtTypeName(stmt)}
@@ -72,8 +69,13 @@ func ReplaceTable(oldName, newName string) Rule {
 
 // AddTableAlias returns a Rule that assigns an alias to a specific table in a
 // SELECT, UPDATE, or DELETE statement. For SELECT statements the alias is applied
-// to the matching entry in the FROM clause; for UPDATE and DELETE it sets the
-// statement-level alias field.
+// to the matching FROM or JOIN entry and its column qualifiers. For UPDATE and
+// DELETE it is applied wherever the statement names the table (the target, further
+// targets, JOINs, FROM / USING lists) and the column qualifiers that named the
+// table are renamed to the alias, because a table with an alias can no longer
+// be referred to by its name. In DELETE t FROM t JOIN ... the target is renamed
+// to the alias as well. A table that appears more than once in the same scope
+// (a self join) is an error, since one alias cannot name both.
 //
 // Parameters:
 //   - tableName: The table to alias (case-insensitive match)
@@ -84,22 +86,11 @@ func AddTableAlias(tableName, alias string) Rule {
 	return RuleFunc(func(stmt ast.Statement) error {
 		switch s := stmt.(type) {
 		case *ast.SelectStatement:
-			for i := range s.From {
-				if strings.EqualFold(s.From[i].Name, tableName) {
-					s.From[i].Alias = alias
-				}
-			}
-			return nil
+			return addAliasToSelect(s, tableName, alias)
 		case *ast.UpdateStatement:
-			if strings.EqualFold(s.TableName, tableName) {
-				s.Alias = alias
-			}
-			return nil
+			return addAliasToUpdate(s, tableName, alias)
 		case *ast.DeleteStatement:
-			if strings.EqualFold(s.TableName, tableName) {
-				s.Alias = alias
-			}
-			return nil
+			return addAliasToDelete(s, tableName, alias)
 		default:
 			return &ErrUnsupportedStatement{Transform: "AddTableAlias", Got: stmtTypeName(stmt)}
 		}
@@ -153,13 +144,43 @@ func replaceTableInJoins(joins []ast.JoinClause, old, new string) {
 // rendered from ref.TableFunc, so the call is renamed too when its name
 // matches; the arguments are kept.
 func renameTableRef(ref *ast.TableReference, old, new string) {
+	if g := ast.TableRefJoinGroup(ref); g != nil {
+		// A parenthesized join group names no table itself; rename inside.
+		replaceTableInFrom(g.Tables, old, new)
+		replaceTableInJoins(g.Joins, old, new)
+		return
+	}
 	if !strings.EqualFold(ref.Name, old) {
 		return
 	}
 	ref.Name = new
+	ref.NameQuote = replacedNameQuote(ref.NameQuote)
 	if ref.TableFunc != nil && strings.EqualFold(ref.TableFunc.Name, old) {
 		ref.TableFunc.Name = new
+		ref.TableFunc.NameQuote = replacedNameQuote(ref.TableFunc.NameQuote)
 	}
+}
+
+// replacedNameQuote returns the NameQuote for a name that a transform has
+// replaced: the new name is written as the caller gave it (quoted only when
+// its content needs it), so the delimited parts recorded for the old name
+// are dropped; the source's delimiter style is kept.
+func replacedNameQuote(q ast.NameQuote) ast.NameQuote {
+	if !q.HasStyle() {
+		return 0
+	}
+	return ast.NameQuoteOf(q.Style())
+}
+
+// replacedQualifierQuote returns the NameQuote of a column reference whose
+// table qualifier a transform has replaced: the column's own mark (part 0)
+// is kept and the marks of the old qualifier's parts are dropped.
+func replacedQualifierQuote(q ast.NameQuote) ast.NameQuote {
+	out := replacedNameQuote(q).WithBareHash(q.BareHash())
+	if q.Part(0) {
+		out = out.WithPart(0)
+	}
+	return out
 }
 
 // walkExpr recursively walks all expression types and applies fn to each expression.
@@ -175,6 +196,21 @@ func walkExpr(expr ast.Expression, fn func(ast.Expression) ast.Expression) ast.E
 	case *ast.BinaryExpression:
 		e.Left = walkExpr(e.Left, fn)
 		e.Right = walkExpr(e.Right, fn)
+		if e.Extras != nil {
+			e.Extras.Escape = walkExpr(e.Extras.Escape, fn)
+		}
+	case *ast.AtTimeZoneExpression:
+		e.Expr = walkExpr(e.Expr, fn)
+		e.Zone = walkExpr(e.Zone, fn)
+	case *ast.CollateExpression:
+		e.Expr = walkExpr(e.Expr, fn)
+	case *ast.AnyAllExpression:
+		e.Expr = walkExpr(e.Expr, fn)
+		e.Array = walkExpr(e.Array, fn)
+	case *ast.TernaryExpression:
+		e.Cond = walkExpr(e.Cond, fn)
+		e.Then = walkExpr(e.Then, fn)
+		e.Else = walkExpr(e.Else, fn)
 	case *ast.AliasedExpression:
 		e.Expr = walkExpr(e.Expr, fn)
 	case *ast.UnaryExpression:
@@ -340,11 +376,17 @@ func replaceTableInExpr(expr ast.Expression, old, new string) ast.Expression {
 		e.Expr = replaceTableInExpr(e.Expr, old, new)
 		replaceTableInStmt(e.Subquery, old, new)
 		return e
+	case *ast.AnyAllExpression:
+		// = SOME (SELECT ...) keeps its subquery in Array.
+		e.Expr = replaceTableInExpr(e.Expr, old, new)
+		e.Array = replaceTableInExpr(e.Array, old, new)
+		return e
 	}
 	return walkExpr(expr, func(e ast.Expression) ast.Expression {
 		if id, ok := e.(*ast.Identifier); ok {
 			if strings.EqualFold(id.Table, old) {
 				id.Table = new
+				id.Quotes = replacedQualifierQuote(id.Quotes)
 			}
 		}
 		return e

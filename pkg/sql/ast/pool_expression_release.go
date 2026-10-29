@@ -324,6 +324,9 @@ func putExpressionBounded(expr Expression, depth int, mode releaseMode, maxWork,
 			if e.Right != nil {
 				workQueue = append(workQueue, e.Right)
 			}
+			if e.DialectExtras().Escape != nil {
+				workQueue = append(workQueue, e.DialectExtras().Escape)
+			}
 			if mode == releaseAll {
 				// CustomOp is not pooled; the reset drops it for the GC.
 				*e = BinaryExpression{}
@@ -334,6 +337,10 @@ func putExpressionBounded(expr Expression, depth int, mode releaseMode, maxWork,
 			if mode == releaseAll {
 				*e = LiteralValue{}
 				literalValuePool.Put(e)
+			}
+		case *UnicodeEscapeExpression:
+			if mode == releaseAll {
+				*e = UnicodeEscapeExpression{}
 			}
 
 		case *FunctionCall:
@@ -353,6 +360,12 @@ func putExpressionBounded(expr Expression, depth int, mode releaseMode, maxWork,
 			workQueue = appendOrderByExprs(workQueue, e.OrderBy)
 			workQueue = appendOrderByExprs(workQueue, e.WithinGroup)
 			workQueue = appendWindowSpecExprs(workQueue, e.Over)
+			if sep := e.DialectExtras().Separator; sep != nil {
+				workQueue = append(workQueue, sep)
+			}
+			if e.DialectExtras().Keep != nil {
+				workQueue = appendOrderByExprs(workQueue, e.DialectExtras().Keep.OrderBy)
+			}
 			if mode == releaseAll {
 				// Keep Arguments/Parameters capacity; OrderBy, WithinGroup and
 				// Over are rare and left to the GC.
@@ -431,6 +444,40 @@ func putExpressionBounded(expr Expression, depth int, mode releaseMode, maxWork,
 				subqueryExprPool.Put(e)
 			}
 
+		case *AtTimeZoneExpression:
+			// No dedicated pool; children are freed here and the node is left
+			// to the garbage collector.
+			if e.Expr != nil {
+				workQueue = append(workQueue, e.Expr)
+			}
+			if e.Zone != nil {
+				workQueue = append(workQueue, e.Zone)
+			}
+
+		case *CollateExpression:
+			if e.Expr != nil {
+				workQueue = append(workQueue, e.Expr)
+			}
+
+		case *AnyAllExpression:
+			if e.Expr != nil {
+				workQueue = append(workQueue, e.Expr)
+			}
+			if e.Array != nil {
+				workQueue = append(workQueue, e.Array)
+			}
+
+		case *TernaryExpression:
+			if e.Cond != nil {
+				workQueue = append(workQueue, e.Cond)
+			}
+			if e.Then != nil {
+				workQueue = append(workQueue, e.Then)
+			}
+			if e.Else != nil {
+				workQueue = append(workQueue, e.Else)
+			}
+
 		case *ParenthesizedExpression:
 			if e.Expr != nil {
 				workQueue = append(workQueue, e.Expr)
@@ -442,6 +489,11 @@ func putExpressionBounded(expr Expression, depth int, mode releaseMode, maxWork,
 		case *FieldAccessExpression:
 			if e.Expr != nil {
 				workQueue = append(workQueue, e.Expr)
+			}
+			for _, a := range e.Args {
+				if a != nil {
+					workQueue = append(workQueue, a)
+				}
 			}
 			*e = FieldAccessExpression{}
 
@@ -455,6 +507,9 @@ func putExpressionBounded(expr Expression, depth int, mode releaseMode, maxWork,
 			}
 
 		case *IntervalExpression:
+			if e.ValueExpr != nil {
+				workQueue = append(workQueue, e.ValueExpr)
+			}
 			if mode == releaseAll {
 				*e = IntervalExpression{}
 				intervalExprPool.Put(e)
@@ -555,6 +610,13 @@ func putExpressionBounded(expr Expression, depth int, mode releaseMode, maxWork,
 			if e.Subquery != nil {
 				releaseSelectStatement(e.Subquery, mode)
 			}
+			// ARRAY(SELECT 1 UNION SELECT 2): the set operation itself is
+			// not pooled, its operand statements are.
+			if so, ok := e.Query.(*SetOperation); ok {
+				releaseSetOperationOperands(so, mode)
+			} else if e.Query != nil {
+				releaseStatement(e.Query, mode)
+			}
 			elems := e.Elements
 			clear(elems)
 			*e = ArrayConstructorExpression{Elements: elems[:0]}
@@ -653,6 +715,41 @@ func putExpressionBounded(expr Expression, depth int, mode releaseMode, maxWork,
 			}
 			e.Value = nil
 
+		case *StarExpression:
+			if e.Star != nil {
+				workQueue = append(workQueue, e.Star)
+			}
+			if e.Ilike != nil {
+				workQueue = append(workQueue, e.Ilike)
+			}
+			for _, r := range e.Replace {
+				if r != nil {
+					workQueue = append(workQueue, r)
+				}
+			}
+			for _, a := range e.Apply {
+				if a != nil {
+					workQueue = append(workQueue, a)
+				}
+			}
+			e.Star, e.Ilike = nil, nil
+			clear(e.Replace)
+			e.Replace = e.Replace[:0]
+			clear(e.Apply)
+			e.Apply = e.Apply[:0]
+
+		case *ObjectLiteral:
+			for i := range e.Entries {
+				if e.Entries[i].Key != nil {
+					workQueue = append(workQueue, e.Entries[i].Key)
+				}
+				if e.Entries[i].Value != nil {
+					workQueue = append(workQueue, e.Entries[i].Value)
+				}
+				e.Entries[i] = ObjectEntry{}
+			}
+			e.Entries = e.Entries[:0]
+
 		case *VariantPath:
 			if e.Root != nil {
 				workQueue = append(workQueue, e.Root)
@@ -666,6 +763,36 @@ func putExpressionBounded(expr Expression, depth int, mode releaseMode, maxWork,
 			}
 
 		// Default case - expression type not pooled, just ignore
+		// Unpooled primary-expression nodes: release their children only.
+		case *KeywordArgument:
+			if e.Value != nil {
+				workQueue = append(workQueue, e.Value)
+			}
+		case *MatchAgainstExpression:
+			for _, c := range e.Columns {
+				if c != nil {
+					workQueue = append(workQueue, c)
+				}
+			}
+			if e.Query != nil {
+				workQueue = append(workQueue, e.Query)
+			}
+		case *OuterJoinMarker:
+			if e.Expr != nil {
+				workQueue = append(workQueue, e.Expr)
+			}
+		case *ConnectByRootExpression:
+			if e.Expr != nil {
+				workQueue = append(workQueue, e.Expr)
+			}
+		case *AssignmentExpression:
+			if e.Target != nil {
+				workQueue = append(workQueue, e.Target)
+			}
+			if e.Value != nil {
+				workQueue = append(workQueue, e.Value)
+			}
+
 		default:
 			// Unknown expression type - no pool available
 		}

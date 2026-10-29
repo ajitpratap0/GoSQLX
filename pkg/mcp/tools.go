@@ -29,6 +29,7 @@ import (
 	"github.com/ajitpratap0/GoSQLX/pkg/linter"
 	"github.com/ajitpratap0/GoSQLX/pkg/linter/rules"
 	"github.com/ajitpratap0/GoSQLX/pkg/linter/rules/keywords"
+	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
 	sqlkeywords "github.com/ajitpratap0/GoSQLX/pkg/sql/keywords"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/security"
 )
@@ -78,7 +79,7 @@ func validateSQLInternal(sql, dialect string) (map[string]any, error) {
 // formatSQLInternal formats a SQL string using the provided options.
 //
 // gosqlx.Format always emits clause keywords (SELECT, FROM, WHERE, ...) in
-// upper case and leaves the case of other keywords (and, in, case, ...) to the
+// upper case and leaves the case of other keywords (like, case, ...) to the
 // AST, so its UppercaseKeywords option alone changes nothing visible. When
 // uppercaseKeywords is true the remaining keywords are therefore upper-cased
 // here (data type names are left alone); when false the output is
@@ -227,23 +228,33 @@ func uppercaseSQLKeywords(sql string) string {
 }
 
 // parseSQLInternal parses a SQL string and returns statement count and types.
-func parseSQLInternal(sql string) (map[string]any, error) {
+func parseSQLInternal(sql, dialect string) (map[string]any, error) {
 	if sql == "" {
 		return nil, fmt.Errorf("parameter 'sql' is required and must not be empty")
 	}
 
-	tree, err := gosqlx.Parse(sql)
+	var tree *ast.AST
+	var err error
+	if dialect == "" {
+		tree, err = gosqlx.Parse(sql)
+	} else {
+		// ParseWithDialect validates against keywords.IsValidDialect, as validate_sql does.
+		tree, err = gosqlx.ParseWithDialect(sql, sqlkeywords.SQLDialect(dialect))
+	}
 	if err != nil {
 		return nil, fmt.Errorf("parse failed: %w", err)
 	}
 
 	stmtTypes := make([]string, 0, len(tree.Statements))
 	for _, stmt := range tree.Statements {
+		if _, ok := stmt.(*ast.BatchSeparator); ok {
+			continue // a GO line is a client directive, not a statement
+		}
 		stmtTypes = append(stmtTypes, fmt.Sprintf("%T", stmt))
 	}
 
 	return map[string]any{
-		"statement_count": len(tree.Statements),
+		"statement_count": len(stmtTypes),
 		"statement_types": stmtTypes,
 	}, nil
 }
@@ -546,7 +557,11 @@ func handleParseSQL(ctx context.Context, req mcpmcp.CallToolRequest) (*mcpmcp.Ca
 	if errRes != nil {
 		return errRes, nil
 	}
-	return toolOutcome(parseSQLInternal(sql))
+	dialect, err := optionalString(req, "dialect", "")
+	if err != nil {
+		return mcpmcp.NewToolResultError(err.Error()), nil
+	}
+	return toolOutcome(parseSQLInternal(sql, dialect))
 }
 
 // handleExtractMetadata is the MCP tool handler for "extract_metadata".
@@ -595,7 +610,7 @@ func handleAnalyzeSQL(ctx context.Context, req mcpmcp.CallToolRequest) (*mcpmcp.
 		fn   func() (map[string]any, error)
 	}{
 		{"validate", func() (map[string]any, error) { return validateSQLInternal(sql, "") }},
-		{"parse", func() (map[string]any, error) { return parseSQLInternal(sql) }},
+		{"parse", func() (map[string]any, error) { return parseSQLInternal(sql, "") }},
 		{"metadata", func() (map[string]any, error) { return extractMetadataInternal(sql) }},
 		{"security", func() (map[string]any, error) { return securityScanInternal(sql) }},
 		{"lint", func() (map[string]any, error) { return lintSQLInternal(sql) }},

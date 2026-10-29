@@ -20,6 +20,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/ajitpratap0/GoSQLX/pkg/models"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/keywords"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/parser"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/tokenizer"
@@ -47,13 +48,31 @@ type Result struct {
 //   - Filename: Path to the file that was linted
 //   - Violations: All rule violations found in this file
 //   - Error: Any error encountered during linting (file read, rule execution)
+//   - TokenizeError: The tokenizer error, when the content could not be tokenized
+//   - ParseError: The parser error, when the content tokenized but did not parse
 //
 // A FileResult with non-nil Error may still contain partial violations
 // from rules that executed successfully before the error occurred.
+//
+// TokenizeError and ParseError describe invalid SQL, not a failed lint run:
+// the text and token rules still run and their violations are reported, so
+// callers that must not accept invalid SQL (CI gates, the CLI) check
+// SyntaxError.
 type FileResult struct {
-	Filename   string
-	Violations []Violation
-	Error      error
+	Filename      string
+	Violations    []Violation
+	Error         error
+	TokenizeError error
+	ParseError    error
+}
+
+// SyntaxError returns the tokenizer or parser error for content that is not
+// valid SQL, or nil when the content tokenized and parsed.
+func (r FileResult) SyntaxError() error {
+	if r.TokenizeError != nil {
+		return r.TokenizeError
+	}
+	return r.ParseError
 }
 
 // Linter performs SQL linting with configurable rules.
@@ -210,7 +229,8 @@ func (l *Linter) LintFile(filename string) FileResult {
 // This allows partial linting of syntactically invalid SQL.
 //
 // Returns a FileResult containing violations. The Error field is only set if
-// a rule execution fails, not for tokenization/parsing failures.
+// a rule execution fails. Tokenization and parsing failures are recorded in
+// TokenizeError and ParseError (see FileResult.SyntaxError).
 //
 // Example:
 //
@@ -238,11 +258,19 @@ func (l *Linter) LintString(sql string, filename string) FileResult {
 	if tokenErr == nil {
 		ctx.WithTokens(tokens)
 
-		// Attempt parsing with position tracking (best effort - some rules are token-only)
-		defer p.Release()
-		astObj, parseErr := p.ParseFromModelTokens(tokens)
-		ctx.WithAST(astObj, parseErr)
+		if hasStatementTokens(tokens) {
+			// Attempt parsing with position tracking (best effort - some rules are token-only)
+			defer p.Release()
+			astObj, parseErr := p.ParseFromModelTokens(tokens)
+			ctx.WithAST(astObj, parseErr)
+			result.ParseError = parseErr
+		} else {
+			// Empty, whitespace-only and comment-only content has no
+			// statements: nothing to parse, and not a syntax error.
+			p.Release()
+		}
 	} else {
+		result.TokenizeError = tokenErr
 		p.Release()
 	}
 
@@ -257,6 +285,17 @@ func (l *Linter) LintString(sql string, filename string) FileResult {
 	}
 
 	return result
+}
+
+// hasStatementTokens reports whether tokens holds anything besides the
+// end-of-input marker.
+func hasStatementTokens(tokens []models.TokenWithSpan) bool {
+	for i := range tokens {
+		if tokens[i].Token.Type != models.TokenTypeEOF {
+			return true
+		}
+	}
+	return false
 }
 
 // LintFiles lints multiple files in batch.
@@ -424,6 +463,10 @@ func FormatResult(result Result) string {
 		if fileResult.Error != nil {
 			sb.WriteString(fmt.Sprintf("\n%s: ERROR: %v\n", fileResult.Filename, fileResult.Error))
 			continue
+		}
+
+		if synErr := fileResult.SyntaxError(); synErr != nil {
+			sb.WriteString(fmt.Sprintf("\n%s: SYNTAX ERROR: %v\n", fileResult.Filename, synErr))
 		}
 
 		if len(fileResult.Violations) == 0 {

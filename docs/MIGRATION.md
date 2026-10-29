@@ -6,7 +6,7 @@
 
 ### Why upgrade
 
-- **Real-world dialect corpus**: 2,788 production-style statements across all 8 dialects now parse, format, re-parse identically and keep every word (1,327 failures before).
+- **Real-world dialect corpus**: 2,813 production-style statements across all 8 dialects now parse, format, re-parse identically and keep every word (1,327 failures before).
 - **Faithful formatting**: `gosqlx.Format`, `gosqlx format`, LSP and C-binding formatting keep comments, optimizer hints, SQL Server `GO` lines, Oracle `/` lines and PostgreSQL `U&"..."` spellings.
 - **Security**: `ScanSQL` bypasses through inline comments, quoted dollar tags and input truncation are closed, `Scanner.Scan` walks the whole AST, and the CLI merges both scanners.
 - **Robustness**: the LSP server, C exports and transpiler no longer crash on malformed input, very long operator chains or panics, and metadata extraction is linear on nested CTEs.

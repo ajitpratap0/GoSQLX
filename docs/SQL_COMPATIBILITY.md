@@ -6,7 +6,7 @@ This matrix documents the comprehensive SQL feature support in GoSQLX across dif
 
 ### Real-world dialect audit (October 2026, unreleased)
 
-The real-world corpus contains 2,788 production-style statements: SQL written
+The real-world corpus contains 2,813 production-style statements: SQL written
 by hand to imitate what ORMs, migration tools and applications send, not SQL
 collected from production systems. Every statement passes
 split → dialect-aware parse → format → reparse → format idempotency, plus a
@@ -18,17 +18,17 @@ retain their text rather than receiving a complete semantic AST.
 
 | Dialect | Passing statements | Known failures | Pass rate |
 | --- | ---: | ---: | ---: |
-| PostgreSQL | 300 / 300 | 0 | 100% |
-| MySQL | 405 / 405 | 0 | 100% |
-| MariaDB | 374 / 374 | 0 | 100% |
-| SQL Server | 276 / 276 | 0 | 100% |
+| PostgreSQL | 305 / 305 | 0 | 100% |
+| MySQL | 414 / 414 | 0 | 100% |
+| MariaDB | 380 / 380 | 0 | 100% |
+| SQL Server | 277 / 277 | 0 | 100% |
 | Oracle | 368 / 368 | 0 | 100% |
 | SQLite | 348 / 348 | 0 | 100% |
-| Snowflake | 325 / 325 | 0 | 100% |
-| ClickHouse | 392 / 392 | 0 | 100% |
+| Snowflake | 327 / 327 | 0 | 100% |
+| ClickHouse | 394 / 394 | 0 | 100% |
 
-The table totals 2,788 statements and was checked with `scripts/dialect-audit`
-at commit `8d8c5272`. Reproduce one dialect's row from the repository root
+The table totals 2,813 statements and was checked with `scripts/dialect-audit`
+at commit `fda9a5ef`. Reproduce one dialect's row from the repository root
 (replace `<d>` with a dialect string such as `mysql`); the last line of output
 reads, for example:
 

@@ -10,7 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.17.0] - 2026-10-29 — Real-World Dialect Corpus, Dialect-Faithful Round Trips, Security Scanner & LSP Hardening
 
 Covers everything merged since v1.16.0, mostly the October 2026 dialect audit:
-a 2,788-statement real-world corpus across eight dialects that now parses,
+a 2,813-statement real-world corpus across eight dialects that now parses,
 formats, re-parses identically and keeps every word, guarded by a ratchet test;
 new syntax across Snowflake, BigQuery, ClickHouse, SQL Server, MySQL/MariaDB
 and PostgreSQL; per-dialect lexing and rendering (numeric and Unicode-escape
@@ -160,7 +160,7 @@ upgrading.
   instead of crashing the host process. (#871)
 
 ### Added
-- **Real-world dialect corpus**: `testdata/realworld/<dialect>/` holds 2,788
+- **Real-world dialect corpus**: `testdata/realworld/<dialect>/` holds 2,813
   production-style statements across PostgreSQL, MySQL, MariaDB, SQL Server,
   Oracle, SQLite, Snowflake and ClickHouse. `TestRealWorldCorpus` runs each
   through split, parse, format, reparse, idempotency and dropped-word checks

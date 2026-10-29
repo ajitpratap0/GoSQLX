@@ -134,12 +134,24 @@ out, err := gosqlx.FormatWithDialect(
 ```
 
 ### `WithComments() Option`
-A `ParseTree` option that keeps the comments of the input on the tree so that `FormatTree` and `FormatAST` write them back. Without it comments are discarded. A tree does not record where each comment stood: comments on their own line go in front of the query and comments that shared a line with SQL go after it, so use `Format` on the text when placement matters. This option is unreleased and available on the main branch.
+A `ParseTree` option that keeps the comments of the input on the tree so that `FormatTree` and `FormatAST` write them back. Without it comments are discarded. Parser-produced statement spans let formatting keep comments next to their statements; comments inside a statement move above it. Use `Format` on the original text when preserving optimizer hints, since it also retains the token stream needed to place hints inside statements. This option is unreleased and available on the main branch.
 
 ```go
 tree, err := gosqlx.ParseTree(ctx, "SELECT 1 -- one", gosqlx.WithComments())
 out := gosqlx.FormatTree(tree) // "SELECT 1 -- one"
 ```
+
+### Checked tree formatting
+
+Since v1.17.0, use these variants to receive semantic rendering errors, including target-dialect operators that cannot be represented:
+
+```go
+func FormatASTChecked(a *ast.AST, opts ...FormatOption) (string, error)
+func FormatTreeChecked(t *Tree, opts ...FormatOption) (string, error)
+func (t *Tree) FormatChecked(opts ...FormatOption) (string, error)
+```
+
+They render an existing tree without parsing it again, return `"", nil` for a nil tree, and do not mutate the caller's AST. The corresponding `FormatAST`, `FormatTree` and `Tree.Format` helpers discard rendering errors and return an empty string. Check the returned error before using formatted SQL. For low-level rendering options and comment placement, see the [formatter package](formatter.md).
 
 ## Linting Functions
 

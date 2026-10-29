@@ -180,6 +180,9 @@ cat query.sql | gosqlx validate && echo "Valid SQL"
 | 0 | Valid SQL - no syntax errors |
 | 1 | Invalid SQL - syntax errors detected |
 
+`validate --quiet` (or `--check`) still exits 1 on validation failure, without
+printing the failure to stdout or stderr.
+
 Input with no statements (empty, whitespace only, or only comments) is valid.
 A file that fails as a whole is checked again statement by statement, so
 scripts that use the T-SQL `GO` batch separator or the MySQL `DELIMITER`
@@ -441,6 +444,10 @@ gosqlx analyze [file|query] [flags]
 | `--complexity` | bool | false | Focus on complexity metrics |
 | `--all` | bool | false | Comprehensive analysis (all features) |
 
+`analyze --security` runs both the AST scanner (`Scan`) and the full-input text
+scanner (`ScanSQL`). It merges their findings and removes duplicate reports
+with the same pattern, severity and description.
+
 #### Examples
 
 ```bash
@@ -533,6 +540,12 @@ gosqlx lint [file...] [flags]
 | `--auto-fix` | bool | false | Automatically fix violations where possible |
 | `--max-length` | int | 100 | Maximum line length for L005 rule |
 | `--fail-on-warn` | bool | false | Exit with error code on warnings |
+| `--security` | bool | false | Also run the SQL security scanner |
+
+For files that parse successfully, `lint --security` merges findings from the
+AST scanner (`Scan`) and the full-input text scanner (`ScanSQL`), removing
+duplicates with the same pattern, severity and description. Security findings
+cause a non-zero exit status.
 
 #### Available Lint Rules
 

@@ -38,6 +38,36 @@ type Expression interface {
 }
 ```
 
+## AST
+
+`AST` is the root container returned by the parser. Return pooled trees with `ast.ReleaseAST` when finished.
+
+```go
+type AST struct {
+    UnicodeIdentifiers    map[int][]UnicodeIdentifierSpelling
+    Statements            []Statement
+    Comments              []models.Comment
+    StatementStarts       []models.Location
+    StatementEnds         []models.Location
+    ExecuteSlash          []bool
+    ExecuteSlashPositions []models.Location
+}
+```
+
+Since v1.17.0, the container carries source metadata for script formatting:
+
+| Field | Contents and producer |
+|---|---|
+| `StatementStarts` | The parser records the first token location for each entry of `Statements`, including the `GO` keyword of a `BatchSeparator`. Locations are zero when parsing tokens without positions. |
+| `StatementEnds` | The parser records each statement's last token end, including an optional semicolon and excluding Oracle SQL*Plus execute lines. |
+| `ExecuteSlash` | The Oracle parser marks statements followed by a SQL*Plus `/` execute line. When present, this slice is parallel to `Statements`; execute lines do not add statements. |
+| `ExecuteSlashPositions` | The Oracle parser records the execute line locations, parallel to `ExecuteSlash`; nil when no execute commands occur. |
+| `UnicodeIdentifiers` | The parser records original PostgreSQL `U&` identifier spellings by statement index, plus ordinary name occurrences needed to distinguish equal decoded names. Nil unless Unicode identifiers occur. Semantic name fields on nodes remain decoded. |
+
+Treat starts and ends as absent unless their lengths equal `len(tree.Statements)`; hand-built trees may omit them. `UnicodeIdentifierSpelling` has `Name string`, `Spelling string` (empty for ordinary names) and `Quoted bool` (whether rendering retains double quotes).
+
+`Statements` also contains `*ast.BatchSeparator` for T-SQL `GO`. Skip these nodes when counting or processing executable SQL statements; see [BatchSeparator](#batchseparator).
+
 ## DML Statement Types
 
 ### `SelectStatement`
@@ -314,30 +344,29 @@ for _, stmt := range tree.Statements {
 ### `WithClause`
 ```go
 type WithClause struct {
-    Recursive    bool
-    Materialized *bool              // MATERIALIZED/NOT MATERIALIZED hint
-    CTEs         []CommonTableExpr
+    Recursive bool
+    CTEs      []*CommonTableExpr
+    Pos       models.Location
 }
-```
-
-**Enhancements:**
-- `Materialized` - PostgreSQL optimization hints (MATERIALIZED, NOT MATERIALIZED)
-
-**Example:**
-```go
-// Materialized CTE
-sql := "WITH cte AS MATERIALIZED (SELECT * FROM large_table WHERE expensive_filter = true) SELECT * FROM cte"
-ast, _ := gosqlx.Parse(sql)
 ```
 
 ### `CommonTableExpr`
 ```go
 type CommonTableExpr struct {
-    Name    string
-    Columns []string
-    Query   *SelectStatement
+    Name         string
+    Columns      []string
+    Statement    Statement
+    ScalarExpr   Expression // ClickHouse scalar CTE
+    Materialized *bool      // nil = default, true = MATERIALIZED, false = NOT MATERIALIZED
+    Pos          models.Location
+    Search       *CTESearchClause
+    Cycle        *CTECycleClause
+    NameQuote    NameQuote
+    ColumnQuotes []NameQuote
 }
 ```
+
+`Search` and `Cycle` hold recursive CTE clauses for PostgreSQL and Oracle, or are nil when absent. `CTESearchClause` exposes `Breadth bool` (false means DEPTH FIRST), `By []string`, `Set string` and `Pos models.Location`. `CTECycleClause` exposes `Columns []string`, `Set string`, `To Expression`, `Default Expression`, `Using string` (PostgreSQL path column) and `Pos models.Location`.
 
 ### `SetOperation`
 ```go
@@ -437,6 +466,8 @@ type Identifier struct {
 ```
 
 `QuoteStyle` records the opening delimiter the source used: `"` (ANSI), `` ` `` (MySQL, MariaDB, ClickHouse) or `[` (SQL Server). On the main branch (unreleased, next release), `SQL()`, the formatter and fingerprints write quoted identifiers back with the same delimiters, so a MySQL `` `select` `` stays a name. Statement, table and column names carry the same information in `NameQuote` fields, such as `TableReference.NameQuote` and `TableReference.AliasQuote`.
+
+`NameQuote` is the compact metadata type used by `Identifier.Quotes` and name fields. It records delimiter style and which name parts must stay delimited; the parser sets it. Its recorded style takes precedence over `Identifier.QuoteStyle`.
 
 ### `LiteralValue`
 ```go
@@ -608,6 +639,8 @@ type TableReference struct {
 
 `Modifiers` holds TABLESAMPLE / SAMPLE, Oracle flashback and `@dblink`, MySQL `PARTITION` selection and index hints, SQLite `INDEXED BY`, the SQL Server `OPENJSON ... WITH` schema and a derived `VALUES` table. Read it with `DialectModifiers()` and write it after `EnsureModifiers()`; see [Dialect extension fields](#dialect-extension-fields).
 
+`TableModifiers.Sample *SampleClause` holds ClickHouse `SAMPLE k [OFFSET m]` on a table in a FROM list with joins or several tables. A lone FROM table keeps it on `SelectStatement.Sample`. This differs from `TableModifiers.TableSample`, which holds TABLESAMPLE / SAMPLE row-sampling clauses.
+
 **Enhancement:**
 - `Lateral` - PostgreSQL LATERAL JOIN support
 
@@ -671,7 +704,7 @@ type UnpivotClause struct {
 }
 ```
 
-`AggregateAlias`, `ExtraAggregates`, `NullHandling` and `ValueColumns` are unreleased additions on the main branch. `ast.UnpivotNullHandling(s)` normalizes a `NullHandling` value. Quoted aliases and value columns keep their source delimiters when rendered.
+`AggregateAlias`, `ExtraAggregates`, `NullHandling` and `ValueColumns` are unreleased additions on the main branch. `NullHandling` has type `string`. In multi-column UNPIVOT, `ValueColumns` holds the target column set, `ValueColumn` is empty, and each `InColumns` entry holds a parenthesized source column set with its optional label. `ast.UnpivotNullHandling(s)` normalizes a `NullHandling` value. Quoted aliases and value columns keep their source delimiters when rendered.
 
 ## Dialect Extension Fields
 

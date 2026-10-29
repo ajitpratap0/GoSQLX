@@ -459,7 +459,7 @@ Using eglot:
 ```json
 {
   "capabilities": {
-    "textDocumentSyncOptions": {
+    "textDocumentSync": {
       "openClose": true,
       "change": 2,
       "save": {"includeText": true}
@@ -479,6 +479,18 @@ Using eglot:
   }
 }
 ```
+
+### Protocol Error Handling
+
+Unknown request methods return JSON-RPC error `-32601` (`MethodNotFound`).
+The server logs malformed `Content-Length` headers and invalid JSON, then
+continues processing subsequent well-framed messages. Invalid input does not
+require restarting the server.
+
+Incremental `textDocument/didChange` ranges use UTF-16 positions. Negative
+positions are rejected; positions beyond a line or the document are clamped
+to its end, and reversed ranges have their endpoints swapped. The server
+continues serving requests after these changes.
 
 ### Server Limits
 

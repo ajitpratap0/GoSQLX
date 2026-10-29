@@ -69,8 +69,8 @@ func contractSample() any {
 		Highlight: HighlightResponse{
 			Spans: []HighlightSpan{{Start: 0, End: 6, Category: "keyword"}},
 		},
-		Format:    TextResponse{Result: "SELECT 1", Error: "format error", ErrorSpan: sampleSpan},
-		Transpile: TextResponse{Result: "SELECT 1", Error: "transpile error", ErrorSpan: sampleSpan},
+		Format:    TextResponse{Result: "SELECT 1", Error: "format error"},
+		Transpile: TextResponse{Result: "SELECT 1", Error: "transpile error"},
 	}
 }
 

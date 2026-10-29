@@ -23,14 +23,21 @@ declare global {
 
 export interface GoSQLXApi {
   parse(sql: string, dialect?: string): unknown;
-  /** Throws with the error message when the SQL cannot be formatted. */
+  /**
+   * Throws with the error message when the SQL cannot be formatted.
+   * Unknown or omitted dialects use generic rules, as do parse, lint, analyze and highlight.
+   */
   format(sql: string, dialect?: string): TextData;
   lint(sql: string, dialect?: string): unknown;
   analyze(sql: string, dialect?: string): unknown;
   validate(sql: string, dialect?: string): { valid: boolean; error?: string };
   /** Span offsets are UTF-16 code units (JavaScript string indices). Throws on failure. */
   highlight(sql: string, dialect?: string): HighlightData;
-  /** Rewrites SQL from one dialect to another. Throws on failure. */
+  /**
+   * Rewrites SQL from one dialect to another. Throws on failure.
+   * Unlike the other calls, unknown source/target dialects throw
+   * `unsupported source|target dialect "x"`. An empty string means generic.
+   */
   transpile(sql: string, from: string, to: string): TextData;
 }
 
@@ -123,7 +130,7 @@ export async function initWasm(): Promise<GoSQLXApi> {
         if (done) break;
         chunks.push(value);
         received += value.length;
-        notifyProgress(received / total);
+        notifyProgress(Math.min(1, received / total));
       }
 
       const wasmBytes = new Uint8Array(received);

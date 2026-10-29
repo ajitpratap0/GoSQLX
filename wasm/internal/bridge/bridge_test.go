@@ -235,6 +235,7 @@ func TestFormat(t *testing.T) {
 		{name: "sqlserver keeps TOP", sql: "SELECT TOP 10 * FROM t", dialect: "sqlserver", want: "SELECT TOP 10 *\nFROM t"},
 		{name: "leading comment kept", sql: "-- c\nSELECT 1", dialect: "generic", want: "-- c\nSELECT 1"},
 		{name: "inline comment moves above the statement", sql: "-- top\nSELECT /* inline */ a FROM t", dialect: "sqlserver", want: "-- top\n/* inline */\nSELECT a\nFROM t"},
+		{name: "unknown dialect is generic", sql: "SELECT 1", dialect: "nope", want: "SELECT 1"},
 		{name: "empty dialect is generic", sql: "select id,name from users where id>5", dialect: "", want: "SELECT id, name\nFROM users\nWHERE id > 5"},
 	}
 	for _, tt := range tests {
@@ -257,9 +258,6 @@ func TestFormat_UsesDialect(t *testing.T) {
 	if resp.Error == "" {
 		t.Fatalf("generic should reject TOP; got %q", resp.Result)
 	}
-	if resp.ErrorSpan == nil || resp.ErrorSpan.Line != 1 {
-		t.Fatalf("parse error should carry a span, got %+v", resp.ErrorSpan)
-	}
 }
 
 func TestFormat_UnplaceableComment(t *testing.T) {
@@ -267,9 +265,6 @@ func TestFormat_UnplaceableComment(t *testing.T) {
 	resp := Format(sql, "generic")
 	if resp.Result != "" || !strings.Contains(resp.Error, formatter.ErrUnplaceableComment.Error()) {
 		t.Fatalf("expected an unplaceable-comment error, got %+v", resp)
-	}
-	if resp.ErrorSpan != nil {
-		t.Fatalf("a comment error has no parser position, got span %+v", resp.ErrorSpan)
 	}
 }
 
@@ -304,10 +299,9 @@ func TestTranspile_Errors(t *testing.T) {
 		sql      string
 		from, to string
 		contains string
-		span     bool
 	}{
 		{name: "xor has no oracle form", sql: "SELECT a ^ b FROM t", from: "mysql", to: "oracle", contains: "no equivalent in oracle"},
-		{name: "source parse error", sql: invalidSQL, from: "mysql", to: "postgresql", contains: "E2002", span: true},
+		{name: "source parse error", sql: invalidSQL, from: "mysql", to: "postgresql", contains: "E2002"},
 		{name: "unknown source", sql: "SELECT 1", from: "nope", to: "postgresql", contains: `source dialect "nope"`},
 		{name: "unknown target", sql: "SELECT 1", from: "mysql", to: "nope", contains: `target dialect "nope"`},
 	}
@@ -316,9 +310,6 @@ func TestTranspile_Errors(t *testing.T) {
 			resp := Transpile(tt.sql, tt.from, tt.to)
 			if resp.Result != "" || !strings.Contains(resp.Error, tt.contains) {
 				t.Fatalf("expected an error containing %q, got %+v", tt.contains, resp)
-			}
-			if (resp.ErrorSpan != nil) != tt.span {
-				t.Fatalf("span = %+v, want present=%v", resp.ErrorSpan, tt.span)
 			}
 		})
 	}
@@ -332,17 +323,30 @@ func TestTextResponse_JSONContract(t *testing.T) {
 	if string(ok) != `{"result":"SELECT 1"}` {
 		t.Fatalf("success payload = %s", ok)
 	}
-	bad, err := json.Marshal(Format(invalidSQL, "generic"))
-	if err != nil {
-		t.Fatalf("marshal: %v", err)
-	}
-	var raw map[string]any
-	if err := json.Unmarshal(bad, &raw); err != nil {
-		t.Fatalf("unmarshal: %v", err)
-	}
-	for _, key := range []string{"result", "error", "error_span"} {
-		if _, ok := raw[key]; !ok {
-			t.Errorf("error payload missing %q: %s", key, bad)
-		}
+	for _, tt := range []struct {
+		name string
+		resp TextResponse
+	}{
+		{"format", Format(invalidSQL, "generic")},
+		{"transpile", Transpile(invalidSQL, "mysql", "postgresql")},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			bad, err := json.Marshal(tt.resp)
+			if err != nil {
+				t.Fatalf("marshal: %v", err)
+			}
+			var raw map[string]any
+			if err := json.Unmarshal(bad, &raw); err != nil {
+				t.Fatalf("unmarshal: %v", err)
+			}
+			for _, key := range []string{"result", "error"} {
+				if _, ok := raw[key]; !ok {
+					t.Errorf("error payload missing %q: %s", key, bad)
+				}
+			}
+			if _, ok := raw["error_span"]; ok {
+				t.Errorf("error payload contains unused error_span: %s", bad)
+			}
+		})
 	}
 }

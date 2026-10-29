@@ -1,4 +1,5 @@
 'use client';
+import { useCopyFeedback } from "./useCopyFeedback";
 import React, { useState, useEffect, useCallback, useMemo, useRef, Suspense } from "react";
 import { useWasm } from "./WasmLoader";
 import SqlEditor from "./SqlEditor";
@@ -138,14 +139,15 @@ export default function Playground() {
     [api, dialect],
   );
 
-  const [copied, setCopied] = useState(false);
+  const { copied, flash } = useCopyFeedback();
 
   const handleCopy = useCallback(() => {
     navigator.clipboard.writeText('go get github.com/ajitpratap0/GoSQLX').then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+      flash("copied");
+    }).catch(() => {
+      flash("failed");
     });
-  }, []);
+  }, [flash]);
 
   if (loading) {
     return (

@@ -352,6 +352,20 @@ The result has the shape `{"spans":[{"start":0,"end":6,"category":"keyword"}]}`.
 The [gosqlx.dev playground](https://gosqlx.dev/playground/) uses it for editor
 highlighting.
 
+### Dialect arguments
+
+The WASM bridge accepts dialect names for these calls:
+
+| Call | Unknown dialect | Empty or omitted dialect |
+|------|-----------------|--------------------------|
+| `gosqlxParse`, `gosqlxFormat`, `gosqlxLint`, `gosqlxAnalyze`, `gosqlxHighlight` | Generic rules | Generic rules |
+| `gosqlxTranspile` | Error response for an unsupported source or target dialect | Empty means generic; both arguments are required |
+
+Transpile validates both dialects because silently choosing another dialect
+could produce misleading SQL. Its raw JSON response includes an `error` such
+as `unsupported source dialect "nope"`; the playground wrapper throws that
+error message. The other calls retain their lenient fallback.
+
 ## Performance
 
 Highlighting is one tokenizer pass plus classification. `BenchmarkSpans` (about

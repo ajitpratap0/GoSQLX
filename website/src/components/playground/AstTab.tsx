@@ -1,4 +1,5 @@
 'use client';
+import { useCopyFeedback } from "./useCopyFeedback";
 import { useState, useCallback } from "react";
 import { ErrorNotice } from "./ResultParts";
 
@@ -158,18 +159,15 @@ interface AstTabProps {
 
 export default function AstTab({ data }: AstTabProps) {
   const [showEmpty, setShowEmpty] = useState(false);
-  const [copied, setCopied] = useState(false);
-  const [copyFailed, setCopyFailed] = useState(false);
+  const { copied, copyFailed, flash } = useCopyFeedback();
   const handleCopy = useCallback(() => {
     if (!data) return;
     navigator.clipboard.writeText(JSON.stringify(data, null, 2)).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+      flash("copied");
     }).catch(() => {
-      setCopyFailed(true);
-      setTimeout(() => setCopyFailed(false), 2000);
+      flash("failed");
     });
-  }, [data]);
+  }, [data, flash]);
 
   if (!data) {
     return (

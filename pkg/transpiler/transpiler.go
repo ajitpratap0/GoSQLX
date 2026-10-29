@@ -60,6 +60,10 @@ type RewriteRule func(stmt ast.Statement) error
 // object constants) are rewritten for the target or return an error; see
 // retargetOperators.
 func Transpile(sql string, from, to keywords.SQLDialect) (string, error) {
+	return transpile(sql, from, to, true)
+}
+
+func transpile(sql string, from, to keywords.SQLDialect, prefilter bool) (string, error) {
 	// Use ParseWithDialect so the tokenizer and parser understand dialect-
 	// specific syntax (e.g. MySQL backtick identifiers, PG ILIKE, etc.).
 	tree, err := parser.ParseWithDialect(sql, from)
@@ -77,8 +81,13 @@ func Transpile(sql string, from, to keywords.SQLDialect) (string, error) {
 		}
 	}
 
-	// Apply rules for this dialect pair.
-	rules := rulesFor(from, to)
+	// Prefilters are superset tests on source bytes: false positives only cost
+	// a walk; false negatives would change output or error order.
+	src := scanSource(sql)
+	// The tokenizer emits TokenTypeStringConcat only for two adjacent |, and
+	// the parser's OR and concatenation parsing are the only producers of
+	// PipesOr and ||; no rewrite rule creates either.
+	rules := rulesForSource(from, to, !prefilter || src.pipe)
 	for _, stmt := range tree.Statements {
 		for _, rule := range rules {
 			if err := rule(stmt); err != nil {
@@ -88,14 +97,23 @@ func Transpile(sql string, from, to keywords.SQLDialect) (string, error) {
 		if err := retargetOperators(stmt, from, to); err != nil {
 			return "", fmt.Errorf("rewrite: %w", err)
 		}
-		requoteIdentifiers(stmt, from, to)
+		// requoteDataType (ast/data_type_quotes.go) is the identity without
+		// ", ` or [. The parser inserts these only from quoted type tokens
+		// (typeNameTokenSQL) or [ tokens; rules only assign bare type names.
+		// SetNameQuoteStyle still runs: names can have content delimiters.
+		requoteIdentifiers(stmt, from, to, !prefilter || src.typeDelim || src.nonASCII)
 	}
 
 	// Re-render string literals for the target dialect (escaping and
 	// introducers); see retargetStringLiterals.
-	for _, stmt := range tree.Statements {
-		if err := retargetStringLiterals(stmt, to); err != nil {
-			return "", fmt.Errorf("rewrite: %w", err)
+	// Type "string" is set only by parser/string_literal.go's
+	// newStringLiteral; all 11 callers consume string tokens. Their openers
+	// contain ', " or $, or a non-ASCII byte (Unicode quote delimiters).
+	if !prefilter || src.quote || src.nonASCII {
+		for _, stmt := range tree.Statements {
+			if err := retargetStringLiterals(stmt, to); err != nil {
+				return "", fmt.Errorf("rewrite: %w", err)
+			}
 		}
 	}
 
@@ -109,4 +127,25 @@ func Transpile(sql string, from, to keywords.SQLDialect) (string, error) {
 		return "", fmt.Errorf("format: %w", err)
 	}
 	return out, nil
+}
+
+type sourceFeatures struct{ pipe, quote, nonASCII, typeDelim bool }
+
+func scanSource(sql string) sourceFeatures {
+	var f sourceFeatures
+	for i := 0; i < len(sql); i++ {
+		switch c := sql[i]; {
+		case c >= 0x80:
+			f.nonASCII = true
+		case c == '|':
+			f.pipe = true
+		case c == '\'' || c == '$':
+			f.quote = true
+		case c == '"':
+			f.quote, f.typeDelim = true, true
+		case c == '`' || c == '[':
+			f.typeDelim = true
+		}
+	}
+	return f
 }

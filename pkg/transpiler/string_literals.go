@@ -19,6 +19,7 @@ import (
 	"reflect"
 	"strings"
 
+	"github.com/ajitpratap0/GoSQLX/pkg/internal/reflplan"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/dialect"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/keywords"
@@ -131,34 +132,43 @@ type seenPtr struct {
 // keep the source escaping. seen guards against shared or cyclic pointers.
 // An explicit stack preserves pre-order without consuming the goroutine stack.
 func forEachLiteral(v reflect.Value, seen map[seenPtr]bool, f func(*ast.LiteralValue)) {
-	var small [64]reflect.Value
-	stack := append(small[:0], v)
+	type item struct {
+		v reflect.Value
+		p *reflplan.Plan
+	}
+	if !v.IsValid() {
+		return
+	}
+	var small [64]item
+	stack := append(small[:0], item{v, reflplan.Of(v.Type())})
 	for len(stack) > 0 {
-		v = stack[len(stack)-1]
+		it := stack[len(stack)-1]
+		v, p := it.v, it.p
 		stack = stack[:len(stack)-1]
 		switch v.Kind() {
 		case reflect.Interface:
 			if !v.IsNil() {
-				stack = append(stack, v.Elem())
+				e := v.Elem()
+				stack = append(stack, item{e, reflplan.Of(e.Type())})
 			}
 		case reflect.Pointer:
 			if v.IsNil() {
 				continue
 			}
-			key := seenPtr{v.Type(), v.Pointer()}
+			key := seenPtr{p.Type, v.Pointer()}
 			if seen[key] {
 				continue
 			}
 			seen[key] = true
-			if v.Elem().Type() == literalType {
+			if p.Elem.Type == literalType {
 				if lit, ok := v.Interface().(*ast.LiteralValue); ok {
 					f(lit)
 				}
 				continue
 			}
-			stack = append(stack, v.Elem())
+			stack = append(stack, item{v.Elem(), p.Elem})
 		case reflect.Struct:
-			if v.Type() == literalType {
+			if p.Type == literalType {
 				if v.CanAddr() {
 					if lit, ok := v.Addr().Interface().(*ast.LiteralValue); ok {
 						f(lit)
@@ -166,21 +176,25 @@ func forEachLiteral(v reflect.Value, seen map[seenPtr]bool, f func(*ast.LiteralV
 				}
 				continue
 			}
-			t := v.Type()
-			for i := v.NumField() - 1; i >= 0; i-- {
-				if t.Field(i).IsExported() {
-					stack = append(stack, v.Field(i))
-				}
+			for i := len(p.Fields) - 1; i >= 0; i-- {
+				fp := p.Fields[i]
+				stack = append(stack, item{v.Field(fp.Index), fp.Plan})
 			}
 		case reflect.Slice, reflect.Array:
+			if !p.Elem.Reach {
+				continue
+			}
 			for i := v.Len() - 1; i >= 0; i-- {
-				stack = append(stack, v.Index(i))
+				stack = append(stack, item{v.Index(i), p.Elem})
 			}
 		case reflect.Map:
+			if !p.Elem.Reach {
+				continue
+			}
 			iter := v.MapRange()
 			start := len(stack)
 			for iter.Next() {
-				stack = append(stack, iter.Value())
+				stack = append(stack, item{iter.Value(), p.Elem})
 			}
 			// Preserve this iterator's order with a LIFO stack.
 			for i, j := start, len(stack)-1; i < j; i, j = i+1, j-1 {

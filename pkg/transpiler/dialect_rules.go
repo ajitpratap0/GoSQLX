@@ -15,6 +15,8 @@
 package transpiler
 
 import (
+	"sync"
+
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/dialect"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/keywords"
 	"github.com/ajitpratap0/GoSQLX/pkg/transpiler/rules"
@@ -53,12 +55,55 @@ func register(from, to keywords.SQLDialect, rs ...RewriteRule) {
 // Cross-dialect pairs include common row-limit rules; same-dialect pairs return nil.
 // Exported for testing.
 func RulesFor(from, to keywords.SQLDialect) []RewriteRule {
+	return buildRules(from, to, true)
+}
+
+type rulesKey struct {
+	from, to keywords.SQLDialect
+	pipes    bool
+}
+
+// rulesCache is immutable after rulesCacheOnce publishes it. Only the nine
+// supported dialects are cached; arbitrary caller strings cannot grow it.
+var (
+	rulesCacheOnce sync.Once
+	rulesCache     map[rulesKey][]RewriteRule
+)
+
+func rulesForSource(from, to keywords.SQLDialect, pipes bool) []RewriteRule {
+	rulesCacheOnce.Do(func() {
+		dialects := [...]keywords.SQLDialect{
+			keywords.DialectGeneric, keywords.DialectMySQL, keywords.DialectPostgreSQL,
+			keywords.DialectSQLite, keywords.DialectSQLServer, keywords.DialectOracle,
+			keywords.DialectSnowflake, keywords.DialectClickHouse, keywords.DialectMariaDB,
+		}
+		rulesCache = make(map[rulesKey][]RewriteRule, len(dialects)*len(dialects)*2)
+		for _, f := range dialects {
+			for _, t := range dialects {
+				for _, p := range [...]bool{false, true} {
+					rulesCache[rulesKey{f, t, p}] = buildRules(f, t, p)
+				}
+			}
+		}
+	})
+	if rs, ok := rulesCache[rulesKey{from, to, pipes}]; ok {
+		// Callers must never mutate the shared slice. rowLimitRule keeps all
+		// mutable traversal state per invocation, so its closure is safe to share.
+		return rs
+	}
+	return buildRules(from, to, pipes)
+}
+
+func buildRules(from, to keywords.SQLDialect, pipes bool) []RewriteRule {
 	if from == to {
 		return nil
 	}
 	rs := ruleRegistry[dialectPair{from, to}]
 	// Never append into the registry's backing array.
 	rs = append(rs[:len(rs):len(rs)], rowLimitRule(to))
+	if !pipes {
+		return rs
+	}
 	if r := pipesRule(from, to); r != nil {
 		return append(rs, r)
 	}
@@ -79,9 +124,4 @@ func pipesRule(from, to keywords.SQLDialect) RewriteRule {
 		return rules.PipesOrToKeywordOr
 	}
 	return nil
-}
-
-// rulesFor is the internal version used by Transpile.
-func rulesFor(from, to keywords.SQLDialect) []RewriteRule {
-	return RulesFor(from, to)
 }

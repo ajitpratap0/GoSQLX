@@ -154,3 +154,39 @@ func TestTranspile_NestedParenthesizedWith(t *testing.T) {
 		})
 	}
 }
+
+func BenchmarkTranspile_SelectOps(b *testing.B) {
+	const sql = "SELECT u.id, u.name || 'x', COUNT(*) AS c, a ^ b, CASE WHEN u.age > 18 AND u.flag = 1 THEN 'adult' ELSE 'minor' END FROM users u JOIN orders o ON o.uid = u.id AND o.total > 10 WHERE u.status IN ('a','b') OR (u.score * 2 + 1) >= 5 GROUP BY u.id, u.name HAVING COUNT(*) > 1 ORDER BY c DESC LIMIT 10"
+	for _, p := range []struct {
+		name     string
+		from, to keywords.SQLDialect
+	}{
+		{"mysql2pg", keywords.DialectMySQL, keywords.DialectPostgreSQL},
+		{"pg2mysql", keywords.DialectPostgreSQL, keywords.DialectMySQL},
+	} {
+		b.Run(p.name, func(b *testing.B) {
+			b.ReportAllocs()
+			for i := 0; i < b.N; i++ {
+				if _, err := transpiler.Transpile(sql, p.from, p.to); err != nil {
+					b.Fatal(err)
+				}
+			}
+		})
+	}
+}
+
+// A large tree must not leave stale seen pointers or AST references in scratch
+// retained for the next, small call.
+func TestTranspileDeepChainFollowedBySmall(t *testing.T) {
+	if testing.Short() || raceEnabled {
+		t.Skip("near-ceiling chain skipped under -short and -race")
+	}
+	checkDeepChain(t, "OR", 490000, keywords.DialectPostgreSQL, keywords.DialectMySQL)
+	got, err := transpiler.Transpile("SELECT a || b FROM t", keywords.DialectPostgreSQL, keywords.DialectMySQL)
+	if err != nil {
+		t.Fatalf("small transpile after large tree: %v", err)
+	}
+	if want := "SELECT CONCAT(a, b) FROM t"; got != want {
+		t.Fatalf("small transpile after large tree = %q, want %q", got, want)
+	}
+}

@@ -4,7 +4,7 @@
 
 This matrix documents the comprehensive SQL feature support in GoSQLX across different SQL dialects and standards. The testing was conducted using the comprehensive integration test suite with 700+ test cases covering real-world SQL patterns.
 
-### Real-world dialect audit (October 2026, unreleased)
+### Real-world dialect audit (October 2026)
 
 The real-world corpus contains 2,813 production-style statements: SQL written
 by hand to imitate what ORMs, migration tools and applications send, not SQL
@@ -494,10 +494,9 @@ MariaDB inherits all MySQL features (SHOW, DESCRIBE, REPLACE INTO, ON DUPLICATE 
 | **WITHOUT ROWID** | ✅ Full | ✅ Full | 85% | CREATE TABLE option fully supported |
 | **Simplified syntax** | ✅ Full | ✅ Full | 85% | SQLite variations |
 
-### Statement syntax on main (not yet released)
+### Statement syntax
 
-These forms are merged on `main` and listed under `[Unreleased]` in the
-CHANGELOG; they are not in a tagged release yet. Each example was parsed with
+These forms are available in v1.17.0. Each example was parsed with
 `gosqlx.ParseWithDialect` and formatted with `gosqlx.FormatWithDialect` in the
 named dialect.
 
@@ -515,10 +514,10 @@ named dialect.
 | **CREATE / ALTER / DROP SEQUENCE** | PostgreSQL, Oracle, Snowflake | ⚠️ Partial | Parsed and kept as statement text (`UtilityStatement`); `AST.SQL()` no longer drops them. MariaDB has a full `CreateSequenceStatement` (see MariaDB-Specific Features) |
 | **EXPLAIN** | PostgreSQL, MySQL, SQLite | ✅ Full | `ExplainStatement` now retains the explained statement as an AST (`EXPLAIN ANALYZE ...`, SQLite `EXPLAIN QUERY PLAN ...`) |
 | **SQL\*Plus `/` line** | Oracle | ✅ Full | A line holding only `/` ends a statement in the parser and in `SplitStatements`; `/` with other SQL on the line is still division. Known gap: formatting drops the `/` lines |
-| **`<=>` operator** | MySQL, MariaDB, PostgreSQL | ✅ Full | Null-safe equality (MySQL family) and pgvector distance (PostgreSQL). Unreleased (on main, next release): accepted only in these dialects and rejected in the others; v1.16.0 accepted `<=>` in no dialect |
-| **`==` operator** | SQLite, ClickHouse | ✅ Full | Unreleased (on main, next release): accepted only in these dialects and rejected in the others; v1.16.0 accepted `==` in no dialect |
+| **`<=>` operator** | MySQL, MariaDB, PostgreSQL | ✅ Full | Null-safe equality (MySQL family) and pgvector distance (PostgreSQL). Accepted only in these dialects and rejected in the others; v1.16.0 accepted `<=>` in no dialect |
+| **`==` operator** | SQLite, ClickHouse | ✅ Full | Accepted only in these dialects and rejected in the others; v1.16.0 accepted `==` in no dialect |
 
-Related grammar checks on `main`: outside SQL Server, a utility statement
+Related grammar checks: outside SQL Server, a utility statement
 (`SET`, `USE`, `GRANT`, `COPY`, `CALL`, ...) followed on the next line by
 another statement without `;` is an error (E2002); transaction statements are
 checked against each dialect's grammar (`BEGIN banana` is rejected); an
@@ -806,7 +805,7 @@ gosqlx format --dialect mysql query.sql
 - 30+ ClickHouse-specific keywords: TTL, CODEC, FORMAT, SETTINGS, DISTRIBUTED, etc.
 
 #### BigQuery
-- PIVOT / UNPIVOT (unreleased, #854): aggregate aliases and multiple aggregates (`PIVOT (SUM(s) AS total, COUNT(*) AS n FOR q IN ('Q1' AS q1, 'Q2' q2))`), `UNPIVOT INCLUDE NULLS` / `EXCLUDE NULLS`, row-value aliases with or without `AS` (string or INT64), and multi-column UNPIVOT (`UNPIVOT ((a, b) FOR k IN ((c1, c2) AS 'x', (c3, c4) AS 'y'))`)
+- PIVOT / UNPIVOT (#854): aggregate aliases and multiple aggregates (`PIVOT (SUM(s) AS total, COUNT(*) AS n FOR q IN ('Q1' AS q1, 'Q2' q2))`), `UNPIVOT INCLUDE NULLS` / `EXCLUDE NULLS`, row-value aliases with or without `AS` (string or INT64), and multi-column UNPIVOT (`UNPIVOT ((a, b) FOR k IN ((c1, c2) AS 'x', (c3, c4) AS 'y'))`)
 - PIVOT `IN` values must be literals or names; constant expressions such as `IN (1 + 1)` or `IN (DATE '2024-01-01')` are not parsed
 - QUALIFY, `UNNEST` in FROM and `(struct).field` access are capability-gated; BigQuery has no dedicated keyword set
 - Quoted PIVOT aggregate aliases and UNPIVOT value-column names retain their source delimiters, including BigQuery backticks and Oracle double quotes

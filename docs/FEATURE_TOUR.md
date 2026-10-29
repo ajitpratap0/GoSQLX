@@ -2,7 +2,7 @@
 
 This page walks through short examples of GoSQLX features: PostgreSQL extensions, security scanning, linting, formatting that keeps comments, transforms, fingerprinting and transpilation. Install GoSQLX first by following [Getting Started](GETTING_STARTED.md).
 
-The formatting, transform, fingerprinting and transpilation examples show behaviour that is on the main branch and ships in the next release; the outputs below were produced from the main branch.
+The formatting, transform, fingerprinting and transpilation examples show behaviour released in v1.17.0.
 
 ## Feature Examples
 

@@ -307,7 +307,7 @@ type ExplainStatement struct {
 }
 ```
 
-On the main branch (unreleased, next release), `EXPLAIN SELECT 1` parses into an `*ast.ExplainStatement` whose `Statement` is the `*ast.SelectStatement`, and `SQL()` writes it back as `EXPLAIN SELECT 1`. In earlier releases it became a `DescribeStatement`, so code that matched `EXPLAIN` through `*ast.DescribeStatement` must handle `*ast.ExplainStatement` instead. `Children()` returns the explained statement, so `ast.Inspect` and `ast.Walk` reach it.
+`EXPLAIN SELECT 1` parses into an `*ast.ExplainStatement` whose `Statement` is the `*ast.SelectStatement`, and `SQL()` writes it back as `EXPLAIN SELECT 1`. Before v1.17.0, it became a `DescribeStatement`, so code that matched `EXPLAIN` through `*ast.DescribeStatement` must handle `*ast.ExplainStatement` instead. `Children()` returns the explained statement, so `ast.Inspect` and `ast.Walk` reach it.
 
 ```go
 tree, _ := gosqlx.ParseWithDialect("EXPLAIN SELECT 1", keywords.DialectPostgreSQL)
@@ -326,7 +326,7 @@ type BatchSeparator struct {
 }
 ```
 
-On the main branch (unreleased, next release), scripts that use `GO` and `GO <count>` parse with the SQL Server dialect, also without semicolons. Repeated batches are not expanded, and `SQL()` and `FormatAST` keep each `GO` on its own line. Code that enumerates `AST.Statements` must skip `*ast.BatchSeparator` nodes when it counts statements:
+Scripts that use `GO` and `GO <count>` parse with the SQL Server dialect, also without semicolons. Repeated batches are not expanded, and `SQL()` and `FormatAST` keep each `GO` on its own line. Code that enumerates `AST.Statements` must skip `*ast.BatchSeparator` nodes when it counts statements:
 
 ```go
 tree, _ := gosqlx.ParseWithDialect("SELECT 1\nGO\nSELECT 2\nGO 3", keywords.DialectSQLServer)
@@ -465,7 +465,7 @@ type Identifier struct {
 }
 ```
 
-`QuoteStyle` records the opening delimiter the source used: `"` (ANSI), `` ` `` (MySQL, MariaDB, ClickHouse) or `[` (SQL Server). On the main branch (unreleased, next release), `SQL()`, the formatter and fingerprints write quoted identifiers back with the same delimiters, so a MySQL `` `select` `` stays a name. Statement, table and column names carry the same information in `NameQuote` fields, such as `TableReference.NameQuote` and `TableReference.AliasQuote`.
+`QuoteStyle` records the opening delimiter the source used: `"` (ANSI), `` ` `` (MySQL, MariaDB, ClickHouse) or `[` (SQL Server). `SQL()`, the formatter and fingerprints write quoted identifiers back with the same delimiters, so a MySQL `` `select` `` stays a name. Statement, table and column names carry the same information in `NameQuote` fields, such as `TableReference.NameQuote` and `TableReference.AliasQuote`.
 
 `NameQuote` is the compact metadata type used by `Identifier.Quotes` and name fields. It records delimiter style and which name parts must stay delimited; the parser sets it. Its recorded style takes precedence over `Identifier.QuoteStyle`.
 
@@ -478,7 +478,7 @@ type LiteralValue struct {
 }
 ```
 
-String literals keep their introducer and escape rules (unreleased, on the main branch). Read them with `DialectExtras()`, which returns a `LiteralExtras` value, and change them through `EnsureExtras()` or `SetRawBackslash()`:
+String literals keep their introducer and escape rules. Read them with `DialectExtras()`, which returns a `LiteralExtras` value, and change them through `EnsureExtras()` or `SetRawBackslash()`:
 
 ```go
 type LiteralExtras struct {
@@ -510,7 +510,7 @@ type BinaryExpression struct {
 }
 ```
 
-`^` is exponentiation in PostgreSQL and bitwise XOR in MySQL, MariaDB and SQL Server. The parser records the XOR meaning in `BitwiseXor` (unreleased, on the main branch), and `gosqlx.Transpile` uses it to write `POWER()`, `#`, `BITXOR()` or `bitXor()` for the target dialect.
+`^` is exponentiation in PostgreSQL and bitwise XOR in MySQL, MariaDB and SQL Server. The parser records the XOR meaning in `BitwiseXor`, and `gosqlx.Transpile` uses it to write `POWER()`, `#`, `BITXOR()` or `bitXor()` for the target dialect.
 
 **Supported Operators:**
 - Arithmetic: `+`, `-`, `*`, `/`, `%`
@@ -704,11 +704,11 @@ type UnpivotClause struct {
 }
 ```
 
-`AggregateAlias`, `ExtraAggregates`, `NullHandling` and `ValueColumns` are unreleased additions on the main branch. `NullHandling` has type `string`. In multi-column UNPIVOT, `ValueColumns` holds the target column set, `ValueColumn` is empty, and each `InColumns` entry holds a parenthesized source column set with its optional label. `ast.UnpivotNullHandling(s)` normalizes a `NullHandling` value. Quoted aliases and value columns keep their source delimiters when rendered.
+`AggregateAlias`, `ExtraAggregates`, `NullHandling` and `ValueColumns` are additions in v1.17.0. `NullHandling` has type `string`. In multi-column UNPIVOT, `ValueColumns` holds the target column set, `ValueColumn` is empty, and each `InColumns` entry holds a parenthesized source column set with its optional label. `ast.UnpivotNullHandling(s)` normalizes a `NullHandling` value. Quoted aliases and value columns keep their source delimiters when rendered.
 
 ## Dialect Extension Fields
 
-Dialect-specific clauses that most statements never use live behind optional pointers, so common statements do not carry them. On the main branch (unreleased, next release) these are:
+Dialect-specific clauses that most statements never use live behind optional pointers, so common statements do not carry them. These are:
 
 | Field | Type | Holds |
 |---|---|---|

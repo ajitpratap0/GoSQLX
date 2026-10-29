@@ -188,8 +188,7 @@ A file that fails as a whole is checked again statement by statement, so
 scripts that use the T-SQL `GO` batch separator or the MySQL `DELIMITER`
 directive validate, and a file over the tokenizer's 1,000,000 token limit
 validates when every statement is under it. Results read from stdin are named
-`<stdin>`; stdin with no bytes at all is reported as an error. `--quiet` prints nothing, not even errors. These behaviours are
-unreleased: they are on the main branch and ship in the next release.
+`<stdin>`; stdin with no bytes at all is reported as an error. `--quiet` prints nothing, not even errors.
 
 ```bash
 printf 'SELECT 1\nGO\nSELECT 2\nGO\n' | gosqlx validate --dialect mssql
@@ -226,7 +225,7 @@ source case, including their `COLUMNS` definitions, to preserve names and litera
 
 #### Comments, hints and keyword case
 
-On the main branch (unreleased, next release), `gosqlx format` keeps comments.
+`gosqlx format` keeps comments.
 A comment between statements stays between them, a trailing comment stays after
 its statement, and a comment inside a statement moves to the line above it. An
 optimizer hint (`/*+ ... */`) directly after a statement's first keyword stays in
@@ -396,8 +395,7 @@ gosqlx parse -f json -o ast.json query.sql
 ```
 
 With `--dialect sqlserver`, `GO` lines appear in the statement list as
-`BatchSeparator` entries but are not counted in the `Statements` total
-(unreleased, on the main branch).
+`BatchSeparator` entries but are not counted in the `Statements` total.
 
 #### Pipeline/Stdin Examples
 
@@ -620,8 +618,8 @@ gosqlx lint -
 >
 > SQL that does not tokenize or parse is reported as a syntax error and also exits 1; the style
 > rules that need no parse tree still report their violations. With `--auto-fix` the exit code
-> reflects what is left after the fixes. Exiting 1 on syntax errors is unreleased behaviour on the
-> main branch. An empty or comment-only file, and comment-only stdin, has no violations and exits 0.
+> reflects what is left after the fixes. An empty or comment-only file, and comment-only stdin,
+> has no violations and exits 0.
 
 ```bash
 echo 'SELEC 1' | gosqlx lint
@@ -820,7 +818,7 @@ echo "SELECT * FROM users WHERE name ILIKE '%alice%'" | gosqlx transpile --from 
 gosqlx transpile --from mysql --to postgres -o out.sql "SELECT 1"
 ```
 
-On the main branch (unreleased, next release), strings and quoted identifiers
+Strings and quoted identifiers
 are written with the target dialect's escape rules and delimiters, and
 dialect-specific operators are mapped. `^` is exponentiation in PostgreSQL and
 bitwise XOR in MySQL, MariaDB and SQL Server; PostgreSQL `@` and `|/` become
@@ -1075,7 +1073,7 @@ Available for all commands:
 | `-h, --help` | bool | false | Help for any command |
 | `--version` | bool | false | Show version information |
 
-On the main branch (unreleased), `-o` also works for `parse` and `transpile`.
+`-o` also works for `parse` and `transpile`.
 `-f`/`-o` map onto `validate`'s `--output-format`/`--output-file`, and commands
 that cannot honour them reject them instead of ignoring them.
 
@@ -1084,8 +1082,7 @@ that cannot honour them reject them instead of ignoring them.
 ## Dialect Names and Aliases
 
 Every `--dialect` flag takes a canonical dialect name (`gosqlx validate
---list-dialects` prints them). On the main branch (unreleased, next release),
-these aliases are accepted too:
+--list-dialects` prints them). These aliases are accepted too:
 
 | Alias | Dialect |
 |-------|---------|

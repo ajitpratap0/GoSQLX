@@ -416,7 +416,7 @@ func AutoFixFile(filename string) error {
 **Symptom:** `gosqlx.Lint` or `gosqlx.LintWithDialect` returns a non-nil error
 together with a result, or `gosqlx lint` exits 1 although no style rule fired.
 
-**Cause:** On the main branch (unreleased, next release), SQL that does not
+**Cause:** SQL that does not
 tokenize or parse is reported as an error instead of an empty, clean-looking
 result. The error wraps `gosqlx.ErrTokenize` or `gosqlx.ErrSyntax`, and the
 returned `*LintResult` still holds the violations of the text and token rules.
@@ -935,7 +935,7 @@ func ParseLargeScript(script string) error {
 it statement by statement, so a file past the token limit validates as long as
 each statement is under it.
 
-On the main branch (unreleased, next release), `SplitStatements` keeps compound
+`SplitStatements` keeps compound
 statements whole: a `BEGIN ... END` body of a trigger, procedure or function,
 `CASE ... END`, T-SQL `BEGIN TRY` and Oracle `DECLARE` sections are not cut at an
 inner `;`. Client batch separators are honoured and removed from the output: a

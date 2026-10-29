@@ -207,7 +207,7 @@ parse, validate or execute them one at a time. It ignores semicolons inside
 strings, quoted identifiers and comments, and returns segments without the
 terminating `;`; skip the empty ones.
 
-On the main branch (unreleased, next release), it also keeps compound
+It also keeps compound
 statements whole (`BEGIN ... END` bodies of triggers, procedures and functions,
 `CASE ... END`, T-SQL `BEGIN TRY`, PostgreSQL `BEGIN ATOMIC`, Oracle `DECLARE`
 sections) and honours client batch separators, which it removes from the
@@ -1045,7 +1045,7 @@ func LintSQL(sql string) error {
 }
 ```
 
-On the main branch (unreleased, next release), `gosqlx.Lint` and
+`gosqlx.Lint` and
 `gosqlx.LintWithDialect` return an error for SQL that does not tokenize or parse.
 The error wraps `gosqlx.ErrTokenize` or `gosqlx.ErrSyntax`, and the result is
 still returned with the violations of the text and token rules, so the function
@@ -1394,9 +1394,8 @@ gosqlx validate query1.sql query2.sql query3.sql
 
 ### Format Command
 
-Format SQL with consistent indentation. On the main branch (unreleased, next
-release) the formatter keeps comments and optimizer hints, and `--no-uppercase`
-writes every keyword in lower case; see the [CLI Guide](CLI_GUIDE.md#comments-hints-and-keyword-case).
+Format SQL with consistent indentation. The formatter keeps comments and optimizer
+hints, and `--no-uppercase` writes every keyword in lower case; see the [CLI Guide](CLI_GUIDE.md#comments-hints-and-keyword-case).
 
 ```bash
 # Format and print to stdout

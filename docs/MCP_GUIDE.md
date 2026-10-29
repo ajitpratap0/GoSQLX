@@ -408,7 +408,7 @@ curl -s -X POST http://127.0.0.1:8080/mcp \
 | `statement_count` | integer | Number of SQL statements parsed, excluding `GO` batch separators |
 | `statement_types` | array of string | Go type names of each parsed statement (e.g. `*ast.SelectStatement`) |
 
-On the main branch (unreleased, next release), SQL Server `GO` batch separators
+SQL Server `GO` batch separators
 (`*ast.BatchSeparator`) are left out of `statement_count` and `statement_types`.
 `parse_sql` defaults to the generic dialect. Set `"dialect": "sqlserver"` to
 parse T-SQL scripts containing `GO`; repeat counts on `GO` do not increase
@@ -468,7 +468,7 @@ curl -s -X POST http://127.0.0.1:8080/mcp \
 }
 ```
 
-On the main branch (unreleased, next release; issue #849), an unqualified name
+Since v1.17.0 (issue #849), an unqualified name
 in `ORDER BY` or `HAVING` that matches a SELECT-list alias is treated as the
 alias, so `extract_metadata` and the metadata part of `analyze_sql` no longer
 report SELECT aliases as columns. For `SELECT count(*) AS orders FROM t GROUP BY

@@ -2,6 +2,7 @@
   "sql": "SELECT\n  u.name,\n  u.email,\n  COUNT(o.id) AS order_count,\n  SUM(o.total) AS lifetime_value\nFROM users u\nLEFT JOIN orders o ON o.user_id = u.id\nWHERE u.created_at \u003e '2024-01-01'\nGROUP BY u.name, u.email\nHAVING COUNT(o.id) \u003e 5\nORDER BY lifetime_value DESC\nLIMIT 20;",
   "formatted": "SELECT u.name, u.email, COUNT(o.id) AS order_count, SUM(o.total) AS lifetime_value\nFROM users u\nLEFT JOIN orders o ON o.user_id = u.id\nWHERE u.created_at \u003e '2024-01-01'\nGROUP BY u.name, u.email\nHAVING COUNT(o.id) \u003e 5\nORDER BY lifetime_value DESC\nLIMIT 20;",
   "ast": {
+    "UnicodeIdentifiers": null,
     "Statements": [
       {
         "With": null,
@@ -194,6 +195,7 @@
               "Not": false,
               "PipesOr": false,
               "BitwiseXor": false,
+              "XorAtAdditive": false,
               "CustomOp": null,
               "Extras": null,
               "Pos": {
@@ -238,6 +240,7 @@
           "Not": false,
           "PipesOr": false,
           "BitwiseXor": false,
+          "XorAtAdditive": false,
           "CustomOp": null,
           "Extras": null,
           "Pos": {
@@ -309,6 +312,7 @@
           "Not": false,
           "PipesOr": false,
           "BitwiseXor": false,
+          "XorAtAdditive": false,
           "CustomOp": null,
           "Extras": null,
           "Pos": {
@@ -357,6 +361,14 @@
         "Line": 1,
         "Column": 1
       }
-    ]
+    ],
+    "StatementEnds": [
+      {
+        "Line": 12,
+        "Column": 10
+      }
+    ],
+    "ExecuteSlash": null,
+    "ExecuteSlashPositions": null
   }
 }

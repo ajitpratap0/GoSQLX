@@ -179,7 +179,7 @@ To apply only some rules or change their settings, build a linter from `pkg/lint
 Turning on every rule at once on a large SQL directory usually produces hundreds of findings. A gradual path:
 
 1. Start with validation only (`gosqlx validate`). Broken SQL is never intentional.
-2. Add `gosqlx format --check` after one pull request that runs `gosqlx format -i` over the whole tree. The latest release drops SQL comments when formatting; the main branch keeps them and ships that in the next release. See [Format SQL in Go](format-sql-in-go.md#comments-and-optimizer-hints).
+2. Add `gosqlx format --check` after one pull request that runs `gosqlx format -i` over the whole tree. Releases before v1.17.0 drop SQL comments when formatting; v1.17.0 keeps them. See [Format SQL in Go](format-sql-in-go.md#comments-and-optimizer-hints).
 3. Enable lint rules a few at a time with `--rules`, fixing existing findings as you go. `gosqlx lint --auto-fix` fixes the whitespace and keyword-case rules automatically.
 
 ## Next steps

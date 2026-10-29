@@ -109,7 +109,7 @@ out, err := gosqlx.Format("select id from users where id = 1", opts)
 // WHERE id = 1;
 ```
 
-On the main branch (unreleased, next release), `Format` keeps comments and optimizer hints. A comment inside a statement moves to the line above it, and a `/*+ ... */` hint directly after a statement's first keyword stays there. SQL whose hints or MySQL `/*! ... */` comments cannot be put back faithfully returns an error wrapping `formatter.ErrUnplaceableComment` (package `pkg/formatter`) instead of being rewritten without them:
+`Format` keeps comments and optimizer hints. A comment inside a statement moves to the line above it, and a `/*+ ... */` hint directly after a statement's first keyword stays there. SQL whose hints or MySQL `/*! ... */` comments cannot be put back faithfully returns an error wrapping `formatter.ErrUnplaceableComment` (package `pkg/formatter`) instead of being rewritten without them:
 
 ```go
 _, err := gosqlx.Format("select a from /*+ FULL(t) */ t", gosqlx.DefaultFormatOptions())
@@ -119,7 +119,7 @@ errors.Is(err, formatter.ErrUnplaceableComment) // true
 See [Format SQL in Go](../guides/format-sql-in-go.md#comments-and-optimizer-hints) for examples.
 
 ### `FormatWithDialect(sql string, options FormatOptions, dialect keywords.SQLDialect) (string, error)`
-`Format` for SQL in a specific dialect: the SQL is tokenized and parsed with that dialect's rules, and comments and hints are kept as in `Format`. An empty dialect behaves like `Format`; an unknown dialect returns an error wrapping `ErrUnsupportedDialect`. This function is unreleased and available on the main branch.
+`Format` for SQL in a specific dialect: the SQL is tokenized and parsed with that dialect's rules, and comments and hints are kept as in `Format`. An empty dialect behaves like `Format`; an unknown dialect returns an error wrapping `ErrUnsupportedDialect`.
 
 ```go
 out, err := gosqlx.FormatWithDialect(
@@ -134,7 +134,7 @@ out, err := gosqlx.FormatWithDialect(
 ```
 
 ### `WithComments() Option`
-A `ParseTree` option that keeps the comments of the input on the tree so that `FormatTree` and `FormatAST` write them back. Without it comments are discarded. Parser-produced statement spans let formatting keep comments next to their statements; comments inside a statement move above it. Use `Format` on the original text when preserving optimizer hints, since it also retains the token stream needed to place hints inside statements. This option is unreleased and available on the main branch.
+A `ParseTree` option that keeps the comments of the input on the tree so that `FormatTree` and `FormatAST` write them back. Without it comments are discarded. Parser-produced statement spans let formatting keep comments next to their statements; comments inside a statement move above it. Use `Format` on the original text when preserving optimizer hints, since it also retains the token stream needed to place hints inside statements.
 
 ```go
 tree, err := gosqlx.ParseTree(ctx, "SELECT 1 -- one", gosqlx.WithComments())
@@ -161,7 +161,7 @@ Run all 30 built-in rules (L001-L030) and return the violations in `LintResult.V
 ### `LintWithDialect(sql string, dialect keywords.SQLDialect) (*LintResult, error)`
 `Lint` with the SQL tokenized and parsed in the given dialect, so the AST-based rules (L011-L030) also run on dialect-specific syntax. An empty dialect behaves like `Lint`; an unknown dialect returns an error wrapping `ErrUnsupportedDialect`.
 
-On the main branch (unreleased, next release), both functions report SQL that does not tokenize or parse as an error: the error wraps `ErrTokenize` or `ErrSyntax`, and the returned `*LintResult` still holds the violations of the text and token rules. Code that ignored the error and treated an empty result as clean must check it:
+Since v1.17.0, both functions report SQL that does not tokenize or parse as an error: the error wraps `ErrTokenize` or `ErrSyntax`, and the returned `*LintResult` still holds the violations of the text and token rules. Code that ignored the error and treated an empty result as clean must check it:
 
 ```go
 res, err := gosqlx.LintWithDialect("SELEC 1", keywords.DialectPostgreSQL)
@@ -178,7 +178,7 @@ The lower-level `linter.FileResult` (package `pkg/linter`) gains the fields `Tok
 ### `SplitStatements(sql, dialect string) []string`
 Split a script into statements at top-level semicolons, ignoring semicolons inside strings, quoted identifiers and comments. The dialect selects the quoting rules, such as PostgreSQL dollar quotes, MySQL backticks and SQL Server brackets; an unknown dialect falls back to ANSI quoting. The terminating `;` is removed and empty segments are kept, so trim and skip them. Segments are substrings of the input, so no bytes are copied.
 
-On the main branch (unreleased, next release), the splitter also:
+The splitter also:
 
 - keeps compound statements whole: `BEGIN ... END` bodies of triggers, procedures and functions, T-SQL `BEGIN TRY` and `IF ... BEGIN`, PostgreSQL `BEGIN ATOMIC`, `CASE ... END`, `IF`/`LOOP`/`WHILE`/`REPEAT` inside a block, and Oracle `DECLARE` sections. Transaction statements such as `BEGIN;` are not blocks, and a script whose blocks do not balance falls back to plain `;` splitting;
 - honours client batch separators and removes them from the output: a line holding only `GO [n]` for SQL Server, `DELIMITER` for MySQL and MariaDB, and a line holding only `/` for Oracle;
@@ -206,7 +206,7 @@ out, err := gosqlx.Transpile(
 // CREATE TABLE t (id SERIAL PRIMARY KEY)
 ```
 
-On the main branch (unreleased, next release), string literals and quoted identifiers are written with the target dialect's escape rules and delimiters, and dialect-specific operators are mapped for the target: `^` is exponentiation in PostgreSQL and bitwise XOR in MySQL, MariaDB and SQL Server, and PostgreSQL `@` and `|/` become `ABS()` and `SQRT()`. PostgreSQL `||/` becomes `CBRT()` only for Snowflake and ClickHouse; every other target (MySQL, for example) has no `CBRT()` and returns an error. A literal, operator or SQL Server `GO` script the target cannot represent returns an error instead of SQL with a different meaning:
+String literals and quoted identifiers are written with the target dialect's escape rules and delimiters, and dialect-specific operators are mapped for the target: `^` is exponentiation in PostgreSQL and bitwise XOR in MySQL, MariaDB and SQL Server, and PostgreSQL `@` and `|/` become `ABS()` and `SQRT()`. PostgreSQL `||/` becomes `CBRT()` only for Snowflake and ClickHouse; every other target (MySQL, for example) has no `CBRT()` and returns an error. A literal, operator or SQL Server `GO` script the target cannot represent returns an error instead of SQL with a different meaning:
 
 ```go
 gosqlx.Transpile("SELECT `Order Id` FROM t WHERE n = 'it\\'s'", keywords.DialectMySQL, keywords.DialectPostgreSQL)
@@ -224,7 +224,7 @@ gosqlx.Transpile("SELECT a ^ b FROM t", keywords.DialectMySQL, keywords.DialectO
 ### `ExtractColumns(astNode *ast.AST) []string`
 Return the deduplicated, sorted column names referenced in SELECT lists, WHERE, GROUP BY, ORDER BY, JOIN conditions and HAVING, without table qualifiers.
 
-On the main branch (unreleased, next release; issue #849), an unqualified name in `ORDER BY` or `HAVING` that matches a SELECT-list alias of the same query block is treated as the alias, not reported as a column. Qualified references stay columns, and aliases never cross subquery, CTE or UNION boundaries. `ExtractColumnsQualified` follows the same rule.
+Since v1.17.0 (issue #849), an unqualified name in `ORDER BY` or `HAVING` that matches a SELECT-list alias of the same query block is treated as the alias, not reported as a column. Qualified references stay columns, and aliases never cross subquery, CTE or UNION boundaries. `ExtractColumnsQualified` follows the same rule.
 
 ```go
 tree, _ := gosqlx.Parse("SELECT count(*) AS orders FROM t GROUP BY customer_id ORDER BY orders")

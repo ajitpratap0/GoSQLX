@@ -77,7 +77,7 @@ Use `errors.Is(err, gosqlx.ErrSyntax)` and `gosqlx.ErrorLocation(err)` to report
 
 ## Comments and optimizer hints
 
-On the main branch, `gosqlx.Format` keeps comments; this is unreleased behaviour that ships in the next release. A comment between statements stays between them, a trailing comment stays after its statement, and a comment inside a statement moves to the line above that statement:
+`gosqlx.Format` keeps comments. A comment between statements stays between them, a trailing comment stays after its statement, and a comment inside a statement moves to the line above that statement:
 
 ```go
 sql := "-- top users\nselect id, /* pk */ email from users where id = 1; -- one user\nselect 2"
@@ -122,7 +122,7 @@ If you work with a parsed tree instead of text, pass `gosqlx.WithComments()` to 
 
 ## Format dialect-specific SQL
 
-`gosqlx.Format` parses with the default dialect. To format SQL that only parses under a specific dialect, call `gosqlx.FormatWithDialect`, which tokenizes and parses with that dialect's rules and keeps comments and hints the same way as `Format`. It is also unreleased and available on the main branch:
+`gosqlx.Format` parses with the default dialect. To format SQL that only parses under a specific dialect, call `gosqlx.FormatWithDialect`, which tokenizes and parses with that dialect's rules and keeps comments and hints the same way as `Format`. Use it as follows:
 
 ```go
 out, err := gosqlx.FormatWithDialect(
@@ -210,8 +210,6 @@ from t
 where b is null and c in (1, 2)
 order by cast(a as integer) desc
 ```
-
-These behaviours are unreleased: they are on the main branch and ship in the next release.
 
 ## Next steps
 

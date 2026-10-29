@@ -22,7 +22,8 @@ type withIface struct {
 	S    []leaf
 	M    map[string]any
 	P    *selfLeaf
-	hid  any
+	//lint:ignore U1000 an unexported interface field must be excluded from Fields
+	hid any
 }
 type cycA struct {
 	B *cycB

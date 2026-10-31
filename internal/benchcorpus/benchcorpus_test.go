@@ -11,6 +11,10 @@ import (
 	"sort"
 	"strings"
 	"testing"
+
+	"github.com/ajitpratap0/GoSQLX/internal/dialectaudit"
+	"github.com/ajitpratap0/GoSQLX/pkg/gosqlx"
+	"github.com/ajitpratap0/GoSQLX/pkg/sql/keywords"
 )
 
 var updateManifest = flag.Bool("update-manifest", false, "rewrite testdata/bench/MANIFEST.sha256 from the files on disk")
@@ -191,6 +195,111 @@ func TestScriptBuildsLargeInput(t *testing.T) {
 	}
 }
 
+// TestScriptSplitsAndParsesForEveryRealWorldDialect proves the separator
+// survives statements that end in a line comment (-- or #): the script must
+// split back into exactly the cycled statements and parse without error.
+func TestScriptSplitsAndParsesForEveryRealWorldDialect(t *testing.T) {
+	set, err := Default()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range Corpora {
+		if c.Kind != KindRealWorld {
+			continue
+		}
+		d := c.Dialect
+		t.Run(d, func(t *testing.T) {
+			rw := set.RealWorld(d)
+			script := Script(rw, LargeMin)
+			// Script cycles through rw, so count how many statements it holds.
+			var want int
+			for n, size := 0, 0; size < LargeMin; n++ {
+				size += len(strings.TrimRight(rw[n%len(rw)].SQL, " \t\r\n")) + len("\n;\n")
+				want = n + 1
+			}
+			var got int
+			for _, sql := range gosqlx.SplitStatements(script.SQL, d) {
+				if !dialectaudit.Empty(sql) {
+					got++
+				}
+			}
+			if got != want {
+				t.Errorf("script splits into %d non-empty statements, want %d", got, want)
+			}
+			if _, err := gosqlx.ParseWithDialect(script.SQL, keywords.SQLDialect(d)); err != nil {
+				t.Errorf("script does not parse: %v", err)
+			}
+		})
+	}
+}
+
+// TestScriptKeepsSeparatorAfterLineComment is a focused regression for a
+// statement whose last line is a comment.
+func TestScriptKeepsSeparatorAfterLineComment(t *testing.T) {
+	stmts := []Statement{
+		{SQL: "SELECT 1 -- trailing", Dialect: "mysql"},
+		{SQL: "SELECT 2#hash", Dialect: "mysql"},
+	}
+	got := Script(stmts, 60)
+	if !strings.Contains(got.SQL, "-- trailing\n;\n") || !strings.Contains(got.SQL, "#hash\n;\n") {
+		t.Errorf("separator is not on its own line: %q", got.SQL)
+	}
+	n := 0
+	for _, sql := range gosqlx.SplitStatements(Script(stmts, 60).SQL, "mysql") {
+		if !dialectaudit.Empty(sql) {
+			n++
+		}
+	}
+	if n < 2 {
+		t.Errorf("statements merged: split into %d", n)
+	}
+}
+
+// TestRealWorldIsolatedFromFeature pins the realworld/ prefix filter.
+func TestRealWorldIsolatedFromFeature(t *testing.T) {
+	set, err := Default()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range Corpora {
+		if c.Kind != KindRealWorld {
+			continue
+		}
+		rw := set.RealWorld(c.Dialect)
+		for _, st := range rw {
+			if st.Corpus != "realworld/"+c.Dialect {
+				t.Fatalf("RealWorld(%s) returned %s from corpus %s", c.Dialect, st.Key(), st.Corpus)
+			}
+		}
+		if want := len(set.ByCorpus("realworld/" + c.Dialect)); len(rw) != want || want == 0 {
+			t.Errorf("RealWorld(%s) = %d statements, ByCorpus = %d", c.Dialect, len(rw), want)
+		}
+	}
+}
+
+// TestCorpusLabels checks every Corpus carries a dialect the library knows
+// and that real-world folders are named after their dialect.
+func TestCorpusLabels(t *testing.T) {
+	for _, c := range Corpora {
+		if c.Dialect != GenericDialect && !keywords.IsValidDialect(c.Dialect) {
+			t.Errorf("%s: dialect %q is not a valid keywords dialect", c.Name, c.Dialect)
+		}
+		if c.Kind == KindRealWorld && c.Dir != "realworld/"+c.Dialect {
+			t.Errorf("%s: Dir %q, want realworld/%s", c.Name, c.Dir, c.Dialect)
+		}
+		if c.Kind == KindGeneric && c.Dialect != GenericDialect {
+			t.Errorf("%s: generic corpus labelled %q", c.Name, c.Dialect)
+		}
+	}
+	// The feature folders are labelled by the dialect they exercise.
+	wantFeature := map[string]string{"feature/mssql": "sqlserver", "feature/mysql": "mysql", "feature/oracle": "oracle", "feature/postgresql": "postgresql"}
+	for _, c := range Corpora {
+		if c.Kind == KindFeature && wantFeature[c.Name] != c.Dialect {
+			t.Errorf("%s labelled %q, want %q", c.Name, c.Dialect, wantFeature[c.Name])
+		}
+	}
+}
+
 func TestKnownFailuresExcluded(t *testing.T) {
 	root := t.TempDir()
 	write := func(rel, content string) {
@@ -209,17 +318,30 @@ func TestKnownFailuresExcluded(t *testing.T) {
 	write(PortableQueriesFile, "q\tQ\tSELECT 1\n")
 	write(KnownFailuresFile, "# header\nmysql/01.sql#1 parse\n")
 
+	// Comment-only segments count towards Index, matching known_failures.txt.
+	write("realworld/mysql/02.sql", "SELECT 1;\n-- note\n;\nSELECT 2;\nSELECT 3;\n")
+	write(KnownFailuresFile, "# header\nmysql/01.sql#1 parse\nmysql/02.sql#2 parse\n")
+
 	set, err := Load(root)
 	if err != nil {
 		t.Fatal(err)
+	}
+	var idx02 []int
+	for _, st := range set.RealWorld("mysql") {
+		if st.File == "realworld/mysql/02.sql" {
+			idx02 = append(idx02, st.Index)
+		}
+	}
+	if !reflect.DeepEqual(idx02, []int{0, 3}) {
+		t.Errorf("02.sql surviving indexes = %v, want [0 3] (#1 is the comment-only segment, #2 excluded)", idx02)
 	}
 	for _, st := range set.RealWorld("mysql") {
 		if st.File == "realworld/mysql/01.sql" && st.Index == 1 {
 			t.Errorf("known failure %s was not excluded", st.Key())
 		}
 	}
-	if ex := set.Excluded(); len(ex) != 1 || ex[0].Key() != "realworld/mysql/01.sql#1" {
-		t.Errorf("Excluded() = %+v, want exactly mysql/01.sql#1", ex)
+	if ex := set.Excluded(); len(ex) != 2 || ex[0].Key() != "realworld/mysql/01.sql#1" || ex[1].Key() != "realworld/mysql/02.sql#2" {
+		t.Errorf("Excluded() = %+v, want exactly mysql/01.sql#1 and mysql/02.sql#2", ex)
 	}
 	// The feature/mysql corpus has the same basename but is not realworld, so it is kept.
 	if n := len(set.ByCorpus("feature/mysql")); n != 2 {

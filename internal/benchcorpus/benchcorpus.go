@@ -347,10 +347,9 @@ func Script(stmts []Statement, minBytes int) Statement {
 	for i := 0; b.Len() < minBytes; i++ {
 		sql := strings.TrimRight(stmts[i%len(stmts)].SQL, " \t\r\n")
 		b.WriteString(sql)
-		if !strings.HasSuffix(sql, ";") {
-			b.WriteByte(';')
-		}
-		b.WriteByte('\n')
+		// The separator goes on its own line: a statement may end in a
+		// line comment (-- or #) that would otherwise swallow the ';'.
+		b.WriteString("\n;\n")
 	}
 	out := stmts[0]
 	out.File, out.Index = "", 0

@@ -421,6 +421,11 @@ func targetExpressionPrecedence(e Expression, target string) int {
 	if !ok || binary == nil || binary.CustomOp != nil {
 		return retargetExpressionPrecedence(e) * 10
 	}
+	if binary.Lambda && lambdaTarget(target) {
+		return 0 // looser than OR: the body is never grouped
+	}
+	// Elsewhere a lambda is written as the target's -> operator, grouped as
+	// the target parses it.
 	switch binary.Operator {
 	case "->", "->>", "#>", "#>>", "@>", "<@", "#-", "?", "?|", "?&":
 		switch target {
@@ -457,6 +462,12 @@ func targetExpressionPrecedence(e Expression, target string) int {
 		}
 	}
 	return retargetExpressionPrecedence(e) * 10
+}
+
+// lambdaTarget reports whether -> is the lambda operator in target, as the
+// parser reads it (see Parser.arrowIsLambda).
+func lambdaTarget(target string) bool {
+	return target == "clickhouse" || target == "snowflake"
 }
 
 // rewriteXor handles ^ as bitwise XOR (MySQL, MariaDB, SQL Server).

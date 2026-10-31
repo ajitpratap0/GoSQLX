@@ -397,6 +397,9 @@ func (p *Parser) parseJSONExpression() (ast.Expression, error) {
 	// precedence handled by parseBitwiseExpression. Other dialects keep
 	// their existing JSON precedence.
 	for p.isJSONOperator() && !p.IsPostgreSQL() {
+		if p.isType(models.TokenTypeArrow) && p.arrowIsLambda() {
+			return p.parseLambdaBody(left)
+		}
 		opPos := p.currentLocation()
 		operator := p.currentToken.Token.Value
 		operatorType := p.currentToken.Token.Type
@@ -469,6 +472,28 @@ func (p *Parser) isDataTypeKeyword() bool {
 		return true
 	}
 	return false
+}
+
+// arrowIsLambda reports whether -> introduces a lambda body rather than JSON
+// field access. ClickHouse (arrayMap(x -> x * 2, a)) and Snowflake
+// (TRANSFORM(a, x -> x * 2)) have no JSON arrow operator; there -> is only
+// the lambda operator.
+func (p *Parser) arrowIsLambda() bool {
+	return p.IsClickHouse() || p.IsSnowflake()
+}
+
+// parseLambdaBody parses the body of a lambda whose parameters (an identifier
+// or a parenthesized list) are params, with the current token at ->. The body
+// is a full expression: the lambda binds looser than every other operator,
+// so x -> x * 2 is x -> (x * 2), never (x -> x) * 2.
+func (p *Parser) parseLambdaBody(params ast.Expression) (ast.Expression, error) {
+	opPos := p.currentLocation()
+	p.advance() // Consume ->
+	body, err := p.parseExpression()
+	if err != nil {
+		return nil, err
+	}
+	return &ast.BinaryExpression{Left: params, Operator: "->", Right: body, Lambda: true, Pos: opPos}, nil
 }
 
 // isJSONOperator checks if current token is a JSON/JSONB operator

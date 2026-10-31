@@ -67,6 +67,8 @@ func compareQueries(t *testing.T, root string) []Query {
 				got.Name = val
 			case "SQL":
 				got.SQL = val
+			default:
+				t.Fatalf("Corpus field %q is not mirrored in testdata/bench/portable_queries.txt; extend the mirror", key.Name)
 			}
 		}
 		out = append(out, got)

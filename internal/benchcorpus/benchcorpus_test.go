@@ -103,7 +103,78 @@ func TestVerifyDetectsDrift(t *testing.T) {
 	}
 }
 
-// TestLoadDeterministic checks two independent loads agree exactly.
+// TestSplitsPinned compares the statement set produced by the current
+// gosqlx.SplitStatements with testdata/bench/SPLITS.sha256, so a splitter
+// change cannot silently change which statements are benchmarked. Regenerate
+// with -update-manifest.
+func TestSplitsPinned(t *testing.T) {
+	root, err := FindRoot()
+	if err != nil {
+		t.Fatal(err)
+	}
+	set, err := Load(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := set.BuildSplits()
+	path := filepath.Join(root, "testdata", filepath.FromSlash(SplitsFile))
+	if *updateManifest {
+		if err := os.WriteFile(path, []byte(got), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		t.Logf("wrote %s", SplitsFile)
+		return
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(raw) == got {
+		return
+	}
+	want := map[string]string{}
+	for _, l := range strings.Split(strings.TrimSpace(string(raw)), "\n") {
+		if name, rest, ok := strings.Cut(l, " "); ok {
+			want[name] = rest
+		}
+	}
+	names := []string{ExcludedLabel}
+	for _, c := range Corpora {
+		names = append(names, c.Name)
+	}
+	gotLines := map[string]string{}
+	for _, l := range strings.Split(strings.TrimSpace(got), "\n") {
+		if name, rest, ok := strings.Cut(l, " "); ok {
+			gotLines[name] = rest
+		}
+	}
+	for _, n := range names {
+		if gotLines[n] != want[n] {
+			t.Errorf("split drift in corpus %s: pinned %q, now %q (splitter or Load changed; rerun with -update-manifest if intended)", n, want[n], gotLines[n])
+		}
+	}
+	if !t.Failed() {
+		t.Errorf("%s differs from the loaded splits (unexpected or missing lines)", SplitsFile)
+	}
+}
+
+// TestSplitsDigestSensitive proves the digest reacts to statement text,
+// order and numbering.
+func TestSplitsDigestSensitive(t *testing.T) {
+	a := []Statement{{File: "x.sql", Index: 0, SQL: "SELECT 1"}, {File: "x.sql", Index: 1, SQL: "SELECT 2"}}
+	base := statementDigest(a)
+	text := []Statement{a[0], {File: "x.sql", Index: 1, SQL: "SELECT 3"}}
+	order := []Statement{a[1], a[0]}
+	index := []Statement{a[0], {File: "x.sql", Index: 2, SQL: "SELECT 2"}}
+	for name, v := range map[string][]Statement{"text": text, "order": order, "index": index, "truncated": a[:1]} {
+		if statementDigest(v) == base {
+			t.Errorf("digest unchanged after %s mutation", name)
+		}
+	}
+}
+
+// TestLoadDeterministic checks two independent loads agree exactly and keys
+// are unique.
 func TestLoadDeterministic(t *testing.T) {
 	root, err := FindRoot()
 	if err != nil {

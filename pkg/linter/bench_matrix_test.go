@@ -111,19 +111,22 @@ func reportPerStmt(b *testing.B, n int) {
 }
 
 // lintInput holds the tokens and tree of one statement, built outside the
-// timed region. proto is a prepared Context that is never passed to a rule;
-// each op checks a fresh shallow copy (see fresh), so any lazily cached state
-// a rule or Context accessor fills in (for example a future Context.Nodes())
-// is rebuilt every op and the walk cost stays inside the timed region.
+// timed region. proto is a prepared Context that is never passed to a rule.
+// scratch is the one Context handed to rules: reset overwrites it by value from
+// proto, which allocates nothing (the scratch is heap-allocated once during
+// setup, because rules take it through an interface) and clears any lazily
+// cached state a rule or Context accessor filled in (for example a future
+// Context.Nodes()), so that cost stays inside the timed region.
 type lintInput struct {
-	proto *linter.Context
+	proto   *linter.Context
+	scratch *linter.Context
 }
 
-// fresh returns a Context equal to the prepared one with no state cached by
-// earlier Check calls.
-func (in lintInput) fresh() *linter.Context {
-	c := *in.proto
-	return &c
+// reset restores the scratch Context to the prepared one, with no state cached
+// by earlier Check calls, and returns it. It does not allocate.
+func (in lintInput) reset() *linter.Context {
+	*in.scratch = *in.proto
+	return in.scratch
 }
 
 // buildInputs tokenizes and parses each statement with the dialect the way
@@ -145,7 +148,7 @@ func buildInputs(tb testing.TB, stmts []string, dialect string) []lintInput {
 			tree, perr := p.ParseFromModelTokens(toks)
 			ctx.WithAST(tree, perr)
 		}
-		out = append(out, lintInput{proto: ctx})
+		out = append(out, lintInput{proto: ctx, scratch: new(linter.Context)})
 	}
 	return out
 }
@@ -219,8 +222,12 @@ func BenchmarkLintPhase(b *testing.B) {
 			b.ReportAllocs()
 			for i := 0; i < b.N; i++ {
 				for _, in := range inputs {
+					// One Context per statement shared by all rules, like
+					// Linter.LintString, so a cache filled by one rule is
+					// visible to the next.
+					c := in.reset()
 					for _, r := range rules {
-						_, _ = r.Check(in.fresh())
+						_, _ = r.Check(c)
 					}
 				}
 			}
@@ -244,7 +251,7 @@ func BenchmarkLintRule(b *testing.B) {
 			b.ReportAllocs()
 			for i := 0; i < b.N; i++ {
 				for _, in := range inputs {
-					_, _ = r.Check(in.fresh())
+					_, _ = r.Check(in.reset())
 				}
 			}
 			reportPerStmt(b, len(inputs))
@@ -253,9 +260,9 @@ func BenchmarkLintRule(b *testing.B) {
 }
 
 // TestLintContextHasNoCachedState pins the Context field set. The benchmarks
-// check a copy of a prepared Context per op, which is only valid while Context
+// check a by-value reset of a prepared Context per op, which is only valid while Context
 // has no lazily filled cache. When a field such as a cached node list is added
-// (PLAN W6-05) this fails: update lintInput.fresh to reset it, then this list.
+// (PLAN W6-05) this fails: update lintInput.reset to clear it, then this list.
 func TestLintContextHasNoCachedState(t *testing.T) {
 	want := []string{"SQL", "Lines", "Tokens", "AST", "ParseErr", "Filename"}
 	typ := reflect.TypeOf(linter.Context{})
@@ -264,7 +271,7 @@ func TestLintContextHasNoCachedState(t *testing.T) {
 		got = append(got, typ.Field(i).Name)
 	}
 	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("linter.Context fields = %v, want %v; reset any new cached field in lintInput.fresh", got, want)
+		t.Fatalf("linter.Context fields = %v, want %v; clear any new cached field in lintInput.reset", got, want)
 	}
 }
 
@@ -306,7 +313,7 @@ func TestBenchInputsAreMeaningful(t *testing.T) {
 				parsed++
 			}
 			for _, r := range benchRules() {
-				v, err := r.Check(in.fresh())
+				v, err := r.Check(in.reset())
 				if err != nil {
 					t.Fatalf("%s %s: %v", d, r.ID(), err)
 				}
@@ -339,7 +346,7 @@ func TestLintRWMatchesRuleSet(t *testing.T) {
 			}
 			var want []string
 			for _, r := range benchRules() {
-				v, err := r.Check(inputs[i].fresh())
+				v, err := r.Check(inputs[i].reset())
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -354,6 +361,43 @@ func TestLintRWMatchesRuleSet(t *testing.T) {
 			if strings.Join(got, ",") != strings.Join(want, ",") {
 				t.Errorf("%s #%d: violations differ\n got %v\nwant %v", d, i, got, want)
 			}
+		}
+	}
+}
+
+// TestBenchContextResetIsAllocFree guards the harness: resetting the scratch
+// Context and running a cheap rule must not allocate, so the allocs/op and
+// B/op of BenchmarkLintRule measure the rule and not the harness.
+func TestBenchContextResetIsAllocFree(t *testing.T) {
+	if testing.Short() {
+		t.Skip("alloc counting under -short is skipped")
+	}
+	inputs := buildInputs(t, rwSQL(t, "postgresql"), "postgresql")
+	if len(inputs) == 0 {
+		t.Fatal("no inputs")
+	}
+	in := inputs[0]
+	if n := testing.AllocsPerRun(100, func() { _ = in.reset() }); n != 0 {
+		t.Errorf("reset allocs/op = %v, want 0", n)
+	}
+	for _, r := range benchRules() {
+		if r.ID() != "L001" && r.ID() != "L015" {
+			continue
+		}
+		// Use an input whose rule run yields no violations, so only the
+		// harness could allocate.
+		var quiet *lintInput
+		for i := range inputs {
+			if v, _ := r.Check(inputs[i].reset()); len(v) == 0 {
+				quiet = &inputs[i]
+				break
+			}
+		}
+		if quiet == nil {
+			continue
+		}
+		if n := testing.AllocsPerRun(100, func() { _, _ = r.Check(quiet.reset()) }); n != 0 {
+			t.Errorf("%s reset+Check allocs/op = %v, want 0", r.ID(), n)
 		}
 	}
 }

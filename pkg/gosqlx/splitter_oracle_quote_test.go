@@ -15,10 +15,10 @@
 package gosqlx
 
 import (
+	"github.com/ajitpratap0/GoSQLX/internal/scaletest"
 	"reflect"
 	"strings"
 	"testing"
-	"time"
 )
 
 // TestSplitStatements_OracleAlternativeQuoting checks that the body of an
@@ -64,27 +64,14 @@ func TestSplitStatements_OracleQuoteUnterminatedLinear(t *testing.T) {
 // assertSplitLinear fails when splitting gen(4n) takes much more than four
 // times as long as gen(n): linear work grows about 4x, quadratic work 16x. A
 // ratio, unlike a wall-clock bound, holds on slow or race-instrumented CI
-// runners. Each size is timed three times and the fastest run counts.
+// runners, and scaletest repeats the measurement so a load spike cannot fail
+// it on its own.
 func assertSplitLinear(t *testing.T, name string, gen func(n int) string, dialect string, n int) {
 	t.Helper()
-	measure := func(src string) time.Duration {
-		best := time.Duration(1<<63 - 1)
-		for i := 0; i < 3; i++ {
-			start := time.Now()
-			SplitStatements(src, dialect)
-			if d := time.Since(start); d < best {
-				best = d
-			}
-		}
-		return best
-	}
-	small, large := measure(gen(n)), measure(gen(4*n))
-	if large < 20*time.Millisecond {
-		return // too fast to be quadratic at this size, and too fast to time reliably
-	}
-	if ratio := float64(large) / float64(small); ratio > 10 {
-		t.Errorf("%s: %v for n=%d but %v for 4n (%.1fx), want roughly linear growth", name, small, n, large, ratio)
-	}
+	smallSrc, largeSrc := gen(n), gen(4*n)
+	scaletest.AssertLinearGrowth(t, name, 10,
+		func() { SplitStatements(smallSrc, dialect) },
+		func() { SplitStatements(largeSrc, dialect) })
 }
 
 // TestSplitStatements_OracleQuoteMemoDoesNotHideLiterals checks that a failed

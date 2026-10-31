@@ -9,12 +9,32 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ajitpratap0/GoSQLX/internal/scaletest"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/keywords"
 	"github.com/ajitpratap0/GoSQLX/pkg/transpiler"
 )
 
 func TestTranspileDeepChainFast(t *testing.T) {
 	checkDeepChain(t, "OR", 50000, keywords.DialectPostgreSQL, keywords.DialectMySQL)
+}
+
+// TestTranspileDeepChainLinear guards against quadratic behaviour in the
+// token-to-SQL pipeline: a chain with 4x the terms must cost about 4x (a
+// quadratic pipeline costs 16x). The comparison is between two sizes, so
+// slow or loaded machines and the race detector do not affect it.
+func TestTranspileDeepChainLinear(t *testing.T) {
+	if testing.Short() {
+		t.Skip("scaling test")
+	}
+	run := func(terms int) func() {
+		sql := "SELECT 1" + strings.Repeat(" OR 1", terms)
+		return func() {
+			if _, err := transpiler.Transpile(sql, keywords.DialectPostgreSQL, keywords.DialectMySQL); err != nil {
+				t.Errorf("transpile %d terms: %v", terms, err)
+			}
+		}
+	}
+	scaletest.AssertLinearGrowth(t, "OR chain 10k -> 40k terms", 10, run(10000), run(40000))
 }
 
 func TestTranspileDeepChains(t *testing.T) {
@@ -58,9 +78,8 @@ func checkDeepChain(t *testing.T, op string, terms int, from, to keywords.SQLDia
 	sql := "SELECT 1" + strings.Repeat(" "+op+" 1", terms)
 	started := time.Now()
 	out, err := transpiler.Transpile(sql, from, to)
-	if elapsed := time.Since(started); elapsed > 60*time.Second {
-		t.Errorf("transpile took %v, bound 60s", elapsed)
-	}
+	// Running time is checked as a growth ratio in TestTranspileDeepChainLinear;
+	// an absolute bound here would only measure how busy the machine is.
 	// Nested call/parenthesis rewrites may reject depth to protect the formatter.
 	// Flat OR, AND and addition must succeed.
 	if err != nil {

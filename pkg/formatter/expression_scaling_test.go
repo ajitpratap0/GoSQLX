@@ -19,22 +19,26 @@ import (
 	"runtime"
 	"strings"
 	"testing"
-	"time"
 
+	"github.com/ajitpratap0/GoSQLX/internal/scaletest"
 	"github.com/ajitpratap0/GoSQLX/pkg/formatter"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
 )
 
 // Sixteenfold expression growth must stay far below the 256-fold cost of
 // repeatedly rendering or scanning every descendant: linear work grows ~16x,
-// and the 64x bound leaves room for noisy shared CI runners. Build ASTs outside the measurement so
-// parser limits and parsing time do not conceal formatter regressions.
+// and the 64x allocation bound leaves room for noise. Measured running time
+// of the deepest shapes grows 30-70x for 16x input (deep recursion touches
+// more stack and cache), so its bound is 128x, still half the quadratic 256x. Build ASTs outside the measurement
+// so parser limits and parsing time do not conceal formatter regressions.
+//
+// Two measures are used. Allocations per call are deterministic and checked
+// everywhere, including under the race detector; they catch regressions that
+// re-render subtrees. Running time (repeated, interleaved min-of-N, see
+// scaletest) also catches allocation-free rescans, but race instrumentation
+// inflates allocation-heavy paths unevenly across sizes, so it is skipped
+// there.
 func TestFormatASTExpressionLinearGrowth(t *testing.T) {
-	// Race instrumentation inflates allocation-heavy paths unevenly across
-	// input sizes, so the growth ratio is only meaningful without it.
-	if raceEnabled {
-		t.Skip("timing ratios are unreliable under the race detector")
-	}
 	for _, shape := range []struct {
 		name  string
 		small int
@@ -68,12 +72,19 @@ func TestFormatASTExpressionLinearGrowth(t *testing.T) {
 							t.Fatalf("formatted expression differs: got length %d, want %d", len(got), len(tc.want))
 						}
 					}
-					smallTime := expressionFormatDuration(small, opts)
-					largeTime := expressionFormatDuration(large, opts)
-					t.Logf("n=%d: %v; n=%d: %v; ratio %.2f", shape.small, smallTime, 16*shape.small, largeTime, float64(largeTime)/float64(smallTime))
-					if largeTime > 64*smallTime {
-						t.Fatalf("sixteenfold expression growth took %v -> %v, exceeding 64x", smallTime, largeTime)
+					format := func(tree *ast.AST) func() {
+						return func() { runtime.KeepAlive(formatter.FormatAST(tree, opts)) }
 					}
+					smallAllocs := testing.AllocsPerRun(5, format(small))
+					largeAllocs := testing.AllocsPerRun(5, format(large))
+					t.Logf("allocs/op n=%d: %.0f; n=%d: %.0f", shape.small, smallAllocs, 16*shape.small, largeAllocs)
+					if largeAllocs > 64*smallAllocs {
+						t.Errorf("sixteenfold expression growth went from %.0f to %.0f allocations, exceeding 64x", smallAllocs, largeAllocs)
+					}
+					if raceEnabled || testing.Short() {
+						return
+					}
+					scaletest.AssertLinearGrowth(t, "FormatAST", 128, format(small), format(large))
 				})
 			}
 		})
@@ -144,27 +155,4 @@ func scalingMarkerLiterals(n int, lower bool) (*ast.AST, string) {
 	want.WriteString(")")
 	expr := &ast.FunctionCall{Name: "COALESCE", Arguments: args}
 	return &ast.AST{Statements: []ast.Statement{&ast.SelectStatement{Columns: []ast.Expression{expr}}}}, want.String()
-}
-
-// Use the minimum of repeated equal-size batches to limit scheduler and GC
-// noise. The assertion compares input sizes, never an absolute time budget.
-func expressionFormatDuration(tree *ast.AST, opts ast.FormatOptions) time.Duration {
-	// Repeat until a sample spans at least 20ms so coarse timers (Windows)
-	// and scheduler noise cannot dominate, then keep the best per-call time.
-	var best time.Duration
-	for sample := 0; sample < 3; sample++ {
-		runtime.GC()
-		calls := 0
-		start := time.Now()
-		for time.Since(start) < 20*time.Millisecond {
-			out := formatter.FormatAST(tree, opts)
-			runtime.KeepAlive(out)
-			calls++
-		}
-		perCall := time.Since(start) / time.Duration(calls)
-		if best == 0 || perCall < best {
-			best = perCall
-		}
-	}
-	return best
 }

@@ -19,8 +19,8 @@ import (
 	"errors"
 	"strings"
 	"testing"
-	"time"
 
+	"github.com/ajitpratap0/GoSQLX/internal/scaletest"
 	"github.com/ajitpratap0/GoSQLX/pkg/formatter"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/keywords"
 )
@@ -225,30 +225,30 @@ func TestFormatWithDialect_CommentsFollowStatementStarts(t *testing.T) {
 // bounds are generous so that -race and slow CI machines pass.
 func TestFormat_CommentsScaleLinearly(t *testing.T) {
 	if testing.Short() {
-		t.Skip("timing test")
+		t.Skip("scaling test")
 	}
 	tests := []struct {
 		name string
-		sql  string
+		gen  func(n int) string // input with n repetitions
+		n    int                // repetitions in the small input; the large one has 4n
 	}{
-		{"hints", strings.Repeat("SELECT /*+ H */ 1 UNION ALL ", 3000) + "SELECT /*+ H */ 1"},
-		{"comments", strings.Repeat("SELECT 1; -- c\n", 40000)},
+		{"hints", func(n int) string { return strings.Repeat("SELECT /*+ H */ 1 UNION ALL ", n) + "SELECT /*+ H */ 1" }, 750},
+		{"comments", func(n int) string { return strings.Repeat("SELECT 1; -- c\n", n) }, 10000},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			start := time.Now()
-			out, err := Format(tc.sql, DefaultFormatOptions())
-			elapsed := time.Since(start)
+			small, large := tc.gen(tc.n), tc.gen(4*tc.n)
+			out, err := Format(large, DefaultFormatOptions())
 			if err != nil {
 				t.Fatal(err)
 			}
-			if strings.Count(out, "/*+ H */") != strings.Count(tc.sql, "/*+ H */") ||
-				strings.Count(out, "-- c") != strings.Count(tc.sql, "-- c") {
+			if strings.Count(out, "/*+ H */") != strings.Count(large, "/*+ H */") ||
+				strings.Count(out, "-- c") != strings.Count(large, "-- c") {
 				t.Fatal("comments lost")
 			}
-			if limit := 3 * time.Second; elapsed > limit {
-				t.Fatalf("took %v, want under %v", elapsed, limit)
-			}
+			scaletest.AssertLinearGrowth(t, tc.name, 10,
+				func() { _, _ = Format(small, DefaultFormatOptions()) },
+				func() { _, _ = Format(large, DefaultFormatOptions()) })
 		})
 	}
 }

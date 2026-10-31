@@ -18,7 +18,8 @@ import (
 	"math/rand"
 	"strings"
 	"testing"
-	"time"
+
+	"github.com/ajitpratap0/GoSQLX/internal/scaletest"
 )
 
 // inlineReference is the straightforward definition of Comment.Inline: some
@@ -75,24 +76,25 @@ func TestTokenizer_CommentInlineMatchesReference(t *testing.T) {
 
 // TestTokenizer_CommentRunLinearTime checks that many comments on one line
 // after a long whitespace prefix are tokenized in time linear in the input:
-// the inline check must not rescan the line prefix for every comment. With a
-// per-comment rescan this input takes on the order of 10 s; the linear scan
-// takes milliseconds. The bound is relative to tokenizing an input of the
-// same length without comments, so race and coverage instrumentation on CI
-// slow both runs alike instead of tripping a fixed wall-clock limit.
+// the inline check must not rescan the line prefix for every comment. The
+// work of a rescan is comments x prefix length, so the test grows both by 4x:
+// a linear tokenizer takes about 4x as long, a rescanning one about 16x. The
+// comparison is between two sizes of the same input, so race and coverage
+// instrumentation slow both alike (see scaletest).
 func TestTokenizer_CommentRunLinearTime(t *testing.T) {
 	const (
 		spaces   = 1 << 20
 		comments = 20000
 	)
-	input := strings.Repeat(" ", spaces) + strings.Repeat("/**/", comments) + "SELECT 1"
+	build := func(div int) string {
+		return strings.Repeat(" ", spaces/div) + strings.Repeat("/**/", comments/div) + "SELECT 1"
+	}
+	input := build(1)
 
 	tkz := GetTokenizer()
 	defer PutTokenizer(tkz)
 
-	start := time.Now()
 	tokens, err := tkz.TokenizeString(input)
-	elapsed := time.Since(start)
 	if err != nil {
 		t.Fatalf("TokenizeString: %v", err)
 	}
@@ -111,15 +113,11 @@ func TestTokenizer_CommentRunLinearTime(t *testing.T) {
 		}
 	}
 
-	baseInput := strings.Repeat(" ", spaces+4*comments) + "SELECT 1"
-	start = time.Now()
-	if _, err := tkz.TokenizeString(baseInput); err != nil {
-		t.Fatalf("TokenizeString(baseline): %v", err)
+	if testing.Short() {
+		t.Skip("scaling check skipped in short mode")
 	}
-	base := time.Since(start)
-	// Linear: a small multiple of the baseline. Quadratic: several hundred.
-	if limit := 50*base + 100*time.Millisecond; elapsed > limit {
-		t.Fatalf("tokenizing %d comments after %d spaces took %v, want under %v (50x the %v comment-free baseline)",
-			comments, spaces, elapsed, limit, base)
-	}
+	small := build(4)
+	scaletest.AssertLinearGrowth(t, "comments after whitespace", 10,
+		func() { _, _ = tkz.TokenizeString(small) },
+		func() { _, _ = tkz.TokenizeString(input) })
 }

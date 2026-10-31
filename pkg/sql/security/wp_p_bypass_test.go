@@ -9,8 +9,8 @@ import (
 	"runtime"
 	"strings"
 	"testing"
-	"time"
 
+	"github.com/ajitpratap0/GoSQLX/internal/scaletest"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/tokenizer"
 )
@@ -402,25 +402,10 @@ func TestWPPScanSQLLinear(t *testing.T) {
 		return strings.Repeat(chunk, (size+len(chunk)-1)/len(chunk))[:size]
 	}
 	scanner := NewScanner()
-	measure := func(sql string) time.Duration {
-		best := time.Duration(1<<63 - 1)
-		for i := 0; i < 5; i++ {
-			start := time.Now()
-			_ = scanner.ScanSQL(sql)
-			if elapsed := time.Since(start); elapsed < best {
-				best = elapsed
-			}
-		}
-		return best
-	}
 	small, large := input(64<<10), input(256<<10)
-	_ = scanner.ScanSQL(small)
-	_ = scanner.ScanSQL(large)
-	a, b := measure(small), measure(large)
-	t.Logf("64KiB %s, 256KiB %s, ratio %.2fx", a, b, float64(b)/float64(a))
-	if float64(b)/float64(a) >= 10 {
-		t.Errorf("4x input took %.2fx time (64KiB %s, 256KiB %s)", float64(b)/float64(a), a, b)
-	}
+	scaletest.AssertLinearGrowth(t, "ScanSQL 64KiB -> 256KiB", 10,
+		func() { _ = scanner.ScanSQL(small) },
+		func() { _ = scanner.ScanSQL(large) })
 }
 
 // The old captures provide a small-input oracle for the streaming implementation.

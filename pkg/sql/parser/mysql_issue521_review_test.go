@@ -18,8 +18,8 @@ import (
 	"errors"
 	"strings"
 	"testing"
-	"time"
 
+	"github.com/ajitpratap0/GoSQLX/internal/scaletest"
 	goerrors "github.com/ajitpratap0/GoSQLX/pkg/errors"
 	"github.com/ajitpratap0/GoSQLX/pkg/gosqlx"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
@@ -119,16 +119,16 @@ func TestIssue521_ColumnRefPartLimit(t *testing.T) {
 	}
 
 	// A long dotted chain used to take quadratic time (a 1 MB chain ran for
-	// ~10 s). It must now fail fast at the sixth part.
-	long := "SELECT " + strings.Repeat("a.", 50000) + "a FROM t"
-	start := time.Now()
-	_, err := gosqlx.Parse(long)
-	if elapsed := time.Since(start); elapsed > 5*time.Second {
-		t.Errorf("50k-part reference took %v", elapsed)
-	}
-	if err == nil || !strings.Contains(err.Error(), "more than 5 parts") {
+	// ~10 s). It must now fail fast at the sixth part, so 4x the parts costs
+	// about 4x, not 16x.
+	chain := func(parts int) string { return "SELECT " + strings.Repeat("a.", parts) + "a FROM t" }
+	if _, err := gosqlx.Parse(chain(50000)); err == nil || !strings.Contains(err.Error(), "more than 5 parts") {
 		t.Errorf("50k-part reference: err = %v, want a 'more than 5 parts' error", err)
 	}
+	small, large := chain(12500), chain(50000)
+	scaletest.AssertLinearGrowth(t, "dotted chain 12.5k -> 50k parts", 10,
+		func() { _, _ = gosqlx.Parse(small) },
+		func() { _, _ = gosqlx.Parse(large) })
 }
 
 // ExtractColumnsQualified must describe db.t.col with the same Schema/Table

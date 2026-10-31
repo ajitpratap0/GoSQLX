@@ -132,63 +132,77 @@ func (r *KeywordCaseRule) Check(ctx *linter.Context) ([]linter.Violation, error)
 	violations := []linter.Violation{}
 
 	for lineNum, line := range ctx.Lines {
-		// Tokenize the line to find keywords
-		words := tokenizeLine(line)
-
-		for _, word := range words {
-			upperWord := strings.ToUpper(word.text)
-			if sqlKeywords[upperWord] {
-				// Check if case matches preferred style
-				hasViolation := false
-				var expectedCase string
-
-				if r.preferredStyle == CaseUpper {
-					hasViolation = word.text != upperWord
-					expectedCase = upperWord
-				} else {
-					lowerWord := strings.ToLower(word.text)
-					hasViolation = word.text != lowerWord
-					expectedCase = lowerWord
-				}
-
-				if hasViolation {
-					violations = append(violations, linter.Violation{
-						Rule:       r.ID(),
-						RuleName:   r.Name(),
-						Severity:   r.Severity(),
-						Message:    "Keyword '" + word.text + "' should be " + string(r.preferredStyle) + "case: '" + expectedCase + "'",
-						Location:   models.Location{Line: lineNum + 1, Column: word.column},
-						Line:       line,
-						Suggestion: "Change '" + word.text + "' to '" + expectedCase + "'",
-						CanAutoFix: true,
-					})
-				}
+		scanWords(line, func(text string, column int) {
+			if !isSQLKeyword(text) {
+				return
 			}
-		}
+			// Check if case matches preferred style
+			hasViolation := false
+			var expectedCase string
+
+			if r.preferredStyle == CaseUpper {
+				expectedCase = strings.ToUpper(text)
+				hasViolation = text != expectedCase
+			} else {
+				expectedCase = strings.ToLower(text)
+				hasViolation = text != expectedCase
+			}
+
+			if hasViolation {
+				violations = append(violations, linter.Violation{
+					Rule:       r.ID(),
+					RuleName:   r.Name(),
+					Severity:   r.Severity(),
+					Message:    "Keyword '" + text + "' should be " + string(r.preferredStyle) + "case: '" + expectedCase + "'",
+					Location:   models.Location{Line: lineNum + 1, Column: column},
+					Line:       line,
+					Suggestion: "Change '" + text + "' to '" + expectedCase + "'",
+					CanAutoFix: true,
+				})
+			}
+		})
 	}
 
 	return violations, nil
 }
 
-// wordToken represents a word extracted from a line with its position.
-type wordToken struct {
-	text   string
-	column int // 1-indexed column position in the line
+// maxKeywordLen bounds the length of ASCII entries in sqlKeywords.
+const maxKeywordLen = 16
+
+// isSQLKeyword reports whether word, compared case-insensitively, is in
+// sqlKeywords. ASCII words are upper-cased into a stack buffer so the map
+// lookup does not allocate; words containing non-ASCII bytes take the
+// strings.ToUpper slow path (Unicode case folding can map e.g. U+017F to S).
+func isSQLKeyword(word string) bool {
+	var buf [maxKeywordLen]byte
+	if len(word) <= maxKeywordLen {
+		for i := 0; i < len(word); i++ {
+			c := word[i]
+			if c >= 0x80 {
+				return sqlKeywords[strings.ToUpper(word)]
+			}
+			if c >= 'a' && c <= 'z' {
+				c -= 'a' - 'A'
+			}
+			buf[i] = c
+		}
+		return sqlKeywords[string(buf[:len(word)])]
+	}
+	for i := 0; i < len(word); i++ {
+		if word[i] >= 0x80 {
+			return sqlKeywords[strings.ToUpper(word)]
+		}
+	}
+	return false
 }
 
-// tokenizeLine extracts words from a line with their column positions.
-//
-// Parses the line character by character, extracting sequences of letters, digits,
-// and underscores as words. Skips content inside string literals (both single and
-// double quoted) to avoid extracting keywords from SQL string values.
-//
-// Returns a slice of wordTokens representing each word and its position.
-func tokenizeLine(line string) []wordToken {
-	words := []wordToken{}
+// scanWords calls emit for each word in line (letters, digits and underscores,
+// not starting with a digit) outside quoted strings, passing a substring of
+// line and its 1-indexed byte column. It does not allocate.
+func scanWords(line string, emit func(text string, column int)) {
 	inString := false
 	stringChar := rune(0)
 	wordStart := -1
-	currentWord := strings.Builder{}
 
 	for i, ch := range line {
 		// Handle string literals - skip keywords inside strings
@@ -196,11 +210,7 @@ func tokenizeLine(line string) []wordToken {
 			inString = true
 			stringChar = ch
 			if wordStart >= 0 {
-				words = append(words, wordToken{
-					text:   currentWord.String(),
-					column: wordStart + 1, // 1-indexed
-				})
-				currentWord.Reset()
+				emit(line[wordStart:i], wordStart+1)
 				wordStart = -1
 			}
 			continue
@@ -219,26 +229,16 @@ func tokenizeLine(line string) []wordToken {
 			if wordStart < 0 {
 				wordStart = i
 			}
-			currentWord.WriteRune(ch)
 		} else if wordStart >= 0 {
-			words = append(words, wordToken{
-				text:   currentWord.String(),
-				column: wordStart + 1, // 1-indexed
-			})
-			currentWord.Reset()
+			emit(line[wordStart:i], wordStart+1)
 			wordStart = -1
 		}
 	}
 
 	// Don't forget the last word
 	if wordStart >= 0 {
-		words = append(words, wordToken{
-			text:   currentWord.String(),
-			column: wordStart + 1,
-		})
+		emit(line[wordStart:], wordStart+1)
 	}
-
-	return words
 }
 
 // Fix converts all keywords to the preferred case in SQL content.

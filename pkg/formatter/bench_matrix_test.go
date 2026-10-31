@@ -278,33 +278,37 @@ func TestRenderBenchDialectInputs(t *testing.T) {
 	}
 }
 
-// TestRenderRWDialectPathDiffers guards the "dialect" variant. Statements are
-// parsed in their own dialect, so the output rarely differs from the generic
-// path; the target-dialect path instead does extra work (it prepares the
-// node for the dialect). Over the filtered trees of sqlserver and oracle the
-// dialect variant must allocate more than nodialect, otherwise
-// RenderRW/<d>/dialect would measure the same work as nodialect.
+// TestRenderRWDialectPathDiffers guards the wiring of the "dialect" variant:
+// RenderRW/<d>/dialect must set FormatOptions.Dialect to the target and
+// RenderRW/<d>/nodialect must leave it empty. It deliberately does not assert
+// a performance difference, so optimizing the dialect path never breaks it.
 func TestRenderRWDialectPathDiffers(t *testing.T) {
-	for _, dialect := range []string{"sqlserver", "oracle"} {
-		trees := dialectTrees(t, dialect)
-		var generic, targeted float64
-		for _, tree := range trees {
-			for _, m := range []struct {
-				mode string
-				sum  *float64
-			}{{"nodialect", &generic}, {"dialect", &targeted}} {
-				opts := renderRWOpts(dialect, m.mode)
-				*m.sum += testing.AllocsPerRun(5, func() {
-					if _, err := formatter.FormatASTChecked(tree, opts); err != nil {
-						t.Fatal(err)
-					}
-				})
-			}
-			ast.ReleaseAST(tree)
+	for _, d := range corpusDialects() {
+		if got := renderRWOpts(d, "dialect").Dialect; got != d {
+			t.Errorf("%s: dialect variant Dialect = %q, want %q", d, got, d)
 		}
-		if targeted <= generic {
-			t.Errorf("%s: dialect path allocs %.0f, nodialect %.0f; the dialect variant does no extra work", dialect, targeted, generic)
+		if got := renderRWOpts(d, "nodialect").Dialect; got != "" {
+			t.Errorf("%s: nodialect variant Dialect = %q, want empty", d, got)
 		}
+	}
+
+	// Behavioural check: the dialect options really take the target path.
+	tree := mustParseAST(t, "SELECT id FROM t ORDER BY id LIMIT 10")
+	defer ast.ReleaseAST(tree)
+	targeted, err := formatter.FormatASTChecked(tree, renderRWOpts("sqlserver", "dialect"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	upper := strings.ToUpper(targeted)
+	if !strings.Contains(upper, "OFFSET") || !strings.Contains(upper, "FETCH") || strings.Contains(upper, "LIMIT") {
+		t.Errorf("sqlserver dialect render should use OFFSET/FETCH without LIMIT, got %q", targeted)
+	}
+	generic, err := formatter.FormatASTChecked(tree, renderRWOpts("sqlserver", "nodialect"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(strings.ToUpper(generic), "LIMIT") {
+		t.Errorf("nodialect render should keep LIMIT, got %q", generic)
 	}
 }
 

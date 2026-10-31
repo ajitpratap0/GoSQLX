@@ -50,6 +50,9 @@ func TestPrefilterEquivalence(t *testing.T) {
 		`CREATE TABLE t (v "custom")`, "CREATE TABLE t (v `custom`)", "CREATE TABLE t (v [custom])", "CREATE TABLE t (v INT[])",
 		"SELECT 'a\x00b'; SELECT a ^ b", "SELECT a ^ b; SELECT 'a\x00b'",
 		"SELECT emp# FROM t", "SELECT 1 -- ' || [\n", "SELECT 1 /* $ || [ */", "SELECT 1; SELECT 'x'", "SELECT (((1)))",
+		// #897 and #898: expected outputs are pinned in lambda_unicode_test.go.
+		"SELECT arrayMap(x -> x * 2, [1, 2, 3])", "SELECT arrayFilter(x -> x > 1 AND x || 'a' = y, arr) FROM t",
+		`SELECT U&'d\0061t'`, `SELECT U&"d\0061t" FROM t`,
 	}
 	for _, from := range dialects {
 		for _, to := range dialects {

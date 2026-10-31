@@ -7,17 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Performance
-- **`Transpile`** recovers most of the v1.17.0 correctness cost: the AST walks
-  follow cached per-type reflection plans that skip fields which cannot hold a
-  rewrite target, and cheap source checks skip the `||`, string-literal and
-  identifier-requoting passes when the SQL cannot need them. A short MySQL
-  `CREATE TABLE` to PostgreSQL goes from 5.2 µs to 2.7 µs (52 to 43
-  allocations); wide `OR`/`AND` chains are about 68% faster and `||` chains
-  about 55% faster. Output and errors are unchanged on 955,476 differential
-  cases. (#889)
-
-## [1.17.0] - 2026-10-29 — Real-World Dialect Corpus, Dialect-Faithful Round Trips, Security Scanner & LSP Hardening
+## [1.17.0] - 2026-10-31 — Real-World Dialect Corpus, Dialect-Faithful Round Trips, Security Scanner & LSP Hardening
 
 Covers everything merged since v1.16.0, mostly the October 2026 dialect audit:
 a 2,813-statement real-world corpus across eight dialects that now parses,
@@ -377,6 +367,10 @@ upgrading.
 - **CLI**: `gosqlx format --dialect sqlserver` runs the statement-count guard
   again, counting GO lines and statements that end without `;`; `lint` no
   longer reports a syntax error twice. (#867, #876)
+- **Playground**: copy buttons show their "Copied" state reliably and report
+  failures instead of failing silently; the WASM download progress no longer
+  exceeds 100%; the Format and Transpile results no longer carry an unused
+  `error_span` field. (#888)
 
 ### Performance
 - **Lower-case formatting** streams into a single builder instead of copying
@@ -384,11 +378,18 @@ upgrading.
   upper-case output, with 5x to 500x fewer allocations. (#870, #886)
 - **`ScanSQL` tautology check** no longer allocates per candidate (1 MiB of
   `1=2` went from 50 MB to 1 MB). (#885)
+- **`Transpile`** keeps most of its v1.16.0 speed despite the new
+  operator-retargeting and `||`-meaning passes: the AST walks follow cached
+  per-type reflection plans that skip fields which cannot hold a rewrite
+  target, and cheap source checks skip the `||`, string-literal and
+  identifier-requoting passes when the SQL cannot need them. Without these,
+  the new passes had made a short MySQL `CREATE TABLE` to PostgreSQL take
+  5.2 µs; it now takes about 2.7 µs (v1.16.0: 2.0 µs; 43 allocations, v1.16.0:
+  32). Wide `OR`/`AND` chains are about 68% faster and `||` chains about 55%
+  faster than without the plans. Output and errors are unchanged on 955,476
+  differential cases. (#889)
 - **Costs of the correctness work** (Apple M4, `-count=6`, against v1.16.0):
-  `Transpile` of a short MySQL `CREATE TABLE` to PostgreSQL takes about
-  5.2 µs instead of 2.0 µs (52 instead of 32 allocations), mostly in the new
-  operator-retargeting and `||`-meaning passes that walk every statement.
-  The parse-stage baselines are about 6% slower with 8% fewer allocations and
+  the parse-stage baselines are about 6% slower with 8% fewer allocations and
   about 24% more bytes per parse, from the new AST metadata; all stay within
   the CI regression baselines.
 
@@ -3106,7 +3107,8 @@ For questions about upgrading or changelog entries:
 - Open an issue: https://github.com/ajitpratap0/GoSQLX/issues
 - Join discussions: https://github.com/ajitpratap0/GoSQLX/discussions
 
-[Unreleased]: https://github.com/ajitpratap0/GoSQLX/compare/v1.16.0...HEAD
+[Unreleased]: https://github.com/ajitpratap0/GoSQLX/compare/v1.17.0...HEAD
+[1.17.0]: https://github.com/ajitpratap0/GoSQLX/compare/v1.16.0...v1.17.0
 [1.16.0]: https://github.com/ajitpratap0/GoSQLX/compare/v1.15.0...v1.16.0
 [1.15.0]: https://github.com/ajitpratap0/GoSQLX/compare/v1.14.0...v1.15.0
 [1.14.0]: https://github.com/ajitpratap0/GoSQLX/compare/v1.13.0...v1.14.0

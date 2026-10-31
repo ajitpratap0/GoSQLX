@@ -42,6 +42,17 @@ func benchPair(from, to keywords.SQLDialect) string {
 	return benchShort(from) + "_" + benchShort(to)
 }
 
+// rwCorpus returns the real-world statements for a source dialect. The eight
+// named dialects use set.RealWorld (feature/* fixtures excluded), matching the
+// other wave-0 matrices. Generic has no realworld folder, so it uses
+// ByDialect("generic") (TPC, ORM and real_world statements).
+func rwCorpus(set *benchcorpus.Set, d keywords.SQLDialect) []benchcorpus.Statement {
+	if d == keywords.DialectGeneric {
+		return set.ByDialect(string(d))
+	}
+	return set.RealWorld(string(d))
+}
+
 // BenchmarkTranspileRW transpiles the real-world corpus of the source dialect
 // to every target dialect (9x9 = 81 ordered pairs, identity included). Each
 // iteration transpiles every statement of the source corpus that the source
@@ -56,7 +67,7 @@ func BenchmarkTranspileRW(b *testing.B) {
 	corpora := make(map[keywords.SQLDialect][]string, len(dialects))
 	for _, from := range dialects {
 		var ok []string
-		for _, st := range set.ByDialect(string(from)) {
+		for _, st := range rwCorpus(set, from) {
 			if _, err := transpiler.Transpile(st.SQL, from, from); err == nil {
 				ok = append(ok, st.SQL)
 			}
@@ -85,7 +96,7 @@ func BenchmarkTranspileRW(b *testing.B) {
 // (BenchmarkVShapes) measured the W7-02/03/05/06 evidence on; it carries the
 // `a ^ b` operator-retarget path and the LIMIT 10 row-limit path. Not every
 // source dialect accepts it (SQL Server has no LIMIT; Oracle and ClickHouse
-// reject `^`), so mediumFor falls back to the first variant the pair accepts.
+// reject `^`), so each pair pins the variant it uses (see BenchmarkTranspileShape).
 const (
 	benchMediumBody = "SELECT u.id, u.name || 'x', COUNT(*) AS c, %sCASE WHEN u.age > 18 AND u.flag = 1 THEN 'adult' ELSE 'minor' END " +
 		"FROM users u JOIN orders o ON o.uid = u.id AND o.total > 10 " +
@@ -101,22 +112,21 @@ func mediumVariants() []string {
 	}
 }
 
-// mediumFor returns the first medium variant that from accepts and can
-// transpile to the target. Pairs that fall back lose the operator-retarget
-// and/or row-limit paths; the choice is deterministic per pair.
-func mediumFor(from, to keywords.SQLDialect) (string, bool) {
-	for _, v := range mediumVariants() {
-		if _, err := transpiler.Transpile(v, from, to); err == nil {
-			return v, true
-		}
+// mediumAt returns the pinned medium variant for a pair. The variant index is
+// fixed per pair (no silent fallback): a perf gate must fail, not report a fake
+// speedup, if a later change makes the pinned text stop transpiling.
+func mediumAt(from, to keywords.SQLDialect, variant int) (string, error) {
+	v := mediumVariants()[variant]
+	if _, err := transpiler.Transpile(v, from, to); err != nil {
+		return "", fmt.Errorf("pinned medium variant %d no longer transpiles: %w", variant, err)
 	}
-	return "", false
+	return v, nil
 }
 
-func benchShapes(from, to keywords.SQLDialect) (shapes []struct{ name, sql string }, ok bool) {
-	medium, ok := mediumFor(from, to)
-	if !ok {
-		return nil, false
+func benchShapes(from, to keywords.SQLDialect, variant int) (shapes []struct{ name, sql string }, err error) {
+	medium, err := mediumAt(from, to, variant)
+	if err != nil {
+		return nil, err
 	}
 	var sb strings.Builder
 	sb.WriteString("SELECT a FROM t WHERE ")
@@ -130,7 +140,7 @@ func benchShapes(from, to keywords.SQLDialect) (shapes []struct{ name, sql strin
 		{"small", "SELECT id, name FROM users WHERE id = 1"},
 		{"medium", medium},
 		{"large", sb.String()},
-	}, true
+	}, nil
 }
 
 // BenchmarkTranspileShape measures statement-size scaling on identity and
@@ -138,18 +148,24 @@ func benchShapes(from, to keywords.SQLDialect) (shapes []struct{ name, sql strin
 // <from>_<to>/{small,medium,large} using short dialect names (pg_pg, pg_mysql,
 // mysql_pg, mssql_pg, oracle_snowflake, clickhouse_sqlite).
 func BenchmarkTranspileShape(b *testing.B) {
-	pairs := [][2]keywords.SQLDialect{
-		{keywords.DialectPostgreSQL, keywords.DialectPostgreSQL},
-		{keywords.DialectPostgreSQL, keywords.DialectMySQL},
-		{keywords.DialectMySQL, keywords.DialectPostgreSQL},
-		{keywords.DialectSQLServer, keywords.DialectPostgreSQL},
-		{keywords.DialectOracle, keywords.DialectSnowflake},
-		{keywords.DialectClickHouse, keywords.DialectSQLite},
+	// variant indexes mediumVariants(): 0 verbatim, 1 no LIMIT, 2 no caret,
+	// 3 portable (no caret, no LIMIT).
+	pairs := []struct {
+		from, to keywords.SQLDialect
+		variant  int
+	}{
+		{keywords.DialectPostgreSQL, keywords.DialectPostgreSQL, 0},
+		{keywords.DialectPostgreSQL, keywords.DialectMySQL, 0},
+		{keywords.DialectMySQL, keywords.DialectPostgreSQL, 0},
+		{keywords.DialectSQLServer, keywords.DialectPostgreSQL, 1},
+		{keywords.DialectOracle, keywords.DialectSnowflake, 3},
+		{keywords.DialectClickHouse, keywords.DialectSQLite, 2},
 	}
-	for _, p := range pairs {
-		shapes, ok := benchShapes(p[0], p[1])
-		if !ok {
-			b.Fatalf("%s -> %s: no medium variant transpiles", p[0], p[1])
+	for _, pr := range pairs {
+		p := [2]keywords.SQLDialect{pr.from, pr.to}
+		shapes, err := benchShapes(p[0], p[1], pr.variant)
+		if err != nil {
+			b.Fatalf("%s -> %s: %v", p[0], p[1], err)
 		}
 		for _, sh := range shapes {
 			if _, err := transpiler.Transpile(sh.sql, p[0], p[1]); err != nil {

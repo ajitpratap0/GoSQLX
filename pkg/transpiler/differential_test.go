@@ -85,7 +85,7 @@ func vfixed(depths []int) []string {
 		// itself, so those two branches are equivalent mutants (only the backtick
 		// case with ClickHouse reaches the prefilter). The white-box tests
 		// TestScanSourceStringOpeners and TestScanSourceTypeDelimiters pin them.
-		"SELECT ‘a’", "SELECT «a»", "SELECT „a“ FROM t", "SELECT \u201cx\u201d FROM t", "SELECT émoji FROM t WHERE a = 'é'",
+		"SELECT ‘a’", "SELECT «a»", "SELECT ‘a\\nb’", "SELECT «a\\tb»", "SELECT „a“ FROM t", "SELECT \u201cx\u201d FROM t", "SELECT émoji FROM t WHERE a = 'é'",
 		`CREATE TABLE t (v "custom")`, "CREATE TABLE t (v `custom`)", "CREATE TABLE t (v [custom])", "CREATE TABLE t (v INT[])",
 		"CREATE TABLE t (id INT AUTO_INCREMENT PRIMARY KEY, flag TINYINT(1))", `CREATE TABLE "my tbl" ("my col" INT)`,
 		"CREATE TABLE `my tbl` (`my col` INT)", "CREATE TABLE [my tbl] ([my col] INT)", "SELECT `a b`, \"c d\", [e f] FROM `g h`",

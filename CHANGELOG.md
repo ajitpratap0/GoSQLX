@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Behavior changes
+- **Linter L010 (redundant whitespace)**: violation columns are byte
+  positions on lines with invalid UTF-8. They were shifted before because
+  invalid bytes were replaced with U+FFFD (3 bytes) while scanning. Valid
+  UTF-8 is unaffected.
+
+### Performance
+- **Linter L010**: scans bytes in a single pass instead of rebuilding
+  substrings and running a regular expression; the rule is ~71% faster and
+  allocates nothing.
+
 ### Fixed
 - **Playground**: the GoSQLX WebAssembly module now runs in a Web Worker, so
   loading the parser and every parse, format, lint, analyze, highlight and

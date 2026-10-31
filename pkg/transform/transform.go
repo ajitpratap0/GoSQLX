@@ -17,6 +17,7 @@ package transform
 import (
 	"fmt"
 
+	"github.com/ajitpratap0/GoSQLX/internal/tokscratch"
 	"github.com/ajitpratap0/GoSQLX/pkg/formatter"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/keywords"
@@ -115,7 +116,7 @@ func parseSQL(sql string) (ast.Statement, error) {
 	tkz := tokenizer.GetTokenizer()
 	defer tokenizer.PutTokenizer(tkz)
 
-	tokens, err := tkz.TokenizeString(sql)
+	tokens, err := tokscratch.String(tkz, sql)
 	if err != nil {
 		return nil, fmt.Errorf("tokenize: %w", err)
 	}
@@ -210,7 +211,7 @@ func ParseSQL(sql string) (*ast.AST, error) {
 	tkz := tokenizer.GetTokenizer()
 	defer tokenizer.PutTokenizer(tkz)
 
-	tokens, err := tkz.TokenizeString(sql)
+	tokens, err := tokscratch.String(tkz, sql)
 	if err != nil {
 		return nil, fmt.Errorf("tokenize: %w", err)
 	}
@@ -294,7 +295,7 @@ func ParseSQLWithDialect(sql string, dialect keywords.SQLDialect) (*ast.AST, err
 		tkz.SetDialect(dialect)
 	}
 
-	tokens, err := tkz.TokenizeString(sql)
+	tokens, err := tokscratch.String(tkz, sql)
 	if err != nil {
 		return nil, fmt.Errorf("tokenize: %w", err)
 	}

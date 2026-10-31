@@ -153,21 +153,33 @@ func dialectTrees(tb testing.TB, dialect string) []*ast.AST {
 	return trees
 }
 
+// renderRWOpts builds the options of one BenchmarkRenderRW variant: "dialect"
+// renders for the target dialect, "nodialect" uses the generic path.
+func renderRWOpts(dialect, mode string) ast.FormatOptions {
+	opts := ast.CompactStyle()
+	if mode == "dialect" {
+		opts.Dialect = dialect
+	}
+	return opts
+}
+
 // BenchmarkRenderRW renders real-world statements of each dialect, one
 // statement per operation cycling through the corpus, with and without the
 // target-dialect rendering path. The difference is the dialect overhead.
 func BenchmarkRenderRW(b *testing.B) {
 	for _, dialect := range corpusDialects() {
 		trees := dialectTrees(b, dialect)
+		b.Cleanup(func() {
+			for _, t := range trees {
+				ast.ReleaseAST(t)
+			}
+		})
 		if len(trees) == 0 {
 			b.Fatalf("%s: no renderable real-world statements", dialect)
 		}
 		b.Run(dialect, func(b *testing.B) {
 			for _, mode := range []string{"nodialect", "dialect"} {
-				opts := ast.CompactStyle()
-				if mode == "dialect" {
-					opts.Dialect = dialect
-				}
+				opts := renderRWOpts(dialect, mode)
 				b.Run(mode, func(b *testing.B) {
 					b.ReportAllocs()
 					b.ResetTimer()
@@ -262,6 +274,36 @@ func TestRenderBenchDialectInputs(t *testing.T) {
 		}
 		for _, tree := range trees {
 			ast.ReleaseAST(tree)
+		}
+	}
+}
+
+// TestRenderRWDialectPathDiffers guards the "dialect" variant. Statements are
+// parsed in their own dialect, so the output rarely differs from the generic
+// path; the target-dialect path instead does extra work (it prepares the
+// node for the dialect). Over the filtered trees of sqlserver and oracle the
+// dialect variant must allocate more than nodialect, otherwise
+// RenderRW/<d>/dialect would measure the same work as nodialect.
+func TestRenderRWDialectPathDiffers(t *testing.T) {
+	for _, dialect := range []string{"sqlserver", "oracle"} {
+		trees := dialectTrees(t, dialect)
+		var generic, targeted float64
+		for _, tree := range trees {
+			for _, m := range []struct {
+				mode string
+				sum  *float64
+			}{{"nodialect", &generic}, {"dialect", &targeted}} {
+				opts := renderRWOpts(dialect, m.mode)
+				*m.sum += testing.AllocsPerRun(5, func() {
+					if _, err := formatter.FormatASTChecked(tree, opts); err != nil {
+						t.Fatal(err)
+					}
+				})
+			}
+			ast.ReleaseAST(tree)
+		}
+		if targeted <= generic {
+			t.Errorf("%s: dialect path allocs %.0f, nodialect %.0f; the dialect variant does no extra work", dialect, targeted, generic)
 		}
 	}
 }

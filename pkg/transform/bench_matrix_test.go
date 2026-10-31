@@ -15,6 +15,7 @@
 package transform_test
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -106,15 +107,16 @@ var roundTripCases = []roundTripCase{
 	},
 }
 
-func roundTrip(tb testing.TB, c roundTripCase, dialect keywords.SQLDialect) string {
-	tb.Helper()
+// roundTripOnce is the pure parse, apply, render, release cycle. The timed
+// loops call it directly so no testing.TB bookkeeping lands in the timing.
+func roundTripOnce(c roundTripCase, dialect keywords.SQLDialect) (string, error) {
 	tree, err := transform.ParseSQLWithDialect(c.sql, dialect)
 	if err != nil {
-		tb.Fatalf("%s: parse: %v", c.name, err)
+		return "", fmt.Errorf("%s: parse: %w", c.name, err)
 	}
 	defer ast.ReleaseAST(tree)
 	if err := transform.Apply(tree.Statements[0], c.rules()...); err != nil {
-		tb.Fatalf("%s: apply: %v", c.name, err)
+		return "", fmt.Errorf("%s: apply: %w", c.name, err)
 	}
 	var out string
 	if dialect == "" {
@@ -123,7 +125,17 @@ func roundTrip(tb testing.TB, c roundTripCase, dialect keywords.SQLDialect) stri
 		out = transform.FormatSQLWithDialect(tree.Statements[0], dialect)
 	}
 	if out == "" {
-		tb.Fatalf("%s: rendered empty SQL", c.name)
+		return "", fmt.Errorf("%s: rendered empty SQL", c.name)
+	}
+	return out, nil
+}
+
+// roundTrip is the test-side wrapper around roundTripOnce.
+func roundTrip(tb testing.TB, c roundTripCase, dialect keywords.SQLDialect) string {
+	tb.Helper()
+	out, err := roundTripOnce(c, dialect)
+	if err != nil {
+		tb.Fatal(err)
 	}
 	return out
 }
@@ -135,7 +147,11 @@ func BenchmarkTransformRoundTrip(b *testing.B) {
 		b.Run(c.name, func(b *testing.B) {
 			b.ReportAllocs()
 			for i := 0; i < b.N; i++ {
-				transformSink = roundTrip(b, c, "")
+				out, err := roundTripOnce(c, "")
+				if err != nil {
+					b.Fatal(err)
+				}
+				transformSink = out
 			}
 		})
 	}
@@ -148,7 +164,11 @@ func BenchmarkTransformRoundTripSQLServer(b *testing.B) {
 		b.Run(c.name, func(b *testing.B) {
 			b.ReportAllocs()
 			for i := 0; i < b.N; i++ {
-				transformSink = roundTrip(b, c, keywords.DialectSQLServer)
+				out, err := roundTripOnce(c, keywords.DialectSQLServer)
+				if err != nil {
+					b.Fatal(err)
+				}
+				transformSink = out
 			}
 		})
 	}

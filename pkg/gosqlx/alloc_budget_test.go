@@ -15,6 +15,7 @@
 package gosqlx_test
 
 import (
+	"sort"
 	"testing"
 
 	"github.com/ajitpratap0/GoSQLX/internal/benchcorpus"
@@ -27,7 +28,10 @@ import (
 // the commit that introduced it. A change that adds allocations fails here; a
 // change that removes them must lower the budget in the same PR (the test
 // logs when a budget has slack). Budgets are skipped under -race, where
-// instrumentation and randomised sync.Pool eviction change the counts.
+// instrumentation and randomised sync.Pool eviction change the counts, so CI
+// runs them in a dedicated non-race step (.github/workflows/test.yml, build
+// job). Counts were measured on go1.26.9 (the CI toolchain); they can differ
+// by a few allocations on other patch levels, hence the upper-bound rule.
 
 // parseAllocBudget is allocs/op of Parse+ReleaseAST for the 11 portable queries.
 var parseAllocBudget = map[string]float64{
@@ -44,8 +48,22 @@ var parseAllocBudget = map[string]float64{
 	"delete":        5,
 }
 
-// dialectAllocBudget is allocs/op of ParseWithDialect+ReleaseAST for the first
-// medium real-world statement of each dialect corpus.
+// dialectAllocStatement pins each dialect to one medium real-world corpus
+// statement by benchcorpus Statement.Key(), so a corpus or parser change cannot
+// silently swap the measured statement.
+var dialectAllocStatement = map[string]string{
+	"postgresql": "realworld/postgresql/02_reporting.sql#0",
+	"mysql":      "realworld/mysql/03_ddl_migrations.sql#0",
+	"mariadb":    "realworld/mariadb/03_ddl_migrations.sql#1",
+	"sqlserver":  "realworld/sqlserver/02_reporting.sql#0",
+	"oracle":     "realworld/oracle/02_reporting.sql#5",
+	"sqlite":     "realworld/sqlite/01_app_crud.sql#0",
+	"snowflake":  "realworld/snowflake/02_reporting.sql#7",
+	"clickhouse": "realworld/clickhouse/03_ddl_migrations.sql#2",
+}
+
+// dialectAllocBudget is allocs/op of ParseWithDialect+ReleaseAST for the
+// statement pinned in dialectAllocStatement.
 var dialectAllocBudget = map[string]float64{
 	"postgresql": 37,
 	"mysql":      50,
@@ -123,26 +141,34 @@ func TestParseWithDialectAllocBudget(t *testing.T) {
 		t.Fatalf("load benchmark corpus: %v", err)
 	}
 	tested := 0
-	for _, d := range benchcorpus.Dialects() {
-		mediums := benchcorpus.InBucket(set.RealWorld(d), benchcorpus.Medium)
-		if len(mediums) == 0 {
-			continue
-		}
+	dialects := make([]string, 0, len(dialectAllocStatement))
+	for d := range dialectAllocStatement {
+		dialects = append(dialects, d)
+	}
+	sort.Strings(dialects)
+	for _, d := range dialects {
+		key := dialectAllocStatement[d]
 		dialect := keywords.SQLDialect(d)
 		var sql string
-		for _, st := range mediums {
-			if tree, err := gosqlx.ParseWithDialect(st.SQL, dialect); err == nil {
-				ast.ReleaseAST(tree)
+		for _, st := range set.RealWorld(d) {
+			if st.Key() == key {
 				sql = st.SQL
 				break
 			}
 		}
 		if sql == "" {
-			t.Errorf("%s: no medium statement parses with its own dialect", d)
+			t.Errorf("%s: pinned statement %s not found in the corpus", d, key)
 			continue
+		}
+		if tree, err := gosqlx.ParseWithDialect(sql, dialect); err != nil {
+			t.Errorf("%s: pinned statement %s no longer parses: %v", d, key, err)
+			continue
+		} else {
+			ast.ReleaseAST(tree)
 		}
 		tested++
 		t.Run(d, func(t *testing.T) {
+			t.Logf("measuring %s", key)
 			got := measureAllocs(t, func() error {
 				tree, err := gosqlx.ParseWithDialect(sql, dialect)
 				if err != nil {
@@ -154,7 +180,7 @@ func TestParseWithDialectAllocBudget(t *testing.T) {
 			checkBudget(t, d, dialectAllocBudget, got)
 		})
 	}
-	if tested == 0 {
-		t.Fatal("no dialect has a medium real-world statement")
+	if tested != len(dialectAllocStatement) {
+		t.Fatalf("measured %d dialects, want %d", tested, len(dialectAllocStatement))
 	}
 }

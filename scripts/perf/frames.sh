@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# frames.sh - list the largest stack frames among the parse hot path functions.
+# frames.sh - list the largest stack frames among the parse hot path functions
+# (by default those matching the -f regex; use -a for every function).
 #
 # Large frames make goroutine stacks grow earlier (each doubling copies the
 # stack) and spread hot code over more cache lines, so a frame that grows is a
@@ -9,18 +10,26 @@
 # under `go build -gcflags=-S`; that output has the same shape on amd64 and
 # arm64. Sizes are architecture dependent, so only compare runs on one arch.
 #
-# Usage: scripts/perf/frames.sh [-n TOP] [-m MAX_BYTES] [PACKAGE...]
+# Usage: scripts/perf/frames.sh [-n TOP] [-m MAX_BYTES] [-f REGEX | -a] [PACKAGE...]
 #   -n TOP        number of frames to list (default 15)
+#   -f REGEX      only functions matching this extended regex (default: the parse hot path,
+#                 parser.(*Parser).parse*, tokenizer Tokenize/next/read/scan, gosqlx.Parse*,
+#                 ast New*/Release*)
+#   -a            all functions (cold code such as splitCore or formatters included)
+#                 Package init functions (.init) are always excluded.
 #   -m MAX_BYTES  exit 1 when the largest frame exceeds MAX_BYTES (default: report only)
 #   PACKAGE       packages to inspect (default: tokenizer, parser, ast, gosqlx)
 set -euo pipefail
 
 top=15
 max=""
-while getopts "n:m:h" opt; do
+filter='parser\.\(\*Parser\)\.parse|tokenizer\..*(Tokenize|next|read|scan)|gosqlx\.Parse|ast\.(Release|New)'
+while getopts "n:m:f:ah" opt; do
   case "$opt" in
     n) top="$OPTARG" ;;
     m) max="$OPTARG" ;;
+    f) filter="$OPTARG" ;;
+    a) filter="" ;;
     h|*) sed -n '2,/^set /p' "$0" | sed '$d;s/^# \{0,1\}//' ; exit 2 ;;
   esac
 done
@@ -40,7 +49,7 @@ for p in "${pkgs[@]}"; do
 done
 
 out=$(mktemp)
-trap 'rm -f "$out" "$out.all" "$out.top"' EXIT
+trap 'rm -f "$out" "$out.all" "$out.top" "$out.flt"' EXIT
 
 # -S prints the assembly listing of each function to stderr. The build cache
 # replays that output, so repeated runs stay cheap.
@@ -62,7 +71,11 @@ awk '
       }
     }
   }
-' "$out" | sort -u | sort -k1,1nr -k2,2 > "$out.all"
+' "$out" | sort -u | sort -k1,1nr -k2,2 | grep -Ev ' [^ ]*\.init(\.[0-9]+)?$' > "$out.all" || true
+if [ -n "$filter" ]; then
+  grep -E "^[0-9]+ .*($filter)" "$out.all" > "$out.flt" || true
+  mv "$out.flt" "$out.all"
+fi
 head -n "$top" "$out.all" > "$out.top"
 
 printf 'Top %s frames (bytes of locals) on %s/%s:\n' "$top" "$(go env GOOS)" "$(go env GOARCH)"

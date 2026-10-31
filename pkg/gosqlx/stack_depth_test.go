@@ -15,13 +15,14 @@
 package gosqlx_test
 
 import (
-	"errors"
+	stderrors "errors"
 	"runtime"
 	"runtime/debug"
 	"strings"
 	"sync"
 	"testing"
 
+	"github.com/ajitpratap0/GoSQLX/pkg/errors"
 	"github.com/ajitpratap0/GoSQLX/pkg/gosqlx"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/parser"
@@ -50,8 +51,11 @@ func TestParseStackDepth(t *testing.T) {
 	}{
 		{"parens_shallow", nestedParens(10), false},
 		{"parens_half_limit", nestedParens(limit / 2), false},
+		{"parens_at_limit", nestedParens(limit - 1), false},
+		{"parens_just_over", nestedParens(limit), true},
 		{"parens_beyond_limit", nestedParens(limit * 20), true},
 		{"subqueries_shallow", nestedSubqueries(5), false},
+		{"subqueries_deep", nestedSubqueries(limit/2 - 1), false},
 		{"subqueries_beyond_limit", nestedSubqueries(limit * 5), true},
 	}
 	for _, tc := range cases {
@@ -75,8 +79,12 @@ func TestParseStackDepth(t *testing.T) {
 				if r.err == nil {
 					t.Fatal("expected an error for nesting beyond the recursion limit, got none")
 				}
-				if !errors.Is(r.err, gosqlx.ErrSyntax) {
+				if !stderrors.Is(r.err, gosqlx.ErrSyntax) {
 					t.Fatalf("error %v does not wrap ErrSyntax", r.err)
+				}
+				var perr *errors.Error
+				if !stderrors.As(r.err, &perr) || perr.Code != errors.ErrCodeRecursionDepthLimit {
+					t.Fatalf("error %v is not the recursion depth error (E2007)", r.err)
 				}
 				return
 			}

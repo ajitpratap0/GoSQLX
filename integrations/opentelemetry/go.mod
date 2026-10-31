@@ -3,7 +3,7 @@ module github.com/ajitpratap0/GoSQLX/integrations/opentelemetry
 go 1.26.1
 
 require (
-	github.com/ajitpratap0/GoSQLX v1.16.0
+	github.com/ajitpratap0/GoSQLX v1.17.0
 	go.opentelemetry.io/otel v1.47.0
 	go.opentelemetry.io/otel/sdk v1.47.0
 	go.opentelemetry.io/otel/trace v1.47.0

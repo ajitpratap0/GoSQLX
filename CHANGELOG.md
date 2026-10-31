@@ -20,7 +20,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   is `x -> (x * 2)`. It used to parse as the JSON arrow, `(x -> x) * 2`, and
   formatting or transpiling for ClickHouse or Snowflake, including identity
   transpiles, emitted `arrayMap((x -> x) * 2, a)`. The new
-  `BinaryExpression.Lambda` field marks these nodes. Transpiling a lambda to
+  `BinaryExpression.Lambda` field marks these nodes. Transpiling a ClickHouse
+  or Snowflake lambda to the generic dialect now parenthesizes its body,
+  `arrayMap(x -> (x * 2), a)`, because the generic parser reads `->` as the
+  tight-binding JSON arrow; it used to emit `arrayMap(x -> x * 2, a)`, which
+  reads back as `(x -> x) * 2`. Transpiling a lambda to
   a dialect without lambdas (PostgreSQL, MySQL, MariaDB, SQLite, SQL Server,
   Oracle) now returns an error: written as that dialect's `->` it would mean
   JSON extraction or regroup as `(x -> x) * 2`. In the other direction, a

@@ -42,6 +42,35 @@ func TestTranspileLambdaUnchanged(t *testing.T) {
 	}
 }
 
+// The generic dialect keeps a ClickHouse/Snowflake lambda but parses -> as
+// the tight-binding JSON arrow, so the body is parenthesized to keep its
+// meaning when read back. On main, x -> x * 2 came out unchanged, which the
+// generic parser reads as (x -> x) * 2 (#897).
+func TestTranspileLambdaToGeneric(t *testing.T) {
+	want := map[string]string{
+		"SELECT arrayMap(x -> x * 2, arr) FROM t":                       "SELECT arrayMap(x -> (x * 2), arr) FROM t",
+		"SELECT arrayMap(x -> x * 2, [1, 2, 3])":                        "SELECT arrayMap(x -> (x * 2), [1, 2, 3])",
+		"SELECT arrayFilter(x -> x > 1 AND x < 5, arr) FROM t":          "SELECT arrayFilter(x -> (x > 1 AND x < 5), arr) FROM t",
+		"SELECT arrayFilter(x -> x > 1 OR x IS NULL, arr) FROM t":       "SELECT arrayFilter(x -> (x > 1 OR x IS NULL), arr) FROM t",
+		"SELECT arrayMap((x, y) -> x + y, a, b) FROM t":                 "SELECT arrayMap((x, y) -> (x + y), a, b) FROM t",
+		"SELECT arrayFold((acc, x) -> acc + x, [1, 2, 3], toUInt64(0))": "SELECT arrayFold((acc, x) -> (acc + x), [1, 2, 3], toUInt64(0))",
+		"SELECT arrayExists(x -> x LIKE 'err%', tags) FROM t":           "SELECT arrayExists(x -> (x LIKE 'err%'), tags) FROM t",
+		"SELECT arrayFilter(x -> x IN (SELECT id FROM t), arr) FROM s":  "SELECT arrayFilter(x -> (x IN (SELECT id FROM t)), arr) FROM s",
+		"SELECT arrayMap(x -> arrayMap(y -> y * x, [1, 2]), [1, 2])":    "SELECT arrayMap(x -> arrayMap(y -> (y * x), [1, 2]), [1, 2])",
+		"SELECT arraySort(x -> -x, arr) FROM t":                         "SELECT arraySort(x -> (-x), arr) FROM t",
+		"SELECT TRANSFORM(arr, a -> a * 2) FROM t":                      "SELECT TRANSFORM(arr, a -> (a * 2)) FROM t",
+		"SELECT REDUCE(arr, 0, (acc, val) -> acc + val) FROM t":         "SELECT REDUCE(arr, 0, (acc, val) -> (acc + val)) FROM t",
+	}
+	for _, from := range lambdaDialects {
+		for sql, w := range want {
+			got, err := Transpile(sql, from, keywords.DialectGeneric)
+			if err != nil || got != w {
+				t.Errorf("%s -> generic %q: got %q, %v; want %q", from, sql, got, err, w)
+			}
+		}
+	}
+}
+
 // noLambdaDialects read -> as JSON field access (PostgreSQL, MySQL, MariaDB,
 // SQLite) or not at all (SQL Server, Oracle).
 var noLambdaDialects = []keywords.SQLDialect{

@@ -222,7 +222,8 @@ func TestFormatWithDialect_CommentsFollowStatementStarts(t *testing.T) {
 
 // TestFormat_CommentsScaleLinearly guards against quadratic optimizer-hint
 // placement and comment lookup (seconds and gigabytes before the fix). The
-// bounds are generous so that -race and slow CI machines pass.
+// ratio and B/op bounds sit between linear and quadratic growth, so -race and
+// slow CI machines pass.
 func TestFormat_CommentsScaleLinearly(t *testing.T) {
 	if testing.Short() {
 		t.Skip("scaling test")

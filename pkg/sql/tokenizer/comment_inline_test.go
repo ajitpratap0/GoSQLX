@@ -77,7 +77,8 @@ func TestTokenizer_CommentInlineMatchesReference(t *testing.T) {
 // TestTokenizer_CommentRunLinearTime checks that many comments on one line
 // after a long whitespace prefix are tokenized in time linear in the input:
 // the inline check must not rescan the line prefix for every comment. The
-// work of a rescan is comments x prefix length, so the test grows both by 4x:
+// work of a rescan is comments x prefix length, so the test grows both by 4x
+// (1/64 vs 1/16 of the input, so a regressed run fails fast):
 // a linear tokenizer takes about 4x as long, a rescanning one about 16x. The
 // comparison is between two sizes of the same input, so race and coverage
 // instrumentation slow both alike (see scaletest).
@@ -89,7 +90,9 @@ func TestTokenizer_CommentRunLinearTime(t *testing.T) {
 	build := func(div int) string {
 		return strings.Repeat(" ", spaces/div) + strings.Repeat("/**/", comments/div) + "SELECT 1"
 	}
-	input := build(1)
+	const div = 16 // correctness and the larger scaling sample share one input
+	input := build(div)
+	n := comments / div
 
 	tkz := GetTokenizer()
 	defer PutTokenizer(tkz)
@@ -101,13 +104,13 @@ func TestTokenizer_CommentRunLinearTime(t *testing.T) {
 	if len(tokens) != 3 {
 		t.Fatalf("got %d tokens, want 3", len(tokens))
 	}
-	if len(tkz.Comments) != comments {
-		t.Fatalf("collected %d comments, want %d", len(tkz.Comments), comments)
+	if len(tkz.Comments) != n {
+		t.Fatalf("collected %d comments, want %d", len(tkz.Comments), n)
 	}
 	if tkz.Comments[0].Inline {
 		t.Error("first comment after only whitespace reported as inline")
 	}
-	for _, i := range []int{1, comments / 2, comments - 1} {
+	for _, i := range []int{1, n / 2, n - 1} {
 		if !tkz.Comments[i].Inline {
 			t.Errorf("comment %d after another comment on the same line not reported as inline", i)
 		}
@@ -116,8 +119,11 @@ func TestTokenizer_CommentRunLinearTime(t *testing.T) {
 	if testing.Short() {
 		t.Skip("scaling check skipped in short mode")
 	}
-	small := build(4)
+	// Compare 1/64 with 1/16 of the input (prefix and comments both grow 4x)
+	// so a rescanning tokenizer costs a fraction of a second per run (2s race), not the 13s
+	// of the full input.
+	small, large := build(4*div), input
 	scaletest.AssertLinearGrowth(t, "comments after whitespace", 10,
 		func() { _, _ = tkz.TokenizeString(small) },
-		func() { _, _ = tkz.TokenizeString(input) })
+		func() { _, _ = tkz.TokenizeString(large) })
 }

@@ -43,6 +43,14 @@ const (
 	maxReps = 1 << 14
 )
 
+// budget bounds the total time one AssertLinearGrowth call may spend. When a
+// real regression makes the large case take seconds, retrying and sampling
+// would run for minutes and hit the package timeout, losing the ratio
+// diagnosis. Once the budget is spent the measurement stops after the current
+// sample pair, and an out-of-bound ratio fails at once instead of retrying.
+// It is a variable so the helper's own tests can shrink it.
+var budget = 15 * time.Second
+
 // AssertLinearGrowth fails when run(large) is more than maxRatio times slower
 // than run(small), where large is factor times the size of small. Choose
 // maxRatio between the linear expectation (factor) and the quadratic one
@@ -52,7 +60,8 @@ const (
 // runs of the two sizes are interleaved so both see the same load, the
 // fastest of several runs of each is kept, short functions are repeated until
 // a sample spans minSample, and the whole comparison may be repeated, passing
-// if any attempt is within bound. A runtime.GC precedes every sample but the
+// if any attempt is within bound. A time budget (see budget) makes a slow,
+// clearly out-of-bound case fail fast instead of retrying. A runtime.GC precedes every sample but the
 // collector stays enabled, so allocation-driven super-linear cost is
 // measured. Time cannot separate every regression from noise, though: a
 // quadratic that mostly copies memory is best guarded by AssertLinearBytes
@@ -61,6 +70,8 @@ const (
 func AssertLinearGrowth(t testing.TB, name string, maxRatio float64, small, large func()) {
 	t.Helper()
 	smallReps, largeReps := calibrate(small), calibrate(large) // also warms caches and pools
+	start := time.Now()
+	overBudget := func() bool { return time.Since(start) > budget }
 	var last float64
 	for attempt := 0; attempt < attempts; attempt++ {
 		bestSmall, bestLarge := time.Duration(1<<63-1), time.Duration(1<<63-1)
@@ -71,6 +82,9 @@ func AssertLinearGrowth(t testing.TB, name string, maxRatio float64, small, larg
 			if d := timeReps(large, largeReps); d < bestLarge {
 				bestLarge = d
 			}
+			if overBudget() {
+				break
+			}
 		}
 		if bestSmall <= 0 {
 			t.Skipf("%s: small case below clock resolution, ratio inconclusive", name)
@@ -79,6 +93,10 @@ func AssertLinearGrowth(t testing.TB, name string, maxRatio float64, small, larg
 		last = float64(bestLarge) / float64(bestSmall)
 		t.Logf("%s: small %v, large %v, ratio %.2f (bound %.1f, attempt %d)", name, bestSmall, bestLarge, last, maxRatio, attempt+1)
 		if last <= maxRatio {
+			return
+		}
+		if overBudget() {
+			t.Errorf("%s: larger input was %.1fx slower after %v (attempt %d, time budget %v spent), want at most %.1fx (super-linear growth)", name, last, time.Since(start).Round(time.Millisecond), attempt+1, budget, maxRatio)
 			return
 		}
 	}

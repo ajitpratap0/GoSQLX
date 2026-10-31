@@ -402,8 +402,8 @@ func TestWPPScanSQLLinear(t *testing.T) {
 		return strings.Repeat(chunk, (size+len(chunk)-1)/len(chunk))[:size]
 	}
 	scanner := NewScanner()
-	small, large := input(64<<10), input(256<<10)
-	scaletest.AssertLinearGrowth(t, "ScanSQL 64KiB -> 256KiB", 10,
+	small, large := input(16<<10), input(64<<10)
+	scaletest.AssertLinearGrowth(t, "ScanSQL 16KiB -> 64KiB", 10,
 		func() { _ = scanner.ScanSQL(small) },
 		func() { _ = scanner.ScanSQL(large) })
 }

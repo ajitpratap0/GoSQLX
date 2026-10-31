@@ -18,6 +18,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 )
 
 // recorder captures failures so the helper can be shown to reject a bad curve.
@@ -60,6 +61,25 @@ func TestAssertLinearGrowthRejectsQuadratic(t *testing.T) {
 	AssertLinearGrowth(r, "quadratic", 10, work(4000, true), work(16000, true))
 	if !r.failed {
 		t.Error("quadratic work was not reported")
+	}
+}
+
+// A real regression makes the large case slow; the helper must fail with the
+// ratio within its time budget rather than retry until the package times out.
+func TestAssertLinearGrowthSlowQuadraticFailsWithinBudget(t *testing.T) {
+	old := budget
+	budget = 200 * time.Millisecond
+	defer func() { budget = old }()
+	r := &recorder{TB: t}
+	start := time.Now()
+	// Large case takes a few hundred ms; unbounded retries would take
+	// 5 attempts x 7 samples of it (tens of seconds).
+	AssertLinearGrowth(r, "slow quadratic", 10, work(40000, true), work(160000, true))
+	if !r.failed {
+		t.Error("slow quadratic work was not reported")
+	}
+	if d := time.Since(start); d > 10*time.Second {
+		t.Errorf("slow quadratic took %v to fail, want it bounded by the time budget", d)
 	}
 }
 

@@ -71,7 +71,7 @@ func vstmt(r *rand.Rand) string {
 	return sb.String()
 }
 
-func vfixed() []string {
+func vfixed(depths []int) []string {
 	out := []string{
 		"SELECT 'a\\x1a'", "SELECT '\\u001a'", "SELECT '\\032'", "SELECT 'x\\0y'", "SELECT 'x\\Zy'",
 		"SELECT * FROM t LIMIT 5 WITH TIES", "SELECT topic FROM t", "SELECT a FROM stopwatch", "SELECT ties FROM t",
@@ -79,7 +79,12 @@ func vfixed() []string {
 		"SELECT a FROM t UNION ALL SELECT b FROM u ORDER BY 1 LIMIT 5",
 		"(SELECT a FROM t ORDER BY a LIMIT 1) UNION (SELECT b FROM u ORDER BY b LIMIT 2) ORDER BY 1 LIMIT 3",
 		"SELECT a FROM t WHERE a < b AND b <= c AND c >= d AND d <> e",
-		// Byte classes only the DDL and non-ASCII prefilters key on.
+		// Byte classes the DDL and non-ASCII prefilters key on. The quoted and
+		// bracketed type-delimiter fixtures below do not distinguish the DDL
+		// prefilter for " and [: formatter.FormatASTChecked restyles data types
+		// itself, so those two branches are equivalent mutants (only the backtick
+		// case with ClickHouse reaches the prefilter). The white-box tests
+		// TestScanSourceStringOpeners and TestScanSourceTypeDelimiters pin them.
 		"SELECT ‘a’", "SELECT «a»", "SELECT „a“ FROM t", "SELECT \u201cx\u201d FROM t", "SELECT émoji FROM t WHERE a = 'é'",
 		`CREATE TABLE t (v "custom")`, "CREATE TABLE t (v `custom`)", "CREATE TABLE t (v [custom])", "CREATE TABLE t (v INT[])",
 		"CREATE TABLE t (id INT AUTO_INCREMENT PRIMARY KEY, flag TINYINT(1))", `CREATE TABLE "my tbl" ("my col" INT)`,
@@ -89,13 +94,13 @@ func vfixed() []string {
 		"SELECT é FROM ü", "SELECT a AS é FROM t", "SELECT ‘it’s’", "CREATE TABLE té (cé INT)", "SELECT 1 AS \u2018x\u2019",
 		"SELECT 1 FROM t WHERE x = 1 /* ^ | */", "SELECT 1 -- ^\n", "SELECT ¬ FROM t",
 	}
-	for _, n := range []int{510, 511, 512, 513, 514, 520, 600, 1100} {
+	for _, n := range depths {
 		out = append(out,
 			"SELECT "+strings.Repeat("(", n)+"1"+strings.Repeat(")", n)+" FROM t",
 			"SELECT "+strings.Repeat("f(", n)+"1"+strings.Repeat(")", n)+" FROM t",
 			"SELECT "+strings.Repeat("NOT ", n)+"1 FROM t",
 			"SELECT "+strings.Repeat("- ", n)+"1 FROM t",
-			"SELECT "+strings.Repeat("-", 0)+strings.Repeat("+ ", n)+"1 FROM t",
+			"SELECT "+strings.Repeat("+ ", n)+"1 FROM t",
 			"SELECT "+strings.Repeat("PRIOR ", n)+"1 FROM t",
 			"SELECT "+strings.Repeat("BINARY ", n)+"1 FROM t",
 			"SELECT "+strings.Repeat("CONNECT_BY_ROOT ", n)+"1 FROM t",
@@ -115,11 +120,16 @@ func TestTranspileDifferential(t *testing.T) {
 	dialects := prefilterDialects()
 	r := rand.New(rand.NewSource(42))
 	var sqls []string
-	sqls = append(sqls, vfixed()...)
+	// The deep-nesting fixtures (depths straddling the 512 recursion ceiling)
+	// over 81 pairs dominate the cost, not the random corpus. Under -race or
+	// -short keep one depth just below and one above the ceiling.
+	depths := []int{510, 511, 512, 513, 514, 520, 600, 1100}
 	n := 6000
-	if testing.Short() {
-		n = 100
+	if raceDetector || testing.Short() {
+		depths = []int{511, 513}
+		n = 200
 	}
+	sqls = append(sqls, vfixed(depths)...)
 	for i := 0; i < n; i++ {
 		sqls = append(sqls, vstmt(r))
 	}

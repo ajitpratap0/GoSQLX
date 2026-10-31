@@ -26,18 +26,21 @@ import (
 )
 
 // Sixteenfold expression growth must stay far below the 256-fold cost of
-// repeatedly rendering or scanning every descendant: linear work grows ~16x,
-// and the 64x allocation bound leaves room for noise. Measured running time
-// of the deepest shapes grows 30-70x for 16x input (deep recursion touches
-// more stack and cache), so its bound is 128x, still half the quadratic 256x. Build ASTs outside the measurement
+// repeatedly rendering or scanning every descendant: linear work grows ~16x.
+// The allocation-count bound is 64x; the bytes bound is 128x because the deep
+// nested shape legitimately measures up to ~58x bytes for 16x input (stack and
+// builder growth) while the injected quadratic measures 233-287x. Build ASTs outside the measurement
 // so parser limits and parsing time do not conceal formatter regressions.
 //
-// Two measures are used. Allocations per call are deterministic and checked
-// everywhere, including under the race detector; they catch regressions that
-// re-render subtrees. Running time (repeated, interleaved min-of-N, see
-// scaletest) also catches allocation-free rescans, but race instrumentation
-// inflates allocation-heavy paths unevenly across sizes, so it is skipped
-// there.
+// Two deterministic measures are used, both valid under the race detector
+// (CI runs every test with -race). Allocations per call catch regressions
+// that allocate per node. Bytes allocated per call catch regressions that
+// re-render or copy subtrees: those keep the allocation count linear but
+// make the bytes quadratic (a child rendered into a fresh builder and copied
+// into its parent grew bytes 233-287x for 16x input, against 58x or less for
+// the linear code, while allocs/op moved only 16x). No wall-clock check is
+// made: deep recursion legitimately grows time 30-70x for 16x input, so a
+// time bound loose enough to be stable would also let that regression through.
 func TestFormatASTExpressionLinearGrowth(t *testing.T) {
 	for _, shape := range []struct {
 		name  string
@@ -81,10 +84,7 @@ func TestFormatASTExpressionLinearGrowth(t *testing.T) {
 					if largeAllocs > 64*smallAllocs {
 						t.Errorf("sixteenfold expression growth went from %.0f to %.0f allocations, exceeding 64x", smallAllocs, largeAllocs)
 					}
-					if raceEnabled || testing.Short() {
-						return
-					}
-					scaletest.AssertLinearGrowth(t, "FormatAST", 128, format(small), format(large))
+					scaletest.AssertLinearBytes(t, "FormatAST", 128, format(small), format(large))
 				})
 			}
 		})

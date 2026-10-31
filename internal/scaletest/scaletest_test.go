@@ -80,3 +80,43 @@ func TestTrippingContext(t *testing.T) {
 		t.Errorf("polls=%d afterTrip=%d, want 3 and 1", ctx.Polls(), ctx.PollsAfterTrip())
 	}
 }
+
+// copyBytes allocates n bytes per call (linear) or n*n/4096 (quadratic).
+func copyBytes(n int, quadratic bool) func() {
+	return func() {
+		size := n
+		if quadratic {
+			size = n * n / 4096
+		}
+		sink = len(make([]byte, size))
+	}
+}
+
+func TestAssertLinearBytes(t *testing.T) {
+	r := &recorder{TB: t}
+	AssertLinearBytes(r, "linear", 10, copyBytes(1<<16, false), copyBytes(1<<18, false))
+	if r.failed {
+		t.Error("linear allocation was reported as super-linear")
+	}
+	r = &recorder{TB: t}
+	AssertLinearBytes(r, "quadratic", 10, copyBytes(1<<16, true), copyBytes(1<<18, true))
+	if !r.failed {
+		t.Error("quadratic allocation was not reported")
+	}
+}
+
+func TestTrippingContextClosesDone(t *testing.T) {
+	ctx := NewTrippingContext(1)
+	select {
+	case <-ctx.Done():
+		t.Fatal("Done closed before the allowance was exceeded")
+	default:
+	}
+	_ = ctx.Err()
+	_ = ctx.Err()
+	select {
+	case <-ctx.Done():
+	default:
+		t.Fatal("Done not closed after the allowance was exceeded")
+	}
+}

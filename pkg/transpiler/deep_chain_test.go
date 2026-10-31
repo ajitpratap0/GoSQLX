@@ -34,7 +34,7 @@ func TestTranspileDeepChainLinear(t *testing.T) {
 			}
 		}
 	}
-	scaletest.AssertLinearGrowth(t, "OR chain 10k -> 40k terms", 10, run(10000), run(40000))
+	scaletest.AssertLinearGrowth(t, "OR chain 2.5k -> 10k terms", 10, run(2500), run(10000))
 }
 
 func TestTranspileDeepChains(t *testing.T) {

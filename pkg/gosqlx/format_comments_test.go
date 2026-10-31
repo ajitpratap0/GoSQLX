@@ -246,9 +246,10 @@ func TestFormat_CommentsScaleLinearly(t *testing.T) {
 				strings.Count(out, "-- c") != strings.Count(large, "-- c") {
 				t.Fatal("comments lost")
 			}
-			scaletest.AssertLinearGrowth(t, tc.name, 10,
-				func() { _, _ = Format(small, DefaultFormatOptions()) },
-				func() { _, _ = Format(large, DefaultFormatOptions()) })
+			runSmall := func() { _, _ = Format(small, DefaultFormatOptions()) }
+			runLarge := func() { _, _ = Format(large, DefaultFormatOptions()) }
+			scaletest.AssertLinearBytes(t, tc.name, 8, runSmall, runLarge)
+			scaletest.AssertLinearGrowth(t, tc.name, 10, runSmall, runLarge)
 		})
 	}
 }

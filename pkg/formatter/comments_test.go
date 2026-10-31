@@ -447,8 +447,9 @@ func TestJoinWithComments_StartsDisagree(t *testing.T) {
 // TestJoinWithComments_ScalesLinearly guards against the quadratic hint
 // placement and comment lookup: thousands of hints in one statement and
 // thousands of commented statements must format in time linear in the input.
-// The check compares a 4x larger input against a smaller one (see scaletest),
-// so the race detector and slow CI machines do not matter.
+// Two checks compare a 4x larger input against a smaller one (see scaletest):
+// bytes allocated (deterministic, so valid under -race and load) and a
+// repeated, interleaved timing ratio.
 func TestJoinWithComments_ScalesLinearly(t *testing.T) {
 	if testing.Short() {
 		t.Skip("scaling test")
@@ -472,9 +473,10 @@ func TestJoinWithComments_ScalesLinearly(t *testing.T) {
 			if want := strings.Count(large, "/*+ H */"); strings.Count(got, "SELECT /*+ H */ 1") != want {
 				t.Errorf("%d hints in place, want %d", strings.Count(got, "SELECT /*+ H */ 1"), want)
 			}
-			scaletest.AssertLinearGrowth(t, tc.name, 10,
-				func() { _, _ = renderJoinDialect(t, small, keywords.DialectPostgreSQL, layout) },
-				func() { _, _ = renderJoinDialect(t, large, keywords.DialectPostgreSQL, layout) })
+			runSmall := func() { _, _ = renderJoinDialect(t, small, keywords.DialectPostgreSQL, layout) }
+			runLarge := func() { _, _ = renderJoinDialect(t, large, keywords.DialectPostgreSQL, layout) }
+			scaletest.AssertLinearBytes(t, tc.name, 8, runSmall, runLarge)
+			scaletest.AssertLinearGrowth(t, tc.name, 10, runSmall, runLarge)
 		})
 	}
 }

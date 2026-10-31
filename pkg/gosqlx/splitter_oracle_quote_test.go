@@ -15,10 +15,11 @@
 package gosqlx
 
 import (
-	"github.com/ajitpratap0/GoSQLX/internal/scaletest"
 	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/ajitpratap0/GoSQLX/internal/scaletest"
 )
 
 // TestSplitStatements_OracleAlternativeQuoting checks that the body of an

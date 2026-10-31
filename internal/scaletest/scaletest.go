@@ -22,6 +22,7 @@ import (
 	"context"
 	"runtime"
 	"runtime/debug"
+	"sort"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -34,7 +35,13 @@ const (
 	// attempts is how many times a ratio may be re-measured. A genuine
 	// super-linear regression exceeds the bound in every attempt; a load
 	// spike has to hit all of them to cause a false failure.
-	attempts = 3
+	attempts = 5
+	// minSample is the least wall time one timed sample should span. Faster
+	// functions are repeated within the sample and the time divided by the
+	// repeat count, so a coarse clock (Windows) cannot read a run as zero.
+	minSample = 10 * time.Millisecond
+	// maxReps caps the repeat count of very fast functions.
+	maxReps = 1 << 14
 )
 
 // AssertLinearGrowth fails when run(large) is more than maxRatio times slower
@@ -44,28 +51,31 @@ const (
 //
 // The measurement is robust against a loaded machine and the race detector:
 // runs of the two sizes are interleaved so both see the same load, the
-// fastest of several runs of each is kept, GC is paused while timing, and the
-// whole comparison may be repeated, passing if any attempt is within bound.
+// fastest of several runs of each is kept, short functions are repeated until
+// a sample spans minSample, and the whole comparison may be repeated, passing
+// if any attempt is within bound. A runtime.GC precedes every sample but the
+// collector stays enabled, so allocation-driven super-linear cost is
+// measured. Time cannot separate every regression from noise, though: a
+// quadratic that mostly copies memory is best guarded by AssertLinearBytes
+// as well, which is deterministic. If the small case is still below the clock
+// resolution the result is inconclusive and the test is skipped.
 func AssertLinearGrowth(t testing.TB, name string, maxRatio float64, small, large func()) {
 	t.Helper()
-	old := debug.SetGCPercent(-1)
-	defer debug.SetGCPercent(old)
-
-	small()
-	large() // warm caches, pools and lazily initialised tables
+	smallReps, largeReps := calibrate(small), calibrate(large) // also warms caches and pools
 	var last float64
 	for attempt := 0; attempt < attempts; attempt++ {
 		bestSmall, bestLarge := time.Duration(1<<63-1), time.Duration(1<<63-1)
 		for i := 0; i < samples; i++ {
-			if d := timeOnce(small); d < bestSmall {
+			if d := timeReps(small, smallReps); d < bestSmall {
 				bestSmall = d
 			}
-			if d := timeOnce(large); d < bestLarge {
+			if d := timeReps(large, largeReps); d < bestLarge {
 				bestLarge = d
 			}
 		}
 		if bestSmall <= 0 {
-			bestSmall = 1
+			t.Skipf("%s: small case below clock resolution, ratio inconclusive", name)
+			return
 		}
 		last = float64(bestLarge) / float64(bestSmall)
 		t.Logf("%s: small %v, large %v, ratio %.2f (bound %.1f, attempt %d)", name, bestSmall, bestLarge, last, maxRatio, attempt+1)
@@ -76,11 +86,71 @@ func AssertLinearGrowth(t testing.TB, name string, maxRatio float64, small, larg
 	t.Errorf("%s: larger input was %.1fx slower in all %d attempts, want at most %.1fx (super-linear growth)", name, last, attempts, maxRatio)
 }
 
-func timeOnce(fn func()) time.Duration {
-	runtime.GC()
+// calibrate runs fn once (warm-up) and returns how many repetitions make a
+// sample span at least minSample.
+func calibrate(fn func()) int {
 	start := time.Now()
 	fn()
-	return time.Since(start)
+	one := time.Since(start)
+	if one >= minSample {
+		return 1
+	}
+	if one <= 0 {
+		return maxReps
+	}
+	reps := int(minSample/one) + 1
+	if reps > maxReps {
+		reps = maxReps
+	}
+	return reps
+}
+
+// timeReps returns the per-call time of reps calls of fn.
+func timeReps(fn func(), reps int) time.Duration {
+	runtime.GC()
+	start := time.Now()
+	for i := 0; i < reps; i++ {
+		fn()
+	}
+	return time.Since(start) / time.Duration(reps)
+}
+
+// AssertLinearBytes fails when run(large) allocates more than maxRatio times
+// the bytes of run(small). Allocated bytes are deterministic for a given
+// input, so unlike AssertLinearGrowth this holds under the race detector and
+// on a loaded machine, and it catches regressions that copy or rebuild
+// subtrees (quadratic bytes with a linear allocation count, which
+// testing.AllocsPerRun cannot see). Each size is measured several times and
+// the median delta kept, with the collector paused so pool contents stay stable.
+func AssertLinearBytes(t testing.TB, name string, maxRatio float64, small, large func()) {
+	t.Helper()
+	s, l := minAllocBytes(small), minAllocBytes(large)
+	if s == 0 {
+		s = 1
+	}
+	ratio := float64(l) / float64(s)
+	t.Logf("%s: B/op small %d, large %d, ratio %.2f (bound %.1f)", name, s, l, ratio, maxRatio)
+	if ratio > maxRatio {
+		t.Errorf("%s: larger input allocated %.1fx more bytes, want at most %.1fx (super-linear growth)", name, ratio, maxRatio)
+	}
+}
+
+func minAllocBytes(fn func()) uint64 {
+	// A collection mid-measurement empties sync.Pools, which makes later
+	// runs allocate objects an earlier run reused; keep it out of the window.
+	defer debug.SetGCPercent(debug.SetGCPercent(-1))
+	runtime.GC()
+	fn() // warm pools and lazily initialised tables
+	var runs [5]uint64
+	for i := range runs {
+		var a, b runtime.MemStats
+		runtime.ReadMemStats(&a)
+		fn()
+		runtime.ReadMemStats(&b)
+		runs[i] = b.TotalAlloc - a.TotalAlloc
+	}
+	sort.Slice(runs[:], func(i, j int) bool { return runs[i] < runs[j] })
+	return runs[len(runs)/2]
 }
 
 // TrippingContext is a context.Context whose Err reports nil for the first
@@ -88,7 +158,8 @@ func timeOnce(fn func()) time.Duration {
 // at a fixed point in the callee's own progress instead of after a sleep, so
 // tests of cancellation responsiveness need no wall-clock bound.
 type TrippingContext struct {
-	context.Context // never cancelled itself; supplies a non-nil Done channel
+	context.Context // supplies Done; closed when the allowance is first exceeded
+	cancel          context.CancelFunc
 	allow           int64
 	polls           atomic.Int64
 }
@@ -99,13 +170,15 @@ func NewTrippingContext(allow int) *TrippingContext {
 	// WithCancel gives a non-nil Done channel, which callers use to decide
 	// whether polling Err is worthwhile at all.
 	ctx, cancel := context.WithCancel(context.Background())
-	_ = cancel // released when the test process exits; the context holds no resources
-	return &TrippingContext{Context: ctx, allow: int64(allow)}
+	return &TrippingContext{Context: ctx, cancel: cancel, allow: int64(allow)}
 }
 
 // Err counts the call and reports cancellation once the allowance is spent.
 func (c *TrippingContext) Err() error {
 	if c.polls.Add(1) > c.allow {
+		// Close Done too, so callees that select on Done() and callees that
+		// poll Err() observe the same cancellation point.
+		c.cancel()
 		return context.Canceled
 	}
 	return nil

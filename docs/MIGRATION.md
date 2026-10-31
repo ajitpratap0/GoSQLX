@@ -1,6 +1,6 @@
 # Migration Guide
 
-## v1.16.0 → v1.17.0 (2026-10-29)
+## v1.16.0 → v1.17.0 (2026-10-31)
 
 **Source-compatible upgrade**: exported signatures are unchanged apart from additions, so code that compiled against v1.16.0 compiles against v1.17.0. Parse acceptance, rendered SQL, security findings, transpiler errors and some CLI and LSP behaviour change. Work through the checklist below; the [CHANGELOG](../CHANGELOG.md) has the full list.
 

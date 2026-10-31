@@ -2,7 +2,7 @@
 
 All notable changes to the "GoSQLX" extension will be documented in this file.
 
-## [1.17.0] - 2026-10-29
+## [1.17.0] - 2026-10-31
 
 Bundles the GoSQLX v1.17.0 language server. See the
 [main CHANGELOG](https://github.com/ajitpratap0/GoSQLX/blob/main/CHANGELOG.md)

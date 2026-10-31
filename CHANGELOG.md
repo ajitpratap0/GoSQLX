@@ -20,9 +20,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   is `x -> (x * 2)`. It used to parse as the JSON arrow, `(x -> x) * 2`, and
   formatting or transpiling for ClickHouse or Snowflake, including identity
   transpiles, emitted `arrayMap((x -> x) * 2, a)`. The new
-  `BinaryExpression.Lambda` field marks these nodes. Transpiling to a dialect
-  where `->` is the JSON operator keeps the body grouped, for example
-  `x -> (x * 2)` for MySQL.
+  `BinaryExpression.Lambda` field marks these nodes. Transpiling a lambda to
+  a dialect without lambdas (PostgreSQL, MySQL, MariaDB, SQLite, SQL Server,
+  Oracle) now returns an error: written as that dialect's `->` it would mean
+  JSON extraction or regroup as `(x -> x) * 2`. In the other direction, a
+  JSON `->` or `->>` transpiled to ClickHouse or Snowflake now returns an
+  error, because there `->` is the lambda operator (and `->>` Snowflake's
+  flow operator) and the output would be read back as a lambda.
 - **`U&'...'` in Oracle, Snowflake and ClickHouse is an error** (#898): these
   dialects have neither Unicode-escape literals nor an `&` operator. The
   literal was read as `U & '...'`, and formatting or transpiling then emitted

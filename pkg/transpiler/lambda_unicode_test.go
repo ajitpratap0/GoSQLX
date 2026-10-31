@@ -7,9 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/keywords"
-	"github.com/ajitpratap0/GoSQLX/pkg/sql/parser"
 )
 
 var lambdaDialects = []keywords.SQLDialect{keywords.DialectClickHouse, keywords.DialectSnowflake}
@@ -44,100 +42,54 @@ func TestTranspileLambdaUnchanged(t *testing.T) {
 	}
 }
 
-// Where -> is the JSON operator, the transpiled lambda keeps its body
-// grouped as the target parses it.
-func TestTranspileLambdaKeepsBodyGrouping(t *testing.T) {
-	for _, tc := range []struct {
-		to   keywords.SQLDialect
-		sql  string
-		want string
-	}{
-		{keywords.DialectMySQL, "SELECT arrayMap(x -> x * 2, arr) FROM t", "SELECT arrayMap(x -> (x * 2), arr) FROM t"},
-		{keywords.DialectSQLite, "SELECT arrayMap(x -> x * 2, arr) FROM t", "SELECT arrayMap(x -> (x * 2), arr) FROM t"},
-		{keywords.DialectPostgreSQL, "SELECT arrayMap(x -> x * 2, arr) FROM t", "SELECT arrayMap(x -> x * 2, arr) FROM t"},
-		{keywords.DialectPostgreSQL, "SELECT arrayFilter(x -> x > 1, arr) FROM t", "SELECT arrayFilter(x -> (x > 1), arr) FROM t"},
-	} {
-		for _, from := range lambdaDialects {
-			got, err := Transpile(tc.sql, from, tc.to)
-			if err != nil || got != tc.want {
-				t.Errorf("%s -> %s %q: got %q, %v; want %q", from, tc.to, tc.sql, got, err, tc.want)
-			}
-		}
-	}
-	// Re-parsing the output in each dialect that has a JSON -> must give
-	// the -> the whole body as its right operand.
-	jsonDialects := []keywords.SQLDialect{keywords.DialectPostgreSQL, keywords.DialectMySQL, keywords.DialectMariaDB, keywords.DialectSQLite}
-	bodies := map[string]string{
-		"SELECT arrayMap(x -> x * 2, arr) FROM t":                  "*",
-		"SELECT arrayMap((x, y) -> x + y, a, b) FROM t":            "+",
-		"SELECT arrayFilter(x -> x > 1 AND x < 5, arr) FROM t":     "AND",
-		"SELECT arrayFilter(x -> x > 1 OR x IS NULL, arr) FROM t":  "OR",
-		"SELECT arrayExists(x -> x LIKE 'err%', tags) FROM t":      "LIKE",
-		"SELECT arrayMap(x -> x - 1 + y, arr) FROM t":              "+",
-		"SELECT arrayMap(x -> x = 1, arr) FROM t":                  "=",
-		"SELECT arrayMap(x -> x || 'a', arr) FROM t":               "||",
-		"SELECT arrayFilter(x -> NOT x > 1 AND x < 5, arr) FROM t": "AND",
-	}
+// noLambdaDialects read -> as JSON field access (PostgreSQL, MySQL, MariaDB,
+// SQLite) or not at all (SQL Server, Oracle).
+var noLambdaDialects = []keywords.SQLDialect{
+	keywords.DialectPostgreSQL, keywords.DialectMySQL, keywords.DialectMariaDB,
+	keywords.DialectSQLite, keywords.DialectSQLServer, keywords.DialectOracle,
+}
+
+// A lambda has no equivalent in a dialect without lambdas. Writing it as
+// that dialect's -> would change its meaning (JSON extraction in MySQL) or
+// its grouping (x -> x * 2 is (x -> x) * 2 in SQL Server and Oracle), so the
+// transpile is refused (#897).
+func TestTranspileLambdaRefusedWithoutLambdas(t *testing.T) {
 	for _, from := range lambdaDialects {
-		for _, to := range jsonDialects {
-			for sql, op := range bodies {
-				out, err := Transpile(sql, from, to)
-				if err != nil {
-					t.Errorf("%s -> %s %q: %v", from, to, sql, err)
-					continue
-				}
-				got := arrowBodyOperator(t, out, to)
-				if op == "||" && (to == keywords.DialectMySQL || to == keywords.DialectMariaDB) {
-					op = "CONCAT()" // || is OR there; the transpiler writes CONCAT
-				}
-				if got != op {
-					t.Errorf("%s -> %s %q: output %q parses with -> body %q, want %q", from, to, sql, out, got, op)
+		for _, to := range noLambdaDialects {
+			for _, sql := range lambdaStatements {
+				got, err := Transpile(sql, from, to)
+				if err == nil || !strings.Contains(err.Error(), "the lambda operator -> has no equivalent in "+string(to)) {
+					t.Errorf("%s -> %s %q: got %q, %v; want a lambda refusal", from, to, sql, got, err)
 				}
 			}
 		}
 	}
 }
 
-// arrowBodyOperator parses sql in d and returns the operator at the root of
-// the right operand of the first -> argument of the first column's call.
-func arrowBodyOperator(t *testing.T, sql string, d keywords.SQLDialect) string {
-	t.Helper()
-	tree, err := parser.ParseWithDialect(sql, d)
-	if err != nil {
-		t.Fatalf("%s re-parse %q: %v", d, sql, err)
-	}
-	defer ast.ReleaseAST(tree)
-	sel, ok := tree.Statements[0].(*ast.SelectStatement)
-	if !ok {
-		t.Fatalf("%s re-parse %q: statement %T", d, sql, tree.Statements[0])
-	}
-	call, ok := sel.Columns[0].(*ast.FunctionCall)
-	if !ok {
-		t.Fatalf("%s re-parse %q: column %T", d, sql, sel.Columns[0])
-	}
-	for _, arg := range call.Arguments {
-		arrow, ok := arg.(*ast.BinaryExpression)
-		if !ok || arrow.Operator != "->" {
-			continue
-		}
-		body := arrow.Right
-		for {
-			p, ok := body.(*ast.ParenthesizedExpression)
-			if !ok {
-				break
+// JSON -> and ->> have no equivalent in ClickHouse or Snowflake, where ->
+// is the lambda operator and ->> Snowflake's flow operator: emitting them
+// unchanged would be re-read as a lambda (data -> ('a' = 'x')).
+func TestTranspileJSONArrowRefusedForLambdaDialects(t *testing.T) {
+	jsonDialects := []keywords.SQLDialect{keywords.DialectPostgreSQL, keywords.DialectMySQL, keywords.DialectMariaDB, keywords.DialectSQLite}
+	for _, from := range jsonDialects {
+		for _, to := range lambdaDialects {
+			for _, tc := range []struct{ sql, op string }{
+				{"SELECT data -> 'a' = 'x' FROM t", "->"},
+				{"SELECT data -> 'a' FROM t", "->"},
+				{"SELECT data ->> 'a' FROM t", "->>"},
+				{"SELECT id FROM t WHERE data ->> 'a' = 'x'", "->>"},
+			} {
+				got, err := Transpile(tc.sql, from, to)
+				if err == nil || !strings.Contains(err.Error(), "the JSON operator "+tc.op+" has no equivalent in "+string(to)) {
+					t.Errorf("%s -> %s %q: got %q, %v; want a JSON operator refusal", from, to, tc.sql, got, err)
+				}
 			}
-			body = p.Expr
 		}
-		switch b := body.(type) {
-		case *ast.BinaryExpression:
-			return b.Operator
-		case *ast.FunctionCall:
-			return b.Name + "()"
-		}
-		return "<none>"
 	}
-	t.Fatalf("%s re-parse %q: no -> argument", d, sql)
-	return ""
+	// Between the JSON dialects the arrow is unchanged.
+	if got, err := Transpile("SELECT data -> 'a' FROM t", keywords.DialectPostgreSQL, keywords.DialectMySQL); err != nil || got != "SELECT data -> 'a' FROM t" {
+		t.Errorf("postgresql -> mysql: got %q, %v", got, err)
+	}
 }
 
 // Oracle, Snowflake and ClickHouse have no U& literals and no & operator:

@@ -40,8 +40,10 @@ import (
 //   - The PostgreSQL prefix operators @, |/ and ||/ become ABS(), SQRT() and
 //     CBRT() (where it exists); the factorial operators are refused. ~ becomes
 //     BITNOT()/bitNot() in Snowflake/ClickHouse and is refused in Oracle.
-//   - PostgreSQL # (XOR), the bitwise and shift operators, || concatenation
-//     and PostgreSQL-only operators follow binaryTargetForm.
+//   - PostgreSQL # (XOR), the bitwise and shift operators, || concatenation,
+//     PostgreSQL-only operators, lambdas and JSON -> / ->> follow
+//     binaryTargetForm: a lambda is refused in dialects without lambdas and
+//     JSON -> / ->> in ClickHouse and Snowflake.
 //   - SQL Server money literals ($5.00, $5) and Snowflake object constants
 //     ({'a': 1}) are refused in other dialects.
 //   - PostgreSQL U& escaped literals and identifiers are refused outside
@@ -258,7 +260,7 @@ func (r *operatorRetargeter) nestsOutput(v reflect.Value) bool {
 			}
 			return xorFamily(from) != xorFamily(r.to)
 		}
-		form, _ := binaryTargetForm(x.Operator, x.PipesOr, r.to)
+		form, _ := binaryTargetForm(x.Operator, x.PipesOr, x.Lambda, r.to)
 		if form == formFunc || form == formXorOp {
 			return true
 		}
@@ -335,7 +337,7 @@ func (r *operatorRetargeter) rewrite(e Expression, inOperator bool) (Expression,
 			}
 			return r.rewritePower(x)
 		}
-		if form, _ := binaryTargetForm(x.Operator, x.PipesOr, r.to); form == formConcat {
+		if form, _ := binaryTargetForm(x.Operator, x.PipesOr, x.Lambda, r.to); form == formConcat {
 			return r.rewriteConcat(x), nil
 		}
 		if repl, handled, err := r.rewriteBitwise(x, inOperator); handled {
@@ -424,8 +426,8 @@ func targetExpressionPrecedence(e Expression, target string) int {
 	if binary.Lambda && lambdaTarget(target) {
 		return 0 // looser than OR: the body is never grouped
 	}
-	// Elsewhere a lambda is written as the target's -> operator, grouped as
-	// the target parses it.
+	// Elsewhere a lambda is refused (binaryTargetForm); the generic dialect
+	// writes it as its -> operator, grouped as that operator.
 	switch binary.Operator {
 	case "->", "->>", "#>", "#>>", "@>", "<@", "#-", "?", "?|", "?&":
 		switch target {

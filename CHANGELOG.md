@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **Playground**: the GoSQLX WebAssembly module now runs in a Web Worker, so
+  loading the parser and every parse, format, lint, analyze, highlight and
+  transpile call no longer block the page. The playground computes only the
+  open tab (plus lint, which marks errors in the editor) and the rest when a
+  tab is opened. Total Blocking Time on `/playground/` dropped from ~490 ms to
+  ~80 ms in local Lighthouse runs at CI-equivalent CPU throttling, which ends
+  the Lighthouse CI performance failures on slower GitHub runners.
+
 ## [1.17.0] - 2026-10-31 — Real-World Dialect Corpus, Dialect-Faithful Round Trips, Security Scanner & LSP Hardening
 
 Covers everything merged since v1.16.0, mostly the October 2026 dialect audit:

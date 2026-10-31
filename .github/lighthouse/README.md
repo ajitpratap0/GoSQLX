@@ -35,6 +35,12 @@ via `assertMatrix` (the measured 420 KB plus ~15% headroom). It also loads the G
 with the parser, so its total budget is the measured 3.60 MB (v1.17.0) plus ~15% headroom. Every other route keeps the shared 420 KB budget, and
 the two matrix entries are otherwise identical: change an assertion in both when editing thresholds.
 
+The GoSQLX WASM module runs in a Web Worker (`website/public/gosqlx-worker.js`), so its start-up and every
+parser call stay off the main thread. When it ran on the main thread, `/playground/` Total Blocking Time scaled
+with the runner's CPU (benchmarkIndex ~2,480 runners: 680-765 ms, score 0.66-0.69; ~4,200: ~300 ms, 0.80) and
+the performance assertion failed on slower runners. Keep new parser work in the worker rather than lowering
+the threshold.
+
 Re-measure and update this table whenever the budgets are changed.
 
 ## Field data (RUM) and p75 per route

@@ -1,7 +1,7 @@
 'use client';
 import { useCopyFeedback } from "./useCopyFeedback";
 import React, { useState, useEffect, useCallback, useMemo, useRef, Suspense } from "react";
-import { useWasm } from "./WasmLoader";
+import { useWasm, type GoSQLXApi } from "./WasmLoader";
 import SqlEditor from "./SqlEditor";
 import AstTab from "./AstTab";
 import FormatTab, { type SqlOutputData } from "./FormatTab";
@@ -48,11 +48,49 @@ const TABS: { id: TabId; label: string }[] = [
 interface Results {
   /** The SQL these results were computed for. */
   source: string | null;
+  /** SQL, dialect and transpile target these results were computed for. */
+  inputKey: string | null;
   ast: (Record<string, unknown> & { error?: string }) | null;
   format: SqlOutputData;
   transpile: SqlOutputData;
   lint: LintData | null;
   analyze: AnalysisData | null;
+}
+
+type ResultKey = TabId;
+
+const EMPTY_RESULTS: Results = {
+  source: null,
+  inputKey: null,
+  ast: null,
+  format: null,
+  transpile: null,
+  lint: null,
+  analyze: null,
+};
+
+function callFor(api: GoSQLXApi, key: ResultKey, query: string, dial: string, target: string): Promise<unknown> {
+  switch (key) {
+    case "ast":
+      return api.parse(query, dial);
+    case "format":
+      return api.format(query, dial);
+    case "transpile":
+      return api.transpile(query, dial, target);
+    case "lint":
+      return api.lint(query, dial);
+    case "analyze":
+      return api.analyze(query, dial);
+  }
+}
+
+/** The result for key, or { error } when the call fails. */
+async function computeResult(api: GoSQLXApi, key: ResultKey, query: string, dial: string, target: string): Promise<unknown> {
+  try {
+    return await callFor(api, key, query, dial, target);
+  } catch (e: unknown) {
+    return { error: e instanceof Error ? e.message : String(e) };
+  }
 }
 
 export default function Playground() {
@@ -61,63 +99,44 @@ export default function Playground() {
   const [dialect, setDialect] = useState("generic");
   const [transpileTarget, setTranspileTarget] = useState("postgresql");
   const [activeTab, setActiveTab] = useState<TabId>("ast");
-  const [results, setResults] = useState<Results>({
-    source: null,
-    ast: null,
-    format: null,
-    transpile: null,
-    lint: null,
-    analyze: null,
-  });
-  const runIdRef = useRef(0);
-
-  const runAll = useCallback(
-    (query: string, dial: string, target: string) => {
-      if (!api || !query.trim()) {
-        setResults({ source: null, ast: null, format: null, transpile: null, lint: null, analyze: null });
-        return;
-      }
-
-      const runId = ++runIdRef.current;
-
-      const safeCall = (fn: () => unknown) => {
-        try {
-          return fn();
-        } catch (e: unknown) {
-          const message = e instanceof Error ? e.message : String(e);
-          return { error: message };
-        }
-      };
-
-      Promise.resolve().then(() => {
-        if (runId !== runIdRef.current) return;
-
-        const astResult = safeCall(() => api.parse(query, dial)) as Results['ast'];
-        const formatResult = safeCall(() => api.format(query, dial)) as Results['format'];
-        const transpileResult = safeCall(() => api.transpile(query, dial, target)) as Results['transpile'];
-        const lintResult = safeCall(() => api.lint(query, dial)) as Results['lint'];
-        const analyzeResult = safeCall(() => api.analyze(query, dial)) as Results['analyze'];
-
-        if (runId === runIdRef.current) {
-          setResults({
-            source: query,
-            ast: astResult,
-            format: formatResult,
-            transpile: transpileResult,
-            lint: lintResult,
-            analyze: analyzeResult,
-          });
-        }
-      });
-    },
-    [api]
-  );
-
+  const [computedResults, setResults] = useState<Results>(EMPTY_RESULTS);
+  const resultsRef = useRef(computedResults);
   useEffect(() => {
-    if (ready && api) {
-      runAll(sql, dialect, transpileTarget);
-    }
-  }, [ready, api, sql, dialect, transpileTarget, runAll]);
+    resultsRef.current = computedResults;
+  }, [computedResults]);
+  const results = sql.trim() ? computedResults : EMPTY_RESULTS;
+
+  // The parser runs in a Web Worker (see WasmLoader). Compute only what is on
+  // screen: the active tab, plus lint, whose parse error span marks the
+  // editor; other tabs are computed when opened. New results are committed
+  // together, so the previous output stays visible until they are ready, and
+  // results for input that changed meanwhile are dropped.
+  useEffect(() => {
+    if (!ready || !api || !sql.trim()) return;
+
+    const inputKey = JSON.stringify([sql, dialect, transpileTarget]);
+    const current = resultsRef.current;
+    const base = current.inputKey === inputKey ? current : { ...EMPTY_RESULTS, source: sql, inputKey };
+    const wanted: ResultKey[] = activeTab === "lint" ? ["lint"] : [activeTab, "lint"];
+    const pending = wanted.filter((key) => base[key] === null);
+    if (pending.length === 0) return;
+
+    let cancelled = false;
+    (async () => {
+      const computed: Partial<Record<ResultKey, unknown>> = {};
+      for (const key of pending) {
+        computed[key] = await computeResult(api, key, sql, dialect, transpileTarget);
+        if (cancelled) return;
+      }
+      setResults((prev) => ({
+        ...(prev.inputKey === inputKey ? prev : base),
+        ...(computed as Partial<Results>),
+      }));
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [ready, api, sql, dialect, transpileTarget, activeTab]);
 
   const handleSqlChange = useCallback(
     (value: string) => {
@@ -135,7 +154,7 @@ export default function Playground() {
 
   // GoSQLX highlighting in the selected dialect once the parser is loaded.
   const highlighter = useMemo<HighlightSource | null>(
-    () => (api ? (text: string) => api.highlight(text, dialect).spans : null),
+    () => (api ? async (text: string) => (await api.highlight(text, dialect)).spans : null),
     [api, dialect],
   );
 
@@ -230,7 +249,7 @@ export default function Playground() {
     );
   }
 
-  const hasResults = results.ast !== null;
+  const hasResults = results.source !== null;
 
   return (
     <div className="flex flex-col h-full bg-bg">

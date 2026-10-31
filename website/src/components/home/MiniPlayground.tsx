@@ -87,24 +87,23 @@ interface DemoResult {
   statement: string | null;
 }
 
-function runDemo(api: GoSQLXApi, sql: string, dialect: string, tab: TabId): DemoResult {
+async function runDemo(api: GoSQLXApi, sql: string, dialect: string, tab: TabId): Promise<DemoResult> {
   let ast: unknown;
-  const start = performance.now();
+  let parseUs: number;
   try {
-    ast = api.parse(sql, dialect);
+    ({ result: ast, us: parseUs } = await api.parseTimed(sql, dialect));
   } catch (e: unknown) {
     return { output: '', error: e instanceof Error ? e.message : String(e), parseUs: null, statement: null };
   }
-  const parseUs = (performance.now() - start) * 1000;
   const statement = statementLabel(sql, ast);
   try {
     if (tab === 'tree') return { output: treeText(ast), error: null, parseUs, statement };
     if (tab === 'format') {
-      const f = api.format(sql, dialect);
+      const f = await api.format(sql, dialect);
       const text = typeof f === 'string' ? f : (f as { result?: string }).result ?? '';
       return { output: text, error: null, parseUs, statement };
     }
-    const lint = api.lint(sql, dialect) as LintData;
+    const lint = (await api.lint(sql, dialect)) as LintData;
     if (lint?.error) return { output: '', error: lint.error, parseUs, statement };
     const violations = lint?.violations ?? [];
     const output = violations.length === 0
@@ -139,9 +138,12 @@ export function MiniPlayground() {
   const [elapsed, setElapsed] = useState<number | null>(null);
   const [statement, setStatement] = useState<string | null>(SAMPLE_STATEMENT);
   const debounceRef = useRef<ReturnType<typeof setTimeout>>(null);
+  // Only the latest request's result is shown; earlier ones may finish later.
+  const requestRef = useRef(0);
 
   const parse = useCallback(
-    (query: string, dial: string, tab: TabId) => {
+    async (query: string, dial: string, tab: TabId) => {
+      const request = ++requestRef.current;
       if (!api || !query.trim()) {
         setOutput('');
         setParseError(null);
@@ -149,7 +151,8 @@ export function MiniPlayground() {
         setStatement(null);
         return;
       }
-      const res = runDemo(api, query, dial, tab);
+      const res = await runDemo(api, query, dial, tab);
+      if (request !== requestRef.current) return;
       setElapsed(res.parseUs);
       setStatement(res.statement);
       setParseError(res.error);
@@ -160,12 +163,12 @@ export function MiniPlayground() {
 
   // Parse on ready
   useEffect(() => {
-    if (ready && api) parse(sql, dialect, activeTab);
+    if (ready && api) void parse(sql, dialect, activeTab);
   }, [ready, api]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Re-parse on tab/dialect change (immediate)
   useEffect(() => {
-    if (ready && api) parse(sql, dialect, activeTab);
+    if (ready && api) void parse(sql, dialect, activeTab);
   }, [dialect, activeTab]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Debounced parse on SQL change
@@ -175,7 +178,7 @@ export function MiniPlayground() {
       setSql(value);
       if (debounceRef.current) clearTimeout(debounceRef.current);
       debounceRef.current = setTimeout(() => {
-        parse(value, dialect, activeTab);
+        void parse(value, dialect, activeTab);
       }, 50);
     },
     [parse, dialect, activeTab],

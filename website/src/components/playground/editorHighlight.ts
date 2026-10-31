@@ -25,18 +25,21 @@ import { Decoration, EditorView, ViewPlugin, type DecorationSet, type ViewUpdate
 import type { HighlightCategory, HighlightSpan } from "./bridgeTypes";
 
 /**
- * Classifies sql. Returns null (or throws) when highlighting is unavailable,
- * which keeps the editor's fallback highlighting.
+ * Classifies sql, synchronously or asynchronously. Returns (or resolves to)
+ * null, or throws (rejects), when highlighting is unavailable, which keeps
+ * the editor's fallback highlighting.
  */
-export type HighlightSource = (sql: string) => readonly HighlightSpan[] | null;
+export type HighlightSource = (
+  sql: string,
+) => readonly HighlightSpan[] | null | Promise<readonly HighlightSpan[] | null>;
 
 /** Delay between the last edit and the next highlight request. */
 export const HIGHLIGHT_DEBOUNCE_MS = 120;
 
 /**
  * Longest document (in UTF-16 units) GoSQLX highlights. Each request
- * classifies the whole document synchronously on the main thread, so larger
- * documents keep the editor's Lezer highlighting instead of stalling typing.
+ * classifies the whole document, so larger documents keep the editor's Lezer
+ * highlighting instead of making highlighting lag far behind typing.
  */
 export const MAX_HIGHLIGHT_LENGTH = 200_000;
 
@@ -107,21 +110,36 @@ export function marksToDecorations(marks: readonly HighlightMark[]): DecorationS
   return builder.finish();
 }
 
+/** The decorations for spans classifying sql, or null for a malformed result. */
+function spansToHighlight(spans: unknown, sql: string): DecorationSet | null {
+  if (!Array.isArray(spans)) return null;
+  return marksToDecorations(spansToMarks(spans, sql.length));
+}
+
 /**
- * Runs source on sql and returns the decorations to show, or null when
- * GoSQLX highlighting is unavailable (no source, sql longer than
- * MAX_HIGHLIGHT_LENGTH, a thrown error, or a malformed result).
+ * Runs source on sql and returns (or resolves to) the decorations to show,
+ * or null when GoSQLX highlighting is unavailable (no source, sql longer than
+ * MAX_HIGHLIGHT_LENGTH, a thrown error or rejection, or a malformed result).
+ * The result is a promise exactly when source returned one.
  */
-export function computeHighlight(source: HighlightSource | null, sql: string): DecorationSet | null {
+export function computeHighlight(
+  source: HighlightSource | null,
+  sql: string,
+): DecorationSet | null | Promise<DecorationSet | null> {
   if (!source || sql.length > MAX_HIGHLIGHT_LENGTH) return null;
-  let spans: readonly HighlightSpan[] | null;
+  let spans: ReturnType<HighlightSource>;
   try {
     spans = source(sql);
   } catch {
     return null;
   }
-  if (!Array.isArray(spans)) return null;
-  return marksToDecorations(spansToMarks(spans, sql.length));
+  if (spans instanceof Promise) {
+    return spans.then(
+      (resolved) => spansToHighlight(resolved, sql),
+      () => null,
+    );
+  }
+  return spansToHighlight(spans, sql);
 }
 
 const highlightSource = Facet.define<HighlightSource | null, HighlightSource | null>({
@@ -168,11 +186,15 @@ export function highlightActivation(tr: Transaction): boolean | null {
 }
 
 // Requests spans when the source changes (immediately) and after edits
-// (debounced). Dispatches from a timer, never during an update.
+// (debounced). Dispatches from a timer or a resolved request, never during an
+// update. An asynchronous answer is dropped when a newer request was made or
+// the document changed meanwhile; the newer request replaces it.
 const refresher = ViewPlugin.fromClass(
   class {
     private readonly view: EditorView;
     private timer: ReturnType<typeof setTimeout> | null = null;
+    private request = 0;
+    private destroyed = false;
 
     // No parameter properties: Node's type stripping (npm test) rejects them.
     constructor(view: EditorView) {
@@ -199,13 +221,27 @@ const refresher = ViewPlugin.fromClass(
     private refresh() {
       const state = this.view.state;
       const source = state.facet(highlightSource);
+      const request = ++this.request;
       // Skip serialising a document too large to highlight (see MAX_HIGHLIGHT_LENGTH).
       const next = state.doc.length > MAX_HIGHLIGHT_LENGTH ? null : computeHighlight(source, state.doc.toString());
-      if (next === null && !isGosqlxHighlightActive(state)) return;
+      if (!(next instanceof Promise)) {
+        this.apply(next);
+        return;
+      }
+      const doc = state.doc;
+      void next.then((decorations) => {
+        if (this.destroyed || request !== this.request || this.view.state.doc !== doc) return;
+        this.apply(decorations);
+      });
+    }
+
+    private apply(next: DecorationSet | null) {
+      if (next === null && !isGosqlxHighlightActive(this.view.state)) return;
       this.view.dispatch({ effects: setHighlight.of(next) });
     }
 
     destroy() {
+      this.destroyed = true;
       if (this.timer) clearTimeout(this.timer);
     }
   },

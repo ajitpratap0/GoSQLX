@@ -25,7 +25,10 @@ package lsp
 // Edits alternate insert and delete of one character so the size stays fixed.
 
 import (
+	"bytes"
 	"encoding/json"
+	"io"
+	"log"
 	"strings"
 	"testing"
 
@@ -213,8 +216,8 @@ func TestLSPBenchOps(t *testing.T) {
 			if err != nil {
 				t.Fatalf("documentSymbol: %v", err)
 			}
-			if syms, ok := res.([]DocumentSymbol); ok && len(syms) == 0 {
-				t.Errorf("documentSymbol returned no symbols for %d bytes of SQL", len(doc))
+			if syms, ok := res.([]DocumentSymbol); !ok || len(syms) == 0 {
+				t.Errorf("documentSymbol result = %T (%v), want non-empty []DocumentSymbol for %d bytes of SQL", res, res, len(doc))
 			}
 
 			// A one-character insert changes the document by exactly one
@@ -231,7 +234,21 @@ func TestLSPBenchOps(t *testing.T) {
 				t.Errorf("after delete the document differs from the original (%d vs %d bytes)", len(got), len(doc))
 			}
 
-			h.validateDocument(benchURI, doc, 1) // must not panic or block
+			// The diagnostics benchmark must time the valid-document path: a
+			// publishDiagnostics message carrying an empty diagnostics list.
+			out := &bytes.Buffer{}
+			vs := NewServer(bytes.NewBuffer(nil), out, log.New(io.Discard, "", 0))
+			vh := vs.handler
+			vh.setDialect(keywords.SQLDialect(d))
+			vs.Documents().Open(benchURI, "sql", 1, doc)
+			vh.validateDocument(benchURI, doc, 1)
+			msg := out.String()
+			if !strings.Contains(msg, `"method":"textDocument/publishDiagnostics"`) {
+				t.Fatalf("validateDocument sent no publishDiagnostics message: %q", msg)
+			}
+			if !strings.Contains(msg, `"diagnostics":[]`) {
+				t.Errorf("validateDocument published diagnostics for the benchmark document, want an empty list: %.300s", msg)
+			}
 		})
 	}
 }

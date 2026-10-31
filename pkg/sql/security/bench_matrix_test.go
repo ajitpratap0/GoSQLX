@@ -171,14 +171,21 @@ func parseTrees(tb testing.TB, stmts []string, dialect string) []*ast.AST {
 
 func BenchmarkScanASTRW(b *testing.B) {
 	sc := security.NewScanner()
+	// The trees are shared by every run of every sub-benchmark (testing runs
+	// the sub-benchmark function once per N), so they are released exactly
+	// once, from this top-level benchmark's cleanup. Releasing from a cleanup
+	// registered inside b.Run would empty the trees after the N=1 probe and
+	// put them into the pool repeatedly.
+	var all []*ast.AST
+	b.Cleanup(func() {
+		for _, t := range all {
+			ast.ReleaseAST(t)
+		}
+	})
 	for _, d := range rwDialects(b) {
 		trees := parseTrees(b, rwSQL(b, d), d)
+		all = append(all, trees...)
 		b.Run(d, func(b *testing.B) {
-			b.Cleanup(func() {
-				for _, t := range trees {
-					ast.ReleaseAST(t)
-				}
-			})
 			b.ReportAllocs()
 			for i := 0; i < b.N; i++ {
 				for _, t := range trees {
@@ -186,6 +193,12 @@ func BenchmarkScanASTRW(b *testing.B) {
 				}
 			}
 			b.ReportMetric(float64(b.Elapsed().Nanoseconds())/float64(b.N)/float64(len(trees)), "ns/stmt")
+			// Fail if the inputs were emptied while timing.
+			for _, t := range trees {
+				if len(t.Statements) == 0 {
+					b.Fatal("benchmark input AST was released or emptied during the run")
+				}
+			}
 		})
 	}
 }

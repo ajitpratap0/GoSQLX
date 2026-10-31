@@ -6,7 +6,7 @@ package linter_test
 // Lint benchmark matrix (PLAN.md 2.2, W0-06).
 //
 //	BenchmarkLintRW/<dialect>              gosqlx.LintWithDialect over the dialect's real-world statements
-//	BenchmarkLintPhase/<phase>/<dialect>   phase in {tokenize, parse, rules}; the three add up to LintRW
+//	BenchmarkLintPhase/<phase>/<dialect>   phase in {tokenize, parse, rules}; the three approximately decompose LintRW
 //	BenchmarkLintRule/L001..L030           one rule over the contexts of every dialect
 //
 // One benchmark op is one pass over the whole input set, so ns/op is
@@ -16,6 +16,7 @@ package linter_test
 
 import (
 	"fmt"
+	"reflect"
 	"sort"
 	"strings"
 	"testing"
@@ -28,7 +29,6 @@ import (
 	"github.com/ajitpratap0/GoSQLX/pkg/linter/rules/performance"
 	"github.com/ajitpratap0/GoSQLX/pkg/linter/rules/safety"
 	"github.com/ajitpratap0/GoSQLX/pkg/models"
-	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/keywords"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/parser"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/tokenizer"
@@ -111,9 +111,19 @@ func reportPerStmt(b *testing.B, n int) {
 }
 
 // lintInput holds the tokens and tree of one statement, built outside the
-// timed region.
+// timed region. proto is a prepared Context that is never passed to a rule;
+// each op checks a fresh shallow copy (see fresh), so any lazily cached state
+// a rule or Context accessor fills in (for example a future Context.Nodes())
+// is rebuilt every op and the walk cost stays inside the timed region.
 type lintInput struct {
-	ctx *linter.Context
+	proto *linter.Context
+}
+
+// fresh returns a Context equal to the prepared one with no state cached by
+// earlier Check calls.
+func (in lintInput) fresh() *linter.Context {
+	c := *in.proto
+	return &c
 }
 
 // buildInputs tokenizes and parses each statement with the dialect the way
@@ -135,7 +145,7 @@ func buildInputs(tb testing.TB, stmts []string, dialect string) []lintInput {
 			tree, perr := p.ParseFromModelTokens(toks)
 			ctx.WithAST(tree, perr)
 		}
-		out = append(out, lintInput{ctx: ctx})
+		out = append(out, lintInput{proto: ctx})
 	}
 	return out
 }
@@ -198,10 +208,8 @@ func BenchmarkLintPhase(b *testing.B) {
 			for i := 0; i < b.N; i++ {
 				for _, toks := range tokenized {
 					p := parser.NewParser(parser.WithDialect(d))
-					tree, _ := p.ParseFromModelTokens(toks)
-					if tree != nil {
-						ast.ReleaseAST(tree)
-					}
+					// Like Linter.LintString, the tree is not released.
+					_, _ = p.ParseFromModelTokens(toks)
 					p.Release()
 				}
 			}
@@ -212,7 +220,7 @@ func BenchmarkLintPhase(b *testing.B) {
 			for i := 0; i < b.N; i++ {
 				for _, in := range inputs {
 					for _, r := range rules {
-						_, _ = r.Check(in.ctx)
+						_, _ = r.Check(in.fresh())
 					}
 				}
 			}
@@ -236,11 +244,27 @@ func BenchmarkLintRule(b *testing.B) {
 			b.ReportAllocs()
 			for i := 0; i < b.N; i++ {
 				for _, in := range inputs {
-					_, _ = r.Check(in.ctx)
+					_, _ = r.Check(in.fresh())
 				}
 			}
 			reportPerStmt(b, len(inputs))
 		})
+	}
+}
+
+// TestLintContextHasNoCachedState pins the Context field set. The benchmarks
+// check a copy of a prepared Context per op, which is only valid while Context
+// has no lazily filled cache. When a field such as a cached node list is added
+// (PLAN W6-05) this fails: update lintInput.fresh to reset it, then this list.
+func TestLintContextHasNoCachedState(t *testing.T) {
+	want := []string{"SQL", "Lines", "Tokens", "AST", "ParseErr", "Filename"}
+	typ := reflect.TypeOf(linter.Context{})
+	var got []string
+	for i := 0; i < typ.NumField(); i++ {
+		got = append(got, typ.Field(i).Name)
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("linter.Context fields = %v, want %v; reset any new cached field in lintInput.fresh", got, want)
 	}
 }
 
@@ -278,11 +302,11 @@ func TestBenchInputsAreMeaningful(t *testing.T) {
 		inputs := buildInputs(t, stmts, d)
 		parsed := 0
 		for _, in := range inputs {
-			if in.ctx.AST != nil && in.ctx.ParseErr == nil {
+			if in.proto.AST != nil && in.proto.ParseErr == nil {
 				parsed++
 			}
 			for _, r := range benchRules() {
-				v, err := r.Check(in.ctx)
+				v, err := r.Check(in.fresh())
 				if err != nil {
 					t.Fatalf("%s %s: %v", d, r.ID(), err)
 				}
@@ -315,7 +339,7 @@ func TestLintRWMatchesRuleSet(t *testing.T) {
 			}
 			var want []string
 			for _, r := range benchRules() {
-				v, err := r.Check(inputs[i].ctx)
+				v, err := r.Check(inputs[i].fresh())
 				if err != nil {
 					t.Fatal(err)
 				}

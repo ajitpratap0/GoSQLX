@@ -316,11 +316,9 @@ func TestKnownFailuresExcluded(t *testing.T) {
 		write(c.Dir+"/01.sql", "SELECT 1;\nSELECT 2;\n")
 	}
 	write(PortableQueriesFile, "q\tQ\tSELECT 1\n")
-	write(KnownFailuresFile, "# header\nmysql/01.sql#1 parse\n")
-
 	// Comment-only segments count towards Index, matching known_failures.txt.
 	write("realworld/mysql/02.sql", "SELECT 1;\n-- note\n;\nSELECT 2;\nSELECT 3;\n")
-	write(KnownFailuresFile, "# header\nmysql/01.sql#1 parse\nmysql/02.sql#2 parse\n")
+	write(KnownFailuresFile, "# header\n\nmysql/01.sql#1 parse  # TARGET alias\nmysql/02.sql#2 parse\n")
 
 	set, err := Load(root)
 	if err != nil {
@@ -351,6 +349,42 @@ func TestKnownFailuresExcluded(t *testing.T) {
 	write(KnownFailuresFile, "garbage\n")
 	if _, err := Load(root); err == nil {
 		t.Error("malformed known_failures.txt must be an error")
+	}
+	write(KnownFailuresFile, "mysql/01.sql#1 parse\nmysql/01.sql#1 parse  # again\n")
+	if _, err := Load(root); err == nil {
+		t.Error("duplicate known_failures.txt entry must be an error")
+	}
+}
+
+// TestKnownFailuresResolve fails on a stale known_failures.txt key: one that
+// matches no loaded realworld segment would silently stop excluding anything
+// and would point at the wrong statement once indexes shift.
+func TestKnownFailuresResolve(t *testing.T) {
+	root, err := FindRoot()
+	if err != nil {
+		t.Fatal(err)
+	}
+	f, err := os.Open(filepath.Join(root, "testdata", filepath.FromSlash(KnownFailuresFile)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = f.Close() }()
+	known, err := dialectaudit.ParseKnownFailures(f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	set, err := Default()
+	if err != nil {
+		t.Fatal(err)
+	}
+	seen := map[string]bool{}
+	for _, st := range set.Excluded() {
+		seen[strings.TrimPrefix(st.Key(), "realworld/")] = true
+	}
+	for k := range known {
+		if !seen[k] {
+			t.Errorf("known_failures.txt key %s matches no loaded segment", k)
+		}
 	}
 }
 

@@ -154,11 +154,9 @@ type Query struct {
 	ID, Name, SQL string
 }
 
-// Set is an immutable loaded corpus. All accessors return copies of the
-// slice headers, never of the data; callers must not modify Statement values'
-// backing strings (they are immutable in Go anyway).
+// Set is an immutable loaded corpus. Each accessor returns a fresh slice that
+// the caller may modify without affecting the Set.
 type Set struct {
-	root     string
 	all      []Statement
 	excluded []Statement
 	portable []Query
@@ -171,7 +169,7 @@ func Load(root string) (*Set, error) {
 	if err != nil {
 		return nil, err
 	}
-	s := &Set{root: root}
+	s := &Set{}
 	for _, c := range Corpora {
 		files, err := CorpusFiles(root, c)
 		if err != nil {
@@ -368,21 +366,9 @@ func loadKnownFailures(path string) (map[string]string, error) {
 		return nil, fmt.Errorf("benchcorpus: open known failures: %w", err)
 	}
 	defer func() { _ = f.Close() }()
-	known := map[string]string{}
-	sc := bufio.NewScanner(f)
-	for sc.Scan() {
-		line := strings.TrimSpace(sc.Text())
-		if line == "" || strings.HasPrefix(line, "#") {
-			continue
-		}
-		fields := strings.Fields(line)
-		if len(fields) != 2 {
-			return nil, fmt.Errorf("benchcorpus: known_failures.txt: malformed entry %q (want \"dialect/file.sql#N stage\")", line)
-		}
-		known[fields[0]] = fields[1]
-	}
-	if err := sc.Err(); err != nil {
-		return nil, fmt.Errorf("benchcorpus: scan known failures: %w", err)
+	known, err := dialectaudit.ParseKnownFailures(f)
+	if err != nil {
+		return nil, fmt.Errorf("benchcorpus: %w", err)
 	}
 	return known, nil
 }

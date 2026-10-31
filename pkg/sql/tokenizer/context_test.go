@@ -16,9 +16,12 @@ package tokenizer
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/ajitpratap0/GoSQLX/internal/scaletest"
 )
 
 // TestTokenizeContext_BasicSuccess verifies that TokenizeContext works for valid SQL
@@ -227,46 +230,32 @@ func TestTokenizeContext_ErrorHandling(t *testing.T) {
 	}
 }
 
-// TestTokenizeContext_CancellationResponseTime verifies fast cancellation (< 100ms requirement)
+// TestTokenizeContext_CancellationResponseTime verifies that cancellation is
+// honoured promptly. The context turns cancelled after a fixed number of
+// polls instead of after a sleep, so the check does not depend on scheduler
+// load: the tokenizer must stop at the check that reports cancellation.
 func TestTokenizeContext_CancellationResponseTime(t *testing.T) {
-	// Skip when race detector is enabled - adds 3-5x overhead making timing measurements unreliable
-	if raceEnabled {
-		t.Skip("Skipping timing-sensitive test with race detector (adds 3-5x overhead)")
-	}
-
-	ctx, cancel := context.WithCancel(context.Background())
 	tkz := GetTokenizer()
 	defer PutTokenizer(tkz)
 
-	// Create a large SQL query
 	parts := make([]string, 500)
 	for i := range parts {
 		parts[i] = "column" + strings.Repeat(string(rune('a'+i%26)), 2)
 	}
 	sql := "SELECT " + strings.Join(parts, ", ") + " FROM table"
 
-	// Start tokenization in goroutine
-	done := make(chan bool)
-	go func() {
-		_, _ = tkz.TokenizeContext(ctx, []byte(sql))
-		done <- true
-	}()
-
-	// Wait a bit then cancel
-	time.Sleep(10 * time.Millisecond)
-	cancelTime := time.Now()
-	cancel()
-
-	// Wait for completion
-	<-done
-	responseTime := time.Since(cancelTime)
-
-	// Verify cancellation response time is < 100ms
-	if responseTime > 100*time.Millisecond {
-		t.Errorf("Cancellation response time %v exceeds 100ms requirement", responseTime)
+	// The tokenizer polls every 100 tokens: poll 3 happens 200 tokens in.
+	ctx := scaletest.NewTrippingContext(2)
+	tokens, err := tkz.TokenizeContext(ctx, []byte(sql))
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("err = %v, want context.Canceled", err)
 	}
-
-	t.Logf("Cancellation response time: %v", responseTime)
+	if tokens != nil {
+		t.Errorf("got %d tokens with the error, want none", len(tokens))
+	}
+	if n := ctx.PollsAfterTrip(); n != 1 {
+		t.Errorf("%d context checks after cancellation, want 1 (tokenizer must stop)", n)
+	}
 }
 
 // TestTokenizeContext_ConcurrentCalls verifies thread safety with concurrent context-aware calls

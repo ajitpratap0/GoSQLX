@@ -4,8 +4,11 @@
 package parser_test
 
 import (
+	"errors"
+	"strings"
 	"testing"
 
+	goerrors "github.com/ajitpratap0/GoSQLX/pkg/errors"
 	"github.com/ajitpratap0/GoSQLX/pkg/formatter"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/keywords"
@@ -104,6 +107,36 @@ func TestJSONArrowIsNotLambda(t *testing.T) {
 		b, ok := sel.Columns[0].(*ast.BinaryExpression)
 		if !ok || b.Operator != "->" || b.Lambda {
 			t.Errorf("%s: column = %#v, want JSON ->", d, sel.Columns[0])
+		}
+		ast.ReleaseAST(tree)
+	}
+}
+
+// In ClickHouse and Snowflake ->> is not an expression operator (Snowflake's
+// ->> is the statement-level flow operator), so it is a parse error there
+// rather than a JSON node that no formatter for those dialects can write.
+func TestLongArrowRejectedForLambdaDialects(t *testing.T) {
+	for _, d := range []keywords.SQLDialect{keywords.DialectClickHouse, keywords.DialectSnowflake} {
+		for _, sql := range []string{"SELECT a ->> 'b' FROM t", "SELECT id FROM t WHERE a ->> 'b' = 'x'"} {
+			tree, err := parser.ParseWithDialect(sql, d)
+			if err == nil {
+				ast.ReleaseAST(tree)
+				t.Errorf("%s %q: parsed, want an error", d, sql)
+				continue
+			}
+			var e *goerrors.Error
+			if !errors.As(err, &e) || e.Code != goerrors.ErrCodeUnsupportedFeature ||
+				!strings.Contains(err.Error(), "the ->> operator is not supported in "+string(d)) {
+				t.Errorf("%s %q: error %v, want an unsupported ->> error", d, sql, err)
+			}
+		}
+	}
+	// Elsewhere ->> is still the JSON text-extraction operator.
+	for _, d := range []keywords.SQLDialect{keywords.DialectMySQL, keywords.DialectMariaDB, keywords.DialectSQLite, keywords.DialectPostgreSQL} {
+		tree, err := parser.ParseWithDialect("SELECT a ->> 'b' FROM t", d)
+		if err != nil {
+			t.Errorf("%s: %v", d, err)
+			continue
 		}
 		ast.ReleaseAST(tree)
 	}

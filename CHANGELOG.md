@@ -26,7 +26,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   JSON extraction or regroup as `(x -> x) * 2`. In the other direction, a
   JSON `->` or `->>` transpiled to ClickHouse or Snowflake now returns an
   error, because there `->` is the lambda operator (and `->>` Snowflake's
-  flow operator) and the output would be read back as a lambda.
+  flow operator) and the output would be read back as a lambda. Parsing
+  `->>` with the ClickHouse or Snowflake dialect is now an E4001
+  unsupported-feature error (`the ->> operator is not supported in ...`);
+  it used to parse as a JSON node, which formatted unchanged.
 - **`U&'...'` in Oracle, Snowflake and ClickHouse is an error** (#898): these
   dialects have neither Unicode-escape literals nor an `&` operator. The
   literal was read as `U & '...'`, and formatting or transpiling then emitted

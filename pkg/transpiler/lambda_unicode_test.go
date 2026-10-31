@@ -86,6 +86,14 @@ func TestTranspileJSONArrowRefusedForLambdaDialects(t *testing.T) {
 			}
 		}
 	}
+	// ->> does not parse in ClickHouse or Snowflake, so a same-dialect
+	// transpile fails at parse time instead of naming the source as a target.
+	for _, d := range lambdaDialects {
+		got, err := Transpile("SELECT a ->> 'b' FROM t", d, d)
+		if err == nil || !strings.Contains(err.Error(), "the ->> operator is not supported in "+string(d)) {
+			t.Errorf("%s -> %s ->>: got %q, %v; want a parse error", d, d, got, err)
+		}
+	}
 	// Between the JSON dialects the arrow is unchanged.
 	if got, err := Transpile("SELECT data -> 'a' FROM t", keywords.DialectPostgreSQL, keywords.DialectMySQL); err != nil || got != "SELECT data -> 'a' FROM t" {
 		t.Errorf("postgresql -> mysql: got %q, %v", got, err)

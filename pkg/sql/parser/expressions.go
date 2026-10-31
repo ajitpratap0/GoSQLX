@@ -397,8 +397,19 @@ func (p *Parser) parseJSONExpression() (ast.Expression, error) {
 	// precedence handled by parseBitwiseExpression. Other dialects keep
 	// their existing JSON precedence.
 	for p.isJSONOperator() && !p.IsPostgreSQL() {
-		if p.isType(models.TokenTypeArrow) && p.arrowIsLambda() {
-			return p.parseLambdaBody(left)
+		if p.arrowIsLambda() {
+			if p.isType(models.TokenTypeArrow) {
+				return p.parseLambdaBody(left)
+			}
+			// ->> is not an expression operator where -> is the lambda
+			// arrow (Snowflake's ->> is the statement-level flow operator).
+			if p.isType(models.TokenTypeLongArrow) {
+				return nil, goerrors.UnsupportedFeatureError(
+					"the ->> operator is not supported in "+p.dialect,
+					p.currentLocation(),
+					"",
+				)
+			}
 		}
 		opPos := p.currentLocation()
 		operator := p.currentToken.Token.Value

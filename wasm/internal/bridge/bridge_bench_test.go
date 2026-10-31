@@ -16,6 +16,7 @@ package bridge
 
 import (
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 )
@@ -49,11 +50,19 @@ func BenchmarkWASMBridge(b *testing.B) {
 			return len(out), err
 		}},
 		{"lint", func(s string) (int, error) {
-			out, err := json.MarshalIndent(Lint(s, ""), "", "  ")
+			r := Lint(s, "")
+			if r.ParseError != "" || r.Error != "" {
+				return 0, fmt.Errorf("lint error: parse=%q error=%q", r.ParseError, r.Error)
+			}
+			out, err := json.MarshalIndent(r, "", "  ")
 			return len(out), err
 		}},
 		{"format", func(s string) (int, error) {
-			out, err := json.MarshalIndent(Format(s, ""), "", "  ")
+			r := Format(s, "")
+			if r.Error != "" {
+				return 0, fmt.Errorf("format error: %s", r.Error)
+			}
+			out, err := json.MarshalIndent(r, "", "  ")
 			return len(out), err
 		}},
 		{"highlight", func(s string) (int, error) {
@@ -71,11 +80,15 @@ func BenchmarkWASMBridge(b *testing.B) {
 					}
 					b.ReportAllocs()
 					b.SetBytes(int64(len(q.sql))) // input throughput: stable when the output shape changes
-					b.ReportMetric(float64(n), "outB/op")
 					b.ResetTimer()
 					for i := 0; i < b.N; i++ {
-						_, _ = op.call(q.sql)
+						if _, err := op.call(q.sql); err != nil {
+							b.Fatalf("%s/%s: %v", op.name, q.name, err)
+						}
 					}
+					b.StopTimer()
+					// Reported after the loop: ResetTimer clears custom metrics.
+					b.ReportMetric(float64(n), "outB/op")
 				})
 			}
 		})

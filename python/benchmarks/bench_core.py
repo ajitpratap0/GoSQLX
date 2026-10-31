@@ -33,9 +33,6 @@ QUERIES = {
     ),
 }
 
-# Allow running from a source checkout without installing the package.
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-
 DEFAULT_REPEAT = 5
 DEFAULT_NUMBER = 1000
 
@@ -100,4 +97,8 @@ def main(argv: List[str]) -> int:
 
 
 if __name__ == "__main__":
+    # Allow running from a source checkout without installing the package. Done
+    # only when run as a script so importing this module (pytest, wheel CI with
+    # PYGOSQLX_TEST_INSTALLED=1) never puts the checkout on sys.path.
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
     sys.exit(main(sys.argv[1:]))

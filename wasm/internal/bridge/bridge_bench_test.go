@@ -70,7 +70,8 @@ func BenchmarkWASMBridge(b *testing.B) {
 						b.Fatalf("%s/%s: %d bytes, err %v", op.name, q.name, n, err)
 					}
 					b.ReportAllocs()
-					b.SetBytes(int64(n))
+					b.SetBytes(int64(len(q.sql))) // input throughput: stable when the output shape changes
+					b.ReportMetric(float64(n), "outB/op")
 					b.ResetTimer()
 					for i := 0; i < b.N; i++ {
 						_, _ = op.call(q.sql)
@@ -87,8 +88,11 @@ func TestWASMBenchQueriesAreValid(t *testing.T) {
 		if _, err := Parse(q.sql, ""); err != nil {
 			t.Errorf("%s query does not parse: %v", q.name, err)
 		}
-		if r := Lint(q.sql, ""); r.ParseError != "" {
-			t.Errorf("%s query: lint reported a parse error: %s", q.name, r.ParseError)
+		if r := Lint(q.sql, ""); r.ParseError != "" || r.Error != "" {
+			t.Errorf("%s query: lint reported an error: parse=%q error=%q", q.name, r.ParseError, r.Error)
+		}
+		if r := Format(q.sql, ""); r.Error != "" {
+			t.Errorf("%s query: format failed: %s", q.name, r.Error)
 		}
 	}
 }

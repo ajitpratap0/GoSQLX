@@ -130,6 +130,14 @@ func formatAST(a *ast.AST, opts ast.FormatOptions) string {
 	if a == nil {
 		return ""
 	}
+	// A compact single statement needs neither the parts slice nor the join.
+	// Keep source-spelling restoration and termination on the shared path.
+	if len(a.Statements) == 1 && !opts.NewlinePerClause && len(a.Comments) == 0 &&
+		(len(a.ExecuteSlash) == 0 || !a.ExecuteSlash[0]) {
+		stmt := a.Statements[0]
+		part := RestoreUnicodeIdentifiers(a, 0, formatStatement(stmt, opts), opts.Dialect)
+		return EnsureStatementTerminator(stmt, part, opts.AddSemicolon)
+	}
 	parts := make([]string, 0, len(a.Statements))
 	hasBatch := false
 	for i, stmt := range a.Statements {
@@ -205,6 +213,23 @@ func formatAST(a *ast.AST, opts ast.FormatOptions) string {
 // FormatStatement renders a single AST statement with the given options.
 // Returns "" for nil.
 func formatStatement(s ast.Statement, opts ast.FormatOptions) string {
+	// SQL() has the same compact spelling for these statements. Indentation
+	// is irrelevant without clause newlines. Lowercase keywords, terminators,
+	// and target-dialect rewrites still require the visitor renderer.
+	if !opts.NewlinePerClause && !opts.AddSemicolon && opts.LineWidth == 0 &&
+		opts.Dialect == "" && (opts.KeywordCase == ast.KeywordPreserve || opts.KeywordCase == ast.KeywordUpper) {
+		switch s.(type) {
+		case *ast.SelectStatement, *ast.InsertStatement, *ast.UpdateStatement, *ast.DeleteStatement:
+			return stmtSQL(s)
+		}
+	}
+	// SetOperation and AlterTable deliberately remain on the visitor path:
+	// their SQL() methods differ for nil operands and comma-separated actions.
+	return formatStatementSlow(s, opts)
+}
+
+// formatStatementSlow is the visitor renderer, retained as the compact-path oracle.
+func formatStatementSlow(s ast.Statement, opts ast.FormatOptions) string {
 	if s == nil {
 		return ""
 	}

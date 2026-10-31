@@ -6,6 +6,11 @@
 //
 //	go run ./cmd/publish                 # -count=10, writes results/latest.json and results/latest.txt
 //	go run ./cmd/publish -count=3 -out /tmp/r.json -raw /tmp/r.txt
+//	go run ./cmd/publish -cpus=1,4 -gogc=default,off   # the CI matrix
+//
+// The results document is schema v2 (see ../../SCHEMA.md). Every v1 field is
+// still written, from the first configuration of the matrix, because the
+// website reads results/latest.json.
 //
 // The raw `go test -bench` output is kept next to the JSON so anyone can
 // summarise the same samples with benchstat.
@@ -32,7 +37,7 @@ import (
 	"github.com/ajitpratap0/GoSQLX/benchmarks/compare"
 )
 
-const schemaVersion = 1
+const schemaVersion = 2
 
 const caveat = "The libraries implement different SQL dialects and build different ASTs " +
 	"(pg_query_go wraps the real PostgreSQL parser through CGo and converts its tree to Go structs; " +
@@ -53,6 +58,57 @@ type Report struct {
 	Parsers       []ParserV `json:"parsers"`
 	Queries       []QueryV  `json:"queries"`
 	Results       []ResultV `json:"results"`
+
+	// Schema v2 additions. Everything above is the v1 view and is derived
+	// from the first entry of Configs.
+	Peers        []ParserV           `json:"peers"`
+	ORMQueries   []ORMQueryV         `json:"ormQueries"`
+	Configs      []ConfigV           `json:"configs"`
+	Cells        []CellV             `json:"cells"`
+	Acceptance   []compare.AcceptRow `json:"acceptance"`
+	CommonAccept []CommonAcceptV     `json:"commonAccept"`
+}
+
+// ConfigV is one point of the run matrix.
+type ConfigV struct {
+	ID        string `json:"id"`
+	CPU       int    `json:"cpu"`  // -cpu value; 0 means go test's default (GOMAXPROCS)
+	GOGC      string `json:"gogc"` // "default" or "off"
+	Command   string `json:"command"`
+	RawOutput string `json:"rawOutput"`
+}
+
+// CellV is the median of all samples of one benchmark cell under one
+// configuration. Cell is the benchmark family without the Benchmark prefix
+// (Parse, Lex, Normalize, Render, ParseFresh, ParseParallel, ParseDialect,
+// ParseORM), Group is the query or dialect, Parser the library or
+// implementation ID.
+type CellV struct {
+	Cell        string  `json:"cell"`
+	Group       string  `json:"group"`
+	Parser      string  `json:"parser"`
+	Config      string  `json:"config"`
+	Samples     int     `json:"samples"`
+	NsPerOp     float64 `json:"nsPerOp"`
+	BytesPerOp  float64 `json:"bytesPerOp"`
+	AllocsPerOp float64 `json:"allocsPerOp"`
+}
+
+// ORMQueryV is one ORM-style corpus entry.
+type ORMQueryV struct {
+	ID    string `json:"id"`
+	Name  string `json:"name"`
+	Shape string `json:"shape"`
+	SQL   string `json:"sql"`
+}
+
+// CommonAcceptV summarises one checked-in common-accept set.
+type CommonAcceptV struct {
+	Dialect   string   `json:"dialect"`
+	Parsers   []string `json:"parsers"`
+	Total     int      `json:"total"`
+	Accepted  int      `json:"accepted"`
+	SetSHA256 string   `json:"setSha256"`
 }
 
 // Hardware describes the machine the run happened on.
@@ -79,6 +135,10 @@ type ParserV struct {
 	Version string `json:"version"`
 	Dialect string `json:"dialect"`
 	CGo     bool   `json:"cgo"`
+	// License is read from the library's LICENSE file at the pinned version.
+	License      string   `json:"license"`
+	Legacy       bool     `json:"legacy"`
+	PeerDialects []string `json:"peerDialects,omitempty"`
 }
 
 // QueryV is one corpus entry.
@@ -104,8 +164,10 @@ type samples struct {
 	ns, bytes, allocs []float64
 }
 
+// benchLine matches any benchmark result line with -benchmem columns:
+// Benchmark<Cell>/<group>[/<more>]/<parser>[-<procs>].
 var benchLine = regexp.MustCompile(
-	`^BenchmarkParse/([A-Za-z0-9_]+)/([A-Za-z0-9_]+)(?:-\d+)?\s+\d+\s+([\d.]+) ns/op(?:\s+[\d.]+ MB/s)?\s+([\d.]+) B/op\s+([\d.]+) allocs/op`)
+	`^Benchmark([A-Za-z0-9_]+)((?:/[A-Za-z0-9_]+)+?)(?:-(\d+))?\s+\d+\s+([\d.]+) ns/op(?:\s+[\d.]+ MB/s)?\s+([\d.]+) B/op\s+([\d.]+) allocs/op`)
 
 func main() {
 	if err := run(); err != nil {
@@ -115,14 +177,20 @@ func main() {
 }
 
 func run() error {
-	count := flag.Int("count", 10, "benchmark repetitions per (query, parser) pair")
+	count := flag.Int("count", 10, "benchmark repetitions per benchmark")
 	benchtime := flag.String("benchtime", "", "optional -benchtime passed to go test (default: go test's own)")
+	cpus := flag.String("cpus", "", "comma-separated -cpu values, one run per value (empty: go test's default)")
+	gogcs := flag.String("gogc", "", "comma-separated GOGC settings, default and/or off (empty: default)")
 	out := flag.String("out", filepath.Join("results", "latest.json"), "results JSON path")
-	raw := flag.String("raw", filepath.Join("results", "latest.txt"), "raw go test -bench output path (benchstat input)")
+	raw := flag.String("raw", filepath.Join("results", "latest.txt"), "raw go test -bench output path of the first configuration (benchstat input)")
 	flag.Parse()
 
 	if *count < 1 {
 		return fmt.Errorf("-count must be at least 1, got %d", *count)
+	}
+	configs, err := parseMatrix(*cpus, *gogcs)
+	if err != nil {
+		return err
 	}
 
 	commit, dirty, err := gitState()
@@ -134,63 +202,96 @@ func run() error {
 		return err
 	}
 
-	args := []string{"test", "-run=^$", "-bench=^BenchmarkParse$", "-benchmem", "-count=" + strconv.Itoa(*count)}
-	if *benchtime != "" {
-		args = append(args, "-benchtime="+*benchtime)
-	}
-	args = append(args, ".")
-
-	fmt.Fprintf(os.Stderr, "running: go %s\n", strings.Join(args, " "))
-	var buf bytes.Buffer
-	cmd := exec.Command("go", args...)
-	cmd.Stdout = io.MultiWriter(&buf, os.Stderr)
-	cmd.Stderr = os.Stderr
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("go test -bench: %w", err)
-	}
-
-	cpu, data, err := parseBench(buf.Bytes())
-	if err != nil {
-		return err
-	}
-
 	report := Report{
 		SchemaVersion: schemaVersion,
 		GeneratedAt:   time.Now().UTC().Format(time.RFC3339),
 		Commit:        commit,
 		Dirty:         dirty,
 		GoVersion:     goVersion,
-		Hardware:      Hardware{CPU: cpu, GOOS: runtime.GOOS, GOARCH: runtime.GOARCH, NumCPU: runtime.NumCPU()},
 		Stage:         "e2e",
-		Method: Method{
-			Command:   "go " + strings.Join(args, " "),
-			Count:     *count,
-			Statistic: "median",
-			RawOutput: filepath.ToSlash(*raw),
-		},
-		Caveat:  caveat,
-		Parsers: parserVersions(commit),
+		Caveat:        caveat,
+		Parsers:       parserVersions(commit, true),
+		Peers:         parserVersions(commit, false),
 	}
-	for _, q := range compare.Corpus {
-		report.Queries = append(report.Queries, QueryV{ID: q.ID, Name: q.Name, SQL: q.SQL})
+
+	type rawFile struct {
+		path string
+		data []byte
 	}
-	for _, q := range compare.Corpus {
-		for _, p := range compare.Parsers {
-			r := ResultV{Query: q.ID, Parser: p.ID, Supported: compare.Supports(p, q) == nil}
-			if s, ok := data[q.ID+"/"+p.ID]; ok && r.Supported {
-				r.Samples = len(s.ns)
-				r.NsPerOp = ptr(round(median(s.ns), 1))
-				r.BytesPerOp = ptr(median(s.bytes))
-				r.AllocsPerOp = ptr(median(s.allocs))
-			} else if r.Supported {
-				return fmt.Errorf("no benchmark samples for supported pair %s/%s", q.ID, p.ID)
+	var raws []rawFile
+	var primary map[cellKey]*samples
+	for i, c := range configs {
+		rawPath := rawPathFor(*raw, i, c)
+		args := []string{"test", "-run=^$", "-bench=" + benchRegex, "-benchmem", "-count=" + strconv.Itoa(*count)}
+		if c.CPU > 0 {
+			args = append(args, "-cpu="+strconv.Itoa(c.CPU))
+		}
+		if *benchtime != "" {
+			args = append(args, "-benchtime="+*benchtime)
+		}
+		args = append(args, ".")
+
+		fmt.Fprintf(os.Stderr, "running [%s]: go %s (GOGC=%s)\n", c.ID, strings.Join(args, " "), c.GOGC)
+		var buf bytes.Buffer
+		cmd := exec.Command("go", args...)
+		cmd.Env = envForGOGC(os.Environ(), c.GOGC)
+		cmd.Stdout = io.MultiWriter(&buf, os.Stderr)
+		cmd.Stderr = os.Stderr
+		if err := cmd.Run(); err != nil {
+			return fmt.Errorf("go test -bench (%s): %w", c.ID, err)
+		}
+		cpu, data, err := parseCells(buf.Bytes())
+		if err != nil {
+			return fmt.Errorf("%s: %w", c.ID, err)
+		}
+		c.Command = "GOGC=" + c.GOGC + " go " + strings.Join(args, " ")
+		c.RawOutput = filepath.ToSlash(rawPath)
+		report.Configs = append(report.Configs, c)
+		report.Cells = append(report.Cells, cellResults(data, c.ID)...)
+		raws = append(raws, rawFile{rawPath, buf.Bytes()})
+		if i == 0 {
+			primary = data
+			report.Hardware = Hardware{CPU: cpu, GOOS: runtime.GOOS, GOARCH: runtime.GOARCH, NumCPU: runtime.NumCPU()}
+			report.Method = Method{
+				Command:   c.Command,
+				Count:     *count,
+				Statistic: "median",
+				RawOutput: c.RawOutput,
 			}
-			report.Results = append(report.Results, r)
 		}
 	}
 
-	if err := writeFile(*raw, buf.Bytes()); err != nil {
+	for _, q := range compare.Corpus {
+		report.Queries = append(report.Queries, QueryV{ID: q.ID, Name: q.Name, SQL: q.SQL})
+	}
+	for _, q := range compare.ORMCorpus {
+		report.ORMQueries = append(report.ORMQueries, ORMQueryV{ID: q.ID, Name: q.Name, Shape: q.Shape, SQL: q.SQL})
+	}
+	v1, err := v1Results(primary)
+	if err != nil {
 		return err
+	}
+	report.Results = v1
+
+	acc, err := compare.AcceptanceTable()
+	if err != nil {
+		return fmt.Errorf("acceptance table: %w", err)
+	}
+	report.Acceptance = acc
+	for _, d := range compare.Dialects {
+		c, err := compare.ComputeCommonAccept(d)
+		if err != nil {
+			return fmt.Errorf("common-accept %s: %w", d, err)
+		}
+		report.CommonAccept = append(report.CommonAccept, CommonAcceptV{
+			Dialect: d, Parsers: c.Parsers, Total: c.Total, Accepted: len(c.Statements), SetSHA256: c.SetHash(),
+		})
+	}
+
+	for _, r := range raws {
+		if err := writeFile(r.path, r.data); err != nil {
+			return err
+		}
 	}
 	encoded, err := json.MarshalIndent(report, "", "  ")
 	if err != nil {
@@ -199,15 +300,137 @@ func run() error {
 	if err := writeFile(*out, append(encoded, '\n')); err != nil {
 		return err
 	}
-	fmt.Fprintf(os.Stderr, "wrote %s and %s\n", *out, *raw)
+	fmt.Fprintf(os.Stderr, "wrote %s and %d raw file(s)\n", *out, len(raws))
 	return nil
 }
 
-// parseBench extracts the cpu line and per-pair samples from go test output.
-func parseBench(output []byte) (string, map[string]*samples, error) {
+// benchRegex selects every benchmark family of the harness.
+const benchRegex = "^Benchmark(Parse|ParseORM|ParseFresh|ParseParallel|ParseDialect|Lex|Normalize|Render)$"
+
+// cellKey identifies one benchmark cell: family, group, parser.
+type cellKey struct{ cell, group, parser string }
+
+// parseMatrix expands the -cpus and -gogc flags into the run matrix, cpu
+// varying slowest. The first entry is the primary configuration.
+func parseMatrix(cpus, gogcs string) ([]ConfigV, error) {
+	cpuList := []int{0}
+	if strings.TrimSpace(cpus) != "" {
+		cpuList = nil
+		for _, f := range strings.Split(cpus, ",") {
+			n, err := strconv.Atoi(strings.TrimSpace(f))
+			if err != nil || n < 1 {
+				return nil, fmt.Errorf("-cpus: %q is not a positive integer", f)
+			}
+			cpuList = append(cpuList, n)
+		}
+	}
+	gcList := []string{"default"}
+	if strings.TrimSpace(gogcs) != "" {
+		gcList = nil
+		for _, f := range strings.Split(gogcs, ",") {
+			f = strings.TrimSpace(f)
+			if f != "default" && f != "off" {
+				return nil, fmt.Errorf("-gogc: %q must be default or off", f)
+			}
+			gcList = append(gcList, f)
+		}
+	}
+	var out []ConfigV
+	for _, c := range cpuList {
+		for _, g := range gcList {
+			id := "gogc-" + g
+			if c > 0 {
+				id = "cpu" + strconv.Itoa(c) + "-" + id
+			}
+			out = append(out, ConfigV{ID: id, CPU: c, GOGC: g})
+		}
+	}
+	return out, nil
+}
+
+// rawPathFor returns the raw output path of configuration i: the -raw path
+// itself for the first, a suffixed sibling for the others.
+func rawPathFor(raw string, i int, c ConfigV) string {
+	if i == 0 {
+		return raw
+	}
+	ext := filepath.Ext(raw)
+	return strings.TrimSuffix(raw, ext) + "-" + c.ID + ext
+}
+
+// envForGOGC returns env with GOGC set for the configuration: removed for
+// "default", "off" otherwise.
+func envForGOGC(env []string, gogc string) []string {
+	out := make([]string, 0, len(env)+1)
+	for _, kv := range env {
+		if !strings.HasPrefix(kv, "GOGC=") {
+			out = append(out, kv)
+		}
+	}
+	if gogc == "off" {
+		out = append(out, "GOGC=off")
+	}
+	return out
+}
+
+// cellResults reduces samples to medians, in a stable order.
+func cellResults(data map[cellKey]*samples, config string) []CellV {
+	keys := make([]cellKey, 0, len(data))
+	for k := range data {
+		keys = append(keys, k)
+	}
+	sort.Slice(keys, func(i, j int) bool {
+		a, b := keys[i], keys[j]
+		if a.cell != b.cell {
+			return a.cell < b.cell
+		}
+		if a.group != b.group {
+			return a.group < b.group
+		}
+		return a.parser < b.parser
+	})
+	out := make([]CellV, 0, len(keys))
+	for _, k := range keys {
+		s := data[k]
+		out = append(out, CellV{
+			Cell: k.cell, Group: k.group, Parser: k.parser, Config: config,
+			Samples: len(s.ns), NsPerOp: round(median(s.ns), 1),
+			BytesPerOp: median(s.bytes), AllocsPerOp: median(s.allocs),
+		})
+	}
+	return out
+}
+
+// v1Results builds the schema v1 results array: BenchmarkParse over the
+// portable corpus for the parsers the v1 fields describe.
+func v1Results(data map[cellKey]*samples) ([]ResultV, error) {
+	var out []ResultV
+	for _, q := range compare.Corpus {
+		for _, p := range compare.Parsers {
+			if !p.Schema1 {
+				continue
+			}
+			r := ResultV{Query: q.ID, Parser: p.ID, Supported: compare.Supports(p, q) == nil}
+			if s, ok := data[cellKey{"Parse", q.ID, p.ID}]; ok && r.Supported {
+				r.Samples = len(s.ns)
+				r.NsPerOp = ptr(round(median(s.ns), 1))
+				r.BytesPerOp = ptr(median(s.bytes))
+				r.AllocsPerOp = ptr(median(s.allocs))
+			} else if r.Supported {
+				return nil, fmt.Errorf("no benchmark samples for supported pair %s/%s", q.ID, p.ID)
+			}
+			out = append(out, r)
+		}
+	}
+	return out, nil
+}
+
+// parseCells extracts the cpu line and per-cell samples from go test output.
+func parseCells(output []byte) (string, map[cellKey]*samples, error) {
 	cpu := "unknown"
-	data := map[string]*samples{}
+	data := map[cellKey]*samples{}
 	sc := bufio.NewScanner(bytes.NewReader(output))
+	sc.Buffer(make([]byte, 0, 64*1024), 4*1024*1024)
 	for sc.Scan() {
 		line := sc.Text()
 		if v, ok := strings.CutPrefix(line, "cpu: "); ok {
@@ -218,14 +441,18 @@ func parseBench(output []byte) (string, map[string]*samples, error) {
 		if m == nil {
 			continue
 		}
-		key := m[1] + "/" + m[2]
+		parts := strings.Split(strings.TrimPrefix(m[2], "/"), "/")
+		key := cellKey{cell: m[1], group: strings.Join(parts[:len(parts)-1], "/"), parser: parts[len(parts)-1]}
+		if key.group == "" {
+			continue
+		}
 		s, ok := data[key]
 		if !ok {
 			s = &samples{}
 			data[key] = s
 		}
 		for i, dst := range []*[]float64{&s.ns, &s.bytes, &s.allocs} {
-			v, err := strconv.ParseFloat(m[3+i], 64)
+			v, err := strconv.ParseFloat(m[4+i], 64)
 			if err != nil {
 				return "", nil, fmt.Errorf("parse %q: %w", line, err)
 			}
@@ -236,6 +463,25 @@ func parseBench(output []byte) (string, map[string]*samples, error) {
 		return "", nil, fmt.Errorf("scan benchmark output: %w", err)
 	}
 	if len(data) == 0 {
+		return "", nil, fmt.Errorf("no benchmark results found in go test output")
+	}
+	return cpu, data, nil
+}
+
+// parseBench is the v1 view of parseCells: BenchmarkParse samples keyed
+// "<query>/<parser>".
+func parseBench(output []byte) (string, map[string]*samples, error) {
+	cpu, cells, err := parseCells(output)
+	if err != nil {
+		return "", nil, err
+	}
+	data := map[string]*samples{}
+	for k, s := range cells {
+		if k.cell == "Parse" {
+			data[k.group+"/"+k.parser] = s
+		}
+	}
+	if len(data) == 0 {
 		return "", nil, fmt.Errorf("no BenchmarkParse results found in go test output")
 	}
 	return cpu, data, nil
@@ -244,7 +490,7 @@ func parseBench(output []byte) (string, map[string]*samples, error) {
 // parserVersions resolves each library's pinned version from the build info,
 // which reflects this module's go.mod. GoSQLX is replaced by the enclosing
 // repository, so its version is the commit being measured.
-func parserVersions(commit string) []ParserV {
+func parserVersions(commit string, v1Only bool) []ParserV {
 	versions := map[string]string{}
 	if info, ok := debug.ReadBuildInfo(); ok {
 		for _, d := range info.Deps {
@@ -253,11 +499,15 @@ func parserVersions(commit string) []ParserV {
 	}
 	out := make([]ParserV, 0, len(compare.Parsers))
 	for _, p := range compare.Parsers {
+		if v1Only && !p.Schema1 {
+			continue
+		}
 		v := versions[p.Module]
 		if p.ID == "gosqlx" {
 			v = "commit " + shortCommit(commit)
 		}
-		out = append(out, ParserV{ID: p.ID, Name: p.Name, Module: p.Module, Version: v, Dialect: p.Dialect, CGo: p.CGo})
+		out = append(out, ParserV{ID: p.ID, Name: p.Name, Module: p.Module, Version: v, Dialect: p.Dialect, CGo: p.CGo,
+			License: p.License, Legacy: p.Legacy, PeerDialects: p.PeerDialects})
 	}
 	return out
 }

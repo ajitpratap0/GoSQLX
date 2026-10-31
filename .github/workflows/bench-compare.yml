@@ -29,6 +29,10 @@ on:
         description: 'Benchmark repetitions per (query, parser) pair'
         required: false
         default: '10'
+      benchtime:
+        description: 'go test -benchtime per benchmark (the matrix has about 2300 cells, so keep it short)'
+        required: false
+        default: '200ms'
 
 permissions:
   contents: read
@@ -72,14 +76,16 @@ jobs:
         run: go test -race -timeout 300s ./...
 
       - name: Benchmark smoke run
-        run: go test -run='^$' -bench=. -benchmem -benchtime=200x .
+        # -cpu 1,4 exercises the parallel cells at both widths; the full
+        # matrix (GOGC default and off) runs in the publish job.
+        run: go test -run='^$' -bench=. -benchmem -benchtime=20x -cpu 1,4 .
 
   publish:
     name: Publish results JSON
     needs: test
     if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 300
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
@@ -93,25 +99,37 @@ jobs:
       - name: Run harness
         env:
           COUNT: ${{ github.event.inputs.count || '10' }}
+          BENCHTIME: ${{ github.event.inputs.benchtime || '200ms' }}
         run: |
           case "$COUNT" in
             ''|*[!0-9]*) echo "count must be a positive integer, got '$COUNT'" >&2; exit 1 ;;
           esac
+          case "$BENCHTIME" in
+            *[!0-9a-z.]*|'') echo "benchtime must look like 200ms or 100x, got '$BENCHTIME'" >&2; exit 1 ;;
+          esac
           mkdir -p "$RUNNER_TEMP/bench"
-          go run ./cmd/publish -count="$COUNT" \
+          # The matrix: -cpu 1 and -cpu 4, each with GOGC at its default and
+          # off, so mutator CPU can be told apart from GC. The first entry
+          # (cpu1, GOGC default) feeds the schema v1 fields of the JSON.
+          go run ./cmd/publish -count="$COUNT" -benchtime="$BENCHTIME" \
+            -cpus=1,4 -gogc=default,off \
             -out "$RUNNER_TEMP/bench/latest.json" \
             -raw "$RUNNER_TEMP/bench/latest.txt"
 
       - name: benchstat summary
         run: |
-          go run golang.org/x/perf/cmd/benchstat@v0.0.0-20260908200009-22c9c6c9d4da \
-            "$RUNNER_TEMP/bench/latest.txt" | tee "$RUNNER_TEMP/bench/benchstat.txt"
           {
-            echo '## Competitor benchmark (end-to-end stage)'
-            echo
-            echo '```'
-            cat "$RUNNER_TEMP/bench/benchstat.txt"
-            echo '```'
+            echo '## Competitor benchmarks'
+            for f in "$RUNNER_TEMP"/bench/latest*.txt; do
+              name=$(basename "$f" .txt)
+              go run golang.org/x/perf/cmd/benchstat@v0.0.0-20260908200009-22c9c6c9d4da \
+                "$f" > "$RUNNER_TEMP/bench/benchstat-$name.txt"
+              echo
+              echo "### $name"
+              echo '```'
+              cat "$RUNNER_TEMP/bench/benchstat-$name.txt"
+              echo '```'
+            done
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload results

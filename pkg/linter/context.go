@@ -75,6 +75,9 @@ type Context struct {
 
 	// File metadata for violation reporting
 	Filename string
+
+	nodes      []ast.Node
+	nodesBuilt bool
 }
 
 // NewContext creates a new linting context from SQL content and filename.
@@ -123,6 +126,7 @@ func (c *Context) WithTokens(tokens []models.TokenWithSpan) *Context {
 func (c *Context) WithAST(astObj *ast.AST, err error) *Context {
 	c.AST = astObj
 	c.ParseErr = err
+	c.nodes, c.nodesBuilt = nil, false
 	return c
 }
 
@@ -152,4 +156,29 @@ func (c *Context) GetLine(lineNum int) string {
 // (e.g., overall structure, ending newlines).
 func (c *Context) GetLineCount() int {
 	return len(c.Lines)
+}
+
+// Nodes returns every node of every AST statement in preorder, matching
+// ast.Inspect. The list is built on first use and cached for this Context's AST.
+// Rules must not mutate the returned slice or the AST. Use WithAST to replace
+// the AST and invalidate the cache. Separate Contexts have independent caches;
+// a Context must not be used concurrently. Returns nil when no AST is available.
+func (c *Context) Nodes() []ast.Node {
+	if c.nodesBuilt {
+		return c.nodes
+	}
+	c.nodesBuilt = true
+	if c.AST == nil {
+		return nil
+	}
+	c.nodes = make([]ast.Node, 0, 64)
+	for _, stmt := range c.AST.Statements {
+		ast.Inspect(stmt, func(n ast.Node) bool {
+			if n != nil {
+				c.nodes = append(c.nodes, n)
+			}
+			return true
+		})
+	}
+	return c.nodes
 }

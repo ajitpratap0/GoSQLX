@@ -44,27 +44,24 @@ func (r *SelectStarRule) Check(ctx *linter.Context) ([]linter.Violation, error) 
 		return nil, nil
 	}
 	var violations []linter.Violation
-	for _, stmt := range ctx.AST.Statements {
-		ast.Inspect(stmt, func(n ast.Node) bool {
-			sel, ok := n.(*ast.SelectStatement)
-			if !ok {
-				return true
+	for _, n := range ctx.Nodes() {
+		sel, ok := n.(*ast.SelectStatement)
+		if !ok {
+			continue
+		}
+		for _, col := range sel.Columns {
+			ident, ok := col.(*ast.Identifier)
+			if ok && ident.Name == "*" {
+				violations = append(violations, linter.Violation{
+					Rule:       r.ID(),
+					RuleName:   r.Name(),
+					Severity:   r.Severity(),
+					Message:    "SELECT * fetches all columns; specify only needed columns",
+					Location:   ident.Pos,
+					Suggestion: "Replace SELECT * with an explicit column list: SELECT id, name, ...",
+				})
 			}
-			for _, col := range sel.Columns {
-				ident, ok := col.(*ast.Identifier)
-				if ok && ident.Name == "*" {
-					violations = append(violations, linter.Violation{
-						Rule:       r.ID(),
-						RuleName:   r.Name(),
-						Severity:   r.Severity(),
-						Message:    "SELECT * fetches all columns; specify only needed columns",
-						Location:   ident.Pos,
-						Suggestion: "Replace SELECT * with an explicit column list: SELECT id, name, ...",
-					})
-				}
-			}
-			return true
-		})
+		}
 	}
 	return violations, nil
 }

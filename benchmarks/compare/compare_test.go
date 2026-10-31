@@ -7,6 +7,9 @@ import (
 	"strings"
 	"sync"
 	"testing"
+
+	"github.com/ajitpratap0/GoSQLX/pkg/gosqlx"
+	"github.com/ajitpratap0/GoSQLX/pkg/metrics"
 )
 
 var update = flag.Bool("update", false, "rewrite the checked-in common-accept sets")
@@ -141,7 +144,10 @@ func benchImpls(b *testing.B, impls []Impl) {
 		b.Run(q.ID, func(b *testing.B) {
 			for _, im := range impls {
 				b.Run(im.ID, func(b *testing.B) {
-					op, err := im.New(q.SQL)
+					op, cleanup, err := im.New(q.SQL)
+					if cleanup != nil {
+						b.Cleanup(cleanup)
+					}
 					if err != nil {
 						b.Skipf("%s cannot handle this query: %v", im.Name, err)
 					}
@@ -169,6 +175,42 @@ func BenchmarkNormalize(b *testing.B) { benchImpls(b, NormalizeImpls) }
 // BenchmarkRender measures AST-to-SQL rendering of a pre-parsed statement.
 func BenchmarkRender(b *testing.B) { benchImpls(b, RenderImpls) }
 
+// concurrencyVariant is one row of the ParseFresh and ParseParallel cells: a
+// parser, optionally with GoSQLX's global metrics collection switched on.
+type concurrencyVariant struct {
+	id      string
+	parser  Parser
+	metrics bool
+}
+
+// concurrencyVariants lists every parser plus gosqlx_metricson. Metrics are
+// off by default, so the plain gosqlx row is the metrics-off measurement;
+// the metrics-on row shows the cost of the shared atomic counters under
+// concurrency (CRITIQUE item 10).
+func concurrencyVariants() []concurrencyVariant {
+	var out []concurrencyVariant
+	for _, p := range Parsers {
+		out = append(out, concurrencyVariant{id: p.ID, parser: p})
+	}
+	if g, ok := ParserByID("gosqlx"); ok {
+		out = append(out, concurrencyVariant{id: "gosqlx_metricson", parser: g, metrics: true})
+	}
+	return out
+}
+
+// enableMetrics turns global metrics on for the benchmark and restores the
+// previous state when it ends.
+func enableMetrics(b *testing.B) {
+	b.Helper()
+	was := metrics.IsEnabled()
+	metrics.Enable()
+	b.Cleanup(func() {
+		if !was {
+			metrics.Disable()
+		}
+	})
+}
+
 // BenchmarkParseFresh measures one parse on a brand-new goroutine per op, the
 // shape of a server that handles each request on its own goroutine. It
 // exposes stack growth and cold per-goroutine state that a long-lived loop
@@ -176,8 +218,12 @@ func BenchmarkRender(b *testing.B) { benchImpls(b, RenderImpls) }
 func BenchmarkParseFresh(b *testing.B) {
 	for _, q := range Corpus {
 		b.Run(q.ID, func(b *testing.B) {
-			for _, p := range Parsers {
-				b.Run(p.ID, func(b *testing.B) {
+			for _, v := range concurrencyVariants() {
+				p := v.parser
+				b.Run(v.id, func(b *testing.B) {
+					if v.metrics {
+						enableMetrics(b)
+					}
 					parse := mustParse(b, p)
 					if err := safeParse(parse, q.SQL); err != nil {
 						b.Skipf("%s does not accept this query: %v", p.Name, err)
@@ -205,14 +251,19 @@ func BenchmarkParseFresh(b *testing.B) {
 }
 
 // BenchmarkParseParallel measures throughput with every P parsing at once
-// (b.RunParallel); run it with -cpu 1,4 to see scaling and shared-state
-// contention. Each worker builds its own parse function, since parse
+// (b.RunParallel); run it with -cpu 1,4,10 (or wider on a large box, see
+// README) to see scaling and shared-state contention. gosqlx_metricson
+// repeats the GoSQLX cell with global metrics enabled. Each worker builds its own parse function, since parse
 // functions are not safe for concurrent use.
 func BenchmarkParseParallel(b *testing.B) {
 	for _, q := range Corpus {
 		b.Run(q.ID, func(b *testing.B) {
-			for _, p := range Parsers {
-				b.Run(p.ID, func(b *testing.B) {
+			for _, v := range concurrencyVariants() {
+				p := v.parser
+				b.Run(v.id, func(b *testing.B) {
+					if v.metrics {
+						enableMetrics(b)
+					}
 					if err := safeParse(mustParse(b, p), q.SQL); err != nil {
 						b.Skipf("%s does not accept this query: %v", p.Name, err)
 					}
@@ -409,7 +460,10 @@ func TestImplsRunOnPortableQueries(t *testing.T) {
 				}
 				ran := 0
 				for _, q := range Corpus {
-					op, err := im.New(q.SQL)
+					op, cleanup, err := im.New(q.SQL)
+					if cleanup != nil {
+						t.Cleanup(cleanup)
+					}
 					if err != nil {
 						continue
 					}
@@ -427,16 +481,55 @@ func TestImplsRunOnPortableQueries(t *testing.T) {
 }
 
 // TestRenderOutputsParse checks GoSQLX's render cells produce SQL that GoSQLX
-// parses again, so the render benchmark measures real output.
+// parses again, so the render benchmark measures real output. It re-parses
+// the output of both AST.SQL() and the compact formatter path.
 func TestRenderOutputsParse(t *testing.T) {
 	for _, q := range Corpus {
-		tree, err := parseTree(q.SQL)
-		if err != nil {
-			t.Fatalf("%s: %v", q.ID, err)
-		}
-		if out := tree.SQL(); strings.TrimSpace(out) == "" {
-			t.Errorf("%s: AST.SQL() is empty", q.ID)
-		}
+		t.Run(q.ID, func(t *testing.T) {
+			tree, err := parseTree(q.SQL)
+			if err != nil {
+				t.Fatal(err)
+			}
+			outs := map[string]string{"sql": tree.SQL()}
+			compact, err := formatCompact(tree)
+			if err != nil {
+				t.Fatalf("compact format: %v", err)
+			}
+			outs["compact"] = compact
+			for name, out := range outs {
+				if strings.TrimSpace(out) == "" {
+					t.Errorf("%s output is empty", name)
+					continue
+				}
+				if _, err := gosqlx.Parse(out); err != nil {
+					t.Errorf("%s output does not parse again: %v\n%s", name, err, out)
+				}
+			}
+		})
+	}
+}
+
+// TestPartialDDLIsRejected guards the strict-DDL wiring: the lenient Parse of
+// Vitess and xwb1989 logs and returns nil for DDL they only partly parsed,
+// which would count a rejection as an acceptance.
+func TestPartialDDLIsRejected(t *testing.T) {
+	for id, partial := range map[string]string{
+		"vitess":  "ALTER TABLE users DROP COLUMN IF EXISTS mobile",
+		"xwb1989": "CREATE TABLE decs (a DEC(4,1))",
+	} {
+		t.Run(id, func(t *testing.T) {
+			p, ok := ParserByID(id)
+			if !ok {
+				t.Fatalf("%s not registered", id)
+			}
+			parse, err := p.New()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if safeParse(parse, partial) == nil {
+				t.Errorf("%s accepted partially parsed DDL %q", id, partial)
+			}
+		})
 	}
 }
 

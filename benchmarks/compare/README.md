@@ -20,6 +20,16 @@ this directory.
   (`cpu1-gogc-default`) feeds the v1 fields; the others are in `cells` of the
   v2 document and in `results/latest-<config>.txt`. Compare configurations of
   one run, not absolute numbers across machines.
+- **Primary configuration:** `cmd/publish` defaults to `-cpus=1 -gogc=default`
+  and CI passes the same first entry, so the v1 `results[]` do not depend on who
+  publishes. This moves the published v1 numbers from the CI runner's default
+  GOMAXPROCS (4) to `-cpu 1`; they are not comparable with earlier files.
+- **Scaling:** `ParseParallel` (and `ParseFresh`) also run a `gosqlx_metricson`
+  row, the GoSQLX parser with global metrics collection enabled, to expose the
+  cost of its shared atomic counters under concurrency. Four vCPU cannot show
+  contention that appears at 32 cores, so for a scaling claim run on a box with
+  32 or more vCPU: `go run ./cmd/publish -cpus=1,4,10,32 -families=ParseParallel,Parse`
+  (`Parse` is always required).
 - **Recorded with every run:** commit, Go version, CPU, OS/arch, the exact
   command and each library's pinned version.
 
@@ -61,8 +71,8 @@ Every cell is a Go benchmark in `compare_test.go`; names are
 |---|---|---|---|
 | `Parse` | portable query ([`corpus.go`](corpus.go)) | every parser | SQL text to AST (the v1 cell) |
 | `ParseORM` | ORM-style query ([`corpus_orm.go`](corpus_orm.go)) | every parser | same, on quoted identifiers, placeholders, lowercase, DDL, deep nesting and multi-statement text |
-| `ParseFresh` | portable query | every parser | one parse on a brand-new goroutine per op (server shape; exposes stack growth) |
-| `ParseParallel` | portable query | every parser | `b.RunParallel`, one parse function per worker; run at `-cpu 1,4` |
+| `ParseFresh` | portable query | every parser, plus `gosqlx_metricson` | one parse on a brand-new goroutine per op (server shape; exposes stack growth) |
+| `ParseParallel` | portable query | every parser, plus `gosqlx_metricson` | `b.RunParallel`, one parse function per worker; run at `-cpu 1,4,10` (more on large boxes) |
 | `ParseDialect` | dialect | GoSQLX and the non-legacy peers of that dialect | one whole common-accept set per op |
 | `Lex` | portable query | `gosqlx_scratch`, `gosqlx_public`, `vitess`, `pgquery_scan` | tokenisation only |
 | `Normalize` | portable query | `gosqlx`, `gosqlx_fingerprint`, `tidb_digest`, `pgquery_normalize`, `pgquery_fingerprint`, `vitess_redact` | literal normalisation or fingerprint; outputs differ in form |
@@ -91,8 +101,15 @@ peer, such as Oracle, Snowflake and SQL Server, are timed for GoSQLX alone).
 
 The acceptance table is informational. GoSQLX is tuned on this corpus (it
 accepts all of it), so read the peers' rates as "how much of this corpus the
-grammar covers", not as a quality ranking; some peers (rqlite, AfterShip)
-parse only the first statement of a multi-statement text.
+grammar covers", not as a quality ranking.
+
+Vitess and xwb1989 are wired through `ParseStrictDDL`: their plain `Parse`
+returns a nil error for DDL it only partly parsed (it logs "ignoring error
+parsing DDL"), which would count a rejection as an acceptance.
+`TestPartialDDLIsRejected` guards this.
+
+Path note: PLAN 2.3 names the sets `corpus/<dialect>.accept.txt`; they live in
+`commonaccept/<dialect>.txt`. Consumers (W0-11) should read that path.
 
 ## Caveat
 
@@ -120,6 +137,12 @@ task bench:publish
 
 # Publish the CI matrix (schema v2 cells for every configuration)
 cd benchmarks/compare && go run ./cmd/publish -cpus=1,4 -gogc=default,off -benchtime=200ms
+
+# Cheap v1-only publish (BenchmarkParse alone, about the v1 cost)
+task bench:publish -- -families=Parse
+
+# Scaling run on a large box (32+ vCPU)
+cd benchmarks/compare && go run ./cmd/publish -cpus=1,4,10,32 -benchtime=200ms
 ```
 
 The results document is schema v2; see [`SCHEMA.md`](SCHEMA.md). Schema v1
@@ -135,5 +158,5 @@ After publishing, copy `results/latest.json` to
 benchmark on every change to this directory. Running it manually
 (`workflow_dispatch`) or pushing a release tag performs a full run and uploads
 the JSON, the raw output of every configuration and a benchstat summary per
-configuration as an artifact. The smoke run covers `-cpu 1,4`; the publish job
+configuration as an artifact. The smoke run covers `-cpu 1,4,10`; the publish job
 runs the full `-cpu 1,4` x `GOGC=default,off` matrix.

@@ -282,3 +282,72 @@ func TestCellResultsMedianAndOrder(t *testing.T) {
 		t.Errorf("render cell = %+v", got[1])
 	}
 }
+
+// unquotedMeta returns the shell metacharacters of cmd outside single quotes.
+func unquotedMeta(cmd string) string {
+	var out []rune
+	inQuote := false
+	for _, r := range cmd {
+		if r == '\'' {
+			inQuote = !inQuote
+			continue
+		}
+		if !inQuote && strings.ContainsRune("()|&;<>$*?[]{}!^`\"\\#~", r) {
+			out = append(out, r)
+		}
+	}
+	return string(out)
+}
+
+// TestMethodCommandIsCopyPasteable keeps method.command (shown by the
+// website as a reproduce command) free of unquoted shell metacharacters, and
+// restricted to the family the v1 results come from.
+func TestMethodCommandIsCopyPasteable(t *testing.T) {
+	cfgs, err := parseMatrix("1,4", "default,off")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range cfgs {
+		for _, re := range []string{v1BenchRegex, "^Benchmark(Parse|ParseORM|Lex)$"} {
+			cmd := shellCommand(c.GOGC, benchArgs(re, 10, c.CPU, "200ms"))
+			if bad := unquotedMeta(cmd); bad != "" {
+				t.Errorf("%q has unquoted shell metacharacters %q", cmd, bad)
+			}
+			if strings.Contains(cmd, "GOGC=default") {
+				t.Errorf("%q uses GOGC=default, which is not a GOGC value", cmd)
+			}
+			if (c.GOGC == "off") != strings.HasPrefix(cmd, "GOGC=off ") {
+				t.Errorf("%q: GOGC=off prefix must appear exactly for the off configuration", cmd)
+			}
+		}
+	}
+	want := "go test -run='^$' -bench='^BenchmarkParse$' -benchmem -count=10 -cpu=1 -benchtime=200ms ."
+	if got := shellCommand("default", benchArgs(v1BenchRegex, 10, 1, "200ms")); got != want {
+		t.Errorf("v1 command = %q, want %q", got, want)
+	}
+}
+
+func TestBenchRegexFor(t *testing.T) {
+	all, err := benchRegexFor("all")
+	if err != nil || !strings.Contains(all, "ParseParallel") || !strings.Contains(all, "Render") {
+		t.Errorf("all = %q, %v", all, err)
+	}
+	if re, err := benchRegexFor("Parse"); err != nil || re != "^Benchmark(Parse)$" {
+		t.Errorf("Parse = %q, %v", re, err)
+	}
+	for _, bad := range []string{"Lex", "Parse,Nope"} {
+		if _, err := benchRegexFor(bad); err == nil {
+			t.Errorf("benchRegexFor(%q) must fail", bad)
+		}
+	}
+}
+
+// TestNoReleaseVariantGetsCommitVersion covers every GoSQLX variant, not just
+// the one with ID "gosqlx".
+func TestNoReleaseVariantGetsCommitVersion(t *testing.T) {
+	for _, p := range parserVersions("0123456789abcdef", false) {
+		if p.Module == gosqlxModule && p.Version != "commit 0123456789ab" {
+			t.Errorf("%s version = %q, want the measured commit", p.ID, p.Version)
+		}
+	}
+}

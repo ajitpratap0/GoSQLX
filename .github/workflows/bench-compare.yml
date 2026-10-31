@@ -76,9 +76,9 @@ jobs:
         run: go test -race -timeout 300s ./...
 
       - name: Benchmark smoke run
-        # -cpu 1,4 exercises the parallel cells at both widths; the full
+        # -cpu 1,4,10 exercises the parallel cells at three widths; the full
         # matrix (GOGC default and off) runs in the publish job.
-        run: go test -run='^$' -bench=. -benchmem -benchtime=20x -cpu 1,4 .
+        run: go test -run='^$' -bench=. -benchmem -benchtime=20x -cpu 1,4,10 .
 
   publish:
     name: Publish results JSON

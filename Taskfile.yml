@@ -143,7 +143,7 @@ tasks:
       - go test -run='^$' -bench=. -benchmem ./...
 
   bench:publish:
-    desc: Run the competitor harness with -count=10 and write benchmarks/compare/results/latest.{json,txt}
+    desc: Run the competitor harness (-count=10, -cpu 1, all families; pass -- -families=Parse for a v1-only run) and write benchmarks/compare/results/latest.{json,txt}
     dir: benchmarks/compare
     env:
       CGO_ENABLED: '1'

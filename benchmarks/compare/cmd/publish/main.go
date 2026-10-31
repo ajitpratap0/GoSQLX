@@ -4,9 +4,15 @@
 // Run it from the benchmarks/compare module directory, usually through
 // `task bench:publish`:
 //
-//	go run ./cmd/publish                 # -count=10, writes results/latest.json and results/latest.txt
+//	go run ./cmd/publish                 # -count=10, -cpu 1, GOGC default, all families
+//	go run ./cmd/publish -families=Parse # cheap v1-only publish (about the v1 cost)
 //	go run ./cmd/publish -count=3 -out /tmp/r.json -raw /tmp/r.txt
 //	go run ./cmd/publish -cpus=1,4 -gogc=default,off   # the CI matrix
+//	go run ./cmd/publish -cpus=1,4,10,32               # scaling run on a 32+ vCPU box
+//
+// The primary configuration (the first -cpus value with the first -gogc
+// value, cpu1-gogc-default unless overridden) feeds the v1 fields, so the
+// published v1 numbers do not depend on who runs the publish.
 //
 // The results document is schema v2 (see ../../SCHEMA.md). Every v1 field is
 // still written, from the first configuration of the matrix, because the
@@ -29,6 +35,7 @@ import (
 	"regexp"
 	"runtime"
 	"runtime/debug"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -38,6 +45,10 @@ import (
 )
 
 const schemaVersion = 2
+
+// gosqlxModule is the module path of the library under test; every variant
+// of it (gosqlx, gosqlx_norelease) reports the commit being measured.
+const gosqlxModule = "github.com/ajitpratap0/GoSQLX"
 
 const caveat = "The libraries implement different SQL dialects and build different ASTs " +
 	"(pg_query_go wraps the real PostgreSQL parser through CGo and converts its tree to Go structs; " +
@@ -179,8 +190,9 @@ func main() {
 func run() error {
 	count := flag.Int("count", 10, "benchmark repetitions per benchmark")
 	benchtime := flag.String("benchtime", "", "optional -benchtime passed to go test (default: go test's own)")
-	cpus := flag.String("cpus", "", "comma-separated -cpu values, one run per value (empty: go test's default)")
-	gogcs := flag.String("gogc", "", "comma-separated GOGC settings, default and/or off (empty: default)")
+	cpus := flag.String("cpus", "1", "comma-separated -cpu values, one run per value; the first is the primary configuration that feeds the v1 fields (empty: go test's default GOMAXPROCS)")
+	gogcs := flag.String("gogc", "default", "comma-separated GOGC settings, default and/or off; the first is the primary configuration")
+	families := flag.String("families", "all", "comma-separated benchmark families to run ("+strings.Join(allFamilies, ",")+"), or all; the v1 fields need Parse, so Parse alone gives a cheap v1-only publish")
 	out := flag.String("out", filepath.Join("results", "latest.json"), "results JSON path")
 	raw := flag.String("raw", filepath.Join("results", "latest.txt"), "raw go test -bench output path of the first configuration (benchstat input)")
 	flag.Parse()
@@ -189,6 +201,10 @@ func run() error {
 		return fmt.Errorf("-count must be at least 1, got %d", *count)
 	}
 	configs, err := parseMatrix(*cpus, *gogcs)
+	if err != nil {
+		return err
+	}
+	benchRe, err := benchRegexFor(*families)
 	if err != nil {
 		return err
 	}
@@ -222,14 +238,7 @@ func run() error {
 	var primary map[cellKey]*samples
 	for i, c := range configs {
 		rawPath := rawPathFor(*raw, i, c)
-		args := []string{"test", "-run=^$", "-bench=" + benchRegex, "-benchmem", "-count=" + strconv.Itoa(*count)}
-		if c.CPU > 0 {
-			args = append(args, "-cpu="+strconv.Itoa(c.CPU))
-		}
-		if *benchtime != "" {
-			args = append(args, "-benchtime="+*benchtime)
-		}
-		args = append(args, ".")
+		args := benchArgs(benchRe, *count, c.CPU, *benchtime)
 
 		fmt.Fprintf(os.Stderr, "running [%s]: go %s (GOGC=%s)\n", c.ID, strings.Join(args, " "), c.GOGC)
 		var buf bytes.Buffer
@@ -244,7 +253,7 @@ func run() error {
 		if err != nil {
 			return fmt.Errorf("%s: %w", c.ID, err)
 		}
-		c.Command = "GOGC=" + c.GOGC + " go " + strings.Join(args, " ")
+		c.Command = shellCommand(c.GOGC, args)
 		c.RawOutput = filepath.ToSlash(rawPath)
 		report.Configs = append(report.Configs, c)
 		report.Cells = append(report.Cells, cellResults(data, c.ID)...)
@@ -253,7 +262,7 @@ func run() error {
 			primary = data
 			report.Hardware = Hardware{CPU: cpu, GOOS: runtime.GOOS, GOARCH: runtime.GOARCH, NumCPU: runtime.NumCPU()}
 			report.Method = Method{
-				Command:   c.Command,
+				Command:   shellCommand(c.GOGC, benchArgs(v1BenchRegex, *count, c.CPU, *benchtime)),
 				Count:     *count,
 				Statistic: "median",
 				RawOutput: c.RawOutput,
@@ -304,8 +313,78 @@ func run() error {
 	return nil
 }
 
-// benchRegex selects every benchmark family of the harness.
-const benchRegex = "^Benchmark(Parse|ParseORM|ParseFresh|ParseParallel|ParseDialect|Lex|Normalize|Render)$"
+// allFamilies lists the benchmark families of the harness.
+var allFamilies = []string{"Parse", "ParseORM", "ParseFresh", "ParseParallel", "ParseDialect", "Lex", "Normalize", "Render"}
+
+// v1BenchRegex selects BenchmarkParse alone, the family the v1 results[] are
+// derived from.
+const v1BenchRegex = "^BenchmarkParse$"
+
+// benchRegexFor builds the -bench regexp for a comma-separated family list.
+func benchRegexFor(families string) (string, error) {
+	families = strings.TrimSpace(families)
+	if families == "" || families == "all" {
+		families = strings.Join(allFamilies, ",")
+	}
+	var picked []string
+	hasParse := false
+	for _, f := range strings.Split(families, ",") {
+		f = strings.TrimSpace(f)
+		if !slices.Contains(allFamilies, f) {
+			return "", fmt.Errorf("-families: unknown family %q (known: %s)", f, strings.Join(allFamilies, ", "))
+		}
+		hasParse = hasParse || f == "Parse"
+		picked = append(picked, f)
+	}
+	if !hasParse {
+		return "", fmt.Errorf("-families must include Parse: the v1 results[] are derived from it")
+	}
+	return "^Benchmark(" + strings.Join(picked, "|") + ")$", nil
+}
+
+// benchArgs builds the go test arguments of one run.
+func benchArgs(benchRe string, count, cpu int, benchtime string) []string {
+	args := []string{"test", "-run=^$", "-bench=" + benchRe, "-benchmem", "-count=" + strconv.Itoa(count)}
+	if cpu > 0 {
+		args = append(args, "-cpu="+strconv.Itoa(cpu))
+	}
+	if benchtime != "" {
+		args = append(args, "-benchtime="+benchtime)
+	}
+	return append(args, ".")
+}
+
+// shellCommand renders a copy-pasteable command line (to be run in
+// benchmarks/compare). Values with shell metacharacters are single-quoted,
+// and GOGC=off is spelled out only for the configuration that sets it.
+func shellCommand(gogc string, args []string) string {
+	parts := make([]string, 0, len(args)+2)
+	if gogc == "off" {
+		parts = append(parts, "GOGC=off")
+	}
+	parts = append(parts, "go")
+	for _, a := range args {
+		parts = append(parts, quoteArg(a))
+	}
+	return strings.Join(parts, " ")
+}
+
+var safeShell = regexp.MustCompile(`^[A-Za-z0-9_@%+:,./-]*$`)
+
+// quoteArg single-quotes the value of a -flag=value argument (or a bare
+// argument) when it holds anything the shell would interpret.
+func quoteArg(a string) string {
+	flagPart, val := "", a
+	if strings.HasPrefix(a, "-") {
+		if i := strings.Index(a, "="); i >= 0 {
+			flagPart, val = a[:i+1], a[i+1:]
+		}
+	}
+	if safeShell.MatchString(val) {
+		return a
+	}
+	return flagPart + "'" + strings.ReplaceAll(val, "'", `'\''`) + "'"
+}
 
 // cellKey identifies one benchmark cell: family, group, parser.
 type cellKey struct{ cell, group, parser string }
@@ -503,7 +582,7 @@ func parserVersions(commit string, v1Only bool) []ParserV {
 			continue
 		}
 		v := versions[p.Module]
-		if p.ID == "gosqlx" {
+		if p.Module == gosqlxModule {
 			v = "commit " + shortCommit(commit)
 		}
 		out = append(out, ParserV{ID: p.ID, Name: p.Name, Module: p.Module, Version: v, Dialect: p.Dialect, CGo: p.CGo,

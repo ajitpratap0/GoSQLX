@@ -134,8 +134,11 @@ var Parsers = []Parser{
 			if err != nil {
 				return nil, fmt.Errorf("vitess: new parser: %w", err)
 			}
+			// ParseStrictDDL, not Parse: Parse logs "ignoring error parsing
+			// DDL" and returns nil for DDL it only partly parsed, which would
+			// count a rejection as an acceptance.
 			return func(sql string) error {
-				_, err := p.Parse(sql)
+				_, err := p.ParseStrictDDL(sql)
 				return err
 			}, nil
 		},
@@ -167,7 +170,8 @@ var Parsers = []Parser{
 		PeerDialects: []string{"mysql", "mariadb"},
 		New: func() (ParseFunc, error) {
 			return func(sql string) error {
-				_, err := xwb.Parse(sql)
+				// ParseStrictDDL: Parse returns nil for partly parsed DDL.
+				_, err := xwb.ParseStrictDDL(sql)
 				return err
 			}, nil
 		},
@@ -199,8 +203,10 @@ func init() {
 			PeerDialects: []string{"sqlite"},
 			New: func() (ParseFunc, error) {
 				return func(sql string) error {
+					// ParseStatements reads every statement, so multi-statement
+					// text costs the same work as in the other parsers.
 					p := rqlite.NewParser(strings.NewReader(sql))
-					_, err := p.ParseStatement()
+					_, err := p.ParseStatements()
 					return err
 				}, nil
 			},

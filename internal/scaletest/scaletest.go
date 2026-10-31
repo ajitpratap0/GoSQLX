@@ -21,7 +21,6 @@ package scaletest
 import (
 	"context"
 	"runtime"
-	"runtime/debug"
 	"sort"
 	"sync/atomic"
 	"testing"
@@ -121,7 +120,7 @@ func timeReps(fn func(), reps int) time.Duration {
 // on a loaded machine, and it catches regressions that copy or rebuild
 // subtrees (quadratic bytes with a linear allocation count, which
 // testing.AllocsPerRun cannot see). Each size is measured several times and
-// the median delta kept, with the collector paused so pool contents stay stable.
+// the median delta kept.
 func AssertLinearBytes(t testing.TB, name string, maxRatio float64, small, large func()) {
 	t.Helper()
 	s, l := minAllocBytes(small), minAllocBytes(large)
@@ -136,9 +135,10 @@ func AssertLinearBytes(t testing.TB, name string, maxRatio float64, small, large
 }
 
 func minAllocBytes(fn func()) uint64 {
-	// A collection mid-measurement empties sync.Pools, which makes later
-	// runs allocate objects an earlier run reused; keep it out of the window.
-	defer debug.SetGCPercent(debug.SetGCPercent(-1))
+	// The collector stays on: TotalAlloc counts every allocation either way,
+	// sync.Pool contents survive one collection through the victim cache, and
+	// the median of five runs absorbs the rest. Pausing it would let the
+	// large input's garbage pile up (hundreds of MB under -race).
 	runtime.GC()
 	fn() // warm pools and lazily initialised tables
 	var runs [5]uint64

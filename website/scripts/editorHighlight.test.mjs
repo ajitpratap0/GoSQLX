@@ -118,6 +118,21 @@ test('computeHighlight skips documents longer than MAX_HIGHLIGHT_LENGTH', () => 
   assert.equal(calls, 1); // the source is not called for an oversized document
 });
 
+test('computeHighlight resolves asynchronous sources', async () => {
+  const pending = computeHighlight(async () => [{ start: 0, end: 6, category: 'keyword' }], 'SELECT 1');
+  assert.ok(pending instanceof Promise);
+  assert.deepEqual(ranges(await pending), [{ from: 0, to: 6, className: 'cm-gsx-keyword' }]);
+
+  assert.equal(await computeHighlight(async () => null, 'SELECT 1'), null);
+  assert.equal(await computeHighlight(async () => ({ spans: [] }), 'SELECT 1'), null); // malformed
+  assert.equal(
+    await computeHighlight(async () => {
+      throw new Error('worker failed');
+    }, 'SELECT 1'),
+    null,
+  );
+});
+
 test('computeHighlight passes the SQL to the source and builds marks', () => {
   let seen = null;
   const set = computeHighlight((sql) => {

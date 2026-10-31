@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Claude Code plugin (`plugins/gosqlx`): prepared for Anthropic's plugin
+  directory. Added a listing icon and `privacyPolicyUrl`, and the MCP server
+  URL is now the literal `https://mcp.gosqlx.dev/mcp` as the directory
+  requires. The `GOSQLX_MCP_URL` override is gone; for local mode add
+  `gosqlx-mcp` as its own MCP server (see the plugin README). The README now
+  states everything the plugin runs and sends.
+
 ## [1.17.0] - 2026-10-31 — Real-World Dialect Corpus, Dialect-Faithful Round Trips, Security Scanner & LSP Hardening
 
 Covers everything merged since v1.16.0, mostly the October 2026 dialect audit:

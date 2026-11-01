@@ -1673,8 +1673,11 @@ func (a *AlterTableStatement) SQL() string {
 	defer putBuf(sb)
 	sb.WriteString("ALTER TABLE ")
 	writeQualifiedName(sb, a.Table)
-	for _, action := range a.Actions {
+	for i, action := range a.Actions {
 		action := action // G601: Create local copy to avoid memory aliasing
+		if i > 0 {
+			sb.WriteString(",")
+		}
 		sb.WriteString(" ")
 		sb.WriteString(alterActionSQL(&action))
 	}

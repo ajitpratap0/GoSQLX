@@ -14,7 +14,7 @@ How GoSQLX measures performance, how a pull request is judged, and what we may c
 Most functionality-by-dialect cells have a benchmark; lint, security and LSP are pending (#910). List them with `go test -list Benchmark ./pkg/...`. Run the whole matrix once with:
 
 ```bash
-task bench:matrix                      # all pkg benchmarks, -cpu 1, GOGC=off -> .bench/matrix.txt
+task bench:matrix                      # all pkg benchmarks, -cpu 1, GOGC=off GOMEMLIMIT=64MiB -> .bench/matrix.txt
 task bench:matrix FILTER='^BenchmarkParseRW$' BENCHTIME=200ms
 ```
 
@@ -29,7 +29,19 @@ task bench:ab BENCH='./pkg/gosqlx=^BenchmarkParseE2E$'    # one benchmark
 task bench:gate                        # exactly what CI runs, locally
 ```
 
-`scripts/perf/ab.sh` builds test binaries for both revisions with the same toolchain and runs them interleaved in ABBA order for at least 10 rounds. The primary metric uses `GOGC=off GOMAXPROCS=1` (`-cpu 1`, pinned to one CPU where `taskset` exists): garbage-collection-free mutator time has low variance and ranks queries the same way the `-cpu 4` headline does. A secondary default-GC `-cpu 1` arm (`-g`, enabled by `bench:gate`) is reported for information only; `-cpu 4` is measured only by `task bench:profile` and the competitor harness. Results go through `benchstat` at alpha 0.01. The benchmarks that are gated are listed in `scripts/perf/gate-suite.txt`.
+`scripts/perf/ab.sh` builds test binaries for both revisions with the same toolchain and runs them interleaved in ABBA order for at least 10 rounds. The primary metric uses `GOGC=off GOMEMLIMIT=64MiB GOMAXPROCS=1` (`-cpu 1`, pinned to one CPU where `taskset` exists): almost garbage-collection-free mutator time has low variance and ranks queries the same way the `-cpu 4` headline does. A secondary default-GC `-cpu 1` arm (`-g`, enabled by `bench:gate`) is reported for information only; `-cpu 4` is measured only by `task bench:profile` and the competitor harness. Results go through `benchstat` at alpha 0.01. The benchmarks that are gated are listed in `scripts/perf/gate-suite.txt`.
+
+**Why GOMEMLIMIT.** With `GOGC=off` and no limit the heap only grows, so every allocated byte lands on a fresh page and pays a first-touch page fault and kernel zeroing. That cost is not mutator work, scales with B/op and lands on whichever benchmark first grows the heap in a process (in the amd64 checkpoint the first benchmark of a binary gained nothing from `GOGC=off` while the others gained 21-25%). With a limit the collector runs only when the heap reaches it and the pages are reused. Every `GOGC=off` measurement (`ab.sh`, `profile.sh`, `task bench:matrix`, the competitor harness) therefore also sets `GOMEMLIMIT`, default `64MiB` from `scripts/perf/lib.sh`; override it with `PERF_GOMEMLIMIT` (or the `gomemlimit` dispatch input), and `off` unsets it. Consequences:
+
+- Timings include a small GC share (each collection of the tiny live heap costs about 0.5 ms, about 1% of a run), and so do instructions/op: `perfdriver` and cachegrind run with the same limit, so Ir/op is no longer pure mutator work but carries a GC share proportional to B/op (about 0.25% for `join`).
+- Each collection drains the `sync.Pool`s. allocs/op stays exact for the gated suite (identical in every A/A and PR run so far) but varies for large-input and low-iteration benchmarks (`ParseRW/*/large`, `Handler_LargeDocument`, `*SustainedLoad*`), which are not gated.
+- `GOGC=off` timings recorded before this change are not comparable with later ones; base and head of one run always share the setting.
+
+`scripts/perf/baseline` (below) is the deliberate exception: it gates absolute allocs/op and B/op only, so it runs `GOGC=off` with no limit, where no collection drains a pool and the counts are exact for every benchmark.
+
+**Toolchain.** `perf-gate.yml` and `bench-compare.yml` build with one pinned Go release, `PERF_GO_VERSION` (1.26.9, the toolchain of the recorded baselines), with `GOTOOLCHAIN=local` so `go.mod` cannot switch it. Numbers from the gate and the competitor harness are only comparable when built by the same release.
+
+**Ratios only.** Hosted runners hand out different CPU models from job to job. Every artifact and report names the runner CPU, and reports compare base and head of the same job by ratio only; absolute ns/op hold for that CPU and job alone. The competitor harness summary likewise leads with GoSQLX/peer time ratios (`cmd/publish -ratios`).
 
 Tips: run on an idle machine, close other benchmarks, and re-run once if the A/A control (below) reports noise. Never weaken a test or a threshold to make a result pass.
 
@@ -45,6 +57,8 @@ Tips: run on an idle machine, close other benchmarks, and re-run once if the A/A
 | Instructions/op | any case executes more than 1.5% more instructions (`cmd/perfdriver`) |
 
 **A/A control.** Each run also compares the base binary against a second copy of itself. If more than 10% of benchmarks move by more than 3% in that A/A comparison, the machine is too noisy: the job re-runs once, and a second noisy result is **inconclusive**, which is neutral, not a failure.
+
+**Other dispatch modes** of `perf-gate.yml`: `matrix` runs the same interleaved A/B over the whole benchmark matrix (`scripts/perf/matrix-suite.sh`, about 900 benchmarks, 5 rounds of 100ms by default, roughly an hour; base = head gives an A/A of the whole matrix) without the A/A arm and instruction counts. It is a report, not a gate: its job is named "Matrix A/B (report only)" and its heading says so. `profile` records pprof profiles, `perf stat` counters where the PMU allows, and cachegrind cache simulation (32 KiB 8-way L1i, the Zen 3/4/5 geometry) of the gap queries: instructions, L1i and L1d misses per operation and the functions with the most L1i misses.
 
 **Verdicts:** `pass`, `regression`, `noisy` (re-run), `inconclusive`. The gate starts in shadow mode (it reports but never fails); enforcement is switched on after the shadow period. A maintainer can accept a known regression with the `perf-regression-accepted` label plus a written justification in the PR body.
 
@@ -71,7 +85,7 @@ Deviation from PLAN 2.7: the baseline files do not store instructions/op (Ir). I
 ## Profiling and PGO
 
 ```bash
-task bench:profile                     # pprof at -cpu 1 / GOGC=off / -cpu 4 for the gap queries
+task bench:profile                     # pprof at -cpu 1 / GOGC=off (with GOMEMLIMIT) / -cpu 4 for the gap queries
 task pgo:refresh                       # regenerate cmd/gosqlx/default.pgo from the parse benchmarks
 ```
 
@@ -93,6 +107,7 @@ Public performance statements (README, website, release notes) follow these rule
 ## Reference
 
 - `scripts/perf/ab.sh`, `scripts/perf/gate/`, `scripts/perf/gate-suite.txt`: A/B runner, verdict logic, gated suite
+- `scripts/perf/lib.sh`: shared settings (the `GOMEMLIMIT` default, the runner CPU model)
 - `scripts/perf/baseline/`: baseline recorder and checker
 - `.github/workflows/perf-gate.yml`: CI gate; `.github/workflows/bench-compare.yml`: competitor runs
 - `benchmarks/compare/README.md`: competitor harness

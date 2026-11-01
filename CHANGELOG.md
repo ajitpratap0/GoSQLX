@@ -43,6 +43,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     its never-enforced `TokenizationThroughput` and `EndToEndSustained` entries
     are removed.
 
+### Changed
+- **Perf measurement methodology** (W0-15; benchmark tooling only, no library
+  behaviour change):
+  - Every `GOGC=off` measurement now also sets `GOMEMLIMIT` (default `64MiB`;
+    override with `PERF_GOMEMLIMIT` or the `gomemlimit` dispatch input, `off`
+    unsets it): `scripts/perf/ab.sh` (so `task bench:ab` and `task bench:gate`),
+    `scripts/perf/profile.sh`, `task bench:matrix` and the competitor
+    harness's `cmd/publish` (`-gomemlimit`, recorded as
+    `configs[].gomemlimit` in the results JSON). An invalid value is refused
+    up front instead of making every benchmark binary panic.
+    Without a limit a GC-off heap only grows, so allocations land on fresh pages
+    whose first-touch faults were timed and profiled; the first benchmark of
+    each test binary absorbed most of them. GOGC=off timings are therefore not
+    comparable with runs made before this change; base and head of one run
+    always use the same setting. The limit lets the collector run, so timings
+    and instructions/op (`perfdriver`, cachegrind) are no longer pure mutator
+    work but include a small GC share (about 0.25% of Ir/op for `join`), and
+    the pool drains it causes make allocs/op vary for large-input and
+    low-iteration benchmarks (not in the gated suite, where it stays exact).
+  - `scripts/perf/baseline` deliberately keeps `GOGC=off` with no
+    `GOMEMLIMIT` (and drops an inherited one): it gates absolute allocs/op and
+    B/op only, which are exact only when no collection drains the pools.
+    `docs/PERFORMANCE_METHODOLOGY.md` documents the whole method.
+  - `perf-gate.yml` and `bench-compare.yml` build with one pinned Go release,
+    `PERF_GO_VERSION` 1.26.9 (the toolchain of the recorded baselines); the
+    gate used to take 1.26.1 from `go.mod`.
+  - `perf-gate.yml` profile mode adds cachegrind cache simulation (32 KiB
+    8-way L1i, the Zen 3/4/5 geometry) of the gap queries: instructions, L1i
+    and L1d misses per operation and the functions with the most L1i misses.
+  - New `matrix` dispatch mode in `perf-gate.yml`: the interleaved A/B over the
+    full benchmark matrix (`scripts/perf/matrix-suite.sh`), report only: the
+    job is named "Matrix A/B (report only)" and the report heading is
+    "Matrix A/B: VERDICT (report only, not a gate verdict)" (`ab.sh -T`,
+    `gate -report-only -title`).
+  - Every perf artifact and report names the runner CPU model, and the reports
+    compare by in-job ratio only: the gate report says so, and the competitor
+    harness summary leads with GoSQLX/peer time ratios (`cmd/publish -ratios`)
+    instead of absolute ns/op.
+  - The LSP benchmark server (`setupTestServer`) discards its output, so
+    benchmarks that publish diagnostics no longer time a growing buffer.
+
 ### Performance
 - **Tokenizer**: `time.Now`/`time.Since` are now read only when metrics are enabled (previously twice per tokenization even when disabled). If metrics are toggled on mid-call the call is not recorded. No API or token-output change [W1-02].
 - **Tokenizer**: keyword and compound-keyword-start lookup now uses a single fused-hash open-addressed table (one FNV-1a hash computed while upper-casing, one probe) instead of two Go map lookups per identifier. The table is filled in a fixed order (hot keywords first, then sorted) so its probe layout is deterministic across processes. No behaviour change; token output is identical [W2-01].

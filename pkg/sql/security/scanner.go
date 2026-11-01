@@ -289,7 +289,7 @@ func initCompiledPatterns() {
 				compilePattern(`(?i)\bsp_oacreate\b`),
 				// ClickHouse table functions that reach files, URLs, object
 				// stores, other servers or external programs.
-				compilePattern(`(?i)\b(?:FROM|JOIN)[\s\v]+(?:url|urlCluster|file|fileCluster|remote|remoteSecure|s3|s3Cluster|gcs|azureBlobStorage|hdfs|hdfsCluster|jdbc|odbc|mysql|postgresql|mongodb|redis|sqlite|executable)[\s\v]*\(`),
+				withGuard(compilePattern(`(?i)\b(?:FROM|JOIN)[\s\v]+(?:url|urlCluster|file|fileCluster|remote|remoteSecure|s3|s3Cluster|gcs|azureBlobStorage|hdfs|hdfsCluster|jdbc|odbc|mysql|postgresql|mongodb|redis|sqlite|executable)[\s\v]*\(`), hasTableFnCandidate),
 			},
 			severity:   SeverityCritical,
 			risk:       "Out-of-band data exfiltration or command execution",
@@ -1214,6 +1214,9 @@ func (s *Scanner) detectTautologyInSQL(views []string, folded []byte, result *Sc
 			if patternIndex == 0 && folded != nil && !hasEqualNumericPair(input) {
 				continue
 			}
+			if patternIndex == 2 && folded != nil && isASCII(input) && !hasEqualIdentPair(input) {
+				continue
+			}
 			for rest := input; rest != ""; {
 				// FindString uses a stack capture buffer; SubmatchIndex allocates
 				// an index slice for every unequal pair on large inputs.
@@ -1337,6 +1340,9 @@ func (s *Scanner) detectRegexPatterns(views []string, folded []byte, patternType
 		// no match, and a non-empty result is the same leftmost-first match that
 		// FindStringSubmatch(sql)[0] would return.
 		for _, sql := range views {
+			if p.guard != nil && folded != nil && isASCII(sql) && !p.guard(sql) {
+				continue
+			}
 			if m := p.re.FindString(sql); m != "" {
 				finding := Finding{
 					Severity:    group.severity,

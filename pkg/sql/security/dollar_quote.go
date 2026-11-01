@@ -23,7 +23,7 @@ import "strings"
 // is hidden. ScanSQL has no dialect: MySQL can use $x$ as an identifier, so a
 // MySQL-only payload of that shape is still stripped.
 func stripDollarQuotedStrings(sql string) string {
-	if strings.IndexByte(sql, '$') < 0 {
+	if strings.IndexByte(sql, '$') < 0 || !hasDollarOpener(sql) {
 		return sql
 	}
 	// Cross product of escapes, nesting, bracket identifiers, hash comments and
@@ -70,4 +70,21 @@ func resetDollarStates(states *[32]sqlLexState) {
 	for j := range states {
 		states[j] = sqlLexState{eOnly: j&16 != 0}
 	}
+}
+
+// hasDollarOpener reports whether any '$' could open a dollar quote (the same
+// opener condition the lexer loop below uses); when none can, the 32-state
+// lexer can never strip anything, so it is skipped.
+func hasDollarOpener(sql string) bool {
+	for i := strings.IndexByte(sql, '$'); i >= 0; {
+		if (i == 0 || !identifierByte(sql[i-1])) && dollarTagEnd(sql, i) != 0 {
+			return true
+		}
+		j := strings.IndexByte(sql[i+1:], '$')
+		if j < 0 {
+			return false
+		}
+		i += 1 + j
+	}
+	return false
 }

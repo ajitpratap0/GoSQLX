@@ -286,3 +286,9 @@ func versionIsNull() bool {
 	defer freeCString(p)
 	return p == nil
 }
+
+// allocAndFreeCString allocates a C string holding s and releases it through
+// the exported gosqlx_free, exercising the free path in isolation.
+func allocAndFreeCString(s string) {
+	gosqlx_free(C.CString(s))
+}

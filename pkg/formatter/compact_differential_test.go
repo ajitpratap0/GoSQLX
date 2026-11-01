@@ -96,7 +96,10 @@ func TestCompactFastDifferential(t *testing.T) {
 								slow := formatStatementSlow(statement, slowOpts)
 								comparisons++
 								if opts.Dialect == "" && opts.KeywordCase != ast.KeywordLower {
-									fastEligible++
+									switch statement.(type) {
+									case *ast.SelectStatement, *ast.InsertStatement, *ast.UpdateStatement, *ast.DeleteStatement:
+										fastEligible++
+									}
 								}
 								if fast != slow {
 									mismatches++

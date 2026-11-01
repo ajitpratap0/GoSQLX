@@ -34,6 +34,7 @@ func TestCompactFastOptions(t *testing.T) {
 		{"tabs", func(o *ast.FormatOptions) { o.IndentStyle = ast.IndentTabs; o.IndentWidth = 2 }},
 		{"semicolon", func(o *ast.FormatOptions) { o.AddSemicolon = true }},
 		{"readable", func(o *ast.FormatOptions) { *o = ast.ReadableStyle() }},
+		{"newline_per_clause", func(o *ast.FormatOptions) { o.NewlinePerClause = true }},
 		{"line_width", func(o *ast.FormatOptions) { o.LineWidth = 80 }},
 		{"postgresql", func(o *ast.FormatOptions) { o.Dialect = "postgresql" }},
 		{"mysql", func(o *ast.FormatOptions) { o.Dialect = "mysql" }},

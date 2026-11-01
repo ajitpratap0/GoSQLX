@@ -7,11 +7,48 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Benchmark and perf-gate infrastructure (performance overhaul, wave 0)**:
+  pull requests are now judged by interleaved A/B measurements instead of
+  absolute numbers. No library behaviour changes apart from #901 (see Fixed). The pieces, by PR:
+  - Corpus and behaviour guards: the benchmark corpus manifest and
+    `internal/benchcorpus` loader (#895); behaviour goldens (token, parse,
+    format, lint, scan and transpile hashes) over every corpus and dialect
+    (#915); wall-clock test assertions replaced with ratio and count checks
+    (#899); ClickHouse/Snowflake lambda bodies and `U&` in dialects without
+    `&` fixed so the goldens could be pinned (#901).
+  - Benchmark matrix: tokenizer and parse stages (#913), server shapes with
+    `AllocsPerRun` budgets, a stack-depth test and a frame-size script (#909),
+    high-level, render and transform (#911), transpile with a prefilter
+    differential test (#912), interop benchmarks and a binary-size budget
+    (#908), and lint, security and LSP (#910).
+  - Competitor harness: new pure-Go peers (dolthub/vitess, rqlite/sql,
+    AfterShip/clickhouse-sql-parser, auxten/postgresql-parser), ORM-style
+    queries, lexer, render, normalize, fresh-goroutine, parallel and
+    per-dialect cells with checked-in common-accept sets, and a schema v2
+    results file that keeps every v1 field (#914).
+  - Gate: an interleaved A/B workflow in shadow mode (`GOGC=off`, `-cpu 1`,
+    ABBA rounds, benchstat at alpha 0.01, A/A noise control; `allocs/op`, `B/op`
+    and instruction-count gates) with `task bench:ab` and `task bench:gate`
+    (#916).
+  - Baselines and docs (#917): per-architecture
+    `benchmarks/baselines/{amd64,arm64}.json` holding trend-only ns/op and gated
+    B/op and allocs/op, checked or regenerated with `task bench:baseline` and
+    `task bench:baseline:update` (local-only until W0-13 wires the check into
+    `perf-gate.yml`; CI currently gates allocs/op and B/op relatively via the
+    A/B gate); new `task bench:matrix` and `task pgo:refresh`;
+    `docs/PERFORMANCE_METHODOLOGY.md` (method, how to run an A/B, how the gate
+    decides, claims policy). `performance_baselines.json` and
+    `TestPerformanceRegression` are now documented as a smoke test only, and
+    its never-enforced `TokenizationThroughput` and `EndToEndSustained` entries
+    are removed.
+
 ### Performance
 - **Tokenizer**: `time.Now`/`time.Since` are now read only when metrics are enabled (previously twice per tokenization even when disabled). If metrics are toggled on mid-call the call is not recorded. No API or token-output change [W1-02].
 - **Tokenizer**: keyword and compound-keyword-start lookup now uses a single fused-hash open-addressed table (one FNV-1a hash computed while upper-casing, one probe) instead of two Go map lookups per identifier. The table is filled in a fixed order (hot keywords first, then sorted) so its probe layout is deterministic across processes. No behaviour change; token output is identical [W2-01].
 - **Pools**: the tokenizer, parser and AST pools now count Get/Put through precreated, cache-line padded atomic counters (`internal/poolstats`) instead of an RWMutex-guarded map keyed by pool name, removing a lock, map lookup and string hash from every pool operation. `metrics.GetPoolStats` and `metrics.ResetPoolStats` behave exactly as before; named custom pools keep the map path. [W1-01]
 - **Parser**: token preprocessing now takes a type-gated fast path. Only identifier, keyword, aggregate and compound tokens take the normalisation path; every other token is appended with a single copy. Output is identical (guarded by an old-versus-new differential test); no API or behaviour change.
+- **Fingerprint, formatter, transform**: `fingerprint.Normalize`/`Fingerprint`, `Formatter.Format` and `transform.ParseSQL`/`ParseSQLWithDialect` tokenize through the internal pooled token scratch instead of the public `TokenizeString`. `Normalize` allocates 42-70% fewer bytes/op and `transform.ParseSQL` 49-78% fewer, with 2-3 fewer allocs/op and no output change. [W5-01]
 
 ### Fixed
 - **AST**: `AlterTableStatement.SQL()` now separates multiple ALTER TABLE actions with commas, matching the compact formatter and preserving action boundaries when re-parsed.

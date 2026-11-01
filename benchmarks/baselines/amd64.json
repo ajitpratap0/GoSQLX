@@ -1,0 +1,6 @@
+{
+  "schema": 1,
+  "arch": "amd64",
+  "comment": "Empty on purpose: recorded on amd64 hardware at checkpoint C0 (W0-13) with task bench:baseline:update. The check refuses an empty baseline.",
+  "benchmarks": {}
+}

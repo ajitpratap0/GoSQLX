@@ -191,8 +191,7 @@ go test -bench=. -benchmem -cpuprofile=cpu.prof ./pkg/...    # With profiling
 ```
 
 ### Performance Regression Tests
-- Baselines defined in `performance_baselines.json` at project root
-- CI environment variability may require baseline adjustments (tolerance %)
+- `TestPerformanceRegression` is a smoke test only (loose ceilings in `performance_baselines.json`); the real gate is `task bench:gate` plus `task bench:baseline` (`benchmarks/baselines/<arch>.json`), see `docs/PERFORMANCE_METHODOLOGY.md`
 - Run locally: `go test -run TestPerformanceRegression ./pkg/sql/parser/`
 - Skip with race detector (adds 3-5x overhead): automatically skipped
 

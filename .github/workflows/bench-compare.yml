@@ -8,9 +8,15 @@ name: Competitor Benchmarks
 #   one-pass benchmark smoke run.
 # - workflow_dispatch and release tags: a full -count run that publishes the
 #   results JSON, the raw benchmark output and a benchstat summary as an
-#   artifact. Shared runners are noisy; the JSON records the CPU so a run is
-#   never presented without its hardware. Commit the artifact to
+#   artifact. Shared runners are noisy and differ in CPU model from job to
+#   job; the JSON and env.txt record the CPU so a run is never presented
+#   without its hardware, and the job summary compares GoSQLX with each peer
+#   by in-job time ratios rather than absolute ns/op. Commit the artifact to
 #   benchmarks/compare/results/ (and website/src/data/) in a PR to publish it.
+#
+# Both jobs build with PERF_GO_VERSION, the release perf-gate.yml also pins
+# (scripts/perf/gate/config_test.go keeps them equal); GOGC=off runs set
+# GOMEMLIMIT (cmd/publish -gomemlimit, default as in scripts/perf/lib.sh).
 
 on:
   pull_request:
@@ -58,6 +64,8 @@ defaults:
 env:
   CGO_ENABLED: '1'
   GOTOOLCHAIN: local
+  # One Go release for every perf measurement; perf-gate.yml pins the same.
+  PERF_GO_VERSION: '1.26.9'
 
 jobs:
   test:
@@ -70,8 +78,8 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
         with:
-          go-version-file: benchmarks/compare/go.mod
-          check-latest: true
+          go-version: ${{ env.PERF_GO_VERSION }}
+          check-latest: false
           cache-dependency-path: benchmarks/compare/go.sum
 
       - name: Verify go.mod is tidy
@@ -102,8 +110,8 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
         with:
-          go-version-file: benchmarks/compare/go.mod
-          check-latest: true
+          go-version: ${{ env.PERF_GO_VERSION }}
+          check-latest: false
           cache-dependency-path: benchmarks/compare/go.sum
 
       - name: Run harness
@@ -118,27 +126,43 @@ jobs:
             *[!0-9a-z.]*|'') echo "benchtime must look like 200ms or 100x, got '$BENCHTIME'" >&2; exit 1 ;;
           esac
           mkdir -p "$RUNNER_TEMP/bench"
+          {
+            echo "cpu model:   $(. ../../scripts/perf/lib.sh && perf_cpu_model)"
+            echo "go:          $(go version)"
+            echo "kernel:      $(uname -srm)"
+            echo "commit:      $(git rev-parse HEAD)"
+            echo
+            lscpu
+          } > "$RUNNER_TEMP/bench/env.txt"
           # The matrix: -cpu 4 and -cpu 1, each with GOGC at its default and
-          # off, so mutator CPU can be told apart from GC. The first entry
-          # (cpu4, GOGC default) feeds the schema v1 fields of the JSON.
+          # off (with GOMEMLIMIT), so mutator CPU can be told apart from GC.
+          # The first entry (cpu4, GOGC default) feeds the schema v1 fields.
           go run ./cmd/publish -count="$COUNT" -benchtime="$BENCHTIME" \
             -cpus=4,1 -gogc=default,off \
             -out "$RUNNER_TEMP/bench/latest.json" \
-            -raw "$RUNNER_TEMP/bench/latest.txt"
+            -raw "$RUNNER_TEMP/bench/latest.txt" \
+            -ratios "$RUNNER_TEMP/bench/ratios.md"
 
       - name: benchstat summary
         run: |
           {
             echo '## Competitor benchmarks'
+            echo
+            cat "$RUNNER_TEMP/bench/ratios.md"
+            echo
+            echo '### Absolute numbers (this job and this CPU only)'
             for f in "$RUNNER_TEMP"/bench/latest*.txt; do
               name=$(basename "$f" .txt)
               go run golang.org/x/perf/cmd/benchstat@v0.0.0-20260908200009-22c9c6c9d4da \
                 "$f" > "$RUNNER_TEMP/bench/benchstat-$name.txt"
               echo
-              echo "### $name"
+              echo "<details><summary>$name</summary>"
+              echo
               echo '```'
               cat "$RUNNER_TEMP/bench/benchstat-$name.txt"
               echo '```'
+              echo
+              echo '</details>'
             done
           } >> "$GITHUB_STEP_SUMMARY"
 

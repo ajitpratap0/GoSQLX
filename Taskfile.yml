@@ -185,7 +185,7 @@ tasks:
       - go run golang.org/x/perf/cmd/benchstat@v0.0.0-20260908200009-22c9c6c9d4da results/latest.txt
 
   bench:ab:
-    desc: "Interleaved A/B of the working tree against BASE (GOGC=off, -cpu 1, ABBA, benchstat alpha 0.01). Vars: BASE (default origin/main), ROUNDS (10), BENCHTIME (200ms), BENCH='./pkg/gosqlx=^BenchmarkParseE2E$' (default: the gated suite)"
+    desc: "Interleaved A/B of the working tree against BASE (GOGC=off with GOMEMLIMIT, -cpu 1, ABBA, benchstat alpha 0.01). Vars: BASE (default origin/main), ROUNDS (10), BENCHTIME (200ms), BENCH='./pkg/gosqlx=^BenchmarkParseE2E$' (default: the gated suite)"
     cmds:
       - scripts/perf/ab.sh -r {{.ROUNDS}} -t {{.BENCHTIME}} {{if .BENCH}}-b '{{.BENCH}}'{{end}} {{.BASE}}
     vars:

@@ -8,7 +8,9 @@
 #     revisions with the same toolchain, in the same job.
 #   - Primary metric: GOGC=off GOMAXPROCS=1 (-test.cpu 1), pinned to one CPU
 #     with taskset when it exists. GC-free mutator time is low-variance and
-#     ranks queries like the -cpu 4 headline does.
+#     ranks queries like the -cpu 4 headline does. GOMEMLIMIT (default 64MiB,
+#     see scripts/perf/lib.sh) bounds the heap so the runs reuse pages instead
+#     of paying first-touch page faults.
 #   - Arms run interleaved, one -test.count 1 pass per arm per round, in
 #     ABBA order (two arms) or rotating through every permutation (three).
 #   - Optional A/A control (-a): a second, interleaved run of the base binary.
@@ -17,6 +19,8 @@
 #     else cachegrind, else macOS `/usr/bin/time -l`, at two iteration counts;
 #     the difference divided by the extra iterations is instructions/op.
 #   - allocs/op and B/op come from the primary runs (GOGC=off: no pool drains).
+#   - env.txt and the report name the CPU model: hosted runners differ from
+#     job to job, so only the in-job base/head ratios are reported.
 #
 # Usage: scripts/perf/ab.sh [options] BASE [HEAD]
 #   BASE        git revision of the baseline
@@ -39,6 +43,7 @@
 #   PIN_CPU     CPU for taskset (default: the last online CPU; "none" disables pinning)
 #   BENCHSTAT   benchstat command (default: benchstat on PATH, else the pinned version via go run)
 #   IR_SAMPLES  samples per perfdriver case, median taken (default 3, every backend)
+#   PERF_GOMEMLIMIT  GOMEMLIMIT of the GOGC=off runs (default 64MiB; "off" unsets it)
 #
 # Output: DIR/report.md (also printed), DIR/status (pass, regression,
 # inconclusive), DIR/raw/*.txt (raw benchmark output), DIR/env.txt.
@@ -47,6 +52,12 @@
 set -euo pipefail
 
 BENCHSTAT_VERSION=v0.0.0-20260908200009-22c9c6c9d4da
+
+# shellcheck source=scripts/perf/lib.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib.sh"
+gcoff_env=()
+while IFS= read -r kv; do gcoff_env+=("$kv"); done < <(perf_gcoff_env)
+memlimit=$(perf_gomemlimit)
 
 usage() { sed -n '2,/^set -euo/p' "$0" | sed -e '$d' -e 's/^# \{0,1\}//'; }
 die() { echo "ab.sh: $*" >&2; exit "${2:-3}"; }
@@ -190,9 +201,11 @@ fi
 	echo "date:        $(date -u +%Y-%m-%dT%H:%M:%SZ)"
 	echo "base:        $base_sha"
 	echo "head:        ${head_sha:-working tree of $(git -C "$root" rev-parse HEAD)}"
+	echo "cpu model:   $(perf_cpu_model)"
 	echo "go:          $(go version)"
 	echo "kernel:      $(uname -srm)"
 	echo "pinning:     $pin_desc"
+	echo "gcoff env:   ${gcoff_env[*]}"
 	echo "clocksource: $(cat /sys/devices/system/clocksource/clocksource0/current_clocksource 2>/dev/null || echo n/a)"
 	echo "load:        $(uptime | sed 's/.*load average[s]*: //')"
 	echo "instr count: ${ir_backend:-none}${ir_note:+ ($ir_note)}"
@@ -215,7 +228,7 @@ run_arm() { # arm config outfile
 	case $arm in base | base2) bin=$out/bin/base tree=$base_tree ;; head) bin=$out/bin/head tree=$head_tree ;; esac
 	for i in "${!pkgs[@]}"; do
 		local pkg=${pkgs[$i]} re=${regexes[$i]} envs
-		if [ "$config" = gcoff ]; then envs=(GOGC=off GOMAXPROCS=1); else envs=(-u GOGC GOMAXPROCS=1); fi
+		if [ "$config" = gcoff ]; then envs=("${gcoff_env[@]}" GOMAXPROCS=1); else envs=(-u GOGC -u GOMEMLIMIT GOMAXPROCS=1); fi
 		(cd "$tree/$pkg" && env "${envs[@]}" ${pin[@]+"${pin[@]}"} "$bin/$(slug "$pkg").test" \
 			-test.run '^$' -test.bench "$re" -test.benchmem -test.count 1 \
 			-test.benchtime "$benchtime" -test.cpu 1) >"$out/run.log" 2>&1 ||
@@ -258,7 +271,7 @@ count_instructions() { # arm case n -> prints the count
 	case $arm in base) tree=$base_tree ;; head) tree=$head_tree ;; esac
 	# The environment is set outside the counter so that the counted
 	# process is perfdriver itself, not env (valgrind does not follow exec).
-	local envs=(GOGC=off GOMAXPROCS=1 GODEBUG=asyncpreemptoff=1)
+	local envs=("${gcoff_env[@]}" GOMAXPROCS=1 GODEBUG=asyncpreemptoff=1)
 	local drv=("$out/bin/$arm/perfdriver" -case "$c" -n "$n")
 	case $ir_backend in
 		perf)
@@ -333,7 +346,7 @@ judge() { # extra gate flags...
 	local args=(-base "$out/raw/gcoff-base.txt" -head "$out/raw/gcoff-head.txt"
 		-md "$out/report.md" -status "$out/status" -env "$out/env.txt" -benchstat "$out/benchstat.txt"
 		-base-ref "$base_label" -head-ref "$head_label"
-		-settings "$rounds interleaved rounds, benchtime $benchtime, -cpu 1, $pin_desc.")
+		-settings "$rounds interleaved rounds, benchtime $benchtime, -cpu 1, GOMEMLIMIT $memlimit, $pin_desc.")
 	[ $aa -eq 1 ] && args+=(-aa "$out/raw/gcoff-base2.txt")
 	[ $sec -eq 1 ] && args+=(-sec-base "$out/raw/gcon-base.txt" -sec-head "$out/raw/gcon-head.txt")
 	if [ $ir -eq 1 ]; then

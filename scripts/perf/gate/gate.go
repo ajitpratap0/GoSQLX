@@ -421,6 +421,8 @@ func Markdown(res Result, cfg Config, meta Meta) string {
 		}
 		b.WriteString("\n\n")
 	}
+	fmt.Fprintf(&b, "Runner CPU: `%s`. Base and head ran interleaved in this job, so the tables show their ratios only; "+
+		"absolute timings (raw files in the artifact) hold for this CPU and this job alone and are never compared across jobs.\n\n", runnerCPU(meta.Env))
 	if len(res.Reasons) > 0 {
 		for _, r := range res.Reasons {
 			fmt.Fprintf(&b, "- %s\n", r)
@@ -510,6 +512,22 @@ func Markdown(res Result, cfg Config, meta Meta) string {
 		fmt.Fprintf(&b, "<details><summary>benchstat (primary metric)</summary>\n\n```\n%s\n```\n\n</details>\n", strings.TrimSpace(meta.Benchstat))
 	}
 	return b.String()
+}
+
+// runnerCPU extracts the CPU model from the environment block: the
+// "cpu model:" line scripts/perf/lib.sh writes, else lscpu's "Model name:",
+// else "unknown".
+func runnerCPU(env string) string {
+	for _, prefix := range []string{"cpu model:", "Model name:"} {
+		for _, line := range strings.Split(env, "\n") {
+			if v, ok := strings.CutPrefix(strings.TrimSpace(line), prefix); ok {
+				if v = strings.TrimSpace(v); v != "" {
+					return v
+				}
+			}
+		}
+	}
+	return "unknown"
 }
 
 func codeList(names []string) string {

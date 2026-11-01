@@ -10,9 +10,20 @@ name: Perf Gate
 #   scripts/perf/gate judges the result; the report goes to the job summary,
 #   a sticky comment (same-repo PRs only) and an artifact.
 # - Nightly on main: the same gate between main now and main 24 hours ago.
-# - workflow_dispatch: mode "gate" with explicit base/head revisions, or mode
-#   "profile": pprof (-cpu 1, GOGC=off, -cpu 4) of the gap queries and
-#   perf stat counters for one revision (input to W0-14).
+# - workflow_dispatch: mode "gate" with explicit base/head revisions; mode
+#   "matrix": the same interleaved A/B over the full benchmark matrix
+#   (scripts/perf/matrix-suite.sh, about 900 benchmarks; default 5 rounds of
+#   100ms, roughly an hour; base = head gives an A/A of the whole matrix); or
+#   mode "profile": pprof (-cpu 1, GOGC=off, -cpu 4) of the gap queries, perf
+#   stat counters where the PMU allows, and cachegrind cache simulation (L1i
+#   included) for one revision (input to W0-14).
+#
+# Methodology (W0-15): one pinned Go release (PERF_GO_VERSION, shared with
+# bench-compare.yml; GOTOOLCHAIN=local stops go.mod from switching it); every
+# GOGC=off run also sets GOMEMLIMIT (scripts/perf/lib.sh, input "gomemlimit");
+# every artifact and report names the runner CPU model, and reports compare
+# base and head of the same job by ratio only, because hosted runners differ
+# in CPU model from job to job.
 #
 # SHADOW MODE: the gate reports and never fails a PR. After the shadow period,
 # set PERF_GATE_ENFORCE to 'true' below; a regression then fails the job
@@ -34,9 +45,9 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: 'gate: A/B of base vs head; profile: CPU profiles and perf counters of head'
+        description: 'gate: A/B of base vs head over the gated suite; matrix: the same A/B over the full benchmark matrix; profile: CPU profiles, perf counters and cachegrind of head'
         type: choice
-        options: [gate, profile]
+        options: [gate, matrix, profile]
         default: gate
       base:
         description: 'gate mode: base revision (default origin/main)'
@@ -47,11 +58,15 @@ on:
         required: false
         default: ''
       rounds:
-        description: 'gate mode: interleaved rounds'
+        description: 'gate/matrix mode: interleaved rounds (default 10; matrix 5)'
         required: false
-        default: '10'
+        default: ''
       benchtime:
-        description: 'gate mode: -test.benchtime per run; profile mode: per profile'
+        description: 'gate/matrix mode: -test.benchtime per run (default 200ms; matrix 100ms); profile mode: per profile (default 5s)'
+        required: false
+        default: ''
+      gomemlimit:
+        description: 'GOMEMLIMIT of the GOGC=off runs (default: scripts/perf/lib.sh; "off" leaves it unset)'
         required: false
         default: ''
 
@@ -59,19 +74,24 @@ permissions:
   contents: read
 
 concurrency:
-  group: perf-gate-${{ github.event.pull_request.number || github.ref }}-${{ inputs.mode || 'gate' }}
+  group: perf-gate-${{ github.event.pull_request.number || github.ref }}-${{ inputs.mode || 'gate' }}-${{ inputs.gomemlimit }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
   GOTOOLCHAIN: local
+  # The one Go release every perf measurement uses; bench-compare.yml pins
+  # the same (scripts/perf/gate/config_test.go keeps them equal). 1.26.9 is
+  # the toolchain of the recorded C0 baselines.
+  PERF_GO_VERSION: '1.26.9'
+  PERF_GOMEMLIMIT: ${{ inputs.gomemlimit }}
   PERF_GATE_ENFORCE: 'false'
 
 jobs:
   gate:
     name: A/B perf gate (shadow)
-    if: github.event_name != 'workflow_dispatch' || inputs.mode == 'gate'
+    if: github.event_name != 'workflow_dispatch' || inputs.mode != 'profile'
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: ${{ inputs.mode == 'matrix' && 240 || 30 }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
@@ -82,8 +102,8 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
         with:
-          go-version-file: go.mod
-          check-latest: true
+          go-version: ${{ env.PERF_GO_VERSION }}
+          check-latest: false
           cache-dependency-path: go.sum
 
       - name: Install instruction counters (best effort)
@@ -121,20 +141,30 @@ jobs:
 
       - name: Run perf gate
         id: gate
-        continue-on-error: ${{ env.PERF_GATE_ENFORCE != 'true' }}
-        timeout-minutes: 24
+        continue-on-error: ${{ env.PERF_GATE_ENFORCE != 'true' || inputs.mode == 'matrix' }}
+        timeout-minutes: ${{ inputs.mode == 'matrix' && 230 || 24 }}
         env:
           BASE: ${{ steps.refs.outputs.base }}
-          ROUNDS: ${{ inputs.rounds || '10' }}
-          BENCHTIME: ${{ inputs.benchtime || '200ms' }}
+          MODE: ${{ inputs.mode || 'gate' }}
+          ROUNDS: ${{ inputs.rounds }}
+          BENCHTIME: ${{ inputs.benchtime }}
           ACCEPTED: ${{ contains(github.event.pull_request.labels.*.name, 'perf-regression-accepted') }}
         run: |
           set -o pipefail
-          flags=(-G -r "$ROUNDS" -t "$BENCHTIME" -o "$RUNNER_TEMP/perf-gate")
-          [ "$PERF_GATE_ENFORCE" = true ] && flags+=(-e)
-          [ "$ACCEPTED" = true ] && flags+=(-A)
           mkdir -p "$RUNNER_TEMP/perf-gate"
-          scripts/perf/ab.sh "${flags[@]}" "$BASE" 2>&1 | tee "$RUNNER_TEMP/perf-gate.log"
+          if [ "$MODE" = matrix ]; then
+            # The full matrix: base vs head interleaved like the gate, without
+            # the A/A arm and instruction counts (too slow at this size). It
+            # reports and never fails.
+            scripts/perf/matrix-suite.sh > "$RUNNER_TEMP/matrix-suite.txt"
+            cp "$RUNNER_TEMP/matrix-suite.txt" "$RUNNER_TEMP/perf-gate/"
+            flags=(-r "${ROUNDS:-5}" -t "${BENCHTIME:-100ms}" -s "$RUNNER_TEMP/matrix-suite.txt")
+          else
+            flags=(-G -r "${ROUNDS:-10}" -t "${BENCHTIME:-200ms}")
+            [ "$PERF_GATE_ENFORCE" = true ] && flags+=(-e)
+            [ "$ACCEPTED" = true ] && flags+=(-A)
+          fi
+          scripts/perf/ab.sh "${flags[@]}" -o "$RUNNER_TEMP/perf-gate" "$BASE" 2>&1 | tee "$RUNNER_TEMP/perf-gate.log"
 
       - name: Job summary
         if: always()
@@ -147,6 +177,8 @@ jobs:
             {
               echo '<!-- perf-gate-report -->'
               echo '## Perf gate: ERROR (shadow mode: report only)'
+              echo
+              echo "Runner CPU: \`$(. scripts/perf/lib.sh && perf_cpu_model)\`."
               echo
               echo "The gate did not produce a report; see the \"Run perf gate\" step log of ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}. Last lines:"
               echo
@@ -226,14 +258,17 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
         with:
-          go-version-file: go.mod
-          check-latest: true
+          go-version: ${{ env.PERF_GO_VERSION }}
+          check-latest: false
           cache-dependency-path: go.sum
 
-      - name: Install perf (best effort)
+      - name: Install perf and valgrind (best effort)
         continue-on-error: true
         run: |
           sudo apt-get update -qq
+          # valgrind first: cachegrind's cache simulation is the only L1i data
+          # on hosted runners, whose virtualised PMU usually lacks perf events.
+          sudo apt-get install -y -qq --no-install-recommends valgrind >/dev/null
           sudo apt-get install -y -qq --no-install-recommends linux-tools-common "linux-tools-$(uname -r)" >/dev/null
           sudo sysctl -w kernel.perf_event_paranoid=-1
 

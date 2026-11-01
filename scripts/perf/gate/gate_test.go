@@ -481,3 +481,27 @@ func TestUnequalSampleCountsSkipTheGeomeanP(t *testing.T) {
 		t.Fatalf("verdict = %s (%v), want pass", res.Verdict, res.Reasons)
 	}
 }
+
+// Hosted runners hand out different CPU models from job to job (C0 saw an
+// EPYC 7763, 9V74 and 9V45 in one checkpoint), so the report names the CPU
+// it ran on and says that only the in-job ratios are comparable.
+func TestReportNamesTheRunnerCPU(t *testing.T) {
+	s := suite()
+	res := evaluate(t, s, s, s, DefaultConfig())
+	for _, tc := range []struct{ name, env, want string }{
+		{"cpu model line", "date: x\ncpu model:   AMD EPYC 7763 64-Core Processor (x86_64)\ngo: go1.26.9\n", "AMD EPYC 7763 64-Core Processor (x86_64)"},
+		{"lscpu only", "go: go1.26.9\n\nArchitecture: x86_64\nModel name:                           AMD EPYC 9V45 96-Core Processor\n", "AMD EPYC 9V45 96-Core Processor"},
+		{"no environment", "", "unknown"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			md := Markdown(res, DefaultConfig(), Meta{BaseRef: "aaaa", HeadRef: "bbbb", Env: tc.env})
+			want := "Runner CPU: `" + tc.want + "`"
+			if !strings.Contains(md, want) {
+				t.Fatalf("report does not name the runner CPU, want %q in:\n%s", want, md)
+			}
+			if !strings.Contains(md, "ratios") {
+				t.Errorf("report does not say that only in-job ratios are compared:\n%s", md)
+			}
+		})
+	}
+}

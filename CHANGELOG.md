@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **Perf measurement methodology** (W0-15; benchmark tooling only, no library
+  behaviour change):
+  - Every `GOGC=off` measurement now also sets `GOMEMLIMIT` (default `64MiB`;
+    override with `PERF_GOMEMLIMIT` or the `gomemlimit` dispatch input, `off`
+    unsets it): `scripts/perf/ab.sh` (so `task bench:ab` and `task bench:gate`),
+    `scripts/perf/profile.sh` and the competitor harness's `cmd/publish`
+    (`-gomemlimit`, recorded as `configs[].gomemlimit` in the results JSON).
+    Without a limit a GC-off heap only grows, so allocations land on fresh pages
+    whose first-touch faults were timed and profiled; the first benchmark of
+    each test binary absorbed most of them. GOGC=off timings are therefore not
+    comparable with runs made before this change; base and head of one run
+    always use the same setting.
+  - `perf-gate.yml` and `bench-compare.yml` build with one pinned Go release,
+    `PERF_GO_VERSION` 1.26.9 (the toolchain of the recorded baselines); the
+    gate used to take 1.26.1 from `go.mod`.
+  - `perf-gate.yml` profile mode adds cachegrind cache simulation (32 KiB
+    8-way L1i, the Zen 3/4/5 geometry) of the gap queries: instructions, L1i
+    and L1d misses per operation and the functions with the most L1i misses.
+  - New `matrix` dispatch mode in `perf-gate.yml`: the interleaved A/B over the
+    full benchmark matrix (`scripts/perf/matrix-suite.sh`), report only.
+  - Every perf artifact and report names the runner CPU model, and the reports
+    compare by in-job ratio only: the gate report says so, and the competitor
+    harness summary leads with GoSQLX/peer time ratios (`cmd/publish -ratios`)
+    instead of absolute ns/op.
+  - The LSP benchmark server (`setupTestServer`) discards its output, so
+    benchmarks that publish diagnostics no longer time a growing buffer.
+
 ### Fixed
 - **AST**: `AlterTableStatement.SQL()` now separates multiple ALTER TABLE actions with commas, matching the compact formatter and preserving action boundaries when re-parsed.
 - **Playground**: the GoSQLX WebAssembly module now runs in a Web Worker, so

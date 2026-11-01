@@ -29,6 +29,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -45,6 +46,13 @@ import (
 )
 
 const schemaVersion = 2
+
+// defaultGOMEMLIMIT is the GOMEMLIMIT of the GOGC=off configurations. Without
+// a limit a GOGC=off heap only grows, so every allocation lands on a fresh
+// page and its first-touch fault is timed with the parser; the limit lets the
+// collector run rarely and reuse pages. scripts/perf/lib.sh uses the same
+// default (a root-module test keeps them equal) and explains the value.
+const defaultGOMEMLIMIT = "64MiB"
 
 // gosqlxModule is the module path of the library under test; every variant
 // of it (gosqlx, gosqlx_norelease) reports the commit being measured.
@@ -82,11 +90,14 @@ type Report struct {
 
 // ConfigV is one point of the run matrix.
 type ConfigV struct {
-	ID        string `json:"id"`
-	CPU       int    `json:"cpu"`  // -cpu value; 0 means go test's default (GOMAXPROCS)
-	GOGC      string `json:"gogc"` // "default" or "off"
-	Command   string `json:"command"`
-	RawOutput string `json:"rawOutput"`
+	ID   string `json:"id"`
+	CPU  int    `json:"cpu"`  // -cpu value; 0 means go test's default (GOMAXPROCS)
+	GOGC string `json:"gogc"` // "default" or "off"
+	// GOMEMLIMIT is the memory limit of a GOGC=off configuration (empty for
+	// default GC, and when -gomemlimit=off).
+	GOMEMLIMIT string `json:"gomemlimit,omitempty"`
+	Command    string `json:"command"`
+	RawOutput  string `json:"rawOutput"`
 }
 
 // CellV is the median of all samples of one benchmark cell under one
@@ -195,6 +206,8 @@ func run() error {
 	families := flag.String("families", "all", "comma-separated benchmark families to run ("+strings.Join(allFamilies, ",")+"), or all; the v1 fields need Parse, so Parse alone gives a cheap v1-only publish")
 	out := flag.String("out", filepath.Join("results", "latest.json"), "results JSON path")
 	raw := flag.String("raw", filepath.Join("results", "latest.txt"), "raw go test -bench output path of the first configuration (benchstat input)")
+	memlimit := flag.String("gomemlimit", defaultGOMEMLIMIT, "GOMEMLIMIT of the GOGC=off configurations, or off to leave it unset")
+	ratios := flag.String("ratios", "", "also write a Markdown table of GoSQLX/peer time ratios per cell and configuration here")
 	flag.Parse()
 
 	if *count < 1 {
@@ -240,10 +253,13 @@ func run() error {
 		rawPath := rawPathFor(*raw, i, c)
 		args := benchArgs(benchRe, *count, c.CPU, *benchtime)
 
-		fmt.Fprintf(os.Stderr, "running [%s]: go %s (GOGC=%s)\n", c.ID, strings.Join(args, " "), c.GOGC)
+		if c.GOGC == "off" && *memlimit != "off" {
+			c.GOMEMLIMIT = *memlimit
+		}
+		fmt.Fprintf(os.Stderr, "running [%s]: %s\n", c.ID, shellCommand(c.GOGC, *memlimit, args))
 		var buf bytes.Buffer
 		cmd := exec.Command("go", args...)
-		cmd.Env = envForGOGC(os.Environ(), c.GOGC)
+		cmd.Env = envForGOGC(os.Environ(), c.GOGC, *memlimit)
 		cmd.Stdout = io.MultiWriter(&buf, os.Stderr)
 		cmd.Stderr = os.Stderr
 		if err := cmd.Run(); err != nil {
@@ -253,7 +269,7 @@ func run() error {
 		if err != nil {
 			return fmt.Errorf("%s: %w", c.ID, err)
 		}
-		c.Command = shellCommand(c.GOGC, args)
+		c.Command = shellCommand(c.GOGC, *memlimit, args)
 		c.RawOutput = filepath.ToSlash(rawPath)
 		report.Configs = append(report.Configs, c)
 		report.Cells = append(report.Cells, cellResults(data, c.ID)...)
@@ -262,7 +278,7 @@ func run() error {
 			primary = data
 			report.Hardware = Hardware{CPU: cpu, GOOS: runtime.GOOS, GOARCH: runtime.GOARCH, NumCPU: runtime.NumCPU()}
 			report.Method = Method{
-				Command:   shellCommand(c.GOGC, benchArgs(v1BenchRegex, *count, c.CPU, *benchtime)),
+				Command:   shellCommand(c.GOGC, *memlimit, benchArgs(v1BenchRegex, *count, c.CPU, *benchtime)),
 				Count:     *count,
 				Statistic: "median",
 				RawOutput: c.RawOutput,
@@ -318,6 +334,11 @@ func run() error {
 	if err := writeFile(*out, append(encoded, '\n')); err != nil {
 		return err
 	}
+	if *ratios != "" {
+		if err := writeFile(*ratios, []byte(ratioMarkdown(report.Cells, report.Configs, report.Hardware.CPU))); err != nil {
+			return err
+		}
+	}
 	fmt.Fprintf(os.Stderr, "wrote %s and %d raw file(s)\n", *out, len(raws))
 	return nil
 }
@@ -365,11 +386,15 @@ func benchArgs(benchRe string, count, cpu int, benchtime string) []string {
 
 // shellCommand renders a copy-pasteable command line (to be run in
 // benchmarks/compare). Values with shell metacharacters are single-quoted,
-// and GOGC=off is spelled out only for the configuration that sets it.
-func shellCommand(gogc string, args []string) string {
-	parts := make([]string, 0, len(args)+2)
+// and GOGC=off (with its GOMEMLIMIT unless that is "off") is spelled out only
+// for the configuration that sets it.
+func shellCommand(gogc, memlimit string, args []string) string {
+	parts := make([]string, 0, len(args)+3)
 	if gogc == "off" {
 		parts = append(parts, "GOGC=off")
+		if memlimit != "off" {
+			parts = append(parts, "GOMEMLIMIT="+quoteArg(memlimit))
+		}
 	}
 	parts = append(parts, "go")
 	for _, a := range args {
@@ -446,19 +471,140 @@ func rawPathFor(raw string, i int, c ConfigV) string {
 	return strings.TrimSuffix(raw, ext) + "-" + c.ID + ext
 }
 
-// envForGOGC returns env with GOGC set for the configuration: removed for
-// "default", "off" otherwise.
-func envForGOGC(env []string, gogc string) []string {
-	out := make([]string, 0, len(env)+1)
+// envForGOGC returns env with GOGC and GOMEMLIMIT set for the configuration:
+// both removed for "default"; GOGC=off plus GOMEMLIMIT=memlimit (unless
+// memlimit is "off") for "off". Inherited values never leak through.
+func envForGOGC(env []string, gogc, memlimit string) []string {
+	out := make([]string, 0, len(env)+2)
 	for _, kv := range env {
-		if !strings.HasPrefix(kv, "GOGC=") {
+		if !strings.HasPrefix(kv, "GOGC=") && !strings.HasPrefix(kv, "GOMEMLIMIT=") {
 			out = append(out, kv)
 		}
 	}
 	if gogc == "off" {
 		out = append(out, "GOGC=off")
+		if memlimit != "off" {
+			out = append(out, "GOMEMLIMIT="+memlimit)
+		}
 	}
 	return out
+}
+
+// ratioMarkdown renders the in-job comparison for the job summary: for every
+// benchmark family, GoSQLX implementation (parser IDs starting with
+// "gosqlx") and peer, the geometric mean over the groups (queries or
+// dialects) both ran of GoSQLX ns/op divided by peer ns/op, one column per
+// configuration, plus the group count and the worst group of the primary
+// configuration. Absolute times are left out on purpose: hosted runners
+// differ in CPU model from job to job, so only same-job ratios carry over.
+func ratioMarkdown(cells []CellV, configs []ConfigV, cpu string) string {
+	type key struct{ cell, group, parser, config string }
+	ns := map[key]float64{}
+	type pair struct{ cell, gosqlx, peer string }
+	groups := map[pair]map[string]bool{}
+	byCell := map[string]map[string]bool{} // cell -> parser IDs
+	for _, c := range cells {
+		if c.NsPerOp <= 0 {
+			continue
+		}
+		ns[key{c.Cell, c.Group, c.Parser, c.Config}] = c.NsPerOp
+		if byCell[c.Cell] == nil {
+			byCell[c.Cell] = map[string]bool{}
+		}
+		byCell[c.Cell][c.Parser] = true
+	}
+	for _, c := range cells {
+		if !strings.HasPrefix(c.Parser, "gosqlx") {
+			continue
+		}
+		for peer := range byCell[c.Cell] {
+			if strings.HasPrefix(peer, "gosqlx") {
+				continue
+			}
+			p := pair{c.Cell, c.Parser, peer}
+			if groups[p] == nil {
+				groups[p] = map[string]bool{}
+			}
+			groups[p][c.Group] = true
+		}
+	}
+	pairs := make([]pair, 0, len(groups))
+	for p := range groups {
+		pairs = append(pairs, p)
+	}
+	family := func(c string) int {
+		if i := slices.Index(allFamilies, c); i >= 0 {
+			return i
+		}
+		return len(allFamilies)
+	}
+	sort.Slice(pairs, func(i, j int) bool {
+		a, b := pairs[i], pairs[j]
+		if fa, fb := family(a.cell), family(b.cell); fa != fb {
+			return fa < fb
+		}
+		if a.cell != b.cell {
+			return a.cell < b.cell
+		}
+		if a.gosqlx != b.gosqlx {
+			return a.gosqlx < b.gosqlx
+		}
+		return a.peer < b.peer
+	})
+
+	var b strings.Builder
+	b.WriteString("### Ratios: GoSQLX time / peer time (< 1 means GoSQLX is faster)\n\n")
+	fmt.Fprintf(&b, "Runner CPU: `%s`. Every cell ran in this job on this CPU, so the ratios compare across runs; "+
+		"the absolute ns/op in the JSON and raw files hold for this CPU and this job only. "+
+		"Each value is the geometric mean over the groups (queries or dialects) both sides ran.\n\n", cpu)
+	b.WriteString("| cell | GoSQLX | peer |")
+	for _, c := range configs {
+		fmt.Fprintf(&b, " %s |", c.ID)
+	}
+	b.WriteString(" groups | worst group |\n|---|---|---|")
+	for range configs {
+		b.WriteString("---:|")
+	}
+	b.WriteString("---:|---|\n")
+	for _, p := range pairs {
+		gs := make([]string, 0, len(groups[p]))
+		for g := range groups[p] {
+			gs = append(gs, g)
+		}
+		sort.Strings(gs)
+		fmt.Fprintf(&b, "| %s | %s | %s |", p.cell, p.gosqlx, p.peer)
+		n, worst, worstG := 0, 0.0, ""
+		for i, c := range configs {
+			sum, k := 0.0, 0
+			for _, g := range gs {
+				a, okA := ns[key{p.cell, g, p.gosqlx, c.ID}]
+				z, okZ := ns[key{p.cell, g, p.peer, c.ID}]
+				if !okA || !okZ {
+					continue
+				}
+				r := a / z
+				sum += math.Log(r)
+				k++
+				if i == 0 && r > worst {
+					worst, worstG = r, g
+				}
+			}
+			if i == 0 {
+				n = k
+			}
+			if k == 0 {
+				b.WriteString("  |")
+				continue
+			}
+			fmt.Fprintf(&b, " %.2f |", math.Exp(sum/float64(k)))
+		}
+		if worstG != "" {
+			fmt.Fprintf(&b, " %d | %s %.2f |\n", n, worstG, worst)
+		} else {
+			fmt.Fprintf(&b, " %d |  |\n", n)
+		}
+	}
+	return b.String()
 }
 
 // cellResults reduces samples to medians, in a stable order.

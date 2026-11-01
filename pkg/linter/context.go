@@ -77,6 +77,7 @@ type Context struct {
 	Filename string
 
 	nodes      []ast.Node
+	nodesAST   *ast.AST // AST the cache was built for; a changed c.AST invalidates it
 	nodesBuilt bool
 }
 
@@ -126,7 +127,7 @@ func (c *Context) WithTokens(tokens []models.TokenWithSpan) *Context {
 func (c *Context) WithAST(astObj *ast.AST, err error) *Context {
 	c.AST = astObj
 	c.ParseErr = err
-	c.nodes, c.nodesBuilt = nil, false
+	c.nodes, c.nodesAST, c.nodesBuilt = nil, nil, false
 	return c
 }
 
@@ -160,14 +161,14 @@ func (c *Context) GetLineCount() int {
 
 // Nodes returns every node of every AST statement in preorder, matching
 // ast.Inspect. The list is built on first use and cached for this Context's AST.
-// Rules must not mutate the returned slice or the AST. Use WithAST to replace
-// the AST and invalidate the cache. Separate Contexts have independent caches;
+// Rules must not mutate the returned slice or the AST. Replacing c.AST (directly
+// or via WithAST) invalidates the cache; mutating the tree in place does not. Separate Contexts have independent caches;
 // a Context must not be used concurrently. Returns nil when no AST is available.
 func (c *Context) Nodes() []ast.Node {
-	if c.nodesBuilt {
+	if c.nodesBuilt && c.nodesAST == c.AST {
 		return c.nodes
 	}
-	c.nodesBuilt = true
+	c.nodesBuilt, c.nodesAST, c.nodes = true, c.AST, nil
 	if c.AST == nil {
 		return nil
 	}

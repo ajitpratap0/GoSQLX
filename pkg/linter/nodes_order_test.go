@@ -91,6 +91,24 @@ func TestContextNodesNilAndReplacement(t *testing.T) {
 	}
 }
 
+func TestContextNodesDirectASTAssignment(t *testing.T) {
+	first := &ast.SelectStatement{}
+	second := &ast.DeleteStatement{}
+	ctx := linter.NewContext("", "").WithAST(&ast.AST{Statements: []ast.Statement{first}}, nil)
+	if got := ctx.Nodes(); !reflect.DeepEqual(got, []ast.Node{first}) {
+		t.Fatalf("first: %v", got)
+	}
+	ctx.AST = &ast.AST{Statements: []ast.Statement{second}}
+	if got := ctx.Nodes(); !reflect.DeepEqual(got, []ast.Node{second}) {
+		t.Fatalf("direct assignment returned stale nodes: %v", got)
+	}
+	cp := *ctx
+	cp.AST = &ast.AST{Statements: []ast.Statement{first}}
+	if got := cp.Nodes(); !reflect.DeepEqual(got, []ast.Node{first}) {
+		t.Fatalf("by-value copy returned stale nodes: %v", got)
+	}
+}
+
 func TestContextNodesSeparateContextsConcurrent(t *testing.T) {
 	for i := 0; i < 16; i++ {
 		t.Run(string(rune('a'+i)), func(t *testing.T) {

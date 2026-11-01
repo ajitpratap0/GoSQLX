@@ -264,10 +264,10 @@ func BenchmarkLintRule(b *testing.B) {
 // has no lazily filled cache. When a field such as a cached node list is added
 // (PLAN W6-05) this fails: update lintInput.reset to clear it, then this list.
 func TestLintContextHasNoCachedState(t *testing.T) {
-	// nodes and nodesBuilt are the Context.Nodes() cache (W6-05a). lintInput.reset
+	// nodes, nodesAST and nodesBuilt are the Context.Nodes() cache (W6-05a). lintInput.reset
 	// clears them: it overwrites scratch by value from proto, and proto never
 	// reaches a rule, so its cache is always empty.
-	want := []string{"SQL", "Lines", "Tokens", "AST", "ParseErr", "Filename", "nodes", "nodesBuilt"}
+	want := []string{"SQL", "Lines", "Tokens", "AST", "ParseErr", "Filename", "nodes", "nodesAST", "nodesBuilt"}
 	typ := reflect.TypeOf(linter.Context{})
 	var got []string
 	for i := 0; i < typ.NumField(); i++ {

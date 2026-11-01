@@ -18,7 +18,6 @@ import (
 	"context"
 	"fmt"
 	"strings"
-	"sync/atomic"
 	"time"
 
 	"github.com/ajitpratap0/GoSQLX/internal/tokscratch"
@@ -109,9 +108,6 @@ const Version = "1.17.0"
 //
 // See also: ParseWithContext, ParseWithTimeout, ParseMultiple for specialized use cases.
 func Parse(sql string) (*ast.AST, error) {
-	// PERF GATE DEMO (W0-09): one injected heap allocation per Parse.
-	perfGateDemoAlloc.Store(new(int))
-
 	// Step 1: Get tokenizer from pool
 	tkz := tokenizer.GetTokenizer()
 	defer tokenizer.PutTokenizer(tkz)
@@ -846,7 +842,3 @@ func Fingerprint(sql string) (string, error) {
 func Transpile(sql string, from, to keywords.SQLDialect) (string, error) {
 	return transpiler.Transpile(sql, from, to)
 }
-
-// perfGateDemoAlloc receives the injected allocation of the perf gate
-// demonstration (W0-09); reverted in the next commit.
-var perfGateDemoAlloc atomic.Pointer[int]

@@ -16,6 +16,7 @@
 # Run it from a checkout of the revision to profile. Output: DIR/{env.txt,
 # *.pprof, top-*.txt, perfstat-*.txt, gosqlx.test, perfdriver, summary.md}.
 set -euo pipefail
+exec "$(dirname "$0")/w014b.sh" "$@"
 
 out="" benchtime=3s queries="join aggregate complex insert"
 while getopts ":o:t:q:h" opt; do

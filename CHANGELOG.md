@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Performance
 - **Tokenizer**: keyword and compound-keyword-start lookup now uses a single fused-hash open-addressed table (one FNV-1a hash computed while upper-casing, one probe) instead of two Go map lookups per identifier. The table is filled in a fixed order (hot keywords first, then sorted) so its probe layout is deterministic across processes. No behaviour change; token output is identical [W2-01].
+- **Pools**: the tokenizer, parser and AST pools now count Get/Put through precreated, cache-line padded atomic counters (`internal/poolstats`) instead of an RWMutex-guarded map keyed by pool name, removing a lock, map lookup and string hash from every pool operation. `metrics.GetPoolStats` and `metrics.ResetPoolStats` behave exactly as before; named custom pools keep the map path. [W1-01]
+- **Parser**: token preprocessing now takes a type-gated fast path. Only identifier, keyword, aggregate and compound tokens take the normalisation path; every other token is appended with a single copy. Output is identical (guarded by an old-versus-new differential test); no API or behaviour change.
 
 ### Fixed
 - **AST**: `AlterTableStatement.SQL()` now separates multiple ALTER TABLE actions with commas, matching the compact formatter and preserving action boundaries when re-parsed.

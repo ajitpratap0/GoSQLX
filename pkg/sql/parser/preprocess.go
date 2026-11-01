@@ -64,13 +64,50 @@ func preprocessTokensInto(dst, tokens []models.TokenWithSpan) []models.TokenWith
 		dst = make([]models.TokenWithSpan, 0, need)
 	}
 	for i := range tokens {
-		var ok bool
-		if dst, ok = appendCompound(dst, &tokens[i]); ok {
-			continue
+		t := &tokens[i]
+		switch typ := t.Token.Type; {
+		case typ == models.TokenTypeIdentifier || typ == models.TokenTypeKeyword ||
+			(typ >= models.TokenTypeCount && typ <= models.TokenTypeMax) ||
+			(typ >= models.TokenTypeGroupBy && typ <= models.TokenTypeCrossJoin) ||
+			typ == models.TokenTypeGroupingSets:
+			var ok bool
+			if dst, ok = appendCompound(dst, t); ok {
+				continue
+			}
+			dst = append(dst, *t)
+			normalizeTokenInPlace(&dst[len(dst)-1])
+		default:
+			dst = append(dst, *t)
 		}
-		dst = append(dst, normalizeToken(tokens[i]))
 	}
 	return dst
+}
+
+// normalizeTokenInPlace remaps one token's type (and records a backtick quote)
+// in place. Its reference implementation, normalizeToken, lives in
+// preprocess_fastpath_test.go and is checked against it by a differential test.
+func normalizeTokenInPlace(t *models.TokenWithSpan) {
+	switch t.Token.Type {
+	case models.TokenTypeCount, models.TokenTypeSum, models.TokenTypeAvg,
+		models.TokenTypeMin, models.TokenTypeMax:
+		t.Token.Type = models.TokenTypeIdentifier
+		return
+	case models.TokenTypeIdentifier:
+		if t.Token.Quote != 0 {
+			return
+		}
+		if t.Start.Line != 0 && t.Start.Line == t.End.Line && t.End.Column-t.Start.Column > len(t.Token.Value) {
+			t.Token.Quote = '`'
+			return
+		}
+		if remapped := identifierKeywordType(t.Token.Value); remapped != models.TokenTypeUnknown {
+			t.Token.Type = remapped
+		}
+	case models.TokenTypeKeyword:
+		if remapped := keywordType(t.Token.Value); remapped != models.TokenTypeUnknown {
+			t.Token.Type = remapped
+		}
+	}
 }
 
 // Compound token expansion tables. These slices are shared, read-only package
@@ -163,54 +200,6 @@ func appendCompound(dst []models.TokenWithSpan, t *models.TokenWithSpan) ([]mode
 		dst = append(dst, models.TokenWithSpan{Token: parts[i], Start: t.Start, End: t.End})
 	}
 	return dst, true
-}
-
-// normalizeToken maps a TokenWithSpan to a canonical form expected by the
-// parser. Type mismatches that existed in the tokenizer are corrected here.
-func normalizeToken(t models.TokenWithSpan) models.TokenWithSpan {
-	// TokenTypeMul (*) is the same symbol as TokenTypeAsterisk for the
-	// parser. The parser explicitly checks both types wherever '*' can appear
-	// (SELECT list wildcard, table.* qualified wildcard, COUNT(*) argument).
-	// No remap is performed here to preserve the distinction for binary multiply.
-
-	// Aggregate-function tokens (COUNT, SUM, AVG, MIN, MAX) must be treated
-	// as identifiers so they can be used as function-call names.
-	switch t.Token.Type {
-	case models.TokenTypeCount, models.TokenTypeSum, models.TokenTypeAvg,
-		models.TokenTypeMin, models.TokenTypeMax:
-		t.Token.Type = models.TokenTypeIdentifier
-		return t
-	}
-
-	// Identifier tokens whose *value* is a keyword that the parser dispatches
-	// on by type need to be remapped.
-	if t.Token.Type == models.TokenTypeIdentifier {
-		// A delimited identifier (`key`, [Group]) is a name, never a
-		// keyword. The tokenizer strips backticks without recording them,
-		// so a single-line span wider than the value marks one; record
-		// the backtick so later stages can tell it from a bare word.
-		if t.Token.Quote != 0 {
-			return t
-		}
-		if t.Start.Line != 0 && t.Start.Line == t.End.Line && t.End.Column-t.Start.Column > len(t.Token.Value) {
-			t.Token.Quote = '`'
-			return t
-		}
-		if remapped := identifierKeywordType(t.Token.Value); remapped != models.TokenTypeUnknown {
-			t.Token.Type = remapped
-		}
-		return t
-	}
-
-	// Generic TokenTypeKeyword tokens need a specific type for the parser.
-	if t.Token.Type == models.TokenTypeKeyword {
-		if remapped := keywordType(t.Token.Value); remapped != models.TokenTypeUnknown {
-			t.Token.Type = remapped
-		}
-		return t
-	}
-
-	return t
 }
 
 // identifierKeywordType remaps identifiers that carry SQL keyword values to

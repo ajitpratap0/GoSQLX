@@ -23,7 +23,7 @@
 #     worth of allocation, so allocs/op is exact for the gated suite
 #     (identical in every A/A and PR run so far) but not for large-input or
 #     low-N benchmarks (ParseRW/*/large, Handler_LargeDocument,
-#     *SustainedLoad*); see the open question on the allocs rule in PR #921.
+#     *SustainedLoad*); docs/PERFORMANCE_METHODOLOGY.md covers this caveat.
 #   - env.txt and the report name the CPU model: hosted runners differ from
 #     job to job, so only the in-job base/head ratios are reported.
 #

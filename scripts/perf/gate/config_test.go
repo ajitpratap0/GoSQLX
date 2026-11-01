@@ -88,7 +88,6 @@ func TestGCOffMeasurementsSetGOMEMLIMIT(t *testing.T) {
 	// scripts/perf/baseline. Only files listed here may carry the marker.
 	exempt := map[string]bool{"scripts/perf/baseline/main.go": true}
 	const marker = "perf:no-gomemlimit"
-	gcoff := regexp.MustCompile(`GOGC[=:]\s*'?off`)
 	for _, f := range files {
 		var lines []string
 		sc := bufio.NewScanner(strings.NewReader(readRepoFile(t, f)))
@@ -99,7 +98,7 @@ func TestGCOffMeasurementsSetGOMEMLIMIT(t *testing.T) {
 			n := i + 1
 			line := strings.TrimSpace(raw)
 			// Comments and Taskfile descriptions only talk about GOGC=off.
-			if strings.HasPrefix(line, "#") || strings.HasPrefix(line, "//") || strings.HasPrefix(line, "desc:") || !gcoff.MatchString(line) {
+			if strings.HasPrefix(line, "#") || strings.HasPrefix(line, "//") || strings.HasPrefix(line, "desc:") || !gcoffToken.MatchString(line) {
 				continue
 			}
 			if strings.Contains(line, marker) {
@@ -108,8 +107,7 @@ func TestGCOffMeasurementsSetGOMEMLIMIT(t *testing.T) {
 				}
 				continue
 			}
-			// gcoff_env is the array scripts fill from perf_gcoff_env.
-			if !strings.Contains(line, "GOMEMLIMIT") && !strings.Contains(line, "gcoff_env") && !yamlSiblingKey(lines, i, "GOMEMLIMIT:") {
+			if !gcoffSegmentsBounded(line) && !yamlSiblingKey(lines, i, "GOMEMLIMIT:") {
 				t.Errorf("%s:%d sets GOGC=off without GOMEMLIMIT (use perf_gcoff_env from scripts/perf/lib.sh): %s", f, n, line)
 			}
 		}
@@ -123,6 +121,49 @@ func TestGCOffMeasurementsSetGOMEMLIMIT(t *testing.T) {
 	pub := readRepoFile(t, "benchmarks/compare/cmd/publish/main.go")
 	if want := `defaultGOMEMLIMIT = "` + m[1] + `"`; !strings.Contains(pub, want) {
 		t.Errorf("benchmarks/compare/cmd/publish: want %s, the scripts/perf/lib.sh default", want)
+	}
+}
+
+// gcoffSegmentsBounded reports whether every GOGC=off on line sits in a
+// shell segment (delimited by ( ) ; | &) that also names GOMEMLIMIT or the
+// gcoff_env array scripts fill from perf_gcoff_env. Checking the segment, not
+// the whole line, keeps a one-line if/else honest: a GOMEMLIMIT in one branch
+// must not cover a bare GOGC=off in the other.
+func gcoffSegmentsBounded(line string) bool {
+	const seps = "();|&"
+	for _, loc := range gcoffToken.FindAllStringIndex(line, -1) {
+		start := strings.LastIndexAny(line[:loc[0]], seps) + 1
+		end := len(line)
+		if j := strings.IndexAny(line[loc[1]:], seps); j >= 0 {
+			end = loc[1] + j
+		}
+		seg := line[start:end]
+		if !strings.Contains(seg, "GOMEMLIMIT") && !strings.Contains(seg, "gcoff_env") {
+			return false
+		}
+	}
+	return true
+}
+
+var gcoffToken = regexp.MustCompile(`GOGC[=:]\s*'?off`)
+
+// TestGCOffSegmentLint pins the lint above on the shapes it must tell apart,
+// including the one-line if/else of run_arm in scripts/perf/ab.sh.
+func TestGCOffSegmentLint(t *testing.T) {
+	for _, tc := range []struct {
+		line string
+		ok   bool
+	}{
+		{`if [ "$config" = gcoff ]; then envs=("${gcoff_env[@]}" GOMAXPROCS=1); else envs=(-u GOGC -u GOMEMLIMIT GOMAXPROCS=1); fi`, true},
+		{`if [ "$config" = gcoff ]; then envs=(GOGC=off GOMAXPROCS=1); else envs=(-u GOGC -u GOMEMLIMIT GOMAXPROCS=1); fi`, false},
+		{`envs=(GOMEMLIMIT=64MiB GOGC=off GOMAXPROCS=1)`, true},
+		{`env GOGC=off go test ./... && env GOMEMLIMIT=64MiB go test ./...`, false},
+		{`env GOGC=off GOMEMLIMIT=64MiB go test ./...`, true},
+		{`GOGC: 'off'`, false},
+	} {
+		if got := gcoffSegmentsBounded(tc.line); got != tc.ok {
+			t.Errorf("gcoffSegmentsBounded(%q) = %v, want %v", tc.line, got, tc.ok)
+		}
 	}
 }
 
@@ -195,7 +236,7 @@ func TestGOMEMLIMITIsValidated(t *testing.T) {
 	for _, v := range []string{"", "off", "64MiB", "1GiB", "512KiB", "4TiB", "100B", "67108864"} {
 		bashLib(t, []string{"PERF_GOMEMLIMIT=" + v}, "perf_check_gomemlimit")
 	}
-	for _, v := range []string{"64Mi", "64MB", "64KB", "6.4MiB", "-1", "abc", "64 MiB", "MiB"} {
+	for _, v := range []string{"64Mi", "64MB", "64KB", "6.4MiB", "-1", "abc", "64 MiB", "MiB", "1PiB", "1EiB"} {
 		cmd := exec.Command("bash", "-c", `. "$1"; perf_check_gomemlimit`, "bash", filepath.Join(repoRoot, "scripts", "perf", "lib.sh"))
 		cmd.Env = append(os.Environ(), "PERF_GOMEMLIMIT="+v)
 		out, err := cmd.CombinedOutput()
@@ -232,7 +273,7 @@ func TestWorkflowGOMEMLIMITCheckMatchesLib(t *testing.T) {
 		t.Fatal("perf-gate.yml: no \"Validate inputs\" run block")
 	}
 	lib := filepath.Join(repoRoot, "scripts", "perf", "lib.sh")
-	for _, v := range []string{"", "off", "64MiB", "1GiB", "100B", "67108864", "64Mi", "64MB", "6.4MiB", "-1", "abc", "64 MiB", "MiB", "B"} {
+	for _, v := range []string{"", "off", "64MiB", "1GiB", "100B", "67108864", "64Mi", "64MB", "6.4MiB", "-1", "abc", "64 MiB", "MiB", "B", "4TiB", "1PiB", "1EiB"} {
 		wf := exec.Command("bash", "-c", strings.Join(script, "\n"))
 		wf.Env = append(os.Environ(), "LIMIT="+v)
 		wfOK := wf.Run() == nil

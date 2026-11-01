@@ -24,7 +24,7 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/ajitpratap0/GoSQLX/pkg/metrics"
+	"github.com/ajitpratap0/GoSQLX/internal/poolstats"
 	"github.com/ajitpratap0/GoSQLX/pkg/models"
 )
 
@@ -490,7 +490,7 @@ const maxPooledComments = 1024
 //
 // See also: ReleaseAST(), GetSelectStatement(), GetInsertStatement()
 func NewAST() *AST {
-	metrics.RecordNamedPoolGet("ast")
+	poolstats.AST.Get()
 	return astPool.Get().(*AST)
 }
 
@@ -579,7 +579,7 @@ func ReleaseAST(ast *AST) {
 	}
 
 	// Return to pool
-	metrics.RecordNamedPoolPut("ast")
+	poolstats.AST.Put()
 	astPool.Put(ast)
 }
 

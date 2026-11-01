@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Performance
+- **Security**: `Scanner.ScanSQL` now skips the dollar-quote stripping lexer, the identifier-tautology regex and the ClickHouse table-function regex on inputs that provably cannot match them, using linear-time necessary-condition guards (`hasDollarOpener`, `hasEqualIdentPair`, `hasTableFnCandidate`). The regexes still confirm every finding, so results are byte-identical (guarded by a guards-on/off equivalence test over the real-world corpus and 200k random inputs); no API or behaviour change. [W6-01]
 - **Pools**: the tokenizer, parser and AST pools now count Get/Put through precreated, cache-line padded atomic counters (`internal/poolstats`) instead of an RWMutex-guarded map keyed by pool name, removing a lock, map lookup and string hash from every pool operation. `metrics.GetPoolStats` and `metrics.ResetPoolStats` behave exactly as before; named custom pools keep the map path. [W1-01]
 - **Parser**: token preprocessing now takes a type-gated fast path. Only identifier, keyword, aggregate and compound tokens take the normalisation path; every other token is appended with a single copy. Output is identical (guarded by an old-versus-new differential test); no API or behaviour change.
 

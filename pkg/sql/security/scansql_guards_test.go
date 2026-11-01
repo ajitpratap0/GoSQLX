@@ -14,8 +14,6 @@ import (
 	"time"
 )
 
-var scanSQLRWDialects = []string{"postgresql", "mysql", "mariadb", "sqlserver", "oracle", "sqlite", "snowflake", "clickhouse"}
-
 // These are the verifier's mutation vocabulary, plus boundary and Unicode
 // folding cases for the necessary-condition guards. Share them with fuzzing.
 var scanSQLGuardSeeds = []string{
@@ -170,30 +168,6 @@ func TestHasEqualIdentPairLinear(t *testing.T) {
 	t.Logf("16 KiB: %v; 64 KiB: %v; ratio %.2f", small, large, float64(large)/float64(small))
 	if large > 10*small {
 		t.Fatalf("identifier guard scaling exceeds linear allowance: 16 KiB=%v, 64 KiB=%v", small, large)
-	}
-}
-
-// BenchmarkScanSQLRW uses the verifier's real-world dialect batches. ns/stmt
-// normalizes dialects by statement count; ns/op retains the complete batch cost.
-func BenchmarkScanSQLRW(b *testing.B) {
-	for _, dialect := range scanSQLRWDialects {
-		files := loadScanSQLFiles(b, filepath.Join("..", "..", "..", "testdata", "realworld", dialect))
-		statements := scanSQLStatements(files)
-		if len(statements) == 0 {
-			b.Fatalf("no statements for %s", dialect)
-		}
-		b.Run(dialect, func(b *testing.B) {
-			scanner := NewScanner()
-			b.ReportAllocs()
-			b.ResetTimer()
-			for i := 0; i < b.N; i++ {
-				for _, sql := range statements {
-					scanner.ScanSQL(sql)
-				}
-			}
-			b.StopTimer()
-			b.ReportMetric(float64(b.Elapsed().Nanoseconds())/float64(b.N)/float64(len(statements)), "ns/stmt")
-		})
 	}
 }
 

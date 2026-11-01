@@ -38,17 +38,29 @@ func TestCurrentTokenSentinelUnmodifiedOverCorpus(t *testing.T) {
 			toks = append([]models.TokenWithSpan(nil), toks...)
 			tkz.Reset()
 
-			if tree, err := p.ParseFromModelTokens(toks); err == nil {
-				ast.ReleaseAST(tree)
+			// Tokenizer output ends with an EOF token, so the parser almost
+			// never walks past len(p.tokens). Also feed the stream with that
+			// trailing EOF stripped so currentToken/peekToken reach the
+			// per-parser sentinel (&p.eof) on every dialect-specific path.
+			streams := [][]models.TokenWithSpan{toks}
+			if n := len(toks); n > 0 && toks[n-1].Token.Type == models.TokenTypeEOF {
+				streams = append(streams, toks[:n-1])
 			}
-			p.ParseWithRecoveryFromModelTokens(toks)
-			if tree, err := p.ParseContextFromModelTokens(t.Context(), toks); err == nil {
-				ast.ReleaseAST(tree)
-			}
-			if !parser.EOFSentinelClean(p) {
-				t.Fatalf("dialect %s, %s#%d: EOF sentinel modified", dn, st.File, st.Index)
+			for _, ts := range streams {
+				if tree, err := p.ParseFromModelTokens(ts); err == nil {
+					ast.ReleaseAST(tree)
+				}
+				p.ParseWithRecoveryFromModelTokens(ts)
+				if tree, err := p.ParseContextFromModelTokens(t.Context(), ts); err == nil {
+					ast.ReleaseAST(tree)
+				}
+				if !parser.EOFSentinelClean(p) {
+					t.Fatalf("dialect %s, %s#%d: EOF sentinel modified", dn, st.File, st.Index)
+				}
 			}
 			p.Reset()
+			// Reset clears the dialect; re-apply so every statement runs under dn.
+			p.ApplyOptions(parser.WithDialect(dn))
 			if !parser.EOFSentinelClean(p) || !parser.CursorRepointed(p) {
 				t.Fatalf("dialect %s, %s#%d: Reset left a stale cursor or dirty sentinel", dn, st.File, st.Index)
 			}

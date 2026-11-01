@@ -20,9 +20,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-
-	"github.com/ajitpratap0/GoSQLX/pkg/gosqlx"
-	"github.com/ajitpratap0/GoSQLX/pkg/sql/keywords"
 )
 
 var nodeTestDialects = []string{"postgresql", "mysql", "mariadb", "sqlserver", "oracle", "sqlite", "snowflake", "clickhouse"}
@@ -68,26 +65,4 @@ func lintCorpusInputs(tb testing.TB, dialect string, corpus bool) []lintCorpusIn
 		tb.Fatal("no SQL corpus inputs found")
 	}
 	return inputs
-}
-
-// BenchmarkLintWithDialect measures end-to-end linting of each dialect's
-// realworld statements, using the original verification harness workload.
-func BenchmarkLintWithDialect(b *testing.B) {
-	for _, dialect := range nodeTestDialects {
-		var statements []string
-		for _, input := range lintCorpusInputs(b, dialect, false) {
-			if strings.Contains(input.name, "/stmt/") {
-				statements = append(statements, input.sql)
-			}
-		}
-		b.Run(dialect, func(b *testing.B) {
-			b.ReportAllocs()
-			for i := 0; i < b.N; i++ {
-				for _, sql := range statements {
-					_, _ = gosqlx.LintWithDialect(sql, keywords.SQLDialect(dialect))
-				}
-			}
-			b.ReportMetric(float64(b.Elapsed().Nanoseconds())/float64(b.N*len(statements)), "ns/stmt")
-		})
-	}
 }

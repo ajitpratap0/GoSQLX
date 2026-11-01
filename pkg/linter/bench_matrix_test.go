@@ -115,7 +115,7 @@ func reportPerStmt(b *testing.B, n int) {
 // scratch is the one Context handed to rules: reset overwrites it by value from
 // proto, which allocates nothing (the scratch is heap-allocated once during
 // setup, because rules take it through an interface) and clears any lazily
-// cached state a rule or Context accessor filled in (for example a future
+// cached state a rule or Context accessor filled in (for example
 // Context.Nodes()), so that cost stays inside the timed region.
 type lintInput struct {
 	proto   *linter.Context
@@ -264,7 +264,10 @@ func BenchmarkLintRule(b *testing.B) {
 // has no lazily filled cache. When a field such as a cached node list is added
 // (PLAN W6-05) this fails: update lintInput.reset to clear it, then this list.
 func TestLintContextHasNoCachedState(t *testing.T) {
-	want := []string{"SQL", "Lines", "Tokens", "AST", "ParseErr", "Filename"}
+	// nodes and nodesBuilt are the Context.Nodes() cache (W6-05a). lintInput.reset
+	// clears them: it overwrites scratch by value from proto, and proto never
+	// reaches a rule, so its cache is always empty.
+	want := []string{"SQL", "Lines", "Tokens", "AST", "ParseErr", "Filename", "nodes", "nodesBuilt"}
 	typ := reflect.TypeOf(linter.Context{})
 	var got []string
 	for i := 0; i < typ.NumField(); i++ {

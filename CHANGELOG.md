@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Benchmark and perf-gate infrastructure (performance overhaul, wave 0)**:
+  pull requests are now judged by interleaved A/B measurements instead of
+  absolute numbers. No library behaviour changes. The pieces, by PR:
+  - Corpus and behaviour guards: the benchmark corpus manifest and
+    `internal/benchcorpus` loader (#895); behaviour goldens (token, parse,
+    format, lint, scan and transpile hashes) over every corpus and dialect
+    (#915); wall-clock test assertions replaced with ratio and count checks
+    (#899); ClickHouse/Snowflake lambda bodies and `U&` in dialects without
+    `&` fixed so the goldens could be pinned (#901).
+  - Benchmark matrix: tokenizer and parse stages (#913), server shapes with
+    `AllocsPerRun` budgets, a stack-depth test and a frame-size script (#909),
+    high-level, render and transform (#911), transpile with a prefilter
+    differential test (#912), interop benchmarks and a binary-size budget
+    (#908).
+  - Gate: an interleaved A/B workflow in shadow mode (`GOGC=off`, `-cpu 1`,
+    ABBA rounds, benchstat at alpha 0.01, A/A noise control; `allocs/op`, `B/op`
+    and instruction-count gates) with `task bench:ab` and `task bench:gate`
+    (#916).
+  - Baselines and docs (this entry): per-architecture
+    `benchmarks/baselines/{amd64,arm64}.json` holding trend-only ns/op and gated
+    B/op and allocs/op, checked or regenerated with `task bench:baseline` and
+    `task bench:baseline:update`; new `task bench:matrix` and `task pgo:refresh`;
+    `docs/PERFORMANCE_METHODOLOGY.md` (method, how to run an A/B, how the gate
+    decides, claims policy). `performance_baselines.json` and
+    `TestPerformanceRegression` are now documented as a smoke test only, and
+    its never-enforced `TokenizationThroughput` and `EndToEndSustained` entries
+    are removed.
+
 ### Fixed
 - **AST**: `AlterTableStatement.SQL()` now separates multiple ALTER TABLE actions with commas, matching the compact formatter and preserving action boundaries when re-parsed.
 - **Playground**: the GoSQLX WebAssembly module now runs in a Web Worker, so

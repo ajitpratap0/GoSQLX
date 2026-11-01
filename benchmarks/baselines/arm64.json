@@ -1,0 +1,139 @@
+{
+  "schema": 1,
+  "arch": "arm64",
+  "comment": "ns_per_op is trend-only. bytes_per_op and allocs_per_op are gated by scripts/perf/baseline (allocs/op must not rise, B/op may rise at most 2 percent). Measured with GOGC=off, -cpu 1, medians. Regenerate with: task bench:baseline:update",
+  "updated": "2026-11-01",
+  "go_version": "go1.27.2",
+  "benchmarks": {
+    "pkg/gosqlx:BenchmarkParseE2E/aggregate": {
+      "ns_per_op": 1826,
+      "bytes_per_op": 1856,
+      "allocs_per_op": 18
+    },
+    "pkg/gosqlx:BenchmarkParseE2E/complex": {
+      "ns_per_op": 7115,
+      "bytes_per_op": 6552,
+      "allocs_per_op": 50
+    },
+    "pkg/gosqlx:BenchmarkParseE2E/cte": {
+      "ns_per_op": 2283,
+      "bytes_per_op": 2392,
+      "allocs_per_op": 21
+    },
+    "pkg/gosqlx:BenchmarkParseE2E/delete": {
+      "ns_per_op": 685.1,
+      "bytes_per_op": 400,
+      "allocs_per_op": 5
+    },
+    "pkg/gosqlx:BenchmarkParseE2E/insert": {
+      "ns_per_op": 1207,
+      "bytes_per_op": 824,
+      "allocs_per_op": 17
+    },
+    "pkg/gosqlx:BenchmarkParseE2E/join": {
+      "ns_per_op": 2673,
+      "bytes_per_op": 2360,
+      "allocs_per_op": 17
+    },
+    "pkg/gosqlx:BenchmarkParseE2E/select_where": {
+      "ns_per_op": 1684,
+      "bytes_per_op": 1560,
+      "allocs_per_op": 18
+    },
+    "pkg/gosqlx:BenchmarkParseE2E/simple_select": {
+      "ns_per_op": 674.9,
+      "bytes_per_op": 816,
+      "allocs_per_op": 5
+    },
+    "pkg/gosqlx:BenchmarkParseE2E/subquery": {
+      "ns_per_op": 1561,
+      "bytes_per_op": 1872,
+      "allocs_per_op": 14
+    },
+    "pkg/gosqlx:BenchmarkParseE2E/update": {
+      "ns_per_op": 1056,
+      "bytes_per_op": 736,
+      "allocs_per_op": 13
+    },
+    "pkg/gosqlx:BenchmarkParseE2E/window": {
+      "ns_per_op": 1489,
+      "bytes_per_op": 1312,
+      "allocs_per_op": 11
+    },
+    "pkg/gosqlx:BenchmarkParseFresh/complex": {
+      "ns_per_op": 14124,
+      "bytes_per_op": 6632,
+      "allocs_per_op": 51
+    },
+    "pkg/gosqlx:BenchmarkParseFresh/join": {
+      "ns_per_op": 9063,
+      "bytes_per_op": 2440,
+      "allocs_per_op": 18
+    },
+    "pkg/gosqlx:BenchmarkParseFresh/simple_select": {
+      "ns_per_op": 3961,
+      "bytes_per_op": 896,
+      "allocs_per_op": 6
+    },
+    "pkg/gosqlx:BenchmarkParseRW/clickhouse/medium": {
+      "ns_per_op": 44398,
+      "bytes_per_op": 38024,
+      "allocs_per_op": 384
+    },
+    "pkg/gosqlx:BenchmarkParseRW/mariadb/medium": {
+      "ns_per_op": 67434,
+      "bytes_per_op": 66504,
+      "allocs_per_op": 530
+    },
+    "pkg/gosqlx:BenchmarkParseRW/mysql/medium": {
+      "ns_per_op": 46341,
+      "bytes_per_op": 44816,
+      "allocs_per_op": 368
+    },
+    "pkg/gosqlx:BenchmarkParseRW/oracle/medium": {
+      "ns_per_op": 156735,
+      "bytes_per_op": 116496,
+      "allocs_per_op": 1094
+    },
+    "pkg/gosqlx:BenchmarkParseRW/postgresql/medium": {
+      "ns_per_op": 68468,
+      "bytes_per_op": 72216,
+      "allocs_per_op": 648
+    },
+    "pkg/gosqlx:BenchmarkParseRW/snowflake/medium": {
+      "ns_per_op": 98176,
+      "bytes_per_op": 85416,
+      "allocs_per_op": 779
+    },
+    "pkg/gosqlx:BenchmarkParseRW/sqlite/medium": {
+      "ns_per_op": 38032,
+      "bytes_per_op": 40896,
+      "allocs_per_op": 348
+    },
+    "pkg/gosqlx:BenchmarkParseRW/sqlserver/medium": {
+      "ns_per_op": 131491,
+      "bytes_per_op": 92761,
+      "allocs_per_op": 937
+    },
+    "pkg/gosqlx:BenchmarkPoolGetPut/serial": {
+      "ns_per_op": 63.77,
+      "bytes_per_op": 0,
+      "allocs_per_op": 0
+    },
+    "pkg/sql/tokenizer:BenchmarkTokenize/scratch/complex": {
+      "ns_per_op": 3455,
+      "bytes_per_op": 0,
+      "allocs_per_op": 0
+    },
+    "pkg/sql/tokenizer:BenchmarkTokenize/scratch/insert": {
+      "ns_per_op": 598.3,
+      "bytes_per_op": 0,
+      "allocs_per_op": 0
+    },
+    "pkg/sql/tokenizer:BenchmarkTokenize/scratch/join": {
+      "ns_per_op": 1313,
+      "bytes_per_op": 0,
+      "allocs_per_op": 0
+    }
+  }
+}

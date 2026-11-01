@@ -1233,6 +1233,8 @@ func BenchmarkMemoryEfficiency(b *testing.B) {
 
 ## Performance Regression Testing
 
+> **Note:** `TestPerformanceRegression` and `performance_baselines.json` are a coarse smoke test (60-65% tolerances), not a performance gate. Pull requests are judged by the interleaved A/B gate and the allocs/op and B/op baselines described in [PERFORMANCE_METHODOLOGY.md](PERFORMANCE_METHODOLOGY.md).
+
 ### Overview
 
 GoSQLX includes automated performance regression tests to prevent performance degradation over time. The suite tracks key metrics against established baselines and alerts developers to regressions.

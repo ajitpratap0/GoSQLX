@@ -164,11 +164,60 @@ type Report struct {
 	// TimeDrift lists benchmarks whose ns/op moved more than 25 percent; it is
 	// informational only, since time is never gated here.
 	TimeDrift []string
+	// Compared counts baseline benchmarks that were measured.
+	Compared int
 }
 
-// OK reports whether the gated metrics hold. A benchmark missing from the
-// measurement does not fail the check (the suite may be run in part), but New
-// and Missing are reported so stale baselines are visible.
+// Verdict turns a report into an error. Regressions always fail, and so does
+// a run that measured no baseline benchmark at all (a renamed suite would
+// otherwise pass vacuously). When full is set, the run is a complete
+// measurement of the gated suite, so any Missing or New entry means the
+// baseline is stale.
+func (r Report) Verdict(full bool) error {
+	if len(r.Violations) > 0 {
+		return fmt.Errorf("%d gated metric(s) regressed", len(r.Violations))
+	}
+	if r.Compared == 0 {
+		return fmt.Errorf("no baseline benchmark was measured: baseline stale, run task bench:baseline:update")
+	}
+	if full && (len(r.Missing) > 0 || len(r.New) > 0) {
+		return fmt.Errorf("baseline stale (%d missing, %d new), run task bench:baseline:update", len(r.Missing), len(r.New))
+	}
+	return nil
+}
+
+// Goarchs returns the distinct "goarch:" header values of go test output.
+func Goarchs(r io.Reader) []string {
+	seen := map[string]bool{}
+	var out []string
+	sc := bufio.NewScanner(r)
+	sc.Buffer(make([]byte, 0, 64*1024), 1<<20)
+	for sc.Scan() {
+		if v, ok := strings.CutPrefix(sc.Text(), "goarch:"); ok {
+			if v = strings.TrimSpace(v); !seen[v] {
+				seen[v] = true
+				out = append(out, v)
+			}
+		}
+	}
+	return out
+}
+
+// SameGoMinor reports whether two Go versions ("go1.26.1", "go1.26rc1")
+// share major.minor.
+func SameGoMinor(a, b string) bool { return goMinor(a) == goMinor(b) }
+
+var goMinorRE = regexp.MustCompile(`^(?:go)?(\d+\.\d+)`)
+
+func goMinor(v string) string {
+	if m := goMinorRE.FindStringSubmatch(v); m != nil {
+		return m[1]
+	}
+	return v
+}
+
+// OK reports whether the gated metrics hold. Staleness (Missing, New, nothing
+// compared) is judged separately by Verdict.
 func (r Report) OK() bool { return len(r.Violations) == 0 }
 
 // Check compares measured against base. allocs/op must not increase and B/op
@@ -182,6 +231,7 @@ func Check(base File, measured map[string]Entry) Report {
 			rep.Missing = append(rep.Missing, name)
 			continue
 		}
+		rep.Compared++
 		if m.AllocsPerOp > b.AllocsPerOp+1e-9 {
 			rep.Violations = append(rep.Violations, Violation{name, "allocs/op", b.AllocsPerOp, m.AllocsPerOp})
 		}

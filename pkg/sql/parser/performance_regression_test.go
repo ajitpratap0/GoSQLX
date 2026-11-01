@@ -31,8 +31,6 @@ import (
 // PerformanceBaseline represents a single performance baseline
 type PerformanceBaseline struct {
 	NsPerOp          int64   `json:"ns_per_op,omitempty"`
-	TokensPerSec     int64   `json:"tokens_per_sec,omitempty"`
-	OpsPerSec        int64   `json:"ops_per_sec,omitempty"`
 	TolerancePercent float64 `json:"tolerance_percent"`
 	Description      string  `json:"description"`
 }
@@ -46,14 +44,12 @@ type BaselineConfig struct {
 
 // PerformanceResult represents the result of a performance test
 type PerformanceResult struct {
-	Name         string
-	NsPerOp      int64
-	TokensPerSec int64
-	OpsPerSec    int64
-	AllocsPerOp  int64
-	BytesPerOp   int64
-	Iterations   int
-	Duration     time.Duration
+	Name        string
+	NsPerOp     int64
+	AllocsPerOp int64
+	BytesPerOp  int64
+	Iterations  int
+	Duration    time.Duration
 }
 
 // loadBaselines loads performance baselines from JSON file

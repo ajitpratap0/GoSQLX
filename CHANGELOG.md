@@ -10,7 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - **Benchmark and perf-gate infrastructure (performance overhaul, wave 0)**:
   pull requests are now judged by interleaved A/B measurements instead of
-  absolute numbers. No library behaviour changes. The pieces, by PR:
+  absolute numbers. No library behaviour changes apart from #901 (see Fixed). The pieces, by PR:
   - Corpus and behaviour guards: the benchmark corpus manifest and
     `internal/benchcorpus` loader (#895); behaviour goldens (token, parse,
     format, lint, scan and transpile hashes) over every corpus and dialect

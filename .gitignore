@@ -88,3 +88,6 @@ api-reference-*.png
 docs/ARCHITECT_REVIEW_*.md
 docs/audits/
 docs/superpowers/
+
+# benchmark matrix output (task bench:matrix)
+.bench/

@@ -11,10 +11,10 @@ How GoSQLX measures performance, how a pull request is judged, and what we may c
 
 ## The benchmark matrix
 
-Every functionality-by-dialect cell has a benchmark. List them with `go test -list Benchmark ./pkg/...`. Run the whole matrix once with:
+Most functionality-by-dialect cells have a benchmark; lint, security and LSP are pending (#910). List them with `go test -list Benchmark ./pkg/...`. Run the whole matrix once with:
 
 ```bash
-task bench:matrix                      # all pkg benchmarks, -cpu 1, GOGC=off -> bench-matrix.txt
+task bench:matrix                      # all pkg benchmarks, -cpu 1, GOGC=off -> .bench/matrix.txt
 task bench:matrix FILTER='^BenchmarkParseRW$' BENCHTIME=200ms
 ```
 
@@ -59,6 +59,10 @@ go run ./scripts/perf/baseline -input out.txt     # check recorded `go test -ben
 ```
 
 Update a baseline only in a PR whose purpose or measured effect justifies it, and say why in the PR body. Record each architecture on that architecture's hardware; an empty file is refused by the check instead of passing silently. `amd64.json` is recorded at the first amd64 checkpoint.
+
+The check fails (it does not pass silently) when a full measurement leaves a baseline entry unmeasured or finds a benchmark the baseline lacks, because a suite-regex change rekeys entries: run `task bench:baseline:update`. It also fails when no baseline benchmark was measured, and with `-input` it rejects output whose `goarch:` header differs from `-arch`. allocs/op and B/op can shift between Go minors, so the check warns when the baseline's `go_version` differs in major.minor from the running toolchain; record baselines with the toolchain CI uses.
+
+Deviation from PLAN 2.7: the baseline files do not store instructions/op (Ir). Ir is gated relatively by `perfdriver` in the A/B gate instead.
 
 `performance_baselines.json` and `TestPerformanceRegression` (`pkg/sql/parser`) remain only as a **smoke test**: loose ns/op ceilings with 60-65% tolerances that catch order-of-magnitude breakage on noisy CI. They are not a gate and their tolerances must not be tightened to act as one.
 

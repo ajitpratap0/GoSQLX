@@ -86,6 +86,16 @@ func run(args []string, stdout, stderr io.Writer) error {
 		}
 		raw = b
 	}
+	if *input != "" {
+		// A recorded run may come from another machine (CI artifacts): its
+		// goarch header must match the baseline it is checked against or
+		// written into.
+		for _, g := range Goarchs(bytes.NewReader(raw)) {
+			if g != *arch {
+				return fmt.Errorf("%s reports goarch %q but -arch is %q", *input, g, *arch)
+			}
+		}
+	}
 	measured, err := Parse(bytes.NewReader(raw))
 	if err != nil {
 		return err
@@ -119,6 +129,10 @@ func run(args []string, stdout, stderr io.Writer) error {
 	if len(base.Benchmarks) == 0 {
 		return fmt.Errorf("%s has no benchmarks yet; record it on %s hardware with -update", path, *arch)
 	}
+	if base.GoVersion != "" && !SameGoMinor(base.GoVersion, runtime.Version()) {
+		fmt.Fprintf(stdout, "warning: baseline recorded with %s, running %s; allocs/op and B/op can shift between Go minors, re-record with the pinned toolchain if this fails\n",
+			base.GoVersion, runtime.Version())
+	}
 	rep := Check(base, measured)
 	for _, s := range rep.TimeDrift {
 		fmt.Fprintln(stdout, "note (ns/op is trend-only):", s)
@@ -132,10 +146,10 @@ func run(args []string, stdout, stderr io.Writer) error {
 	for _, v := range rep.Violations {
 		fmt.Fprintln(stdout, "REGRESSION:", v)
 	}
-	if !rep.OK() {
-		return fmt.Errorf("%d gated metric(s) regressed against %s", len(rep.Violations), path)
+	if err := rep.Verdict(*input == ""); err != nil {
+		return fmt.Errorf("%w (%s)", err, path)
 	}
-	fmt.Fprintf(stdout, "ok: %d benchmarks within %s\n", len(base.Benchmarks)-len(rep.Missing), path)
+	fmt.Fprintf(stdout, "ok: %d benchmarks within %s\n", rep.Compared, path)
 	return nil
 }
 

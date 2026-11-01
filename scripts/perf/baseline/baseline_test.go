@@ -154,3 +154,83 @@ func TestRepositoryBaselineFilesAreValid(t *testing.T) {
 		}
 	}
 }
+
+func writeBase(t *testing.T, dir, arch, goVersion string, keys ...string) {
+	t.Helper()
+	f := File{Schema: SchemaVersion, Arch: arch, GoVersion: goVersion, Benchmarks: map[string]Entry{}}
+	for _, k := range keys {
+		f.Benchmarks[k] = Entry{NsPerOp: 1000, BytesPerOp: 500, AllocsPerOp: 10}
+	}
+	b, _ := f.Marshal()
+	if err := os.WriteFile(filepath.Join(dir, arch+".json"), b, 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestCheckFailsWhenNothingBaselinedWasMeasured(t *testing.T) {
+	dir := t.TempDir()
+	writeBase(t, dir, "amd64", "", "pkg/gosqlx:BenchmarkParseE2E/join")
+	in := filepath.Join(dir, "bench.txt")
+	renamed := "goarch: amd64\npkg: github.com/ajitpratap0/GoSQLX/pkg/gosqlx\nBenchmarkParseE2ERenamed/join-8 100 1 ns/op 9999 B/op 9999 allocs/op\n"
+	if err := os.WriteFile(in, []byte(renamed), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var out, errb bytes.Buffer
+	err := run([]string{"-dir", dir, "-arch", "amd64", "-input", in}, &out, &errb)
+	if err == nil || !strings.Contains(err.Error(), "baseline stale") {
+		t.Fatalf("disjoint run must fail as stale, got %v out=%s", err, out.String())
+	}
+}
+
+func TestVerdictStaleness(t *testing.T) {
+	base := File{Benchmarks: map[string]Entry{"a": {BytesPerOp: 1, AllocsPerOp: 1}, "b": {BytesPerOp: 1, AllocsPerOp: 1}}}
+	partial := Check(base, map[string]Entry{"a": {BytesPerOp: 1, AllocsPerOp: 1}})
+	if err := partial.Verdict(false); err != nil {
+		t.Fatalf("partial run must pass when not full: %v", err)
+	}
+	if err := partial.Verdict(true); err == nil || !strings.Contains(err.Error(), "stale") {
+		t.Fatalf("missing entry must be stale in full mode, got %v", err)
+	}
+	extra := Check(base, map[string]Entry{"a": {BytesPerOp: 1, AllocsPerOp: 1}, "b": {BytesPerOp: 1, AllocsPerOp: 1}, "c": {}})
+	if err := extra.Verdict(false); err != nil {
+		t.Fatalf("new entry must pass when not full: %v", err)
+	}
+	if err := extra.Verdict(true); err == nil || !strings.Contains(err.Error(), "stale") {
+		t.Fatalf("new entry must be stale in full mode, got %v", err)
+	}
+	none := Check(base, map[string]Entry{"z": {}})
+	if err := none.Verdict(false); err == nil {
+		t.Fatal("nothing measured must fail even when not full")
+	}
+}
+
+func TestInputGoarchMustMatchArch(t *testing.T) {
+	dir := t.TempDir()
+	in := filepath.Join(dir, "bench.txt")
+	if err := os.WriteFile(in, []byte(strings.Replace(sample, "amd64", "arm64", 1)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var out, errb bytes.Buffer
+	err := run([]string{"-dir", dir, "-arch", "amd64", "-input", in, "-update"}, &out, &errb)
+	if err == nil || !strings.Contains(err.Error(), "goarch") {
+		t.Fatalf("goarch mismatch must be rejected, got %v", err)
+	}
+	if _, statErr := os.Stat(filepath.Join(dir, "amd64.json")); statErr == nil {
+		t.Fatal("amd64.json must not be written from arm64 numbers")
+	}
+}
+
+func TestSameGoMinor(t *testing.T) {
+	for _, c := range []struct {
+		a, b string
+		want bool
+	}{
+		{"go1.26.1", "go1.26.4", true},
+		{"go1.26rc1", "go1.26.0", true},
+		{"go1.27.2", "go1.26.1", false},
+	} {
+		if got := SameGoMinor(c.a, c.b); got != c.want {
+			t.Errorf("SameGoMinor(%s,%s)=%v", c.a, c.b, got)
+		}
+	}
+}

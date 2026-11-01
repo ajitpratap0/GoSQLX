@@ -1110,11 +1110,15 @@ func (t *Tokenizer) readIdentifier() (models.Token, error) {
 	var kbuf [keywordKeyBufLen]byte
 	var tokenType models.TokenType
 	isKeyword, compoundStart := false, false
+	kh, kok := uint32(0), false
+	if len(ident) <= keywordKeyBufLen {
+		kh, kok = asciiUpperHash(kbuf[:len(ident)], ident)
+	}
 	switch {
-	case len(ident) <= keywordKeyBufLen && asciiUpper(kbuf[:len(ident)], ident):
-		key := kbuf[:len(ident)]
-		tokenType, isKeyword = keywordTokenTypes[string(key)]
-		compoundStart = compoundKeywordStarts[string(key)]
+	case kok:
+		if e := kwLookup(kh, kbuf[:len(ident)]); e != nil {
+			tokenType, isKeyword, compoundStart = e.typ, e.isKeyword, e.compoundStart
+		}
 	case isASCII(ident):
 		// Pure-ASCII word longer than any keyword: cannot match.
 	default:

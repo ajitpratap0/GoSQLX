@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Performance
+- **Tokenizer**: keyword and compound-keyword-start lookup now uses a single fused-hash open-addressed table (one FNV-1a hash computed while upper-casing, one probe) instead of two Go map lookups per identifier. No behaviour change; token output is identical [W2-01].
+
 ### Fixed
 - **AST**: `AlterTableStatement.SQL()` now separates multiple ALTER TABLE actions with commas, matching the compact formatter and preserving action boundaries when re-parsed.
 - **Playground**: the GoSQLX WebAssembly module now runs in a Web Worker, so

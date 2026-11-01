@@ -338,6 +338,14 @@ type Tokenizer struct {
 	// for the current input/lineStarts and is reset by Reset().
 	posCacheLine int
 
+	// Current-line window for the inlined location fast path in tokenize:
+	// a byte offset idx with curLS <= idx < nextLS is on line curLi (0-based),
+	// so its location is {curLi+1, idx-curLS+1} with no call. Anything else
+	// goes through locSlow, which reloads the window. It is only valid while
+	// lineStarts is immutable (prescan and the BOM adjustment both finish
+	// before the first lookup) and is cleared by Reset.
+	curLi, curLS, nextLS int
+
 	// Forward cursor used by hasCodeBeforeOnLine so that a run of comments
 	// on one line costs time linear in the line length instead of
 	// rescanning the line prefix for every comment. Invalidated by Reset().
@@ -690,7 +698,11 @@ func (t *Tokenizer) tokenize(ctx context.Context, input []byte, src string, have
 			// Compute the start location before scanning so position requests
 			// stay monotone. nextToken replaces it when it skips comments, so
 			// that Start always addresses the token and not the trivia before it.
-			t.tokStart = t.toSQLPosition(t.pos)
+			if idx := t.pos.Index; uint(idx-t.curLS) < uint(t.nextLS-t.curLS) {
+				t.tokStart = models.Location{Line: t.curLi + 1, Column: idx - t.curLS + 1}
+			} else {
+				t.tokStart = t.locSlow(idx)
+			}
 
 			token, err := t.nextToken()
 			if err != nil {
@@ -699,10 +711,16 @@ func (t *Tokenizer) tokenize(ctx context.Context, input []byte, src string, have
 				return
 			}
 
+			var endLoc models.Location
+			if idx := t.pos.Index; uint(idx-t.curLS) < uint(t.nextLS-t.curLS) {
+				endLoc = models.Location{Line: t.curLi + 1, Column: idx - t.curLS + 1}
+			} else {
+				endLoc = t.locSlow(idx)
+			}
 			tw := models.TokenWithSpan{
 				Token: token,
 				Start: t.tokStart,
-				End:   t.getCurrentPosition(),
+				End:   endLoc,
 			}
 			if t.logger != nil && t.logger.Enabled(context.Background(), slog.LevelDebug) {
 				t.logger.LogAttrs(context.Background(), slog.LevelDebug, "token",
@@ -2747,4 +2765,20 @@ func (t *Tokenizer) hasCodeBeforeOnLine(idx int) bool {
 		}
 	}
 	return t.inlCode
+}
+
+// locSlow is the out-of-window path of the inlined location lookup: it uses
+// toSQLPosition and then caches the located line as the new window.
+func (t *Tokenizer) locSlow(idx int) models.Location {
+	loc := t.toSQLPosition(Position{Index: idx})
+	li := t.posCacheLine
+	if li < len(t.lineStarts) {
+		t.curLi, t.curLS = li, t.lineStarts[li]
+		if li+1 < len(t.lineStarts) {
+			t.nextLS = t.lineStarts[li+1]
+		} else {
+			t.nextLS = len(t.input) + 1
+		}
+	}
+	return loc
 }

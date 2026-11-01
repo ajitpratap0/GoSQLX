@@ -222,6 +222,7 @@ func (t *Tokenizer) Reset() {
 	// Invalidate the toSQLPosition line hint: it is only valid for the
 	// input and lineStarts it was built on.
 	t.posCacheLine = 0
+	t.curLi, t.curLS, t.nextLS = 0, 0, 0
 	t.tokStart = models.Location{}
 	t.inlLine, t.inlScan, t.inlCode = 0, 0, false
 

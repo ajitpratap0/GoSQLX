@@ -1,0 +1,244 @@
+name: Perf Gate
+
+# Interleaved A/B performance gate (PLAN section 2.6, task W0-09).
+#
+# - Pull requests touching library code: base (the PR's merge base) and head
+#   test binaries are built in this job and run interleaved by
+#   scripts/perf/ab.sh -G: GOGC=off GOMAXPROCS=1 pinned with taskset as the
+#   primary metric, an A/A control, a default-GC secondary metric, and
+#   instructions/op from cmd/perfdriver (perf stat, else cachegrind).
+#   scripts/perf/gate judges the result; the report goes to the job summary,
+#   a sticky comment (same-repo PRs only) and an artifact.
+# - Nightly on main: the same gate between main now and main 24 hours ago.
+# - workflow_dispatch: mode "gate" with explicit base/head revisions, or mode
+#   "profile": pprof (-cpu 1, GOGC=off, -cpu 4) of the gap queries and
+#   perf stat counters for one revision (input to W0-14).
+#
+# SHADOW MODE: the gate reports and never fails a PR. After the shadow period,
+# set PERF_GATE_ENFORCE to 'true' below; a regression then fails the job
+# unless a maintainer applies the perf-regression-accepted label.
+
+on:
+  pull_request:
+    paths:
+      - 'pkg/**'
+      - 'internal/**'
+      - 'cmd/perfdriver/**'
+      - 'go.mod'
+      - 'go.sum'
+      - 'benchmarks/**'
+      - 'scripts/perf/**'
+      - '.github/workflows/perf-gate.yml'
+  schedule:
+    - cron: '23 3 * * *'
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'gate: A/B of base vs head; profile: CPU profiles and perf counters of head'
+        type: choice
+        options: [gate, profile]
+        default: gate
+      base:
+        description: 'gate mode: base revision (default origin/main)'
+        required: false
+        default: ''
+      head:
+        description: 'Revision to check out as head (default: the branch this run is dispatched on)'
+        required: false
+        default: ''
+      rounds:
+        description: 'gate mode: interleaved rounds'
+        required: false
+        default: '10'
+      benchtime:
+        description: 'gate mode: -test.benchtime per run; profile mode: per profile'
+        required: false
+        default: ''
+
+permissions:
+  contents: read
+
+concurrency:
+  group: perf-gate-${{ github.event.pull_request.number || github.ref }}-${{ inputs.mode || 'gate' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  GOTOOLCHAIN: local
+  PERF_GATE_ENFORCE: 'false'
+
+jobs:
+  gate:
+    name: A/B perf gate (shadow)
+    if: github.event_name != 'workflow_dispatch' || inputs.mode == 'gate'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: ${{ inputs.head || '' }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Go
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
+        with:
+          go-version-file: go.mod
+          check-latest: true
+          cache-dependency-path: go.sum
+
+      - name: Install instruction counters (best effort)
+        continue-on-error: true
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq --no-install-recommends valgrind linux-tools-common "linux-tools-$(uname -r)" >/dev/null ||
+            sudo apt-get install -y -qq --no-install-recommends valgrind >/dev/null
+          sudo sysctl -w kernel.perf_event_paranoid=1
+
+      - name: Install benchstat
+        run: go install golang.org/x/perf/cmd/benchstat@v0.0.0-20260908200009-22c9c6c9d4da
+
+      - name: Resolve base revision
+        id: refs
+        env:
+          EVENT: ${{ github.event_name }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          INPUT_BASE: ${{ inputs.base }}
+        run: |
+          case "$EVENT" in
+            pull_request)
+              # The checkout is the PR merged into its base; its first parent
+              # is the base it was merged into, so the diff is exactly the PR.
+              if git rev-parse --verify -q HEAD^2 >/dev/null; then base=$(git rev-parse HEAD^1); else base=$PR_BASE_SHA; fi ;;
+            schedule)
+              base=$(git rev-list -1 --before='24 hours ago' HEAD)
+              [ -n "$base" ] || base=$(git rev-parse HEAD) ;;
+            *)
+              base=${INPUT_BASE:-origin/main}
+              base=$(git rev-parse --verify "$base^{commit}") ;;
+          esac
+          echo "base=$base" >> "$GITHUB_OUTPUT"
+          echo "Base $base, head $(git rev-parse HEAD)"
+
+      - name: Run perf gate
+        id: gate
+        continue-on-error: ${{ env.PERF_GATE_ENFORCE != 'true' }}
+        timeout-minutes: 24
+        env:
+          BASE: ${{ steps.refs.outputs.base }}
+          ROUNDS: ${{ inputs.rounds || '10' }}
+          BENCHTIME: ${{ inputs.benchtime || '200ms' }}
+          ACCEPTED: ${{ contains(github.event.pull_request.labels.*.name, 'perf-regression-accepted') }}
+        run: |
+          flags=(-G -r "$ROUNDS" -t "$BENCHTIME" -o "$RUNNER_TEMP/perf-gate")
+          [ "$PERF_GATE_ENFORCE" = true ] && flags+=(-e)
+          [ "$ACCEPTED" = true ] && flags+=(-A)
+          scripts/perf/ab.sh "${flags[@]}" "$BASE"
+
+      - name: Job summary
+        if: always()
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          out="$RUNNER_TEMP/perf-gate"
+          mkdir -p "$out"
+          if [ ! -f "$out/report.md" ]; then
+            {
+              echo '<!-- perf-gate-report -->'
+              echo '## Perf gate: ERROR (shadow mode: report only)'
+              echo
+              echo "The gate did not produce a report; see the \"Run perf gate\" step log of ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}."
+            } > "$out/report.md"
+          fi
+          cat "$out/report.md" >> "$GITHUB_STEP_SUMMARY"
+          printf '%s\n' "$PR_NUMBER" > "$out/pr-number"
+
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: perf-gate-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/perf-gate/
+            !${{ runner.temp }}/perf-gate/src/
+            !${{ runner.temp }}/perf-gate/bin/
+          retention-days: 30
+          if-no-files-found: warn
+
+  comment:
+    name: Sticky PR comment
+    needs: gate
+    # Fork PRs get a read-only token, so only same-repo PRs get a comment.
+    # This job never checks out or runs PR code; it only posts the report.
+    if: >-
+      always() && github.event_name == 'pull_request' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      needs.gate.result != 'cancelled'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      pull-requests: write
+    steps:
+      - name: Download report
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: perf-gate-${{ github.run_id }}
+          path: perf-gate
+
+      - name: Post or update the comment
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          marker='<!-- perf-gate-report -->'
+          body=perf-gate/report.md
+          # GitHub caps comments at 65536 characters; the details sections
+          # come last, so truncation keeps the verdict and the main table.
+          head -c 60000 "$body" > comment.md
+          printf '\n\n[Run, raw data and benchstat](%s)\n' "$RUN_URL" >> comment.md
+          id=$(gh api --paginate "repos/$GH_REPO/issues/$PR_NUMBER/comments" \
+            --jq ".[] | select(.user.login == \"github-actions[bot]\" and (.body | startswith(\"$marker\"))) | .id" | head -n 1)
+          if [ -n "$id" ]; then
+            gh api -X PATCH "repos/$GH_REPO/issues/comments/$id" -F body=@comment.md >/dev/null
+          else
+            gh api -X POST "repos/$GH_REPO/issues/$PR_NUMBER/comments" -F body=@comment.md >/dev/null
+          fi
+
+  profile:
+    name: Profiles of the gap queries
+    if: github.event_name == 'workflow_dispatch' && inputs.mode == 'profile'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: ${{ inputs.head || '' }}
+          persist-credentials: false
+
+      - name: Set up Go
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
+        with:
+          go-version-file: go.mod
+          check-latest: true
+          cache-dependency-path: go.sum
+
+      - name: Install perf (best effort)
+        continue-on-error: true
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq --no-install-recommends linux-tools-common "linux-tools-$(uname -r)" >/dev/null
+          sudo sysctl -w kernel.perf_event_paranoid=-1
+
+      - name: Profile
+        env:
+          BENCHTIME: ${{ inputs.benchtime || '5s' }}
+        run: scripts/perf/profile.sh -o "$RUNNER_TEMP/profile" -t "$BENCHTIME" | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload profiles
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: perf-profile-${{ github.run_id }}
+          path: ${{ runner.temp }}/profile/
+          retention-days: 90

@@ -412,3 +412,13 @@ func TestReportSaysWhenThereIsNoAAControl(t *testing.T) {
 		t.Fatal("report does not flag the missing A/A control")
 	}
 }
+
+func TestExactlyTwoPercentMoreBytesIsAllowed(t *testing.T) {
+	// 400 -> 408 B/op is +2.000...02% in floating point; the rule is "more
+	// than 2%", so it must pass.
+	s := []bench{{name: "BenchmarkParseE2E/delete", ns: 700, noise: 0.01, bytes: 400, allocs: 5}}
+	grown := modify(s, func(_ int, b *bench) { b.bytes = 408 })
+	if res := evaluate(t, s, grown, s, DefaultConfig()); res.Verdict != Pass {
+		t.Fatalf("verdict = %s (%v), want pass", res.Verdict, res.Reasons)
+	}
+}

@@ -197,7 +197,7 @@ fi
 	echo "load:        $(uptime | sed 's/.*load average[s]*: //')"
 	echo "instr count: ${ir_backend:-none}${ir_note:+ ($ir_note)}"
 	if command -v perf >/dev/null 2>&1; then
-		echo "perf probe:  $(perf stat -x, -e instructions:u -- true 2>&1 | head -n 1)"
+		echo "perf probe:  $(perf stat -x, -e instructions:u -- true 2>&1 | head -n 3 | tr '\n' ' ' | cut -c 1-200)"
 	else
 		echo "perf probe:  perf not installed"
 	fi

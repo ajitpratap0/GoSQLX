@@ -250,7 +250,7 @@ func Evaluate(in Inputs, cfg Config) Result {
 		} else if r.Allocs.Head < r.Allocs.Base && r.Allocs.significant(cfg, true) {
 			r.Status = append(r.Status, "-allocs")
 		}
-		if r.Bytes.DeltaPct > cfg.BytesPct && r.Bytes.significant(cfg, true) {
+		if exceeds(r.Bytes.DeltaPct, cfg.BytesPct) && r.Bytes.significant(cfg, true) {
 			r.Status = append(r.Status, "+B/op")
 			r.Regress = true
 			moreBytes++
@@ -267,7 +267,7 @@ func Evaluate(in Inputs, cfg Config) Result {
 			if !c.OK {
 				continue
 			}
-			row := IrRow{Name: name, Cmp: c, Regress: c.DeltaPct > cfg.IrPct}
+			row := IrRow{Name: name, Cmp: c, Regress: exceeds(c.DeltaPct, cfg.IrPct)}
 			if row.Regress {
 				moreIr++
 			}
@@ -361,6 +361,10 @@ func roundGeomeanP(base, head *Run, rows []Row) float64 {
 	}
 	return mannWhitney(perRound(base), perRound(head))
 }
+
+// exceeds reports d > limit, treating values within rounding error of the
+// limit as equal: 400 -> 408 B/op is exactly +2%, not "more than 2%".
+func exceeds(d, limit float64) bool { return d > limit+1e-9 }
 
 func pct(d float64) string {
 	if math.IsNaN(d) {

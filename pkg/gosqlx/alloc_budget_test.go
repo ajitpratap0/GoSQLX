@@ -30,8 +30,12 @@ import (
 // logs when a budget has slack). Budgets are skipped under -race, where
 // instrumentation and randomised sync.Pool eviction change the counts, so CI
 // runs them in a dedicated non-race step (.github/workflows/test.yml, build
-// job). Counts were measured on go1.26.9 (the CI toolchain); they can differ
-// by a few allocations on other patch levels, hence the upper-bound rule.
+// job). CI floats to the latest 1.26.x (go-version '1.26' with check-latest),
+// so the toolchain patch level moves without a repo change. Counts can differ
+// by a few allocations between patch levels (hence the upper-bound rule), and a
+// Go patch release can therefore turn this step red on an unrelated PR. The fix
+// is to re-measure the budgets on the new toolchain (or pin the build job's
+// patch version), not to loosen the test.
 
 // parseAllocBudget is allocs/op of Parse+ReleaseAST for the 11 portable queries.
 var parseAllocBudget = map[string]float64{

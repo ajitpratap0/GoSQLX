@@ -18,7 +18,9 @@
 #   -a            all functions (cold code such as splitCore or formatters included)
 #                 Package init functions (.init) are always excluded.
 #   -m MAX_BYTES  exit 1 when the largest frame exceeds MAX_BYTES (default: report only)
-#   PACKAGE       packages to inspect, any package of the module (default: tokenizer, parser, ast, gosqlx)
+#   PACKAGE       packages to inspect: a full import path or a ./ pattern (e.g. ./pkg/linter),
+#                 resolved relative to the repo root, not the caller's directory; a bare
+#                 pkg/linter is rejected by go build (exit 4). Default: tokenizer, parser, ast, gosqlx
 # Exit codes: 1 frame over -m limit, 2 usage, 3 no STEXT lines, 4 go build failed,
 #             5 no function matched -f.
 set -euo pipefail
@@ -56,6 +58,7 @@ trap 'rm -f "$out" "$out.all" "$out.top" "$out.flt"' EXIT
 # -S prints the assembly listing of each function to stderr. The build cache
 # replays that output, so repeated runs stay cheap.
 # The requested packages themselves are built, so any package of the module works.
+# PACKAGE is an import path or a ./ pattern; we cd to the repo root above, so ./ resolves there.
 # A failed build keeps its compiler errors visible instead of vanishing with $out.
 if ! go build "${flags[@]}" "${pkgs[@]}" 2> "$out"; then
   cat "$out" >&2

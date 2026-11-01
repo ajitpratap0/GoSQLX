@@ -605,14 +605,22 @@ func (t *Tokenizer) load(input []byte, src string) {
 // the caller. When scratch is true (the internal tokscratch path) it is built
 // in t.tokBuf and stays owned by t; see tokBuf.
 func (t *Tokenizer) tokenize(ctx context.Context, input []byte, src string, haveSrc, scratch bool) ([]models.TokenWithSpan, error) {
-	// Record start time for metrics
-	startTime := time.Now()
+	// Read the clock only when metrics are enabled; time.Now is a measurable
+	// share of short tokenizations. If metrics are toggled on mid-call the
+	// duration is recorded as 0.
+	var startTime time.Time
+	metricsOn := metrics.IsEnabled()
+	if metricsOn {
+		startTime = time.Now()
+	}
 
 	// Validate input size to prevent DoS attacks. This must stay ahead of the
 	// string copy below so an oversized input is rejected before it is copied.
 	if len(input) > MaxInputSize {
 		err := errors.InputTooLargeError(int64(len(input)), MaxInputSize, models.Location{Line: 1, Column: 1})
-		metrics.RecordTokenization(time.Since(startTime), len(input), err)
+		if metricsOn {
+			metrics.RecordTokenization(time.Since(startTime), len(input), err)
+		}
 		return nil, err
 	}
 
@@ -716,8 +724,9 @@ func (t *Tokenizer) tokenize(ctx context.Context, input []byte, src string, have
 
 	if tokenErr != nil {
 		// Record metrics for failed tokenization
-		duration := time.Since(startTime)
-		metrics.RecordTokenization(duration, len(input), tokenErr)
+		if metricsOn {
+			metrics.RecordTokenization(time.Since(startTime), len(input), tokenErr)
+		}
 		return nil, tokenErr
 	}
 
@@ -733,8 +742,9 @@ func (t *Tokenizer) tokenize(ctx context.Context, input []byte, src string, have
 	}
 
 	// Record metrics for successful tokenization
-	duration := time.Since(startTime)
-	metrics.RecordTokenization(duration, len(input), nil)
+	if metricsOn {
+		metrics.RecordTokenization(time.Since(startTime), len(input), nil)
+	}
 
 	return tokens, nil
 }

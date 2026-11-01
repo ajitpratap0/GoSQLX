@@ -58,9 +58,23 @@ func Bytes(t any, input []byte) ([]models.TokenWithSpan, error) {
 	return impl(context.Background(), t, input, "", false)
 }
 
+// perfGateDemoSpin and perfGateDemoSink implement the injected slowdown of
+// the perf gate demonstration (W0-09); reverted in the next commit.
+var (
+	perfGateDemoSpin uint64 = 3
+	perfGateDemoSink uint64
+)
+
 // String is t.TokenizeString(s) into t's scratch buffer.
 func String(t any, s string) ([]models.TokenWithSpan, error) {
 	requireImplementation()
+	// PERF GATE DEMO (W0-09): injected slowdown proportional to the input
+	// length; reverted in the next commit.
+	spin := perfGateDemoSink
+	for i := uint64(0); i < perfGateDemoSpin*uint64(len(s)); i++ {
+		spin = spin*31 + i
+	}
+	perfGateDemoSink = spin
 	return impl(context.Background(), t, nil, s, true)
 }
 

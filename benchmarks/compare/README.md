@@ -15,15 +15,16 @@ this directory.
 - **Statistic:** median of `-count=10` runs of `go test -bench -benchmem`. The
   raw output is kept in `results/latest.txt` so you can re-summarise it with
   `benchstat`.
-- **Run matrix:** `-cpu 1` and `-cpu 4`, each with GOGC at its default and with
+- **Run matrix:** `-cpu 4` and `-cpu 1`, each with GOGC at its default and with
   `GOGC=off`, to separate mutator CPU from GC cost. The first configuration
-  (`cpu1-gogc-default`) feeds the v1 fields; the others are in `cells` of the
+  (`cpu4-gogc-default`) feeds the v1 fields; the others are in `cells` of the
   v2 document and in `results/latest-<config>.txt`. Compare configurations of
   one run, not absolute numbers across machines.
-- **Primary configuration:** `cmd/publish` defaults to `-cpus=1 -gogc=default`
-  and CI passes the same first entry, so the v1 `results[]` do not depend on who
-  publishes. This moves the published v1 numbers from the CI runner's default
-  GOMAXPROCS (4) to `-cpu 1`; they are not comparable with earlier files.
+- **Primary configuration:** `cmd/publish` defaults to `-cpus=4 -gogc=default`
+  and CI passes the same first entry (`-cpus=4,1 -gogc=default,off`), so the v1
+  `results[]` do not depend on who publishes and keep their v1 meaning (the
+  runner's default GOMAXPROCS, GOGC default). The `-cpu 1` and `GOGC=off`
+  numbers are in `cells[]`.
 - **Scaling:** `ParseParallel` (and `ParseFresh`) also run a `gosqlx_metricson`
   row, the GoSQLX parser with global metrics collection enabled, to expose the
   cost of its shared atomic counters under concurrency. Four vCPU cannot show
@@ -136,7 +137,7 @@ cd benchmarks/compare && go test -bench=. -benchmem -count=10 ./...
 task bench:publish
 
 # Publish the CI matrix (schema v2 cells for every configuration)
-cd benchmarks/compare && go run ./cmd/publish -cpus=1,4 -gogc=default,off -benchtime=200ms
+cd benchmarks/compare && go run ./cmd/publish -cpus=4,1 -gogc=default,off -benchtime=200ms
 
 # Cheap v1-only publish (BenchmarkParse alone, about the v1 cost)
 task bench:publish -- -families=Parse
@@ -159,4 +160,4 @@ benchmark on every change to this directory. Running it manually
 (`workflow_dispatch`) or pushing a release tag performs a full run and uploads
 the JSON, the raw output of every configuration and a benchstat summary per
 configuration as an artifact. The smoke run covers `-cpu 1,4,10`; the publish job
-runs the full `-cpu 1,4` x `GOGC=default,off` matrix.
+runs the full `-cpu 4,1` x `GOGC=default,off` matrix.

@@ -23,9 +23,9 @@ v1 can ignore everything under "v2 additions".
 additions to the object, not changes.
 
 Note: the first configuration is now explicit: `cmd/publish` defaults to
-`-cpus=1 -gogc=default` (CI passes the same primary), so `results[]` are
-measured at `-cpu 1`. Earlier files were measured at the runner's default
-GOMAXPROCS (4); do not compare the two.
+`-cpus=4 -gogc=default` (CI passes `-cpus=4,1 -gogc=default,off`, same primary),
+which is the runner's default GOMAXPROCS, so `results[]` keep the v1 meaning.
+The `-cpu 1` and `GOGC=off` data is in `cells[]`.
 
 ## v2 additions
 

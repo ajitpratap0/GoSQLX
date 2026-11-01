@@ -17,12 +17,22 @@ on:
     paths:
       - 'benchmarks/compare/**'
       - '.github/workflows/bench-compare.yml'
+      - 'testdata/realworld/**'
+      - 'pkg/**'
+      - 'internal/**'
+      - 'go.mod'
+      - 'go.sum'
   push:
     branches: [main]
     tags: ['v*']
     paths:
       - 'benchmarks/compare/**'
       - '.github/workflows/bench-compare.yml'
+      - 'testdata/realworld/**'
+      - 'pkg/**'
+      - 'internal/**'
+      - 'go.mod'
+      - 'go.sum'
   workflow_dispatch:
     inputs:
       count:
@@ -108,11 +118,11 @@ jobs:
             *[!0-9a-z.]*|'') echo "benchtime must look like 200ms or 100x, got '$BENCHTIME'" >&2; exit 1 ;;
           esac
           mkdir -p "$RUNNER_TEMP/bench"
-          # The matrix: -cpu 1 and -cpu 4, each with GOGC at its default and
+          # The matrix: -cpu 4 and -cpu 1, each with GOGC at its default and
           # off, so mutator CPU can be told apart from GC. The first entry
-          # (cpu1, GOGC default) feeds the schema v1 fields of the JSON.
+          # (cpu4, GOGC default) feeds the schema v1 fields of the JSON.
           go run ./cmd/publish -count="$COUNT" -benchtime="$BENCHTIME" \
-            -cpus=1,4 -gogc=default,off \
+            -cpus=4,1 -gogc=default,off \
             -out "$RUNNER_TEMP/bench/latest.json" \
             -raw "$RUNNER_TEMP/bench/latest.txt"
 

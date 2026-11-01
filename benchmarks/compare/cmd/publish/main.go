@@ -4,14 +4,14 @@
 // Run it from the benchmarks/compare module directory, usually through
 // `task bench:publish`:
 //
-//	go run ./cmd/publish                 # -count=10, -cpu 1, GOGC default, all families
+//	go run ./cmd/publish                 # -count=10, -cpu 4, GOGC default, all families
 //	go run ./cmd/publish -families=Parse # cheap v1-only publish (about the v1 cost)
 //	go run ./cmd/publish -count=3 -out /tmp/r.json -raw /tmp/r.txt
-//	go run ./cmd/publish -cpus=1,4 -gogc=default,off   # the CI matrix
+//	go run ./cmd/publish -cpus=4,1 -gogc=default,off   # the CI matrix
 //	go run ./cmd/publish -cpus=1,4,10,32               # scaling run on a 32+ vCPU box
 //
 // The primary configuration (the first -cpus value with the first -gogc
-// value, cpu1-gogc-default unless overridden) feeds the v1 fields, so the
+// value, cpu4-gogc-default unless overridden) feeds the v1 fields, so the
 // published v1 numbers do not depend on who runs the publish.
 //
 // The results document is schema v2 (see ../../SCHEMA.md). Every v1 field is
@@ -190,7 +190,7 @@ func main() {
 func run() error {
 	count := flag.Int("count", 10, "benchmark repetitions per benchmark")
 	benchtime := flag.String("benchtime", "", "optional -benchtime passed to go test (default: go test's own)")
-	cpus := flag.String("cpus", "1", "comma-separated -cpu values, one run per value; the first is the primary configuration that feeds the v1 fields (empty: go test's default GOMAXPROCS)")
+	cpus := flag.String("cpus", "4", "comma-separated -cpu values, one run per value; the first is the primary configuration that feeds the v1 fields (empty: go test's default GOMAXPROCS)")
 	gogcs := flag.String("gogc", "default", "comma-separated GOGC settings, default and/or off; the first is the primary configuration")
 	families := flag.String("families", "all", "comma-separated benchmark families to run ("+strings.Join(allFamilies, ",")+"), or all; the v1 fields need Parse, so Parse alone gives a cheap v1-only publish")
 	out := flag.String("out", filepath.Join("results", "latest.json"), "results JSON path")
@@ -291,6 +291,15 @@ func run() error {
 		c, err := compare.ComputeCommonAccept(d)
 		if err != nil {
 			return fmt.Errorf("common-accept %s: %w", d, err)
+		}
+		// BenchmarkParseDialect times the checked-in set, so the JSON must
+		// describe that set, not a freshly computed one.
+		checked, err := os.ReadFile(filepath.Join(compare.CommonAcceptDir, d+".txt"))
+		if err != nil {
+			return fmt.Errorf("common-accept %s: %w", d, err)
+		}
+		if string(checked) != c.Encode() {
+			return fmt.Errorf("common-accept %s: checked-in %s/%s.txt is stale against the pinned parsers and corpus; run `go test -run TestCommonAcceptSets -update` and commit it", d, compare.CommonAcceptDir, d)
 		}
 		report.CommonAccept = append(report.CommonAccept, CommonAcceptV{
 			Dialect: d, Parsers: c.Parsers, Total: c.Total, Accepted: len(c.Statements), SetSHA256: c.SetHash(),

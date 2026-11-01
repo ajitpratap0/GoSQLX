@@ -116,7 +116,7 @@ func Parse(sql string) (*ast.AST, error) {
 	// copies the tokens while preprocessing and they are not used after.
 	tokens, err := tokscratch.String(tkz, sql)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %w", ErrTokenize, err)
+		return nil, newWrap(ErrTokenize, err)
 	}
 
 	// Step 3: Parse to AST directly from model tokens
@@ -125,7 +125,7 @@ func Parse(sql string) (*ast.AST, error) {
 
 	astNode, err := p.ParseFromModelTokens(tokens)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %w", ErrSyntax, err)
+		return nil, newWrap(ErrSyntax, err)
 	}
 
 	return astNode, nil
@@ -193,7 +193,7 @@ func Parse(sql string) (*ast.AST, error) {
 func ParseWithContext(ctx context.Context, sql string) (*ast.AST, error) {
 	// Check context before starting
 	if err := ctx.Err(); err != nil {
-		return nil, fmt.Errorf("%w: %w", ErrTimeout, err)
+		return nil, newWrap(ErrTimeout, err)
 	}
 
 	// Step 1: Get tokenizer from pool
@@ -204,9 +204,9 @@ func ParseWithContext(ctx context.Context, sql string) (*ast.AST, error) {
 	tokens, err := tokscratch.StringContext(ctx, tkz, sql)
 	if err != nil {
 		if ctxErr := ctx.Err(); ctxErr != nil {
-			return nil, fmt.Errorf("%w: %w", ErrTimeout, ctxErr)
+			return nil, newWrap(ErrTimeout, ctxErr)
 		}
-		return nil, fmt.Errorf("%w: %w", ErrTokenize, err)
+		return nil, newWrap(ErrTokenize, err)
 	}
 
 	// Step 3: Parse to AST with context support
@@ -216,9 +216,9 @@ func ParseWithContext(ctx context.Context, sql string) (*ast.AST, error) {
 	astNode, err := p.ParseContextFromModelTokens(ctx, tokens)
 	if err != nil {
 		if ctxErr := ctx.Err(); ctxErr != nil {
-			return nil, fmt.Errorf("%w: %w", ErrTimeout, ctxErr)
+			return nil, newWrap(ErrTimeout, ctxErr)
 		}
-		return nil, fmt.Errorf("%w: %w", ErrSyntax, err)
+		return nil, newWrap(ErrSyntax, err)
 	}
 
 	return astNode, nil
@@ -245,7 +245,7 @@ func ParseWithTimeout(sql string, timeout time.Duration) (*ast.AST, error) {
 		// (e.g., parsing completed just before the deadline on fast
 		// machines), wrap with ErrTimeout so callers can rely on errors.Is.
 		if ctxErr := ctx.Err(); ctxErr != nil {
-			return nil, fmt.Errorf("%w: %w", ErrTimeout, ctxErr)
+			return nil, newWrap(ErrTimeout, ctxErr)
 		}
 		return nil, err
 	}
@@ -255,7 +255,7 @@ func ParseWithTimeout(sql string, timeout time.Duration) (*ast.AST, error) {
 	// completes. Callers relying on errors.Is(err, ErrTimeout) must see the
 	// timeout in that case.
 	if ctxErr := ctx.Err(); ctxErr != nil {
-		return nil, fmt.Errorf("%w: %w", ErrTimeout, ctxErr)
+		return nil, newWrap(ErrTimeout, ctxErr)
 	}
 	return astNode, nil
 }
@@ -281,7 +281,7 @@ func Validate(sql string) error {
 	// Use the dedicated validation fast-path that avoids building a full AST
 	err := parser.Validate(sql)
 	if err != nil {
-		return fmt.Errorf("%w: %w", ErrSyntax, err)
+		return newWrap(ErrSyntax, err)
 	}
 
 	return nil
@@ -307,7 +307,7 @@ func ParseBytes(sql []byte) (*ast.AST, error) {
 
 	tokens, err := tokscratch.Bytes(tkz, sql)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %w", ErrTokenize, err)
+		return nil, newWrap(ErrTokenize, err)
 	}
 
 	p := parser.GetParser()
@@ -315,7 +315,7 @@ func ParseBytes(sql []byte) (*ast.AST, error) {
 
 	astNode, err := p.ParseFromModelTokens(tokens)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %w", ErrSyntax, err)
+		return nil, newWrap(ErrSyntax, err)
 	}
 
 	return astNode, nil
@@ -732,7 +732,7 @@ func ParseWithRecovery(sql string) ([]ast.Statement, []error) {
 
 	tokens, err := tokscratch.String(tkz, sql)
 	if err != nil {
-		return nil, []error{fmt.Errorf("%w: %w", ErrTokenize, err)}
+		return nil, []error{newWrap(ErrTokenize, err)}
 	}
 
 	p := parser.GetParser()
@@ -742,7 +742,7 @@ func ParseWithRecovery(sql string) ([]ast.Statement, []error) {
 	if len(recoveryErrs) > 0 {
 		wrapped := make([]error, len(recoveryErrs))
 		for i, e := range recoveryErrs {
-			wrapped[i] = fmt.Errorf("%w: %w", ErrSyntax, e)
+			wrapped[i] = newWrap(ErrSyntax, e)
 		}
 		return stmts, wrapped
 	}
@@ -787,7 +787,7 @@ func ParseWithDialect(sql string, dialect keywords.SQLDialect) (*ast.AST, error)
 	}
 	astNode, err := parser.ParseWithDialect(sql, dialect)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %w", ErrSyntax, err)
+		return nil, newWrap(ErrSyntax, err)
 	}
 	return astNode, nil
 }

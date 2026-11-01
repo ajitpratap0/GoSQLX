@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Performance
+- **Parser**: token preprocessing now takes a type-gated fast path. Only identifier, keyword, aggregate and compound tokens take the normalisation path; every other token is appended with a single copy. Output is identical (guarded by an old-versus-new differential test); no API or behaviour change.
+
 ### Fixed
 - **AST**: `AlterTableStatement.SQL()` now separates multiple ALTER TABLE actions with commas, matching the compact formatter and preserving action boundaries when re-parsed.
 - **Playground**: the GoSQLX WebAssembly module now runs in a Web Worker, so

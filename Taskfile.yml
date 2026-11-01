@@ -10,6 +10,8 @@ vars:
     sh: go list ./...
   GO_FILES:
     sh: find . -type f -name '*.go' -not -path './vendor/*'
+  # Packages holding the behaviour golden tests (TestGolden*, testdata/goldens).
+  GOLDEN_PKGS: ./pkg/sql/tokenizer ./pkg/sql/parser ./pkg/formatter ./pkg/fingerprint ./pkg/linter ./pkg/sql/security ./pkg/transpiler ./pkg/lsp
 
 env:
   CGO_ENABLED: '0'
@@ -88,6 +90,20 @@ tasks:
     cmds:
       - echo "Running cbinding tests with CGO enabled..."
       - go test -race -timeout 60s ./pkg/cbinding/...
+      - echo "Smoke-running cbinding benchmarks (10 iterations)..."
+      - go test -race -timeout 120s -run ^\$ -bench CBinding -benchtime=10x ./pkg/cbinding/
+
+  bench:interop:
+    desc: Interop benchmarks (cgo, wasm bridge native) and binary sizes
+    cmds:
+      - CGO_ENABLED=1 go test -run ^\$ -bench CBinding -benchmem ./pkg/cbinding/
+      - go test -run ^\$ -bench WASMBridge -benchmem ./wasm/internal/bridge/
+      - scripts/perf/size-budget.sh
+
+  bench:wasm:
+    desc: Run the wasm bridge benchmarks in the real js/wasm engine under Node
+    cmds:
+      - scripts/perf/wasm-bench.sh
 
   test:pkg:
     desc: Run tests for a specific package (use PKG=./pkg/sql/parser)
@@ -96,6 +112,23 @@ tasks:
       - go test -v -race {{.PKG}}
     vars:
       PKG: '{{default "./..." .PKG}}'
+
+  goldens:
+    desc: Run the behaviour goldens (testdata/goldens) over every corpus and dialect
+    cmds:
+      - go test -count=1 -run '^TestGolden' {{.GOLDEN_PKGS}}
+
+  goldens:update:
+    desc: Regenerate testdata/goldens; list every changed cell and its reason in the PR
+    cmds:
+      - go test -count=1 -run '^TestGolden' {{.GOLDEN_PKGS}} -args -goldens.update
+
+  goldens:diff:
+    desc: Print the first differing statements of each changed golden cell against BASE (default origin/main)
+    cmds:
+      - ./scripts/goldens-diff.sh {{.BASE}}
+    vars:
+      BASE: '{{default "origin/main" .BASE}}'
 
   # =============================================================================
   # COVERAGE TASKS
@@ -143,13 +176,37 @@ tasks:
       - go test -run='^$' -bench=. -benchmem ./...
 
   bench:publish:
-    desc: Run the competitor harness with -count=10 and write benchmarks/compare/results/latest.{json,txt}
+    desc: Run the competitor harness (-count=10, -cpu 4, all families; pass -- -families=Parse for a v1-only run) and write benchmarks/compare/results/latest.{json,txt}
     dir: benchmarks/compare
     env:
       CGO_ENABLED: '1'
     cmds:
       - go run ./cmd/publish {{.CLI_ARGS}}
       - go run golang.org/x/perf/cmd/benchstat@v0.0.0-20260908200009-22c9c6c9d4da results/latest.txt
+
+  bench:ab:
+    desc: "Interleaved A/B of the working tree against BASE (GOGC=off, -cpu 1, ABBA, benchstat alpha 0.01). Vars: BASE (default origin/main), ROUNDS (10), BENCHTIME (200ms), BENCH='./pkg/gosqlx=^BenchmarkParseE2E$' (default: the gated suite)"
+    cmds:
+      - scripts/perf/ab.sh -r {{.ROUNDS}} -t {{.BENCHTIME}} {{if .BENCH}}-b '{{.BENCH}}'{{end}} {{.BASE}}
+    vars:
+      BASE: '{{default "origin/main" .BASE}}'
+      ROUNDS: '{{default "10" .ROUNDS}}'
+      BENCHTIME: '{{default "200ms" .BENCHTIME}}'
+
+  bench:gate:
+    desc: "Run the CI perf gate locally: the gated suite, A/A control, secondary metric and instructions/op, working tree against BASE (default: merge-base with origin/main)"
+    cmds:
+      - scripts/perf/ab.sh -G -r {{.ROUNDS}} -t {{.BENCHTIME}} {{if .BASE}}{{.BASE}}{{else}}"$(git merge-base HEAD origin/main)"{{end}}
+    vars:
+      ROUNDS: '{{default "10" .ROUNDS}}'
+      BENCHTIME: '{{default "200ms" .BENCHTIME}}'
+
+  bench:profile:
+    desc: "CPU profiles (-cpu 1, GOGC=off, -cpu 4) of the gap queries plus perf stat counters when available (Vars: BENCHTIME, default 3s)"
+    cmds:
+      - scripts/perf/profile.sh -t {{.BENCHTIME}}
+    vars:
+      BENCHTIME: '{{default "3s" .BENCHTIME}}'
 
   bench:pkg:
     desc: Run benchmarks for specific package (use PKG=./pkg/sql/parser)

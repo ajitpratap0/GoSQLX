@@ -17,6 +17,7 @@ package metrics_test
 import (
 	"testing"
 
+	"github.com/ajitpratap0/GoSQLX/internal/poolstats"
 	"github.com/ajitpratap0/GoSQLX/pkg/metrics"
 )
 
@@ -121,5 +122,48 @@ func TestPoolStats_ConcurrentSafe(t *testing.T) {
 	}
 	if ts.Puts != 100 {
 		t.Errorf("expected Puts=100, got %d", ts.Puts)
+	}
+}
+
+// TestPoolStats_TypedCountersEquivalent checks that the string-keyed API and
+// the typed internal counters feed the same standard-pool statistics, that a
+// custom pool keeps the map path, and that ResetPoolStats zeroes both.
+func TestPoolStats_TypedCountersEquivalent(t *testing.T) {
+	metrics.ResetPoolStats()
+	t.Cleanup(metrics.ResetPoolStats)
+
+	poolstats.Tokenizer.Get()
+	poolstats.Tokenizer.Get()
+	poolstats.Tokenizer.Put()
+	metrics.RecordNamedPoolGet("tokenizer")
+	metrics.RecordNamedPoolPut("parser")
+	poolstats.AST.Get()
+	metrics.RecordNamedPoolGet("custom-pool")
+
+	stats := metrics.GetPoolStats()
+	want := map[string]metrics.PoolStat{
+		"tokenizer":   {Gets: 3, Puts: 1},
+		"parser":      {Gets: 0, Puts: 1},
+		"ast":         {Gets: 1, Puts: 0},
+		"custom-pool": {Gets: 1, Puts: 0},
+	}
+	if len(stats) != len(want) {
+		t.Fatalf("got %d pools %v, want %d", len(stats), stats, len(want))
+	}
+	for name, w := range want {
+		if stats[name] != w {
+			t.Errorf("%s = %+v, want %+v", name, stats[name], w)
+		}
+	}
+
+	metrics.ResetPoolStats()
+	stats = metrics.GetPoolStats()
+	if len(stats) != 3 {
+		t.Fatalf("after reset got %d pools, want exactly the 3 standard pools: %v", len(stats), stats)
+	}
+	for name, s := range stats {
+		if s.Gets != 0 || s.Puts != 0 {
+			t.Errorf("%s not zeroed: %+v", name, s)
+		}
 	}
 }

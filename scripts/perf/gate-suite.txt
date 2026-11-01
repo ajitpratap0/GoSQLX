@@ -13,3 +13,4 @@
 ./pkg/gosqlx         ^BenchmarkParseFresh$/^(simple_select|join|complex)$
 ./pkg/gosqlx         ^BenchmarkPoolGetPut$/^serial$
 ./pkg/sql/tokenizer  ^BenchmarkTokenize$/^scratch$/^(join|complex|insert)$
+./pkg/sql/security    ^BenchmarkScanSQLRW$

@@ -10,6 +10,8 @@ vars:
     sh: go list ./...
   GO_FILES:
     sh: find . -type f -name '*.go' -not -path './vendor/*'
+  # Packages holding the behaviour golden tests (TestGolden*, testdata/goldens).
+  GOLDEN_PKGS: ./pkg/sql/tokenizer ./pkg/sql/parser ./pkg/formatter ./pkg/fingerprint ./pkg/linter ./pkg/sql/security ./pkg/transpiler ./pkg/lsp
 
 env:
   CGO_ENABLED: '0'
@@ -88,6 +90,20 @@ tasks:
     cmds:
       - echo "Running cbinding tests with CGO enabled..."
       - go test -race -timeout 60s ./pkg/cbinding/...
+      - echo "Smoke-running cbinding benchmarks (10 iterations)..."
+      - go test -race -timeout 120s -run ^\$ -bench CBinding -benchtime=10x ./pkg/cbinding/
+
+  bench:interop:
+    desc: Interop benchmarks (cgo, wasm bridge native) and binary sizes
+    cmds:
+      - CGO_ENABLED=1 go test -run ^\$ -bench CBinding -benchmem ./pkg/cbinding/
+      - go test -run ^\$ -bench WASMBridge -benchmem ./wasm/internal/bridge/
+      - scripts/perf/size-budget.sh
+
+  bench:wasm:
+    desc: Run the wasm bridge benchmarks in the real js/wasm engine under Node
+    cmds:
+      - scripts/perf/wasm-bench.sh
 
   test:pkg:
     desc: Run tests for a specific package (use PKG=./pkg/sql/parser)
@@ -96,6 +112,23 @@ tasks:
       - go test -v -race {{.PKG}}
     vars:
       PKG: '{{default "./..." .PKG}}'
+
+  goldens:
+    desc: Run the behaviour goldens (testdata/goldens) over every corpus and dialect
+    cmds:
+      - go test -count=1 -run '^TestGolden' {{.GOLDEN_PKGS}}
+
+  goldens:update:
+    desc: Regenerate testdata/goldens; list every changed cell and its reason in the PR
+    cmds:
+      - go test -count=1 -run '^TestGolden' {{.GOLDEN_PKGS}} -args -goldens.update
+
+  goldens:diff:
+    desc: Print the first differing statements of each changed golden cell against BASE (default origin/main)
+    cmds:
+      - ./scripts/goldens-diff.sh {{.BASE}}
+    vars:
+      BASE: '{{default "origin/main" .BASE}}'
 
   # =============================================================================
   # COVERAGE TASKS

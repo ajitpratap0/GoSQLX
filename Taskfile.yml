@@ -201,6 +201,39 @@ tasks:
       ROUNDS: '{{default "10" .ROUNDS}}'
       BENCHTIME: '{{default "200ms" .BENCHTIME}}'
 
+  bench:matrix:
+    set: [pipefail]
+    desc: "Run the whole benchmark matrix once (every pkg benchmark except cbinding, which needs CGO: see bench:interop; -benchmem, -cpu 1, GOGC=off) and write it to OUT (default: .bench/matrix.txt, gitignored). Vars: BENCHTIME (default 100ms), OUT, FILTER (default .)"
+    env:
+      GOGC: 'off'
+    cmds:
+      - mkdir -p "$(dirname '{{.OUT}}')"
+      - go test -run '^$' -bench '{{.FILTER}}' -benchmem -benchtime {{.BENCHTIME}} -cpu 1 $(go list ./pkg/... ./wasm/internal/... | grep -v /cbinding) 2>&1 | tee {{.OUT}}
+    vars:
+      BENCHTIME: '{{default "100ms" .BENCHTIME}}'
+      FILTER: '{{default "." .FILTER}}'
+      OUT: '{{default ".bench/matrix.txt" .OUT}}'
+
+  bench:baseline:
+    desc: "Check allocs/op and B/op of the gated suite against benchmarks/baselines/<GOARCH>.json (ns/op is trend-only). Fails if allocs/op rose or B/op rose more than 2%"
+    cmds:
+      - go run ./scripts/perf/baseline {{.CLI_ARGS}}
+
+  bench:baseline:update:
+    desc: "Re-measure the gated suite and rewrite benchmarks/baselines/<GOARCH>.json (run on the architecture being recorded, on an idle machine)"
+    cmds:
+      - go run ./scripts/perf/baseline -update {{.CLI_ARGS}}
+
+  pgo:refresh:
+    desc: "Regenerate cmd/gosqlx/default.pgo from a CPU profile of the parse benchmarks (Go applies it automatically to the CLI build). Vars: BENCHTIME (default 10s)"
+    cmds:
+      - go test -run '^$' -bench '^BenchmarkParseE2E$' -benchtime {{.BENCHTIME}} -cpu 4 -cpuprofile cmd/gosqlx/default.pgo -o {{.TMP_BIN}} ./pkg/gosqlx
+      - /bin/rm -f {{.TMP_BIN}}
+      - echo "Wrote cmd/gosqlx/default.pgo. Verify with task bench:ab before committing it."
+    vars:
+      BENCHTIME: '{{default "10s" .BENCHTIME}}'
+      TMP_BIN: '{{.TMPDIR | default "/tmp"}}/gosqlx-pgo.test'
+
   bench:profile:
     desc: "CPU profiles (-cpu 1, GOGC=off, -cpu 4) of the gap queries plus perf stat counters when available (Vars: BENCHTIME, default 3s)"
     cmds:

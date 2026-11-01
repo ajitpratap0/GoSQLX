@@ -7,19 +7,65 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Benchmark and perf-gate infrastructure (performance overhaul, wave 0)**:
+  pull requests are now judged by interleaved A/B measurements instead of
+  absolute numbers. No library behaviour changes apart from #901 (see Fixed). The pieces, by PR:
+  - Corpus and behaviour guards: the benchmark corpus manifest and
+    `internal/benchcorpus` loader (#895); behaviour goldens (token, parse,
+    format, lint, scan and transpile hashes) over every corpus and dialect
+    (#915); wall-clock test assertions replaced with ratio and count checks
+    (#899); ClickHouse/Snowflake lambda bodies and `U&` in dialects without
+    `&` fixed so the goldens could be pinned (#901).
+  - Benchmark matrix: tokenizer and parse stages (#913), server shapes with
+    `AllocsPerRun` budgets, a stack-depth test and a frame-size script (#909),
+    high-level, render and transform (#911), transpile with a prefilter
+    differential test (#912), interop benchmarks and a binary-size budget
+    (#908), and lint, security and LSP (#910).
+  - Competitor harness: new pure-Go peers (dolthub/vitess, rqlite/sql,
+    AfterShip/clickhouse-sql-parser, auxten/postgresql-parser), ORM-style
+    queries, lexer, render, normalize, fresh-goroutine, parallel and
+    per-dialect cells with checked-in common-accept sets, and a schema v2
+    results file that keeps every v1 field (#914).
+  - Gate: an interleaved A/B workflow in shadow mode (`GOGC=off`, `-cpu 1`,
+    ABBA rounds, benchstat at alpha 0.01, A/A noise control; `allocs/op`, `B/op`
+    and instruction-count gates) with `task bench:ab` and `task bench:gate`
+    (#916).
+  - Baselines and docs (#917): per-architecture
+    `benchmarks/baselines/{amd64,arm64}.json` holding trend-only ns/op and gated
+    B/op and allocs/op, checked or regenerated with `task bench:baseline` and
+    `task bench:baseline:update` (local-only until W0-13 wires the check into
+    `perf-gate.yml`; CI currently gates allocs/op and B/op relatively via the
+    A/B gate); new `task bench:matrix` and `task pgo:refresh`;
+    `docs/PERFORMANCE_METHODOLOGY.md` (method, how to run an A/B, how the gate
+    decides, claims policy). `performance_baselines.json` and
+    `TestPerformanceRegression` are now documented as a smoke test only, and
+    its never-enforced `TokenizationThroughput` and `EndToEndSustained` entries
+    are removed.
+
 ### Changed
 - **Perf measurement methodology** (W0-15; benchmark tooling only, no library
   behaviour change):
   - Every `GOGC=off` measurement now also sets `GOMEMLIMIT` (default `64MiB`;
     override with `PERF_GOMEMLIMIT` or the `gomemlimit` dispatch input, `off`
     unsets it): `scripts/perf/ab.sh` (so `task bench:ab` and `task bench:gate`),
-    `scripts/perf/profile.sh` and the competitor harness's `cmd/publish`
-    (`-gomemlimit`, recorded as `configs[].gomemlimit` in the results JSON).
+    `scripts/perf/profile.sh`, `task bench:matrix` and the competitor
+    harness's `cmd/publish` (`-gomemlimit`, recorded as
+    `configs[].gomemlimit` in the results JSON). An invalid value is refused
+    up front instead of making every benchmark binary panic.
     Without a limit a GC-off heap only grows, so allocations land on fresh pages
     whose first-touch faults were timed and profiled; the first benchmark of
     each test binary absorbed most of them. GOGC=off timings are therefore not
     comparable with runs made before this change; base and head of one run
-    always use the same setting.
+    always use the same setting. The limit lets the collector run, so timings
+    and instructions/op (`perfdriver`, cachegrind) are no longer pure mutator
+    work but include a small GC share (about 0.25% of Ir/op for `join`), and
+    the pool drains it causes make allocs/op vary for large-input and
+    low-iteration benchmarks (not in the gated suite, where it stays exact).
+  - `scripts/perf/baseline` deliberately keeps `GOGC=off` with no
+    `GOMEMLIMIT` (and drops an inherited one): it gates absolute allocs/op and
+    B/op only, which are exact only when no collection drains the pools.
+    `docs/PERFORMANCE_METHODOLOGY.md` documents the whole method.
   - `perf-gate.yml` and `bench-compare.yml` build with one pinned Go release,
     `PERF_GO_VERSION` 1.26.9 (the toolchain of the recorded baselines); the
     gate used to take 1.26.1 from `go.mod`.
@@ -27,7 +73,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     8-way L1i, the Zen 3/4/5 geometry) of the gap queries: instructions, L1i
     and L1d misses per operation and the functions with the most L1i misses.
   - New `matrix` dispatch mode in `perf-gate.yml`: the interleaved A/B over the
-    full benchmark matrix (`scripts/perf/matrix-suite.sh`), report only.
+    full benchmark matrix (`scripts/perf/matrix-suite.sh`), report only: the
+    job is named "Matrix A/B (report only)" and the report heading is
+    "Matrix A/B: VERDICT (report only, not a gate verdict)" (`ab.sh -T`,
+    `gate -report-only -title`).
   - Every perf artifact and report names the runner CPU model, and the reports
     compare by in-job ratio only: the gate report says so, and the competitor
     harness summary leads with GoSQLX/peer time ratios (`cmd/publish -ratios`)

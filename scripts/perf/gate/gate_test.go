@@ -422,3 +422,62 @@ func TestExactlyTwoPercentMoreBytesIsAllowed(t *testing.T) {
 		t.Fatalf("verdict = %s (%v), want pass", res.Verdict, res.Reasons)
 	}
 }
+
+// TestPerBenchmarkTimeThreshold pins both sides of the 3% per-benchmark bar
+// with low-noise samples: +4% must be flagged and +2.5% must not, so moving
+// the bar in either direction fails here.
+func TestPerBenchmarkTimeThreshold(t *testing.T) {
+	s := modify(suite(), func(_ int, b *bench) { b.noise = 0.002 })
+	for _, tc := range []struct {
+		factor  float64
+		flagged bool
+	}{{1.04, true}, {1.025, false}} {
+		t.Run(fmt.Sprintf("x%.3f", tc.factor), func(t *testing.T) {
+			const idx = 5
+			slow := modify(s, func(i int, b *bench) {
+				if i == idx {
+					b.ns *= tc.factor
+				}
+			})
+			res := evaluate(t, s, slow, s, DefaultConfig())
+			r := res.Rows[idx]
+			if !r.Time.significant(DefaultConfig(), false) {
+				t.Fatalf("row %d: time delta %+.2f%% not significant (p=%g); the test needs low noise", idx, r.Time.DeltaPct, r.Time.P)
+			}
+			isSlower := strings.Contains(strings.Join(r.Status, ","), "slower")
+			want := 0
+			if tc.flagged {
+				want = 1
+			}
+			if isSlower != tc.flagged || res.TimeRegressed != want {
+				t.Fatalf("x%.3f: row status %v, %d time regressions; want slower=%v and %d", tc.factor, r.Status, res.TimeRegressed, tc.flagged, want)
+			}
+		})
+	}
+}
+
+// TestUnequalSampleCountsSkipTheGeomeanP: one benchmark with one fewer head
+// sample means the per-round suite geomeans are not aligned, so the geomean
+// p-value is NaN (not judged) and nothing indexes past a short sample slice.
+func TestUnequalSampleCountsSkipTheGeomeanP(t *testing.T) {
+	s := suite()
+	headText := arm(2, rounds, s)
+	drop := s[len(s)-1].name + " "
+	i := strings.LastIndex(headText, drop)
+	if i < 0 {
+		t.Fatalf("no %q line in the head arm", drop)
+	}
+	j := strings.IndexByte(headText[i:], '\n')
+	headText = headText[:i] + headText[i+j+1:]
+	in := Inputs{Base: mustParse(t, arm(1, rounds, s)), Head: mustParse(t, headText)}
+	if n := len(in.Head.Get(s[len(s)-1].name, unitTime)); n != rounds-1 {
+		t.Fatalf("head samples for the shortened benchmark = %d, want %d", n, rounds-1)
+	}
+	res := Evaluate(in, DefaultConfig())
+	if !math.IsNaN(res.GeomeanP) {
+		t.Fatalf("GeomeanP = %g, want NaN for unequal sample counts", res.GeomeanP)
+	}
+	if res.Verdict != Pass {
+		t.Fatalf("verdict = %s (%v), want pass", res.Verdict, res.Reasons)
+	}
+}

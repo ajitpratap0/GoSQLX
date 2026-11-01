@@ -38,7 +38,7 @@
 # Environment:
 #   PIN_CPU     CPU for taskset (default: the last online CPU; "none" disables pinning)
 #   BENCHSTAT   benchstat command (default: benchstat on PATH, else the pinned version via go run)
-#   IR_SAMPLES  samples per perfdriver case (default 1 under cachegrind, else 3)
+#   IR_SAMPLES  samples per perfdriver case, median taken (default 3, every backend)
 #
 # Output: DIR/report.md (also printed), DIR/status (pass, regression,
 # inconclusive), DIR/raw/*.txt (raw benchmark output), DIR/env.txt.

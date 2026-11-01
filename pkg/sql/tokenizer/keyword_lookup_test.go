@@ -123,3 +123,17 @@ func TestIsKeywordMatchesMap(t *testing.T) {
 		}
 	}
 }
+
+// TestKeywordTableHotKeysAtHome asserts the layout is deterministic and that
+// the hot keywords sit in their home slot (zero probe displacement).
+func TestKeywordTableHotKeysAtHome(t *testing.T) {
+	for _, k := range kwHotKeys {
+		if _, ok := keywordTokenTypes[k]; !ok {
+			continue
+		}
+		home := kwHash(k) & (kwTableSize - 1)
+		if !kwTable[home].used || kwTable[home].key != k {
+			t.Errorf("hot keyword %s is displaced from home slot %d", k, home)
+		}
+	}
+}

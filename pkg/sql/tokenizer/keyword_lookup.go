@@ -15,6 +15,7 @@
 package tokenizer
 
 import (
+	"sort"
 	"strings"
 	"unicode/utf8"
 
@@ -81,24 +82,61 @@ func kwHash(s string) uint32 {
 	return h
 }
 
+// kwHotKeys are inserted first, in this order, so that the keywords present in
+// nearly every query claim their home slot (displacement 0) regardless of
+// collisions with rarer keys.
+var kwHotKeys = []string{
+	"SELECT", "FROM", "WHERE", "AND", "OR", "JOIN", "ON", "AS", "BY", "ORDER",
+	"GROUP", "INSERT", "INTO", "VALUES", "UPDATE", "SET", "NOT", "NULL", "IN",
+	"IS", "CASE", "WHEN", "THEN", "END", "WITH", "OVER",
+}
+
 func init() {
-	insert := func(k string) *kwEntry {
+	// Keys are inserted in a fixed order (hot keywords, then the rest sorted)
+	// so the probe layout is identical in every process; ranging over the
+	// maps directly would make collision placement, and so hot-path probe
+	// counts, vary from run to run.
+	types := make(map[string]models.TokenType, len(keywordTokenTypes))
+	keys := make(map[string]struct{}, len(keywordTokenTypes)+len(compoundKeywordStarts))
+	for k, v := range keywordTokenTypes {
+		types[k] = v
+		keys[k] = struct{}{}
+	}
+	for k, v := range compoundKeywordStarts {
+		if v {
+			keys[k] = struct{}{}
+		}
+	}
+	if len(keys) > kwTableSize/2 {
+		panic("tokenizer: keyword table load factor exceeds 0.5; increase kwTableSize")
+	}
+	insert := func(k string) {
 		i := kwHash(k) & (kwTableSize - 1)
 		for kwTable[i].used && kwTable[i].key != k {
 			i = (i + 1) & (kwTableSize - 1)
 		}
 		e := &kwTable[i]
-		e.used, e.key = true, k
-		return e
-	}
-	for k, v := range keywordTokenTypes {
-		e := insert(k)
-		e.typ, e.isKeyword = v, true
-	}
-	for k, v := range compoundKeywordStarts {
-		if v {
-			insert(k).compoundStart = true
+		if e.used {
+			return
 		}
+		e.used, e.key = true, k
+		if t, ok := types[k]; ok {
+			e.typ, e.isKeyword = t, true
+		}
+		e.compoundStart = compoundKeywordStarts[k]
+	}
+	for _, k := range kwHotKeys {
+		if _, ok := keys[k]; ok {
+			insert(k)
+		}
+	}
+	rest := make([]string, 0, len(keys))
+	for k := range keys {
+		rest = append(rest, k)
+	}
+	sort.Strings(rest)
+	for _, k := range rest {
+		insert(k)
 	}
 }
 

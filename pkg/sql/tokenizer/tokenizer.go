@@ -2030,12 +2030,7 @@ func (t *Tokenizer) keywordAt() bool {
 	t.scanIdentifierTail()
 	word := t.src[save.Index:t.pos.Index]
 	t.pos = save
-	var kbuf [keywordKeyBufLen]byte
-	if len(word) > keywordKeyBufLen || !asciiUpper(kbuf[:len(word)], word) {
-		return false
-	}
-	_, ok := keywordTokenTypes[string(kbuf[:len(word)])]
-	return ok
+	return IsKeyword(word) && isASCII(word)
 }
 
 func (t *Tokenizer) invalidNumeric(start int) (models.Token, error) {

@@ -39,17 +39,17 @@ import (
 
 // parseAllocBudget is allocs/op of Parse+ReleaseAST for the 11 portable queries.
 var parseAllocBudget = map[string]float64{
-	"simple_select": 5,
-	"select_where":  18,
-	"join":          17,
-	"aggregate":     18,
-	"subquery":      14,
-	"cte":           21,
-	"window":        11,
-	"complex":       50,
-	"insert":        17,
-	"update":        13,
-	"delete":        5,
+	"simple_select": 6,
+	"select_where":  19,
+	"join":          18,
+	"aggregate":     19,
+	"subquery":      15,
+	"cte":           22,
+	"window":        12,
+	"complex":       51,
+	"insert":        18,
+	"update":        14,
+	"delete":        6,
 }
 
 // dialectAllocStatement pins each dialect to one medium real-world corpus

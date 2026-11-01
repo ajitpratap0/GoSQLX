@@ -90,6 +90,20 @@ tasks:
     cmds:
       - echo "Running cbinding tests with CGO enabled..."
       - go test -race -timeout 60s ./pkg/cbinding/...
+      - echo "Smoke-running cbinding benchmarks (10 iterations)..."
+      - go test -race -timeout 120s -run ^\$ -bench CBinding -benchtime=10x ./pkg/cbinding/
+
+  bench:interop:
+    desc: Interop benchmarks (cgo, wasm bridge native) and binary sizes
+    cmds:
+      - CGO_ENABLED=1 go test -run ^\$ -bench CBinding -benchmem ./pkg/cbinding/
+      - go test -run ^\$ -bench WASMBridge -benchmem ./wasm/internal/bridge/
+      - scripts/perf/size-budget.sh
+
+  bench:wasm:
+    desc: Run the wasm bridge benchmarks in the real js/wasm engine under Node
+    cmds:
+      - scripts/perf/wasm-bench.sh
 
   test:pkg:
     desc: Run tests for a specific package (use PKG=./pkg/sql/parser)

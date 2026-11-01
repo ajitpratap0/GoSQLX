@@ -55,7 +55,7 @@ func TestCompactFastDifferential(t *testing.T) {
 		keywords.DialectSQLServer, keywords.DialectOracle, keywords.DialectSQLite,
 		keywords.DialectSnowflake, keywords.DialectClickHouse, keywords.DialectMariaDB,
 	}
-	parsed, skipped, statements, comparisons, mismatches := 0, 0, 0, 0, 0
+	parsed, skipped, statements, comparisons, mismatches, fastEligible := 0, 0, 0, 0, 0, 0
 	statementTypes := make(map[string]int)
 	for _, file := range files {
 		contents, err := os.ReadFile(file)
@@ -95,6 +95,9 @@ func TestCompactFastDifferential(t *testing.T) {
 								slowOpts.LineWidth = 80
 								slow := formatStatementSlow(statement, slowOpts)
 								comparisons++
+								if opts.Dialect == "" && opts.KeywordCase != ast.KeywordLower {
+									fastEligible++
+								}
 								if fast != slow {
 									mismatches++
 									if mismatches <= 12 {
@@ -109,9 +112,12 @@ func TestCompactFastDifferential(t *testing.T) {
 			}
 		}
 	}
-	t.Logf("files=%d realworld=%d corpus=%d parsed(file/chunk,dialect)=%d parse_skips=%d statements=%d comparisons=%d mismatches=%d types=%v", len(files), groups["realworld"], groups["corpus"], parsed, skipped, statements, comparisons, mismatches, statementTypes)
+	t.Logf("files=%d realworld=%d corpus=%d parsed(file/chunk,dialect)=%d parse_skips=%d statements=%d comparisons=%d fast_eligible=%d mismatches=%d types=%v", len(files), groups["realworld"], groups["corpus"], parsed, skipped, statements, comparisons, fastEligible, mismatches, statementTypes)
 	if statements == 0 {
 		t.Fatal("no statements parsed from differential fixtures")
+	}
+	if fastEligible == 0 {
+		t.Fatal("no comparison was eligible for the compact fast path; the differential is vacuous")
 	}
 	if mismatches != 0 {
 		t.Fatalf("compact rendering differs from visitor output in %d/%d comparisons (first 12 logged)", mismatches, comparisons)

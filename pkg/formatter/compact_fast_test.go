@@ -4,9 +4,12 @@
 package formatter
 
 import (
+	"strings"
 	"testing"
 
+	"github.com/ajitpratap0/GoSQLX/pkg/models"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
+	"github.com/ajitpratap0/GoSQLX/pkg/sql/keywords"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/parser"
 )
 
@@ -90,5 +93,57 @@ func TestCompactFastNil(t *testing.T) {
 		if got := formatStatement(stmt, ast.CompactStyle()); got != "" {
 			t.Fatalf("%T: got %q", stmt, got)
 		}
+	}
+}
+
+// TestCompactFastFormatASTSingleStatement guards the single-statement shortcut
+// in formatAST with exact expectations: the execute slash and the statement
+// terminator must survive it.
+func TestCompactFastFormatASTSingleStatement(t *testing.T) {
+	cases := []struct {
+		name, dialect, sql string
+		semicolon          bool
+		want               string
+	}{
+		{"oracle select slash", "oracle", "SELECT 1 FROM dual\n/", false, "SELECT 1 FROM dual\n/"},
+		{"oracle select slash semicolon", "oracle", "SELECT 1 FROM dual\n/", true, "SELECT 1 FROM dual\n/"},
+		{"oracle plsql slash", "oracle", "BEGIN NULL; END;\n/", false, "BEGIN NULL; END;\n/"},
+		{"oracle plsql slash semicolon", "oracle", "BEGIN NULL; END;\n/", true, "BEGIN NULL; END;\n/"},
+		{"mysql show tables", "mysql", "SHOW TABLES", true, "SHOW TABLES;"},
+		{"postgresql vacuum", "postgresql", "VACUUM", true, "VACUUM;"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			tree, err := parser.ParseBytesWithDialect([]byte(tc.sql), keywords.SQLDialect(tc.dialect))
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer ast.ReleaseAST(tree)
+			opts := ast.CompactStyle()
+			opts.AddSemicolon = tc.semicolon
+			if got := FormatAST(tree, opts); got != tc.want {
+				t.Fatalf("got %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+// TestCompactFastFormatASTHandBuiltComments reaches the Comments guard, which
+// parsed trees never do because they carry StatementEnds.
+func TestCompactFastFormatASTHandBuiltComments(t *testing.T) {
+	parsed, err := parser.ParseBytesWithDialect([]byte("SELECT 1"), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ast.ReleaseAST(parsed)
+	plain := FormatAST(parsed, ast.CompactStyle())
+
+	withComment := &ast.AST{
+		Statements: parsed.Statements,
+		Comments:   []models.Comment{{Text: "-- note", Style: models.LineComment}},
+	}
+	got := FormatAST(withComment, ast.CompactStyle())
+	if !strings.Contains(got, "-- note") || !strings.Contains(got, plain) {
+		t.Fatalf("comment dropped or statement altered: got %q, plain %q", got, plain)
 	}
 }

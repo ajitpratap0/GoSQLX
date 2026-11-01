@@ -223,8 +223,8 @@ func formatStatement(s ast.Statement, opts ast.FormatOptions) string {
 			return stmtSQL(s)
 		}
 	}
-	// SetOperation and AlterTable deliberately remain on the visitor path:
-	// their SQL() methods differ for nil operands and comma-separated actions.
+	// SetOperation deliberately remains on the visitor path: its SQL() method
+	// differs for nil operands.
 	return formatStatementSlow(s, opts)
 }
 

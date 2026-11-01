@@ -20,7 +20,9 @@ package lsp
 //	didChangeIncremental  one textDocument/didChange notification with a one-character range edit (the
 //	                      debounce timer is cancelled so no validation runs in the background)
 //	editCycle             a keystroke followed by what an editor asks for once typing pauses: didChange,
-//	                      validateDocument, semanticTokens
+//	                      validateDocument (diagnostics), documentSymbol, semanticTokens. This is the
+//	                      audit's typical edit cycle: 3 tokenizations and 2 parses of the same text,
+//	                      the duplicate work a per-document cache removes.
 //
 // Edits alternate insert and delete of one character so the size stays fixed.
 
@@ -115,6 +117,20 @@ func mustMarshal(tb testing.TB, v interface{}) json.RawMessage {
 	return raw
 }
 
+// lspEditCycle is the editCycle op: a keystroke, then what an editor asks for
+// once typing pauses (diagnostics, symbols, semantic tokens). It returns the
+// symbol and semantic-token results so the test can check them.
+func lspEditCycle(h *Handler, edit func(int), i int, semParams, symParams json.RawMessage) (syms, toks interface{}, err error) {
+	edit(i)
+	content, _ := h.server.Documents().GetContent(benchURI)
+	h.validateDocument(benchURI, content, i+2)
+	if syms, err = h.HandleRequest("textDocument/documentSymbol", symParams); err != nil {
+		return nil, nil, err
+	}
+	toks, err = h.HandleRequest("textDocument/semanticTokens/full", semParams)
+	return syms, toks, err
+}
+
 func BenchmarkLSP(b *testing.B) {
 	ops := []string{"semanticTokens", "documentSymbol", "diagnostics", "editCycle", "didChangeIncremental"}
 	for _, op := range ops {
@@ -153,10 +169,7 @@ func BenchmarkLSP(b *testing.B) {
 						case "didChangeIncremental":
 							edit(i)
 						case "editCycle":
-							edit(i)
-							content, _ := h.server.Documents().GetContent(benchURI)
-							h.validateDocument(benchURI, content, i+2)
-							if _, err := h.HandleRequest("textDocument/semanticTokens/full", semParams); err != nil {
+							if _, _, err := lspEditCycle(h, edit, i, semParams, symParams); err != nil {
 								b.Fatal(err)
 							}
 						}
@@ -232,6 +245,34 @@ func TestLSPBenchOps(t *testing.T) {
 			cancelDebounce(h)
 			if got, _ = h.server.Documents().GetContent(benchURI); got != doc {
 				t.Errorf("after delete the document differs from the original (%d vs %d bytes)", len(got), len(doc))
+			}
+
+			// editCycle runs didChange, validateDocument, documentSymbol and
+			// semanticTokens; the last two must return real results.
+			edit := func(i int) {
+				if i&1 == 0 {
+					h.HandleNotification("textDocument/didChange", insert(i+2))
+				} else {
+					h.HandleNotification("textDocument/didChange", remove(i+2))
+				}
+				cancelDebounce(h)
+			}
+			semP := mustMarshal(t, SemanticTokensParams{TextDocument: TextDocumentIdentifier{URI: benchURI}})
+			symP := mustMarshal(t, DocumentSymbolParams{TextDocument: TextDocumentIdentifier{URI: benchURI}})
+			for i := 0; i < 2; i++ {
+				syms, toks, err := lspEditCycle(h, edit, i, semP, symP)
+				if err != nil {
+					t.Fatalf("editCycle %d: %v", i, err)
+				}
+				if ds, ok := syms.([]DocumentSymbol); !ok || len(ds) == 0 {
+					t.Errorf("editCycle %d: documentSymbol = %T, want non-empty []DocumentSymbol", i, syms)
+				}
+				if st, ok := toks.(*SemanticTokens); !ok || len(st.Data) == 0 {
+					t.Errorf("editCycle %d: semanticTokens = %T, want non-empty data", i, toks)
+				}
+			}
+			if got, _ = h.server.Documents().GetContent(benchURI); got != doc {
+				t.Errorf("editCycle pair did not restore the document")
 			}
 
 			// The diagnostics benchmark must time the valid-document path: a

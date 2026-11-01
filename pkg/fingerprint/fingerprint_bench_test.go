@@ -15,77 +15,131 @@
 package fingerprint_test
 
 import (
+	"fmt"
+	"strings"
 	"testing"
 
+	"github.com/ajitpratap0/GoSQLX/internal/benchcorpus"
 	"github.com/ajitpratap0/GoSQLX/pkg/fingerprint"
 )
 
-var portableQueries = []struct{ ID, SQL string }{
-	{
-		ID:  "simple_select",
-		SQL: "SELECT id, name FROM users",
-	},
-	{
-		ID:  "select_where",
-		SQL: "SELECT id, name, email FROM users WHERE active = 1 AND created_at > '2024-01-01' ORDER BY name LIMIT 10",
-	},
-	{
-		ID:  "join",
-		SQL: "SELECT u.id, u.name, o.total FROM users u JOIN orders o ON u.id = o.user_id WHERE o.total > 100 ORDER BY o.total DESC LIMIT 50",
-	},
-	{
-		ID:  "aggregate",
-		SQL: "SELECT status, COUNT(*), SUM(total) FROM orders GROUP BY status HAVING COUNT(*) > 10",
-	},
-	{
-		ID:  "subquery",
-		SQL: "SELECT name FROM users WHERE id IN (SELECT user_id FROM orders WHERE total > 1000)",
-	},
-	{
-		ID:  "cte",
-		SQL: "WITH recent AS (SELECT user_id, total FROM orders WHERE total > 100) SELECT user_id, SUM(total) FROM recent GROUP BY user_id",
-	},
-	{
-		ID:  "window",
-		SQL: "SELECT name, salary, ROW_NUMBER() OVER (PARTITION BY dept ORDER BY salary DESC) FROM employees",
-	},
-	{
-		ID: "complex",
-		SQL: "SELECT c.name, p.category, COUNT(o.id), SUM(oi.quantity * oi.price) " +
-			"FROM customers c " +
-			"JOIN orders o ON c.id = o.customer_id " +
-			"JOIN order_items oi ON o.id = oi.order_id " +
-			"LEFT JOIN products p ON oi.product_id = p.id " +
-			"WHERE o.created_at >= '2024-01-01' AND p.category IS NOT NULL " +
-			"GROUP BY c.name, p.category " +
-			"HAVING SUM(oi.quantity * oi.price) > 500 " +
-			"ORDER BY c.name, p.category LIMIT 100",
-	},
-	{
-		ID:  "insert",
-		SQL: "INSERT INTO users (id, name, email) VALUES (1, 'alice', 'alice@example.com')",
-	},
-	{
-		ID:  "update",
-		SQL: "UPDATE users SET name = 'bob', active = 0 WHERE id = 42",
-	},
-	{
-		ID:  "delete",
-		SQL: "DELETE FROM sessions WHERE expires_at < '2024-01-01'",
-	},
+// portableQueries returns the 11 portable benchmark queries shared with
+// benchmarks/compare, so a Normalize or Fingerprint number here is directly
+// comparable with the competitor harness.
+func portableQueries(tb testing.TB) []benchcorpus.Query {
+	tb.Helper()
+	set, err := benchcorpus.Default()
+	if err != nil {
+		tb.Fatalf("load benchmark corpus: %v", err)
+	}
+	qs := set.Portable()
+	if len(qs) == 0 {
+		tb.Fatal("benchmark corpus has no portable queries")
+	}
+	return qs
 }
 
-func BenchmarkNormalize(b *testing.B)   { benchmarkQueries(b, fingerprint.Normalize) }
-func BenchmarkFingerprint(b *testing.B) { benchmarkQueries(b, fingerprint.Fingerprint) }
-func benchmarkQueries(b *testing.B, fn func(string) (string, error)) {
-	for _, q := range portableQueries {
+// BenchmarkFingerprint measures fingerprint.Fingerprint (parse, normalize,
+// hash) over the portable queries.
+func BenchmarkFingerprint(b *testing.B) {
+	for _, q := range portableQueries(b) {
 		b.Run(q.ID, func(b *testing.B) {
 			b.ReportAllocs()
 			for i := 0; i < b.N; i++ {
-				if _, err := fn(q.SQL); err != nil {
+				if _, err := fingerprint.Fingerprint(q.SQL); err != nil {
 					b.Fatal(err)
 				}
 			}
 		})
+	}
+}
+
+// BenchmarkNormalize measures fingerprint.Normalize over the portable queries.
+func BenchmarkNormalize(b *testing.B) {
+	for _, q := range portableQueries(b) {
+		b.Run(q.ID, func(b *testing.B) {
+			b.ReportAllocs()
+			for i := 0; i < b.N; i++ {
+				if _, err := fingerprint.Normalize(q.SQL); err != nil {
+					b.Fatal(err)
+				}
+			}
+		})
+	}
+}
+
+// BenchmarkNormalizeScale measures Normalize on a literal list that grows
+// 10x per step, to expose non-linear cost in the literal-replacement path.
+func BenchmarkNormalizeScale(b *testing.B) {
+	for _, shape := range []string{benchcorpus.ScaleIn, benchcorpus.ScaleValues} {
+		b.Run(shape, func(b *testing.B) {
+			for _, n := range benchcorpus.ScaleSizes {
+				sql := benchcorpus.ScaleSQL(shape, n)
+				b.Run(fmt.Sprint(n), func(b *testing.B) {
+					b.ReportAllocs()
+					b.SetBytes(int64(len(sql)))
+					for i := 0; i < b.N; i++ {
+						if _, err := fingerprint.Normalize(sql); err != nil {
+							b.Fatal(err)
+						}
+					}
+				})
+			}
+		})
+	}
+}
+
+// TestBenchInputsNormalize guards the benchmark inputs: every portable query
+// and scale shape must normalize without error, strip its literals, and give
+// literal-independent fingerprints, otherwise the benchmarks would time an
+// error path or a degenerate input.
+func TestBenchInputsNormalize(t *testing.T) {
+	for _, q := range portableQueries(t) {
+		norm, err := fingerprint.Normalize(q.SQL)
+		if err != nil || norm == "" {
+			t.Errorf("%s: Normalize = %q, %v", q.ID, norm, err)
+		}
+		fp, err := fingerprint.Fingerprint(q.SQL)
+		if err != nil || len(fp) == 0 {
+			t.Errorf("%s: Fingerprint = %q, %v", q.ID, fp, err)
+		}
+	}
+
+	for _, shape := range []string{benchcorpus.ScaleIn, benchcorpus.ScaleValues} {
+		for _, n := range benchcorpus.ScaleSizes {
+			norm, err := fingerprint.Normalize(benchcorpus.ScaleSQL(shape, n))
+			if err != nil {
+				t.Fatalf("%s/%d: %v", shape, n, err)
+			}
+			if strings.Contains(norm, "name_") {
+				t.Errorf("%s/%d: literal survived normalization: %.80s", shape, n, norm)
+			}
+			if got := strings.Count(norm, "?"); got < n {
+				t.Errorf("%s/%d: %d placeholders, want at least %d", shape, n, got, n)
+			}
+		}
+	}
+}
+
+// TestFingerprintIgnoresLiteralValues pins the property the benchmarks
+// assume: queries differing only in literal values share one fingerprint.
+func TestFingerprintIgnoresLiteralValues(t *testing.T) {
+	a, err := fingerprint.Fingerprint("SELECT id FROM t WHERE id IN (1, 2, 3) AND name = 'x'")
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := fingerprint.Fingerprint("SELECT id FROM t WHERE id IN (7, 8, 9) AND name = 'y'")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if a != b {
+		t.Errorf("fingerprints differ for literal-only change: %s vs %s", a, b)
+	}
+	c, err := fingerprint.Fingerprint("SELECT id FROM u WHERE id IN (1, 2, 3) AND name = 'x'")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if a == c {
+		t.Error("fingerprint did not change when the table changed")
 	}
 }

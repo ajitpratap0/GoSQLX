@@ -12,9 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//go:build race
+//go:build !race
 
-package formatter_test
+package gosqlx_test
 
-// raceEnabled reports whether the race detector instruments this test binary.
-const raceEnabled = true
+// raceEnabled reports whether the race detector is compiled in.
+const raceEnabled = false

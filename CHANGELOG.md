@@ -274,6 +274,7 @@ upgrading.
   MCP Registry (`publish-mcp.yml`, `docs/MCP_REGISTRY.md`). (#859, #876)
 
 ### Changed
+- **Performance (fingerprint, formatter, transform)**: `fingerprint.Normalize`/`Fingerprint`, the formatter parse path and `transform.ParseSQL` tokenize through the internal pooled token scratch instead of the public `TokenizeString`. `Normalize` allocates 42-70% fewer bytes/op and `transform.ParseSQL` 49-78% fewer, with 2-3 fewer allocs/op and no output change [W5-01].
 - **Transpiling dialect-specific operators**: `^` is exponentiation in
   PostgreSQL and bitwise XOR in MySQL, MariaDB and SQL Server (recorded as
   `BinaryExpression.BitwiseXor`). Exponentiation is written `POWER(a, b)`

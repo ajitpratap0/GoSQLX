@@ -207,6 +207,44 @@ func TestGOMEMLIMITIsValidated(t *testing.T) {
 	}
 }
 
+// TestWorkflowGOMEMLIMITCheckMatchesLib: perf-gate.yml validates the
+// gomemlimit input inline, before checkout; it must accept exactly what
+// perf_check_gomemlimit accepts.
+func TestWorkflowGOMEMLIMITCheckMatchesLib(t *testing.T) {
+	if _, err := exec.LookPath("bash"); err != nil {
+		t.Skip("bash not installed")
+	}
+	lines := strings.Split(readRepoFile(t, ".github/workflows/perf-gate.yml"), "\n")
+	var script []string
+	for i, l := range lines {
+		if strings.TrimSpace(l) != "- name: Validate inputs" {
+			continue
+		}
+		j := i + 1
+		for ; j < len(lines) && strings.TrimSpace(lines[j]) != "run: |"; j++ {
+		}
+		for j++; j < len(lines) && strings.TrimSpace(lines[j]) != ""; j++ {
+			script = append(script, strings.TrimPrefix(lines[j], "          "))
+		}
+		break
+	}
+	if len(script) == 0 {
+		t.Fatal("perf-gate.yml: no \"Validate inputs\" run block")
+	}
+	lib := filepath.Join(repoRoot, "scripts", "perf", "lib.sh")
+	for _, v := range []string{"", "off", "64MiB", "1GiB", "100B", "67108864", "64Mi", "64MB", "6.4MiB", "-1", "abc", "64 MiB", "MiB", "B"} {
+		wf := exec.Command("bash", "-c", strings.Join(script, "\n"))
+		wf.Env = append(os.Environ(), "LIMIT="+v)
+		wfOK := wf.Run() == nil
+		lc := exec.Command("bash", "-c", `. "$1"; perf_check_gomemlimit 2>/dev/null`, "bash", lib)
+		lc.Env = append(os.Environ(), "PERF_GOMEMLIMIT="+v)
+		libOK := lc.Run() == nil
+		if wfOK != libOK {
+			t.Errorf("gomemlimit %q: workflow accepts=%v, lib.sh accepts=%v", v, wfOK, libOK)
+		}
+	}
+}
+
 func TestCPUModelIsRecorded(t *testing.T) {
 	got := strings.TrimSpace(bashLib(t, nil, "perf_cpu_model"))
 	if got == "" || strings.HasPrefix(got, "unknown") && runtime.GOOS == "linux" {

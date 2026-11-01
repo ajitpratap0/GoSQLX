@@ -480,9 +480,9 @@ func (p *Parser) seek(i int) {
 	}
 	p.currentPos = i
 	if i < len(p.tokens) {
-		p.currentToken = p.tokens[i]
+		p.currentToken = &p.tokens[i]
 	} else {
-		p.currentToken = models.TokenWithSpan{}
+		p.currentToken = &p.eof
 	}
 }
 

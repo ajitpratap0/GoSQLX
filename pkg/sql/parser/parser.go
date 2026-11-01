@@ -67,6 +67,7 @@ type TokenPosition struct {
 var parserPool = sync.Pool{
 	New: func() interface{} {
 		p := &Parser{}
+		p.currentToken = &p.eof
 		p.resetDialectState()
 		return p
 	},
@@ -159,7 +160,7 @@ func (p *Parser) Reset() {
 	p.currentPos = 0
 	p.implicitEnd = 0
 	p.openBlockWork = 0
-	p.currentToken = models.TokenWithSpan{}
+	p.currentToken = &p.eof
 	p.depth = 0
 	p.ctx = nil
 	p.strict = false
@@ -219,7 +220,8 @@ const MaxRecursionDepth = 100
 //   - tokenBuf: Parser-owned scratch buffer holding the preprocessed stream,
 //     reused across parses and scrubbed (or dropped when large) by Reset
 //   - currentPos: Current position in token stream
-//   - currentToken: Current token being examined
+//   - currentToken: Pointer to the current token in tokens (or to the per-parser
+//     zero EOF sentinel past the end); read-only
 //   - depth: Recursion depth counter (DoS protection via MaxRecursionDepth)
 //   - ctx: Optional context for cancellation support
 //   - positions: Source position mapping for enhanced error reporting
@@ -316,9 +318,14 @@ type Parser struct {
 	// tokenBuf is parser-owned scratch holding the preprocessed token stream
 	// (see preprocess). It is reused across parses and never exposed to
 	// callers. INVARIANT: tokenBuf[len:cap] is always zeroed.
-	tokenBuf     []models.TokenWithSpan
-	currentPos   int
-	currentToken models.TokenWithSpan
+	tokenBuf   []models.TokenWithSpan
+	currentPos int
+	// currentToken points at p.tokens[currentPos], or at p.eof once the cursor
+	// is past the stream. It is a pointer, not a copy, so advance moves 8
+	// bytes instead of a 72 B pointerful struct (which cost a GC write barrier
+	// per word). The pointee is read-only: tokens are never mutated while
+	// parsing, and nothing may write through currentToken (see eof).
+	currentToken *models.TokenWithSpan
 	depth        int             // Current recursion depth
 	ctx          context.Context // Optional context for cancellation support
 	strict       bool            // Strict mode rejects empty statements
@@ -373,6 +380,13 @@ type Parser struct {
 	// examined before running into the end of the input inside an unclosed
 	// block. It bounds that wasted work (see utilityStatementEnd).
 	openBlockWork int
+	// eof is this parser's end-of-input sentinel: always the zero token. It is
+	// per parser, not a package variable, so a stray write can neither race
+	// across goroutines nor leak into other parsers. Every parse entry point,
+	// advance, seek, Reset and Release point currentToken at it when no real
+	// token applies, which is also what makes a zero-value &Parser{} usable.
+	// Nothing may write through currentToken.
+	eof models.TokenWithSpan
 }
 
 // Deprecated: Parse is provided for backward compatibility only and is scheduled for
@@ -421,7 +435,9 @@ func (p *Parser) parseTokens(tokens []models.TokenWithSpan) (*ast.AST, error) {
 	p.implicitEnd = 0
 	p.openBlockWork = 0
 	if len(tokens) > 0 {
-		p.currentToken = tokens[0]
+		p.currentToken = &tokens[0]
+	} else {
+		p.currentToken = &p.eof
 	}
 
 	// Get a pre-allocated AST from the pool
@@ -651,7 +667,9 @@ func (p *Parser) parseContextTokens(ctx context.Context, tokens []models.TokenWi
 	p.implicitEnd = 0
 	p.openBlockWork = 0
 	if len(tokens) > 0 {
-		p.currentToken = tokens[0]
+		p.currentToken = &tokens[0]
+	} else {
+		p.currentToken = &p.eof
 	}
 
 	// Get a pre-allocated AST from the pool
@@ -713,7 +731,7 @@ func (p *Parser) Release() {
 	p.tokens = nil
 	p.tokenBuf = nil
 	p.currentPos = 0
-	p.currentToken = models.TokenWithSpan{}
+	p.currentToken = &p.eof
 	p.depth = 0
 	p.ctx = nil
 }
@@ -993,6 +1011,7 @@ func (p *Parser) parseSnowflakeStageStatement(kind string) (ast.Statement, error
 // NewParser creates a new parser with optional configuration.
 func NewParser(opts ...ParserOption) *Parser {
 	p := &Parser{}
+	p.currentToken = &p.eof
 	p.resetDialectState()
 	for _, opt := range opts {
 		opt(p)
@@ -1036,20 +1055,23 @@ func (p *Parser) checkStrictEmptySemicolon() error {
 func (p *Parser) advance() {
 	p.currentPos++
 	if p.currentPos < len(p.tokens) {
-		p.currentToken = p.tokens[p.currentPos]
+		p.currentToken = &p.tokens[p.currentPos]
 	} else {
-		p.currentToken = models.TokenWithSpan{} // EOF sentinel
+		p.currentToken = &p.eof // EOF sentinel
 	}
 }
 
 // peekToken returns the next token without advancing the parser position.
 // Returns an empty TokenWithSpan if at the end of input.
-func (p *Parser) peekToken() models.TokenWithSpan {
+//
+// The result points into p.tokens (or at the parser's zero EOF sentinel) and
+// is read-only.
+func (p *Parser) peekToken() *models.TokenWithSpan {
 	nextPos := p.currentPos + 1
 	if nextPos < len(p.tokens) {
-		return p.tokens[nextPos]
+		return &p.tokens[nextPos]
 	}
-	return models.TokenWithSpan{}
+	return &p.eof
 }
 
 // =============================================================================

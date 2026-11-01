@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Performance
 - **Pools**: the tokenizer, parser and AST pools now count Get/Put through precreated, cache-line padded atomic counters (`internal/poolstats`) instead of an RWMutex-guarded map keyed by pool name, removing a lock, map lookup and string hash from every pool operation. `metrics.GetPoolStats` and `metrics.ResetPoolStats` behave exactly as before; named custom pools keep the map path. [W1-01]
 - **Parser**: token preprocessing now takes a type-gated fast path. Only identifier, keyword, aggregate and compound tokens take the normalisation path; every other token is appended with a single copy. Output is identical (guarded by an old-versus-new differential test); no API or behaviour change.
+- **Fingerprint, formatter, transform**: `fingerprint.Normalize`/`Fingerprint`, the formatter parse path and `transform.ParseSQL` tokenize through the internal pooled token scratch instead of the public `TokenizeString`. `Normalize` allocates 42-70% fewer bytes/op and `transform.ParseSQL` 49-78% fewer, with 2-3 fewer allocs/op and no output change [W5-01].
 
 ### Fixed
 - **AST**: `AlterTableStatement.SQL()` now separates multiple ALTER TABLE actions with commas, matching the compact formatter and preserving action boundaries when re-parsed.
@@ -278,7 +279,6 @@ upgrading.
   MCP Registry (`publish-mcp.yml`, `docs/MCP_REGISTRY.md`). (#859, #876)
 
 ### Changed
-- **Performance (fingerprint, formatter, transform)**: `fingerprint.Normalize`/`Fingerprint`, the formatter parse path and `transform.ParseSQL` tokenize through the internal pooled token scratch instead of the public `TokenizeString`. `Normalize` allocates 42-70% fewer bytes/op and `transform.ParseSQL` 49-78% fewer, with 2-3 fewer allocs/op and no output change [W5-01].
 - **Transpiling dialect-specific operators**: `^` is exponentiation in
   PostgreSQL and bitwise XOR in MySQL, MariaDB and SQL Server (recorded as
   `BinaryExpression.BitwiseXor`). Exponentiation is written `POWER(a, b)`

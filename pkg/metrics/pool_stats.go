@@ -17,6 +17,8 @@ package metrics
 import (
 	"sync"
 	"sync/atomic"
+
+	"github.com/ajitpratap0/GoSQLX/internal/poolstats"
 )
 
 // PoolStat holds utilization counters for a single named object pool.
@@ -68,6 +70,9 @@ func getOrCreatePoolCounter(name string) *poolCounter {
 // Call this immediately after retrieving an object from a sync.Pool.
 // This is safe for concurrent use and uses atomic operations.
 func RecordNamedPoolGet(name string) int64 {
+	if c := poolstats.ByName(name); c != nil {
+		return c.Get()
+	}
 	c := getOrCreatePoolCounter(name)
 	return atomic.AddInt64(&c.gets, 1)
 }
@@ -76,6 +81,9 @@ func RecordNamedPoolGet(name string) int64 {
 // Call this immediately before or after returning an object to a sync.Pool.
 // This is safe for concurrent use and uses atomic operations.
 func RecordNamedPoolPut(name string) int64 {
+	if c := poolstats.ByName(name); c != nil {
+		return c.Put()
+	}
 	c := getOrCreatePoolCounter(name)
 	return atomic.AddInt64(&c.puts, 1)
 }
@@ -85,14 +93,14 @@ func RecordNamedPoolPut(name string) int64 {
 // are always present with zero values even if no operations have been recorded.
 // This function is safe for concurrent use.
 func GetPoolStats() map[string]PoolStat {
-	// Ensure standard pools are always present
-	for _, name := range standardPoolNames {
-		getOrCreatePoolCounter(name)
-	}
-
 	poolStatsMu.RLock()
 	defer poolStatsMu.RUnlock()
-	result := make(map[string]PoolStat, len(poolCounters))
+	result := make(map[string]PoolStat, len(poolCounters)+len(standardPoolNames))
+	// Standard pools are always present, read from the precreated counters.
+	for _, name := range standardPoolNames {
+		g, p := poolstats.ByName(name).Load()
+		result[name] = PoolStat{Gets: g, Puts: p}
+	}
 	for name, c := range poolCounters {
 		result[name] = PoolStat{
 			Gets: atomic.LoadInt64(&c.gets),
@@ -108,4 +116,7 @@ func ResetPoolStats() {
 	poolStatsMu.Lock()
 	defer poolStatsMu.Unlock()
 	poolCounters = map[string]*poolCounter{}
+	for _, name := range standardPoolNames {
+		poolstats.ByName(name).Reset()
+	}
 }

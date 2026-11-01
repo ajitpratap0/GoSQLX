@@ -632,7 +632,7 @@ func TestParenQuery_ClassifierNoAlloc(t *testing.T) {
 		toks := p.preprocess(raw)
 		p.tokens = toks
 		p.currentPos = 0
-		p.currentToken = toks[0]
+		p.currentToken = &toks[0]
 		if allocs := testing.AllocsPerRun(10, func() { _ = p.parenOpensQueryExpression() }); allocs != 0 {
 			t.Errorf("%q: parenOpensQueryExpression allocated %.0f times", sql, allocs)
 		}

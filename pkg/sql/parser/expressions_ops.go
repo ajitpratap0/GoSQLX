@@ -49,12 +49,11 @@ func (p *Parser) peekTypeAt(offset int) models.TokenType {
 // where the current one ends, so that two tokens the tokenizer split apart
 // (for example "<=" and ">") really were written as one operator ("<=>").
 func (p *Parser) nextAdjacent(offset int) bool {
-	prev := p.currentToken
+	prevEnd := p.currentToken.End
 	if offset > 1 {
-		prev = p.peekAt(offset - 1)
+		prevEnd = p.peekAt(offset - 1).End
 	}
-	next := p.peekAt(offset)
-	return prev.End == next.Start
+	return prevEnd == p.peekAt(offset).Start
 }
 
 // peekValueIs reports whether the token offset positions ahead has the given

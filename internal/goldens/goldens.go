@@ -12,7 +12,7 @@
 //
 // Flags (pass after -args, or directly to a single-package go test):
 //
-//	-update             rewrite the golden files from the current tree
+//	-goldens.update     rewrite the golden files from the current tree
 //	-goldens.dump=DIR   also write every output in readable form under DIR
 //	-goldens.base=DIR   a -goldens.dump directory made from a base revision; on
 //	                    mismatch, print the first differing statements against it
@@ -44,7 +44,7 @@ import (
 )
 
 var (
-	update  = flag.Bool("update", false, "rewrite testdata/goldens/*.sha256 from the current tree")
+	update  = flag.Bool("goldens.update", false, "rewrite testdata/goldens/*.sha256 from the current tree")
 	dumpDir = flag.String("goldens.dump", "", "write every golden output in readable form under this directory")
 	baseDir = flag.String("goldens.base", "", "a -goldens.dump directory from a base revision; on mismatch print the first differing statements against it")
 )
@@ -183,7 +183,7 @@ func (g *Golden) Render() string {
 	defer g.mu.Unlock()
 	var b strings.Builder
 	fmt.Fprintf(&b, "# GoSQLX behaviour golden %q: %s\n", g.name, g.desc)
-	b.WriteString("# Generated; do not edit. Regenerate with -update (task goldens:update) and list every changed cell in the PR.\n")
+	b.WriteString("# Generated; do not edit. Regenerate with -goldens.update (task goldens:update) and list every changed cell in the PR.\n")
 	b.WriteString("# Line: <row> <statements> <one 64-bit hash per column, \"=\" = same as left>. Readable diff: task goldens:diff.\n")
 	fmt.Fprintf(&b, "columns %s\n", strings.Join(g.cols, " "))
 	for _, name := range g.rowNames() {
@@ -211,7 +211,7 @@ func (g *Golden) Path(root string) string {
 }
 
 // Check compares the recorded outputs with the committed golden file, or
-// rewrites it under -update. It also writes the -goldens.dump tree.
+// rewrites it under -goldens.update. It also writes the -goldens.dump tree.
 func (g *Golden) Check(t testing.TB) {
 	t.Helper()
 	root, err := benchcorpus.FindRoot()
@@ -237,7 +237,7 @@ func (g *Golden) Check(t testing.TB) {
 	}
 	want, err := os.ReadFile(path)
 	if err != nil {
-		t.Fatalf("goldens: %v\nGenerate it with: go test -run %s ./<pkg> -args -update (or task goldens:update)", err, t.Name())
+		t.Fatalf("goldens: %v\nGenerate it with: go test -run %s ./<pkg> -args -goldens.update (or task goldens:update)", err, t.Name())
 	}
 	if string(want) == got {
 		return

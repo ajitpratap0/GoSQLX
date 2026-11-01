@@ -1,5 +1,5 @@
 # GoSQLX behaviour golden "transpile": transpiler.Transpile from the corpus dialect to each target dialect, identity included
-# Generated; do not edit. Regenerate with -update (task goldens:update) and list every changed cell in the PR.
+# Generated; do not edit. Regenerate with -goldens.update (task goldens:update) and list every changed cell in the PR.
 # Line: <row> <statements> <one 64-bit hash per column, "=" = same as left>. Readable diff: task goldens:diff.
 columns generic mysql postgresql sqlite sqlserver oracle snowflake clickhouse mariadb
 corpus/orm/ent_queries.sql 7 2d1f8cbda37c6e25 afeed81747f8e5f2 2d1f8cbda37c6e25 = e2cea17ad86bc739 00f9994fe915dbd9 2d1f8cbda37c6e25 = afeed81747f8e5f2

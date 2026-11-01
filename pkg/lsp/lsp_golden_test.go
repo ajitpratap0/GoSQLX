@@ -128,8 +128,15 @@ func TestGoldenLSP(t *testing.T) {
 // diagnostics, semantic tokens and document symbols, each rendered as text.
 func lspRun(text, dialect string) (out [3]string) {
 	var buf bytes.Buffer
-	srv := lsp.NewServer(strings.NewReader(""), &buf, log.New(io.Discard, "", 0))
-	h := lsp.NewHandler(srv)
+	var h *lsp.Handler
+	// A panic while building the server shows up as a golden diff of every
+	// column instead of crashing the test binary.
+	if msg := goldens.Safe(func() string {
+		h = lsp.NewHandler(lsp.NewServer(strings.NewReader(""), &buf, log.New(io.Discard, "", 0)))
+		return ""
+	}); msg != "" {
+		return [3]string{msg, msg, msg}
+	}
 	const uri = "file:///golden.sql"
 
 	var legend lsp.SemanticTokensLegend

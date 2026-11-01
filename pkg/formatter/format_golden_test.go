@@ -54,14 +54,26 @@ func TestGoldenFormat(t *testing.T) {
 			"lower":             lower,
 			"compact_nodialect": ast.CompactStyle(),
 		}
-		tree, err := gosqlx.ParseWithDialect(st.SQL, d)
+		var (
+			tree *ast.AST
+			err  error
+		)
+		// A parser panic shows up as a per-statement golden diff, like the
+		// formatter's own panics, instead of crashing the test binary.
+		parsePanic := goldens.Safe(func() string {
+			tree, err = gosqlx.ParseWithDialect(st.SQL, d)
+			return ""
+		})
 		for _, col := range formatGoldenColumns[2:] {
 			opts := styles[col]
 			if col != "compact_nodialect" {
 				opts.Dialect = st.Dialect
 			}
 			out := "parse: " + goldens.Error(err)
-			if err == nil {
+			switch {
+			case parsePanic != "":
+				out = "parse: " + parsePanic
+			case err == nil:
 				out = goldens.Safe(func() string {
 					s, ferr := formatter.FormatASTChecked(tree, opts)
 					if ferr != nil {
@@ -72,7 +84,7 @@ func TestGoldenFormat(t *testing.T) {
 			}
 			g.Add(st.File, col, st.Index, st.SQL, out)
 		}
-		if err == nil {
+		if parsePanic == "" && err == nil {
 			ast.ReleaseAST(tree)
 		}
 	})

@@ -1,5 +1,5 @@
 # GoSQLX behaviour golden "format": FormatWithDialect and FormatASTChecked renderings per corpus statement
-# Generated; do not edit. Regenerate with -update (task goldens:update) and list every changed cell in the PR.
+# Generated; do not edit. Regenerate with -goldens.update (task goldens:update) and list every changed cell in the PR.
 # Line: <row> <statements> <one 64-bit hash per column, "=" = same as left>. Readable diff: task goldens:diff.
 columns format format_upper compact readable lower compact_nodialect
 corpus/orm/ent_queries.sql 7 34419a4972abacd5 6ed324f9d63bf835 2d1f8cbda37c6e25 bd4c8fb530256d3e afc2821cd65ac024 2d1f8cbda37c6e25

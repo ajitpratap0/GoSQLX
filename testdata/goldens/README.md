@@ -6,8 +6,8 @@ so performance work cannot change behaviour silently.
 
 | Golden | Test | Rows x columns | What each cell covers |
 |---|---|---|---|
-| `tokens` | `pkg/sql/tokenizer` `TestGoldenTokens` | corpus file x 11 dialects | every token: type, value, span, quote, Long, Word |
-| `parse` | `pkg/sql/parser` `TestGoldenParse` | corpus file x 11 dialects | `ParseWithDialect` `SQL()` or error code, location, hint and message; every AST `models.Location`; `ValidateWithDialect` |
+| `tokens` | `pkg/sql/tokenizer` `TestGoldenTokens` | corpus file x 11 dialects | every token of `Tokenize([]byte)`: type, value, span, quote, Long, Word; every captured comment (`tkz.Comments`); a `string:`/`scratch:`/`scratch_bytes:` section for `TokenizeString` or the `internal/tokscratch` path only where it differs |
+| `parse` | `pkg/sql/parser` `TestGoldenParse` | corpus file x (11 dialects + `default`) | `ParseWithDialect` `SQL()` or error code, location, hint and message; every AST `models.Location`; `ValidateWithDialect`. `default`: the same for `gosqlx.Parse` (wrapped errors included), plus `parser.Validate` and `gosqlx.Validate` |
 | `format` | `pkg/formatter` `TestGoldenFormat` | corpus file x 6 renderings | `FormatWithDialect` (2 option sets), `FormatASTChecked` compact, readable, lower, compact without dialect |
 | `fingerprint` | `pkg/fingerprint` `TestGoldenFingerprint` | corpus file x 2 | `Normalize`, `Fingerprint` |
 | `lint` | `pkg/linter` `TestGoldenLint` | corpus file x 2 | every violation of `LintWithDialect` (own dialect) and `Lint` |

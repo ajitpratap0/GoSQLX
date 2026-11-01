@@ -1,5 +1,5 @@
 # GoSQLX behaviour golden "lsp": LSP publishDiagnostics, semanticTokens/full and documentSymbol per fixed document and dialect
-# Generated; do not edit. Regenerate with -update (task goldens:update) and list every changed cell in the PR.
+# Generated; do not edit. Regenerate with -goldens.update (task goldens:update) and list every changed cell in the PR.
 # Line: <row> <statements> <one 64-bit hash per column, "=" = same as left>. Readable diff: task goldens:diff.
 columns diagnostics semantic_tokens document_symbols
 errors@generic 1 b886c0d32215f7dd 9c5358219ed2666e 9517e1aa987edd02

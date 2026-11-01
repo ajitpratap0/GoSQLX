@@ -386,3 +386,29 @@ func TestOneNoisyBenchmarkInAShortRunDoesNotTripTheGeomean(t *testing.T) {
 		t.Fatalf("verdict = %s (%v), want pass", res.Verdict, res.Reasons)
 	}
 }
+
+func TestZeroBaseIsAnInfiniteIncrease(t *testing.T) {
+	// PoolGetPut allocates nothing; a first allocation must be caught even
+	// though the relative change is infinite.
+	s := []bench{{name: "BenchmarkPoolGetPut/serial", ns: 60, noise: 0.01, bytes: 0, allocs: 0}}
+	more := modify(s, func(_ int, b *bench) { b.allocs, b.bytes = 1, 8 })
+	res := evaluate(t, s, more, s, DefaultConfig())
+	if res.Verdict != Regression {
+		t.Fatalf("verdict = %s, want regression", res.Verdict)
+	}
+	if !math.IsInf(res.Rows[0].Bytes.DeltaPct, 1) {
+		t.Fatalf("B/op delta = %v, want +Inf", res.Rows[0].Bytes.DeltaPct)
+	}
+	md := Markdown(res, DefaultConfig(), Meta{})
+	if !strings.Contains(md, "+inf%") {
+		t.Fatal("report does not show the infinite B/op increase")
+	}
+}
+
+func TestReportSaysWhenThereIsNoAAControl(t *testing.T) {
+	s := suite()
+	res := evaluate(t, s, s, nil, DefaultConfig())
+	if md := Markdown(res, DefaultConfig(), Meta{}); !strings.Contains(md, "A/A control not run") {
+		t.Fatal("report does not flag the missing A/A control")
+	}
+}

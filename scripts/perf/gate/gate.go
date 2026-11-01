@@ -460,6 +460,8 @@ func Markdown(res Result, cfg Config, meta Meta) string {
 	fmt.Fprintf(&b, "| **geomean** | %s | %s | %s | | | |\n\n", pct((res.Geomean-1)*100), geoP, pct((res.AAGeomean-1)*100))
 	if res.HasAA {
 		fmt.Fprintf(&b, "A/A control: %d of %d benchmarks moved more than %.3g%%.\n\n", res.AANoisy, res.AACompared, cfg.AADeltaPct)
+	} else {
+		b.WriteString("A/A control not run: timings were not checked against machine noise.\n\n")
 	}
 	if len(res.MissingInHead) > 0 {
 		fmt.Fprintf(&b, "Missing in head (not judged): %s\n\n", codeList(res.MissingInHead))

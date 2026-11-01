@@ -129,10 +129,12 @@ jobs:
           BENCHTIME: ${{ inputs.benchtime || '200ms' }}
           ACCEPTED: ${{ contains(github.event.pull_request.labels.*.name, 'perf-regression-accepted') }}
         run: |
+          set -o pipefail
           flags=(-G -r "$ROUNDS" -t "$BENCHTIME" -o "$RUNNER_TEMP/perf-gate")
           [ "$PERF_GATE_ENFORCE" = true ] && flags+=(-e)
           [ "$ACCEPTED" = true ] && flags+=(-A)
-          scripts/perf/ab.sh "${flags[@]}" "$BASE"
+          mkdir -p "$RUNNER_TEMP/perf-gate"
+          scripts/perf/ab.sh "${flags[@]}" "$BASE" 2>&1 | tee "$RUNNER_TEMP/perf-gate.log"
 
       - name: Job summary
         if: always()
@@ -146,11 +148,16 @@ jobs:
               echo '<!-- perf-gate-report -->'
               echo '## Perf gate: ERROR (shadow mode: report only)'
               echo
-              echo "The gate did not produce a report; see the \"Run perf gate\" step log of ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}."
+              echo "The gate did not produce a report; see the \"Run perf gate\" step log of ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}. Last lines:"
+              echo
+              echo '```'
+              tail -n 30 "$RUNNER_TEMP/perf-gate.log" 2>/dev/null || echo '(no log)'
+              echo '```'
             } > "$out/report.md"
           fi
           cat "$out/report.md" >> "$GITHUB_STEP_SUMMARY"
           printf '%s\n' "$PR_NUMBER" > "$out/pr-number"
+          cp "$RUNNER_TEMP/perf-gate.log" "$out/ab.log" 2>/dev/null || true
 
       - name: Upload results
         if: always()

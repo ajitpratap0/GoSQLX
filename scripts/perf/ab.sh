@@ -196,6 +196,11 @@ fi
 	echo "clocksource: $(cat /sys/devices/system/clocksource/clocksource0/current_clocksource 2>/dev/null || echo n/a)"
 	echo "load:        $(uptime | sed 's/.*load average[s]*: //')"
 	echo "instr count: ${ir_backend:-none}${ir_note:+ ($ir_note)}"
+	if command -v perf >/dev/null 2>&1; then
+		echo "perf probe:  $(perf stat -x, -e instructions:u -- true 2>&1 | head -n 1)"
+	else
+		echo "perf probe:  perf not installed"
+	fi
 	if command -v lscpu >/dev/null 2>&1; then
 		echo
 		lscpu | grep -E '^(Model name|Architecture|CPU\(s\)|Thread\(s\) per core|Core\(s\) per socket|Socket\(s\)|L1d|L1i|L2|L3|Hypervisor vendor)'
@@ -273,18 +278,19 @@ count_instructions() { # arm case n -> prints the count
 measure_ir() {
 	local samples cases c s arm n1 n2 i1 i2
 	samples=${IR_SAMPLES:-3}
-	[ $ir_backend = cachegrind ] && samples=${IR_SAMPLES:-1}
 	cases=$(cd "$head_tree" && "$out/bin/head/perfdriver" -list)
 	: >"$out/raw/ir-base.txt"
 	: >"$out/raw/ir-head.txt"
 	log "instructions/op via $ir_backend, $samples sample(s) per case"
 	for c in $cases; do
-		# Iteration counts: cachegrind is deterministic (start-up cancels
-		# exactly) but slow, so it runs few operations; perf and time count
-		# start-up with some jitter, so they run enough operations to bury
-		# it. Real-world operations parse up to 64 statements each.
+		# Iteration counts: no counter is fully deterministic for Go (map
+		# hash seeds change per process, so start-up and keyword lookups vary
+		# a little), so every backend takes the median of several samples
+		# and runs enough operations to bury the start-up jitter. Cachegrind
+		# is slow, so it runs fewer. Real-world operations parse up to 64
+		# statements each.
 		if [ $ir_backend = cachegrind ]; then
-			case $c in rw/*) n1=10 n2=50 ;; *) n1=500 n2=2500 ;; esac
+			case $c in rw/*) n1=10 n2=110 ;; *) n1=500 n2=5500 ;; esac
 		else
 			case $c in rw/*) n1=40 n2=440 ;; *) n1=2000 n2=22000 ;; esac
 		fi
@@ -293,6 +299,12 @@ measure_ir() {
 				if ! i1=$(count_instructions $arm "$c" $n1) || ! i2=$(count_instructions $arm "$c" $n2) ||
 					[ -z "$i1" ] || [ -z "$i2" ]; then
 					ir_note="$ir_backend gave no count for $arm $c (see ir.log in the artifact)"
+					log "$ir_note"
+					tail -n 20 "$out/ir.log" >&2 || true
+					return 1
+				fi
+				if [ "$i2" -le "$i1" ]; then
+					ir_note="$ir_backend counted fewer instructions for $n2 than for $n1 operations of $arm $c"
 					log "$ir_note"
 					return 1
 				fi
@@ -343,13 +355,16 @@ gate_src=$head_tree
 
 gate_rc=0
 judge || gate_rc=$?
+log "gate exited $gate_rc"
 if [ $gate_rc -le 1 ] && [ $gate -eq 1 ] && [ "$(cat "$out/status")" = noisy ]; then
 	log "A/A control noisy; measuring the primary metric once more"
 	mkdir -p "$out/raw/attempt1"
 	mv "$out"/raw/gcoff-*.txt "$out/raw/attempt1/"
+	cp "$out/report.md" "$out/status" "$out/benchstat.txt" "$out/raw/attempt1/"
 	measure gcoff "${primary_arms[@]}"
 	gate_rc=0
 	judge -final || gate_rc=$?
+	log "gate exited $gate_rc"
 fi
 log "measured in $(($(date +%s) - started))s; verdict $(cat "$out/status" 2>/dev/null || echo unknown)"
 [ -f "$out/report.md" ] && cat "$out/report.md"

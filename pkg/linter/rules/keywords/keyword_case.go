@@ -188,6 +188,9 @@ func isSQLKeyword(word string) bool {
 		}
 		return sqlKeywords[string(buf[:len(word)])]
 	}
+	// Defensive: unreachable with today's table (longest keyword is 12 bytes and
+	// only U+017F/U+0131 shrink on upper-casing, capping reachable words at 14
+	// bytes), kept so a future table change cannot silently diverge.
 	for i := 0; i < len(word); i++ {
 		if word[i] >= 0x80 {
 			return sqlKeywords[strings.ToUpper(word)]

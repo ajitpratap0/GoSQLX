@@ -113,6 +113,9 @@ func TestKeywordCaseDifferential(t *testing.T) {
 		"select 'unterminated from\nwhere id = 1\r\n\torder by id",
 		"\xffselect \xc0 from \xe2\x82 where\x00true",
 		"ſelectſelectſelectſelect from abcdefghijklmnopqrstuvwxyz",
+		"select'x'from\"t\"where\"a\"='b'",
+		"SELECT\"col\"FROM t",
+		"select`a`from`b`",
 	}
 	for _, sql := range cases {
 		t.Run(sql, func(t *testing.T) { check(t, sql) })

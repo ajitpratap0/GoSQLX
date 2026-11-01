@@ -1,0 +1,17 @@
+# Gated benchmark suite for the perf gate (scripts/perf/ab.sh, .github/workflows/perf-gate.yml).
+#
+# One line per `go test -bench` invocation: <package> <benchmark regex>. The
+# regex uses go test's per-level syntax (levels split on "/"), so every line
+# is run on its own. Lines starting with # and blank lines are ignored.
+#
+# This is the first slice of the PLAN section 2.6 suite: parse end to end,
+# the scratch tokenizer, one real-world bucket per dialect and the server
+# shapes. Widen it as the remaining matrices settle (CRITIQUE item 27);
+# every added benchmark costs about rounds x arms x benchtime of CI time.
+./pkg/gosqlx         ^BenchmarkParseE2E$
+./pkg/gosqlx         ^BenchmarkParseRW$/^[a-z]+$/^medium$
+./pkg/gosqlx         ^BenchmarkParseFresh$/^(simple_select|join|complex)$
+./pkg/gosqlx         ^BenchmarkPoolGetPut$/^serial$
+./pkg/sql/tokenizer  ^BenchmarkTokenize$/^scratch$/^(join|complex|insert)$
+./pkg/fingerprint    ^BenchmarkNormalize$/^(simple_select|join|complex)$
+./pkg/transform      ^BenchmarkTransformParse$/^(simple_select|join|complex)$

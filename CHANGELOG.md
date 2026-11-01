@@ -7,7 +7,50 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Benchmark and perf-gate infrastructure (performance overhaul, wave 0)**:
+  pull requests are now judged by interleaved A/B measurements instead of
+  absolute numbers. No library behaviour changes apart from #901 (see Fixed). The pieces, by PR:
+  - Corpus and behaviour guards: the benchmark corpus manifest and
+    `internal/benchcorpus` loader (#895); behaviour goldens (token, parse,
+    format, lint, scan and transpile hashes) over every corpus and dialect
+    (#915); wall-clock test assertions replaced with ratio and count checks
+    (#899); ClickHouse/Snowflake lambda bodies and `U&` in dialects without
+    `&` fixed so the goldens could be pinned (#901).
+  - Benchmark matrix: tokenizer and parse stages (#913), server shapes with
+    `AllocsPerRun` budgets, a stack-depth test and a frame-size script (#909),
+    high-level, render and transform (#911), transpile with a prefilter
+    differential test (#912), interop benchmarks and a binary-size budget
+    (#908), and lint, security and LSP (#910).
+  - Competitor harness: new pure-Go peers (dolthub/vitess, rqlite/sql,
+    AfterShip/clickhouse-sql-parser, auxten/postgresql-parser), ORM-style
+    queries, lexer, render, normalize, fresh-goroutine, parallel and
+    per-dialect cells with checked-in common-accept sets, and a schema v2
+    results file that keeps every v1 field (#914).
+  - Gate: an interleaved A/B workflow in shadow mode (`GOGC=off`, `-cpu 1`,
+    ABBA rounds, benchstat at alpha 0.01, A/A noise control; `allocs/op`, `B/op`
+    and instruction-count gates) with `task bench:ab` and `task bench:gate`
+    (#916).
+  - Baselines and docs (#917): per-architecture
+    `benchmarks/baselines/{amd64,arm64}.json` holding trend-only ns/op and gated
+    B/op and allocs/op, checked or regenerated with `task bench:baseline` and
+    `task bench:baseline:update` (local-only until W0-13 wires the check into
+    `perf-gate.yml`; CI currently gates allocs/op and B/op relatively via the
+    A/B gate); new `task bench:matrix` and `task pgo:refresh`;
+    `docs/PERFORMANCE_METHODOLOGY.md` (method, how to run an A/B, how the gate
+    decides, claims policy). `performance_baselines.json` and
+    `TestPerformanceRegression` are now documented as a smoke test only, and
+    its never-enforced `TokenizationThroughput` and `EndToEndSustained` entries
+    are removed.
+
+### Performance
+- **Tokenizer**: keyword and compound-keyword-start lookup now uses a single fused-hash open-addressed table (one FNV-1a hash computed while upper-casing, one probe) instead of two Go map lookups per identifier. The table is filled in a fixed order (hot keywords first, then sorted) so its probe layout is deterministic across processes. No behaviour change; token output is identical [W2-01].
+- **Pools**: the tokenizer, parser and AST pools now count Get/Put through precreated, cache-line padded atomic counters (`internal/poolstats`) instead of an RWMutex-guarded map keyed by pool name, removing a lock, map lookup and string hash from every pool operation. `metrics.GetPoolStats` and `metrics.ResetPoolStats` behave exactly as before; named custom pools keep the map path. [W1-01]
+- **Parser**: token preprocessing now takes a type-gated fast path. Only identifier, keyword, aggregate and compound tokens take the normalisation path; every other token is appended with a single copy. Output is identical (guarded by an old-versus-new differential test); no API or behaviour change.
+- **Fingerprint, formatter, transform**: `fingerprint.Normalize`/`Fingerprint`, `Formatter.Format` and `transform.ParseSQL`/`ParseSQLWithDialect` tokenize through the internal pooled token scratch instead of the public `TokenizeString`. `Normalize` allocates 42-70% fewer bytes/op and `transform.ParseSQL` 49-78% fewer, with 2-3 fewer allocs/op and no output change. [W5-01]
+
 ### Fixed
+- **AST**: `AlterTableStatement.SQL()` now separates multiple ALTER TABLE actions with commas, matching the compact formatter and preserving action boundaries when re-parsed.
 - **Playground**: the GoSQLX WebAssembly module now runs in a Web Worker, so
   loading the parser and every parse, format, lint, analyze, highlight and
   transpile call no longer block the page. The playground computes only the
@@ -15,6 +58,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   tab is opened. Total Blocking Time on `/playground/` dropped from ~490 ms to
   ~80 ms in local Lighthouse runs at CI-equivalent CPU throttling, which ends
   the Lighthouse CI performance failures on slower GitHub runners.
+- **ClickHouse and Snowflake lambdas keep their body** (#897): `->` in these
+  dialects is now parsed as the lambda operator, so `arrayMap(x -> x * 2, a)`
+  is `x -> (x * 2)`. It used to parse as the JSON arrow, `(x -> x) * 2`, and
+  formatting or transpiling for ClickHouse or Snowflake, including identity
+  transpiles, emitted `arrayMap((x -> x) * 2, a)`. The new
+  `BinaryExpression.Lambda` field marks these nodes. Transpiling a ClickHouse
+  or Snowflake lambda to the generic dialect now parenthesizes its body,
+  `arrayMap(x -> (x * 2), a)`, because the generic parser reads `->` as the
+  tight-binding JSON arrow; it used to emit `arrayMap(x -> x * 2, a)`, which
+  reads back as `(x -> x) * 2`. Transpiling a lambda to
+  a dialect without lambdas (PostgreSQL, MySQL, MariaDB, SQLite, SQL Server,
+  Oracle) now returns an error: written as that dialect's `->` it would mean
+  JSON extraction or regroup as `(x -> x) * 2`. In the other direction, a
+  JSON `->` or `->>` transpiled to ClickHouse or Snowflake now returns an
+  error, because there `->` is the lambda operator (and `->>` Snowflake's
+  flow operator) and the output would be read back as a lambda. Parsing
+  `->>` with the ClickHouse or Snowflake dialect is now an E4001
+  unsupported-feature error (`the ->> operator is not supported in ...`);
+  it used to parse as a JSON node, which formatted unchanged.
+- **`U&'...'` in Oracle, Snowflake and ClickHouse is an error** (#898): these
+  dialects have neither Unicode-escape literals nor an `&` operator. The
+  literal was read as `U & '...'`, and formatting or transpiling then emitted
+  `BITAND(U, '...')` or `bitAnd(U, '...')`. Tokenizing `U&'...'` or `U&"..."`
+  in these dialects now returns an E4001 unsupported-feature error. A spaced
+  `U & '...'` and all other dialects are unchanged: in MySQL, MariaDB, SQL
+  Server and SQLite `U&'x'` is still `U & 'x'`, and PostgreSQL still reads it
+  as a Unicode-escape literal.
 
 ## [1.17.0] - 2026-10-31 — Real-World Dialect Corpus, Dialect-Faithful Round Trips, Security Scanner & LSP Hardening
 

@@ -184,6 +184,30 @@ tasks:
       - go run ./cmd/publish {{.CLI_ARGS}}
       - go run golang.org/x/perf/cmd/benchstat@v0.0.0-20260908200009-22c9c6c9d4da results/latest.txt
 
+  bench:ab:
+    desc: "Interleaved A/B of the working tree against BASE (GOGC=off, -cpu 1, ABBA, benchstat alpha 0.01). Vars: BASE (default origin/main), ROUNDS (10), BENCHTIME (200ms), BENCH='./pkg/gosqlx=^BenchmarkParseE2E$' (default: the gated suite)"
+    cmds:
+      - scripts/perf/ab.sh -r {{.ROUNDS}} -t {{.BENCHTIME}} {{if .BENCH}}-b '{{.BENCH}}'{{end}} {{.BASE}}
+    vars:
+      BASE: '{{default "origin/main" .BASE}}'
+      ROUNDS: '{{default "10" .ROUNDS}}'
+      BENCHTIME: '{{default "200ms" .BENCHTIME}}'
+
+  bench:gate:
+    desc: "Run the CI perf gate locally: the gated suite, A/A control, secondary metric and instructions/op, working tree against BASE (default: merge-base with origin/main)"
+    cmds:
+      - scripts/perf/ab.sh -G -r {{.ROUNDS}} -t {{.BENCHTIME}} {{if .BASE}}{{.BASE}}{{else}}"$(git merge-base HEAD origin/main)"{{end}}
+    vars:
+      ROUNDS: '{{default "10" .ROUNDS}}'
+      BENCHTIME: '{{default "200ms" .BENCHTIME}}'
+
+  bench:profile:
+    desc: "CPU profiles (-cpu 1, GOGC=off, -cpu 4) of the gap queries plus perf stat counters when available (Vars: BENCHTIME, default 3s)"
+    cmds:
+      - scripts/perf/profile.sh -t {{.BENCHTIME}}
+    vars:
+      BENCHTIME: '{{default "3s" .BENCHTIME}}'
+
   bench:pkg:
     desc: Run benchmarks for specific package (use PKG=./pkg/sql/parser)
     cmds:

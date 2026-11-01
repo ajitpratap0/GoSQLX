@@ -122,9 +122,9 @@ func (r *RedundantWhitespaceRule) Check(ctx *linter.Context) ([]linter.Violation
 				report(i)
 			}
 		}
-		if !inString {
-			report(len(line))
-		}
+		// runStart is always -1 inside a string (the opening quote flushed it
+		// and spaces in strings never start a run), so this is a no-op then.
+		report(len(line))
 	}
 
 	return violations, nil

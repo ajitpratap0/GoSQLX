@@ -15,7 +15,6 @@
 package whitespace
 
 import (
-	"regexp"
 	"strings"
 
 	"github.com/ajitpratap0/GoSQLX/pkg/linter"
@@ -51,11 +50,6 @@ type RedundantWhitespaceRule struct {
 	linter.BaseRule
 }
 
-// Pre-compiled regex patterns for performance
-var (
-	multipleSpacesRegex = regexp.MustCompile(`  +`) // Two or more consecutive spaces
-)
-
 // NewRedundantWhitespaceRule creates a new L010 rule instance.
 //
 // The rule detects sequences of 2 or more consecutive spaces outside of string
@@ -77,110 +71,63 @@ func NewRedundantWhitespaceRule() *RedundantWhitespaceRule {
 
 // Check performs the redundant whitespace check on SQL content.
 //
-// Extracts non-string portions of each line and searches for sequences of 2+ spaces
-// using regex pattern matching. Leading whitespace (indentation) is skipped. For
-// each match, a violation is reported.
+// Scans each line for runs of 2+ ASCII spaces outside single and double quotes.
+// Runs starting at byte zero are indentation and are skipped. Columns are byte
+// positions, including when the input contains invalid UTF-8.
 //
 // Returns a slice of violations (one per redundant whitespace sequence) and nil error.
 func (r *RedundantWhitespaceRule) Check(ctx *linter.Context) ([]linter.Violation, error) {
 	violations := []linter.Violation{}
 
 	for lineNum, line := range ctx.Lines {
-		// Skip checking inside string literals - we'll check the non-string parts
-		parts := extractNonStringParts(line)
-
-		for _, part := range parts {
-			// Check for multiple consecutive spaces (not at line start - indentation)
-			matches := multipleSpacesRegex.FindAllStringIndex(part.text, -1)
-			for _, match := range matches {
-				// Calculate actual column in original line
-				column := part.startCol + match[0] + 1 // 1-indexed
-
-				// Skip if this is at the beginning of line (indentation)
-				if part.startCol == 0 && match[0] == 0 {
-					// Check if it's leading whitespace on the line
-					if strings.TrimLeft(line[:column], " \t") == "" {
-						continue // Skip leading indentation
-					}
-				}
-
+		// Single pass over the non-string parts of the line: a run of two or
+		// more spaces outside quotes is a violation unless it starts the line
+		// (indentation). Runs never span a quoted string.
+		inString := false
+		var quote byte
+		runStart := -1
+		report := func(end int) {
+			if runStart >= 0 && end-runStart >= 2 && runStart != 0 {
 				violations = append(violations, linter.Violation{
 					Rule:       r.ID(),
 					RuleName:   r.Name(),
 					Severity:   r.Severity(),
 					Message:    "Multiple consecutive spaces found",
-					Location:   models.Location{Line: lineNum + 1, Column: column},
+					Location:   models.Location{Line: lineNum + 1, Column: runStart + 1}, // 1-indexed
 					Line:       line,
 					Suggestion: "Reduce to single space",
 					CanAutoFix: true,
 				})
 			}
+			runStart = -1
 		}
+		for i := 0; i < len(line); i++ {
+			c := line[i]
+			if inString {
+				if c == quote {
+					inString = false
+				}
+				continue
+			}
+			switch c {
+			case '\'', '"':
+				report(i)
+				inString = true
+				quote = c
+			case ' ':
+				if runStart < 0 {
+					runStart = i
+				}
+			default:
+				report(i)
+			}
+		}
+		// runStart is always -1 inside a string (the opening quote flushed it
+		// and spaces in strings never start a run), so this is a no-op then.
+		report(len(line))
 	}
 
 	return violations, nil
-}
-
-// linePart represents a non-string portion of a line with its position.
-type linePart struct {
-	text     string
-	startCol int // 0-indexed position in original line
-}
-
-// extractNonStringParts extracts parts of a line outside of string literals.
-//
-// Parses the line character by character, tracking single and double quoted strings.
-// Returns slices of text that are not inside quotes, along with their starting
-// column positions in the original line.
-//
-// This ensures redundant whitespace inside strings like 'multiple  spaces' is
-// preserved and not flagged as violations.
-func extractNonStringParts(line string) []linePart {
-	parts := []linePart{}
-	inString := false
-	stringChar := rune(0)
-	partStart := 0
-	currentPart := strings.Builder{}
-
-	for i, ch := range line {
-		if !inString && (ch == '\'' || ch == '"') {
-			// Save current non-string part
-			if currentPart.Len() > 0 {
-				parts = append(parts, linePart{
-					text:     currentPart.String(),
-					startCol: partStart,
-				})
-				currentPart.Reset()
-			}
-			inString = true
-			stringChar = ch
-			continue
-		}
-
-		if inString {
-			if ch == stringChar {
-				inString = false
-				stringChar = 0
-				partStart = i + 1
-			}
-			continue
-		}
-
-		if currentPart.Len() == 0 {
-			partStart = i
-		}
-		currentPart.WriteRune(ch)
-	}
-
-	// Add final part
-	if currentPart.Len() > 0 {
-		parts = append(parts, linePart{
-			text:     currentPart.String(),
-			startCol: partStart,
-		})
-	}
-
-	return parts
 }
 
 // Fix removes redundant whitespace from SQL content.

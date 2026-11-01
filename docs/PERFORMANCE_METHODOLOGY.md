@@ -58,6 +58,8 @@ task bench:baseline:update             # re-measure and rewrite benchmarks/basel
 go run ./scripts/perf/baseline -input out.txt     # check recorded `go test -bench -benchmem` output
 ```
 
+`task bench:baseline` is local-only: no workflow runs `scripts/perf/baseline`, and it cannot run on CI's amd64 until `amd64.json` is recorded and the check is wired into `perf-gate.yml` (W0-13). In CI, allocs/op and B/op are currently gated relatively by the A/B gate. When recording from external output use `-update -input out.txt -go-version <toolchain>`; the local toolchain is never stamped onto external numbers.
+
 Update a baseline only in a PR whose purpose or measured effect justifies it, and say why in the PR body. Record each architecture on that architecture's hardware; an empty file is refused by the check instead of passing silently. `amd64.json` is recorded at the first amd64 checkpoint.
 
 The check fails (it does not pass silently) when a full measurement leaves a baseline entry unmeasured or finds a benchmark the baseline lacks, because a suite-regex change rekeys entries: run `task bench:baseline:update`. It also fails when no baseline benchmark was measured, and with `-input` it rejects output whose `goarch:` header differs from `-arch`. allocs/op and B/op can shift between Go minors, so the check warns when the baseline's `go_version` differs in major.minor from the running toolchain; record baselines with the toolchain CI uses.

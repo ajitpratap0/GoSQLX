@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -94,7 +95,7 @@ func TestUpdateThenCheckRoundTripAndRegression(t *testing.T) {
 	}
 	var out, errb bytes.Buffer
 	args := []string{"-dir", dir, "-arch", "amd64", "-input", in}
-	if err := run(append(args, "-update"), &out, &errb); err != nil {
+	if err := run(append(args, "-update", "-go-version", runtime.Version()), &out, &errb); err != nil {
 		t.Fatalf("update: %v", err)
 	}
 	data, err := os.ReadFile(filepath.Join(dir, "amd64.json"))
@@ -211,7 +212,7 @@ func TestInputGoarchMustMatchArch(t *testing.T) {
 		t.Fatal(err)
 	}
 	var out, errb bytes.Buffer
-	err := run([]string{"-dir", dir, "-arch", "amd64", "-input", in, "-update"}, &out, &errb)
+	err := run([]string{"-dir", dir, "-arch", "amd64", "-input", in, "-update", "-go-version", "go1.26.9"}, &out, &errb)
 	if err == nil || !strings.Contains(err.Error(), "goarch") {
 		t.Fatalf("goarch mismatch must be rejected, got %v", err)
 	}
@@ -232,5 +233,34 @@ func TestSameGoMinor(t *testing.T) {
 		if got := SameGoMinor(c.a, c.b); got != c.want {
 			t.Errorf("SameGoMinor(%s,%s)=%v", c.a, c.b, got)
 		}
+	}
+}
+
+func TestUpdateFromInputDoesNotStampLocalToolchain(t *testing.T) {
+	dir := t.TempDir()
+	in := filepath.Join(dir, "bench.txt")
+	if err := os.WriteFile(in, []byte(sample), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var out, errb bytes.Buffer
+	if err := run([]string{"-dir", dir, "-arch", "amd64", "-input", in, "-update"}, &out, &errb); err == nil {
+		t.Fatal("-update -input without -go-version must be rejected")
+	}
+	if _, err := os.Stat(filepath.Join(dir, "amd64.json")); err == nil {
+		t.Fatal("amd64.json must not be written without a declared toolchain")
+	}
+	if err := run([]string{"-dir", dir, "-arch", "amd64", "-input", in, "-update", "-go-version", "go1.0.1"}, &out, &errb); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(filepath.Join(dir, "amd64.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	f, err := ParseFile(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if f.GoVersion != "go1.0.1" || strings.Contains(f.Comment, "Measured with") {
+		t.Fatalf("external provenance not preserved: go_version=%q comment=%q", f.GoVersion, f.Comment)
 	}
 }

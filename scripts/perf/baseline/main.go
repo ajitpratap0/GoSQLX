@@ -20,6 +20,7 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -30,6 +31,9 @@ import (
 	"strings"
 	"time"
 )
+
+const externalFileComment = "ns_per_op is trend-only. bytes_per_op and allocs_per_op are gated by scripts/perf/baseline (allocs/op must not rise, B/op may rise at most 2 percent). " +
+	"Recorded from external benchmark output (-input); go_version is the toolchain declared with -go-version. Regenerate with: task bench:baseline:update"
 
 const fileComment = "ns_per_op is trend-only. bytes_per_op and allocs_per_op are gated by scripts/perf/baseline " +
 	"(allocs/op must not rise, B/op may rise at most 2 percent). Measured with GOGC=off, -cpu 1, medians. " +
@@ -45,7 +49,8 @@ func main() {
 type usageError struct{ error }
 
 func exitCode(err error) int {
-	if _, ok := err.(usageError); ok {
+	var ue usageError
+	if errors.As(err, &ue) {
 		return 2
 	}
 	return 1
@@ -60,12 +65,16 @@ func run(args []string, stdout, stderr io.Writer) error {
 	input := fs.String("input", "", "read `go test -bench -benchmem` output from this file instead of running the suite")
 	suite := fs.String("suite", "scripts/perf/gate-suite.txt", "gated suite file")
 	benchtime := fs.String("benchtime", "200ms", "-benchtime of each benchmark")
+	goVersion := fs.String("go-version", "", "Go toolchain that produced -input (required with -update -input; never defaulted to the local toolchain)")
 	count := fs.Int("count", 5, "samples per benchmark (the median is recorded)")
 	if err := fs.Parse(args); err != nil {
 		return usageError{err}
 	}
 	if *count < 1 {
 		return usageError{fmt.Errorf("-count must be positive")}
+	}
+	if *update && *input != "" && *goVersion == "" {
+		return usageError{fmt.Errorf("-update -input requires -go-version (the toolchain that produced %s, e.g. go1.26.9): the local toolchain is not recorded for external output", *input)}
 	}
 	path := filepath.Join(*dir, *arch+".json")
 
@@ -107,6 +116,12 @@ func run(args []string, stdout, stderr io.Writer) error {
 	if *update {
 		f := File{Schema: SchemaVersion, Arch: *arch, Comment: fileComment, Benchmarks: measured,
 			Updated: time.Now().UTC().Format("2006-01-02"), GoVersion: runtime.Version()}
+		if *input != "" {
+			// External provenance: record the declared toolchain, not ours,
+			// and do not claim how the numbers were measured.
+			f.GoVersion = *goVersion
+			f.Comment = externalFileComment
+		}
 		out, err := f.Marshal()
 		if err != nil {
 			return err

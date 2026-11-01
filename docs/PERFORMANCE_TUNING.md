@@ -1251,7 +1251,7 @@ Use the interleaved A/B gate (`task bench:gate`) and the allocs/op and B/op base
 
 ```yaml
 # GitHub Actions example
-- name: Performance Regression Tests
+- name: Performance Smoke Test
   run: |
     go test -v ./pkg/sql/parser/ -run TestPerformanceRegression
   timeout-minutes: 2
@@ -1259,11 +1259,7 @@ Use the interleaved A/B gate (`task bench:gate`) and the allocs/op and B/op base
 
 ### Troubleshooting Regression Tests
 
-**Test Timing Variance:** System load, CPU throttling, background processes affect results. Run tests multiple times.
-
-**False Positives:** Check system load, run test 3-5 times to confirm, consider increasing tolerance.
-
-**Baseline Drift:** If performance is consistently better, document improvements and update baselines.
+`TestPerformanceRegression` is a smoke test only. Do not raise its tolerance or rewrite `performance_baselines.json` to make it pass. For timing variance, false positives and baseline questions, follow [PERFORMANCE_METHODOLOGY.md](PERFORMANCE_METHODOLOGY.md): interleaved A/B runs, the A/B gate, and per-architecture allocation baselines.
 
 ---
 

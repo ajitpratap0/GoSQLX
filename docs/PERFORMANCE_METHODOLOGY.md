@@ -29,7 +29,7 @@ task bench:ab BENCH='./pkg/gosqlx=^BenchmarkParseE2E$'    # one benchmark
 task bench:gate                        # exactly what CI runs, locally
 ```
 
-`scripts/perf/ab.sh` builds test binaries for both revisions with the same toolchain and runs them interleaved in ABBA order for at least 10 rounds. The primary metric uses `GOGC=off GOMAXPROCS=1` (`-cpu 1`, pinned to one CPU where `taskset` exists): garbage-collection-free mutator time has low variance and ranks queries the same way the `-cpu 4` headline does. `-cpu 4` runs are informational. Results go through `benchstat` at alpha 0.01. The benchmarks that are gated are listed in `scripts/perf/gate-suite.txt`.
+`scripts/perf/ab.sh` builds test binaries for both revisions with the same toolchain and runs them interleaved in ABBA order for at least 10 rounds. The primary metric uses `GOGC=off GOMAXPROCS=1` (`-cpu 1`, pinned to one CPU where `taskset` exists): garbage-collection-free mutator time has low variance and ranks queries the same way the `-cpu 4` headline does. A secondary default-GC `-cpu 1` arm (`-g`, enabled by `bench:gate`) is reported for information only; `-cpu 4` is measured only by `task bench:profile` and the competitor harness. Results go through `benchstat` at alpha 0.01. The benchmarks that are gated are listed in `scripts/perf/gate-suite.txt`.
 
 Tips: run on an idle machine, close other benchmarks, and re-run once if the A/A control (below) reports noise. Never weaken a test or a threshold to make a result pass.
 

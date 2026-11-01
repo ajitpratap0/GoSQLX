@@ -26,11 +26,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     ABBA rounds, benchstat at alpha 0.01, A/A noise control; `allocs/op`, `B/op`
     and instruction-count gates) with `task bench:ab` and `task bench:gate`
     (#916).
-  - Baselines and docs (this entry): per-architecture
+  - Baselines and docs (#917): per-architecture
     `benchmarks/baselines/{amd64,arm64}.json` holding trend-only ns/op and gated
     B/op and allocs/op, checked or regenerated with `task bench:baseline` and
     `task bench:baseline:update` (local-only until W0-13 wires the check into
-    `perf-gate.yml`; CI currently gates allocs/op and B/op relatively via the A/B gate); new `task bench:matrix` and `task pgo:refresh`;
+    `perf-gate.yml`; CI currently gates allocs/op and B/op relatively via the
+    A/B gate); new `task bench:matrix` and `task pgo:refresh`;
     `docs/PERFORMANCE_METHODOLOGY.md` (method, how to run an A/B, how the gate
     decides, claims policy). `performance_baselines.json` and
     `TestPerformanceRegression` are now documented as a smoke test only, and

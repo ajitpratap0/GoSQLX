@@ -15,6 +15,7 @@
 package parser
 
 import (
+	"strings"
 	"sync"
 	"testing"
 
@@ -142,8 +143,13 @@ func TestCurrentToken_PeekToken(t *testing.T) {
 			if *got != toks[i+1] {
 				t.Errorf("peekToken at %d = %+v, want %+v", i, *got, toks[i+1])
 			}
-		} else if *got != (models.TokenWithSpan{}) {
-			t.Errorf("peekToken past end = %+v, want zero token", *got)
+		} else {
+			if *got != (models.TokenWithSpan{}) {
+				t.Errorf("peekToken past end = %+v, want zero token", *got)
+			}
+			if got != &p.eof {
+				t.Errorf("peekToken past end at %d is not the parser's own EOF sentinel", i)
+			}
 		}
 	}
 	if p.eof != (models.TokenWithSpan{}) {
@@ -178,6 +184,7 @@ func TestCurrentToken_SentinelUnmodifiedAfterParsing(t *testing.T) {
 
 			p.Reset()
 			assertSentinelClean(t, p, "Reset", sql)
+			assertRepointedAtSentinel(t, p, "Reset", sql)
 		}
 	}
 }
@@ -190,6 +197,66 @@ func assertSentinelClean(t *testing.T, p *Parser, op, sql string) {
 	if p.currentToken == nil {
 		t.Fatalf("%s(%q): currentToken is nil", op, sql)
 	}
+}
+
+// assertRepointedAtSentinel requires a reset/released parser to hold no
+// interior pointer into a token slice: a stale currentToken would keep a
+// dropped oversized tokenBuf or a caller-owned slice alive in the pool.
+func assertRepointedAtSentinel(t *testing.T, p *Parser, op, sql string) {
+	t.Helper()
+	if p.currentToken != &p.eof {
+		t.Fatalf("%s(%q): currentToken is not re-pointed at the EOF sentinel (stale interior pointer)", op, sql)
+	}
+	if p.tokens != nil {
+		t.Fatalf("%s(%q): tokens still referenced", op, sql)
+	}
+}
+
+// TestCurrentToken_ReleaseRepointsSentinel pins Release's re-point.
+func TestCurrentToken_ReleaseRepointsSentinel(t *testing.T) {
+	for _, sql := range currentTokenCorpus {
+		p := NewParser()
+		toks := cursorTestTokens(t, sql)
+		if tree, err := p.ParseFromModelTokens(toks); err == nil {
+			ast.ReleaseAST(tree)
+		}
+		p.Release()
+		assertSentinelClean(t, p, "Release", sql)
+		assertRepointedAtSentinel(t, p, "Release", sql)
+	}
+}
+
+// TestCurrentToken_ResetDropsOversizedBuffer parses a stream whose token
+// buffer exceeds maxPooledTokenBuf and requires Reset to leave no pointer
+// into the dropped buffer or the caller's slice.
+func TestCurrentToken_ResetDropsOversizedBuffer(t *testing.T) {
+	var sb strings.Builder
+	sb.WriteString("SELECT 1")
+	for i := 0; i < maxPooledTokenBuf; i++ {
+		sb.WriteString(", 1")
+	}
+	toks := cursorTestTokens(t, sb.String())
+	if len(toks) <= maxPooledTokenBuf {
+		t.Fatalf("test stream too small: %d tokens", len(toks))
+	}
+	p := NewParser()
+	if tree, err := p.ParseFromModelTokens(toks); err != nil {
+		t.Fatal(err)
+	} else {
+		ast.ReleaseAST(tree)
+	}
+	big := cap(p.tokenBuf) > maxPooledTokenBuf
+	p.Reset()
+	assertRepointedAtSentinel(t, p, "Reset", "oversized")
+	if big && p.tokenBuf != nil {
+		t.Fatal("oversized tokenBuf was not dropped by Reset")
+	}
+	// Caller-owned slice (ParseWithPositions style): parse the raw slice
+	// directly, then reset.
+	p.tokens = toks
+	p.seek(len(toks) / 2)
+	p.Reset()
+	assertRepointedAtSentinel(t, p, "Reset", "caller-owned")
 }
 
 // TestCurrentToken_SentinelIsPerParser guards decision D4: the sentinel must
@@ -208,6 +275,9 @@ func TestCurrentToken_SentinelIsPerParser(t *testing.T) {
 	defer PutParser(pb)
 	if pa.currentToken == pb.currentToken {
 		t.Fatal("two pooled parsers share one EOF sentinel")
+	}
+	if pa.currentToken != &pa.eof || pb.currentToken != &pb.eof {
+		t.Fatal("a pooled parser's currentToken is not its own sentinel")
 	}
 }
 
@@ -259,6 +329,16 @@ func TestCurrentToken_EmptyStreamClearsStaleCursor(t *testing.T) {
 	p.ParseWithRecoveryFromModelTokens(first)
 	p.ParseWithRecoveryFromModelTokens(nil)
 	assertCursorInvariant(t, p, "empty recovery stream after a parse")
+	if tree, err := p.ParseContextFromModelTokens(t.Context(), first); err == nil {
+		ast.ReleaseAST(tree)
+	}
+	if tree, err := p.ParseContextFromModelTokens(t.Context(), nil); err == nil {
+		ast.ReleaseAST(tree)
+	}
+	assertCursorInvariant(t, p, "empty context stream after a parse")
+	if p.currentToken != &p.eof {
+		t.Fatal("empty context stream left a stale cursor")
+	}
 }
 
 // TestCurrentToken_ConcurrentParsers parses concurrently on independent

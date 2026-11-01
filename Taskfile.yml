@@ -203,9 +203,10 @@ tasks:
 
   bench:matrix:
     set: [pipefail]
-    desc: "Run the whole benchmark matrix once (every pkg benchmark except cbinding, which needs CGO: see bench:interop; -benchmem, -cpu 1, GOGC=off) and write it to OUT (default: .bench/matrix.txt, gitignored). Vars: BENCHTIME (default 100ms), OUT, FILTER (default .)"
+    desc: "Run the whole benchmark matrix once (every pkg benchmark except cbinding, which needs CGO: see bench:interop; -benchmem, -cpu 1, GOGC=off with GOMEMLIMIT=64MiB so the heap stays bounded and GC-off timings are not dominated by first-touch page faults) and write it to OUT (default: .bench/matrix.txt, gitignored). Vars: BENCHTIME (default 100ms), OUT, FILTER (default .)"
     env:
       GOGC: 'off'
+      GOMEMLIMIT: '64MiB'
     cmds:
       - mkdir -p "$(dirname '{{.OUT}}')"
       - go test -run '^$' -bench '{{.FILTER}}' -benchmem -benchtime {{.BENCHTIME}} -cpu 1 $(go list ./pkg/... ./wasm/internal/... | grep -v /cbinding) 2>&1 | tee {{.OUT}}
@@ -235,7 +236,7 @@ tasks:
       TMP_BIN: '{{.TMPDIR | default "/tmp"}}/gosqlx-pgo.test'
 
   bench:profile:
-    desc: "CPU profiles (-cpu 1, GOGC=off, -cpu 4) of the gap queries plus perf stat counters when available (Vars: BENCHTIME, default 3s)"
+    desc: "CPU profiles (-cpu 1, GOGC=off with GOMEMLIMIT, -cpu 4) of the gap queries plus perf stat counters when available (Vars: BENCHTIME, default 3s)"
     cmds:
       - scripts/perf/profile.sh -t {{.BENCHTIME}}
     vars:

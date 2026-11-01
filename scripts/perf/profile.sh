@@ -30,6 +30,7 @@ set -euo pipefail
 
 # shellcheck source=scripts/perf/lib.sh
 . "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib.sh"
+perf_check_gomemlimit || exit 2
 gcoff_env=()
 while IFS= read -r kv; do gcoff_env+=("$kv"); done < <(perf_gcoff_env)
 cpu_model=$(perf_cpu_model)

@@ -505,3 +505,20 @@ func TestReportNamesTheRunnerCPU(t *testing.T) {
 		})
 	}
 }
+
+// TestReportOnlyHeadingIsNotAGateVerdict: a matrix comparison must not read
+// as a gate verdict in a job summary.
+func TestReportOnlyHeadingIsNotAGateVerdict(t *testing.T) {
+	s := suite()
+	res := evaluate(t, s, s, nil, DefaultConfig())
+	md := Markdown(res, DefaultConfig(), Meta{Mode: "report", Title: "Matrix A/B"})
+	if !strings.Contains(md, "## Matrix A/B: PASS (report only, not a gate verdict)") {
+		t.Fatalf("report-only heading missing:\n%s", md)
+	}
+	if strings.Contains(md, "Perf gate:") || strings.Contains(md, "shadow mode") {
+		t.Fatalf("report-only report reads like a gate verdict:\n%s", md)
+	}
+	if md := Markdown(res, DefaultConfig(), Meta{Mode: "shadow"}); !strings.Contains(md, "## Perf gate: PASS (shadow mode") {
+		t.Fatalf("default heading changed:\n%s", md)
+	}
+}

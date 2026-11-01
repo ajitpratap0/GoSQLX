@@ -18,7 +18,12 @@
 #   - Optional instruction counts (-i): cmd/perfdriver under `perf stat`,
 #     else cachegrind, else macOS `/usr/bin/time -l`, at two iteration counts;
 #     the difference divided by the extra iterations is instructions/op.
-#   - allocs/op and B/op come from the primary runs (GOGC=off: no pool drains).
+#   - allocs/op and B/op come from the primary runs. GOMEMLIMIT lets the
+#     collector (and with it sync.Pool drains) run about once per limit's
+#     worth of allocation, so allocs/op is exact for the gated suite
+#     (identical in every A/A and PR run so far) but not for large-input or
+#     low-N benchmarks (ParseRW/*/large, Handler_LargeDocument,
+#     *SustainedLoad*); see the open question on the allocs rule in PR #921.
 #   - env.txt and the report name the CPU model: hosted runners differ from
 #     job to job, so only the in-job base/head ratios are reported.
 #
@@ -38,12 +43,15 @@
 #   -G          gate mode: -a -g -i, and re-measure once when the A/A is noisy
 #   -e          enforce: exit 1 on a regression (default: report only)
 #   -A          the regression is accepted (perf-regression-accepted label)
+#   -T TITLE    report-only comparison (not a gate): heading "TITLE: VERDICT
+#               (report only, not a gate verdict)"; exclusive with -e
 #   -h          show this help
 # Environment:
 #   PIN_CPU     CPU for taskset (default: the last online CPU; "none" disables pinning)
 #   BENCHSTAT   benchstat command (default: benchstat on PATH, else the pinned version via go run)
 #   IR_SAMPLES  samples per perfdriver case, median taken (default 3, every backend)
-#   PERF_GOMEMLIMIT  GOMEMLIMIT of the GOGC=off runs (default 64MiB; "off" unsets it)
+#   PERF_GOMEMLIMIT  GOMEMLIMIT of the GOGC=off runs (default 64MiB; "off" unsets
+#               it; otherwise digits with an optional B/KiB/MiB/GiB/TiB suffix)
 #
 # Output: DIR/report.md (also printed), DIR/status (pass, regression,
 # inconclusive), DIR/raw/*.txt (raw benchmark output), DIR/env.txt.
@@ -60,12 +68,12 @@ while IFS= read -r kv; do gcoff_env+=("$kv"); done < <(perf_gcoff_env)
 memlimit=$(perf_gomemlimit)
 
 usage() { sed -n '2,/^set -euo/p' "$0" | sed -e '$d' -e 's/^# \{0,1\}//'; }
-die() { echo "ab.sh: $*" >&2; exit "${2:-3}"; }
+die() { echo "ab.sh: $1" >&2; exit "${2:-3}"; }
 log() { echo "ab.sh: $*" >&2; }
 
-out="" rounds=10 benchtime=200ms suite="" aa=0 sec=0 ir=0 gate=0 enforce=0 accepted=0
+out="" rounds=10 benchtime=200ms suite="" aa=0 sec=0 ir=0 gate=0 enforce=0 accepted=0 title=""
 adhoc=()
-while getopts ":o:r:t:s:b:agiGeAh" opt; do
+while getopts ":o:r:t:s:b:T:agiGeAh" opt; do
 	case $opt in
 		o) out=$OPTARG ;;
 		r) rounds=$OPTARG ;;
@@ -78,6 +86,7 @@ while getopts ":o:r:t:s:b:agiGeAh" opt; do
 		G) gate=1 aa=1 sec=1 ir=1 ;;
 		e) enforce=1 ;;
 		A) accepted=1 ;;
+		T) title=$OPTARG ;;
 		h) usage; exit 0 ;;
 		:) die "-$OPTARG needs a value" 2 ;;
 		*) die "unknown option -$OPTARG (see -h)" 2 ;;
@@ -86,6 +95,8 @@ done
 shift $((OPTIND - 1))
 [ $# -ge 1 ] && [ $# -le 2 ] || { usage >&2; exit 2; }
 case $rounds in '' | *[!0-9]* | 0) die "-r must be a positive integer, got '$rounds'" 2 ;; esac
+[ -z "$title" ] || [ $enforce -eq 0 ] || die "-T (report only) and -e are exclusive" 2
+perf_check_gomemlimit || exit 2
 
 root=$(git rev-parse --show-toplevel)
 base_ref=$1
@@ -358,6 +369,7 @@ judge() { # extra gate flags...
 	fi
 	[ $enforce -eq 1 ] && args+=(-enforce)
 	[ $accepted -eq 1 ] && args+=(-accepted)
+	[ -n "$title" ] && args+=(-report-only -title "$title")
 	(cd "$gate_src" && go run ./scripts/perf/gate "${args[@]}" "$@")
 }
 

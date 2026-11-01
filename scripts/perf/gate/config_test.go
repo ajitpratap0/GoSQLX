@@ -81,19 +81,35 @@ func TestPerfWorkflowsPinOneGoToolchain(t *testing.T) {
 // turns the collector off also bounds the heap, so first-touch page faults do
 // not pollute timings and profiles (C0 methodology finding 2).
 func TestGCOffMeasurementsSetGOMEMLIMIT(t *testing.T) {
-	files := []string{"scripts/perf/ab.sh", "scripts/perf/profile.sh", "Taskfile.yml"}
+	files := []string{"scripts/perf/ab.sh", "scripts/perf/profile.sh", "Taskfile.yml", "scripts/perf/baseline/main.go"}
 	files = append(files, perfWorkflows...)
+	// The baseline recorder gates absolute allocs/op and B/op only and runs
+	// without a limit on purpose (no GC, so no pool drains): see gcOffEnv in
+	// scripts/perf/baseline. Only files listed here may carry the marker.
+	exempt := map[string]bool{"scripts/perf/baseline/main.go": true}
+	const marker = "perf:no-gomemlimit"
 	gcoff := regexp.MustCompile(`GOGC[=:]\s*'?off`)
 	for _, f := range files {
+		var lines []string
 		sc := bufio.NewScanner(strings.NewReader(readRepoFile(t, f)))
-		for n := 1; sc.Scan(); n++ {
-			line := strings.TrimSpace(sc.Text())
+		for sc.Scan() {
+			lines = append(lines, sc.Text())
+		}
+		for i, raw := range lines {
+			n := i + 1
+			line := strings.TrimSpace(raw)
 			// Comments and Taskfile descriptions only talk about GOGC=off.
-			if strings.HasPrefix(line, "#") || strings.HasPrefix(line, "desc:") || !gcoff.MatchString(line) {
+			if strings.HasPrefix(line, "#") || strings.HasPrefix(line, "//") || strings.HasPrefix(line, "desc:") || !gcoff.MatchString(line) {
+				continue
+			}
+			if strings.Contains(line, marker) {
+				if !exempt[f] {
+					t.Errorf("%s:%d: %s is reserved for the baseline recorder: %s", f, n, marker, line)
+				}
 				continue
 			}
 			// gcoff_env is the array scripts fill from perf_gcoff_env.
-			if !strings.Contains(line, "GOMEMLIMIT") && !strings.Contains(line, "gcoff_env") {
+			if !strings.Contains(line, "GOMEMLIMIT") && !strings.Contains(line, "gcoff_env") && !yamlSiblingKey(lines, i, "GOMEMLIMIT:") {
 				t.Errorf("%s:%d sets GOGC=off without GOMEMLIMIT (use perf_gcoff_env from scripts/perf/lib.sh): %s", f, n, line)
 			}
 		}
@@ -108,6 +124,27 @@ func TestGCOffMeasurementsSetGOMEMLIMIT(t *testing.T) {
 	if want := `defaultGOMEMLIMIT = "` + m[1] + `"`; !strings.Contains(pub, want) {
 		t.Errorf("benchmarks/compare/cmd/publish: want %s, the scripts/perf/lib.sh default", want)
 	}
+}
+
+// yamlSiblingKey reports whether the YAML mapping that holds lines[i] (the
+// contiguous lines at its indentation) also has a key starting with key, as
+// in a Taskfile or workflow env block with GOGC: 'off' and GOMEMLIMIT on
+// separate lines.
+func yamlSiblingKey(lines []string, i int, key string) bool {
+	indent := func(l string) int { return len(l) - len(strings.TrimLeft(l, " ")) }
+	want := indent(lines[i])
+	for _, step := range []int{-1, 1} {
+		for j := i + step; j >= 0 && j < len(lines); j += step {
+			l := lines[j]
+			if strings.TrimSpace(l) == "" || indent(l) != want {
+				break
+			}
+			if strings.HasPrefix(strings.TrimSpace(l), key) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // bashLib runs a snippet with scripts/perf/lib.sh sourced.
@@ -149,6 +186,24 @@ func TestGCOffEnvSetsTheMemoryLimit(t *testing.T) {
 				t.Errorf("env with perf_gcoff_env: got %q, want %q", got, want)
 			}
 		})
+	}
+}
+
+// TestGOMEMLIMITIsValidated: a value the Go runtime rejects would make every
+// benchmark binary panic at startup, so the scripts refuse it up front.
+func TestGOMEMLIMITIsValidated(t *testing.T) {
+	for _, v := range []string{"", "off", "64MiB", "1GiB", "512KiB", "4TiB", "100B", "67108864"} {
+		bashLib(t, []string{"PERF_GOMEMLIMIT=" + v}, "perf_check_gomemlimit")
+	}
+	for _, v := range []string{"64Mi", "64MB", "64KB", "6.4MiB", "-1", "abc", "64 MiB", "MiB"} {
+		cmd := exec.Command("bash", "-c", `. "$1"; perf_check_gomemlimit`, "bash", filepath.Join(repoRoot, "scripts", "perf", "lib.sh"))
+		cmd.Env = append(os.Environ(), "PERF_GOMEMLIMIT="+v)
+		out, err := cmd.CombinedOutput()
+		if err == nil {
+			t.Errorf("PERF_GOMEMLIMIT=%q accepted", v)
+		} else if !strings.Contains(string(out), "PERF_GOMEMLIMIT must be") {
+			t.Errorf("PERF_GOMEMLIMIT=%q: no clear message: %s", v, out)
+		}
 	}
 }
 

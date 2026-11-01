@@ -25,6 +25,26 @@ perf_gomemlimit() {
 	printf '%s\n' "${PERF_GOMEMLIMIT:-$PERF_GOMEMLIMIT_DEFAULT}"
 }
 
+# perf_check_gomemlimit fails with a message on stderr unless the limit is
+# "off" or a value the Go runtime accepts (digits, optional B, KiB, MiB, GiB
+# or TiB suffix). A bad value would otherwise make every benchmark binary
+# panic at startup.
+perf_check_gomemlimit() {
+	local limit
+	limit=$(perf_gomemlimit)
+	case $limit in
+		off) return 0 ;;
+		'' | *[!0-9A-Za-z]*) ;;
+		*)
+			local n=$limit
+			case $n in *B) n=${n%B} n=${n%[KMGT]i} ;; esac
+			case $n in '' | *[!0-9]*) ;; *) return 0 ;; esac
+			;;
+	esac
+	echo "PERF_GOMEMLIMIT must be off or digits with an optional B/KiB/MiB/GiB/TiB suffix (e.g. 64MiB), got '$limit'" >&2
+	return 1
+}
+
 # perf_gcoff_env prints the env(1) arguments of a GOGC=off measurement, one
 # per line: GOGC=off and GOMEMLIMIT=<limit>, or, when the limit is off,
 # "-u" "GOMEMLIMIT" first (env options must precede assignments) and then

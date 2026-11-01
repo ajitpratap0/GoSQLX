@@ -389,7 +389,8 @@ func pval(c Cmp) string {
 // Meta is free-form context printed above the tables.
 type Meta struct {
 	BaseRef, HeadRef string
-	Mode             string // "shadow" or "enforce"
+	Mode             string // "shadow", "enforce" or "report" (a comparison that is not a gate, e.g. the matrix)
+	Title            string // report heading; default "Perf gate"
 	Accepted         bool   // perf-regression-accepted label present
 	Settings         string // one line: rounds, benchtime, pinning
 	Env              string // lscpu / go version block
@@ -413,7 +414,14 @@ func Markdown(res Result, cfg Config, meta Meta) string {
 			mode = "enforced, regression accepted by the perf-regression-accepted label"
 		}
 	}
-	fmt.Fprintf(&b, "## Perf gate: %s (%s)\n\n", verdict, mode)
+	if meta.Mode == "report" {
+		mode = "report only, not a gate verdict"
+	}
+	title := meta.Title
+	if title == "" {
+		title = "Perf gate"
+	}
+	fmt.Fprintf(&b, "## %s: %s (%s)\n\n", title, verdict, mode)
 	if meta.BaseRef != "" || meta.HeadRef != "" {
 		fmt.Fprintf(&b, "Base `%s`, head `%s`.", meta.BaseRef, meta.HeadRef)
 		if meta.Settings != "" {

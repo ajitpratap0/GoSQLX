@@ -18,7 +18,9 @@
 #   -a            all functions (cold code such as splitCore or formatters included)
 #                 Package init functions (.init) are always excluded.
 #   -m MAX_BYTES  exit 1 when the largest frame exceeds MAX_BYTES (default: report only)
-#   PACKAGE       packages to inspect (default: tokenizer, parser, ast, gosqlx)
+#   PACKAGE       packages to inspect, any package of the module (default: tokenizer, parser, ast, gosqlx)
+# Exit codes: 1 frame over -m limit, 2 usage, 3 no STEXT lines, 4 go build failed,
+#             5 no function matched -f.
 set -euo pipefail
 
 top=15
@@ -53,7 +55,13 @@ trap 'rm -f "$out" "$out.all" "$out.top" "$out.flt"' EXIT
 
 # -S prints the assembly listing of each function to stderr. The build cache
 # replays that output, so repeated runs stay cheap.
-go build "${flags[@]}" -o /dev/null ./pkg/gosqlx 2> "$out"
+# The requested packages themselves are built, so any package of the module works.
+# A failed build keeps its compiler errors visible instead of vanishing with $out.
+if ! go build "${flags[@]}" "${pkgs[@]}" 2> "$out"; then
+  cat "$out" >&2
+  echo "frames.sh: go build failed for: ${pkgs[*]}" >&2
+  exit 4
+fi
 
 # Lines look like:
 #   pkg.(*Parser).parseSelect STEXT size=1234 args=0x10 locals=0x1f8 funcid=0x0 align=0x0
@@ -72,9 +80,17 @@ awk '
     }
   }
 ' "$out" | sort -u | sort -k1,1nr -k2,2 | grep -Ev ' [^ ]*\.init(\.[0-9]+)?$' > "$out.all" || true
+if [ ! -s "$out.all" ]; then
+  echo "frames.sh: no STEXT lines found; did the compiler output change?" >&2
+  exit 3
+fi
 if [ -n "$filter" ]; then
   grep -E "^[0-9]+ .*($filter)" "$out.all" > "$out.flt" || true
   mv "$out.flt" "$out.all"
+  if [ ! -s "$out.all" ]; then
+    echo "frames.sh: no function matched -f '$filter'" >&2
+    exit 5
+  fi
 fi
 head -n "$top" "$out.all" > "$out.top"
 
@@ -85,11 +101,6 @@ while read -r size name; do
   printf '%8d  %s\n' "$size" "$name"
   if [ "$size" -gt "$largest" ]; then largest=$size; fi
 done < "$out.top"
-
-if [ "$largest" -eq 0 ]; then
-  echo "frames.sh: no STEXT lines found; did the compiler output change?" >&2
-  exit 3
-fi
 
 if [ -n "$max" ] && [ "$largest" -gt "$max" ]; then
   echo "frames.sh: largest frame $largest bytes exceeds limit $max" >&2

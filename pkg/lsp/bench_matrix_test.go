@@ -68,8 +68,10 @@ func lspBenchDoc(tb testing.TB, dialect string, minBytes int) string {
 
 // lspBenchHandler returns a handler with doc open under benchURI and the
 // dialect configured, plus a one-character edit pair that keeps the size
-// fixed.
-func lspBenchHandler(tb testing.TB, dialect, doc string) (h *Handler, insert, remove func(version int) json.RawMessage) {
+// fixed. The pair is marshalled once here, outside any timed region, so the
+// benchmarks measure the server and not the harness's JSON encoding.
+// Documents.Update does not check versions, so reusing them is safe.
+func lspBenchHandler(tb testing.TB, dialect, doc string) (h *Handler, insert, remove json.RawMessage) {
 	tb.Helper()
 	srv := setupTestServer()
 	h = srv.handler
@@ -79,22 +81,28 @@ func lspBenchHandler(tb testing.TB, dialect, doc string) (h *Handler, insert, re
 	// Edit in the middle of the document, at the start of a line.
 	line := strings.Count(doc, "\n") / 2
 	pos := Position{Line: line, Character: 0}
-	mk := func(r Range, text string) func(int) json.RawMessage {
-		return func(version int) json.RawMessage {
-			p := DidChangeTextDocumentParams{
-				TextDocument:   VersionedTextDocumentIdentifier{TextDocumentIdentifier: TextDocumentIdentifier{URI: benchURI}, Version: version},
-				ContentChanges: []TextDocumentContentChangeEvent{{Range: &r, Text: text}},
-			}
-			raw, err := json.Marshal(p)
-			if err != nil {
-				tb.Fatalf("marshal didChange: %v", err)
-			}
-			return raw
-		}
+	mk := func(r Range, text string, version int) json.RawMessage {
+		return mustMarshal(tb, DidChangeTextDocumentParams{
+			TextDocument:   VersionedTextDocumentIdentifier{TextDocumentIdentifier: TextDocumentIdentifier{URI: benchURI}, Version: version},
+			ContentChanges: []TextDocumentContentChangeEvent{{Range: &r, Text: text}},
+		})
 	}
-	insert = mk(Range{Start: pos, End: pos}, " ")
-	remove = mk(Range{Start: pos, End: Position{Line: line, Character: 1}}, "")
+	insert = mk(Range{Start: pos, End: pos}, " ", 2)
+	remove = mk(Range{Start: pos, End: Position{Line: line, Character: 1}}, "", 3)
 	return h, insert, remove
+}
+
+// lspBenchEdit returns the edit op: even i inserts, odd i deletes, so the
+// document returns to its original size after every pair.
+func lspBenchEdit(h *Handler, insert, remove json.RawMessage) func(int) {
+	return func(i int) {
+		if i&1 == 0 {
+			h.HandleNotification("textDocument/didChange", insert)
+		} else {
+			h.HandleNotification("textDocument/didChange", remove)
+		}
+		cancelDebounce(h)
+	}
 }
 
 // cancelDebounce stops the validation timer didChange arms, so a benchmark
@@ -142,14 +150,7 @@ func BenchmarkLSP(b *testing.B) {
 					defer cancelDebounce(h)
 					symParams := mustMarshal(b, DocumentSymbolParams{TextDocument: TextDocumentIdentifier{URI: benchURI}})
 					semParams := mustMarshal(b, SemanticTokensParams{TextDocument: TextDocumentIdentifier{URI: benchURI}})
-					edit := func(i int) {
-						if i&1 == 0 {
-							h.HandleNotification("textDocument/didChange", insert(i+2))
-						} else {
-							h.HandleNotification("textDocument/didChange", remove(i+2))
-						}
-						cancelDebounce(h)
-					}
+					edit := lspBenchEdit(h, insert, remove)
 
 					b.ReportAllocs()
 					b.SetBytes(int64(len(doc)))
@@ -235,13 +236,13 @@ func TestLSPBenchOps(t *testing.T) {
 
 			// A one-character insert changes the document by exactly one
 			// byte, and the delete restores it.
-			h.HandleNotification("textDocument/didChange", insert(2))
+			h.HandleNotification("textDocument/didChange", insert)
 			cancelDebounce(h)
 			got, _ := h.server.Documents().GetContent(benchURI)
 			if len(got) != len(doc)+1 {
 				t.Fatalf("after insert: %d bytes, want %d", len(got), len(doc)+1)
 			}
-			h.HandleNotification("textDocument/didChange", remove(3))
+			h.HandleNotification("textDocument/didChange", remove)
 			cancelDebounce(h)
 			if got, _ = h.server.Documents().GetContent(benchURI); got != doc {
 				t.Errorf("after delete the document differs from the original (%d vs %d bytes)", len(got), len(doc))
@@ -249,14 +250,7 @@ func TestLSPBenchOps(t *testing.T) {
 
 			// editCycle runs didChange, validateDocument, documentSymbol and
 			// semanticTokens; the last two must return real results.
-			edit := func(i int) {
-				if i&1 == 0 {
-					h.HandleNotification("textDocument/didChange", insert(i+2))
-				} else {
-					h.HandleNotification("textDocument/didChange", remove(i+2))
-				}
-				cancelDebounce(h)
-			}
+			edit := lspBenchEdit(h, insert, remove)
 			semP := mustMarshal(t, SemanticTokensParams{TextDocument: TextDocumentIdentifier{URI: benchURI}})
 			symP := mustMarshal(t, DocumentSymbolParams{TextDocument: TextDocumentIdentifier{URI: benchURI}})
 			for i := 0; i < 2; i++ {

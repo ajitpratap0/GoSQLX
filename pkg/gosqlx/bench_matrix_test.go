@@ -30,8 +30,8 @@ import (
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/keywords"
 )
 
-// mxMaxBucketStatements caps one RW or TPC operation, deterministically (the
-// first N in corpus order), to keep the matrix fast.
+// mxMaxBucketStatements caps one RW operation, deterministically (the first N
+// in corpus order), to keep the matrix fast. TPC operations are not capped.
 const mxMaxBucketStatements = 64
 
 func mxCorpus(tb testing.TB) *benchcorpus.Set {
@@ -118,7 +118,9 @@ func mxRunPass(b *testing.B, c mxCell) {
 			ast.ReleaseAST(tree)
 		}
 	}
-	b.ReportMetric(float64(b.Elapsed().Nanoseconds())/float64(b.N*len(c.sqls)), "ns/stmt")
+	if len(c.sqls) > 1 {
+		b.ReportMetric(float64(b.Elapsed().Nanoseconds())/float64(b.N*len(c.sqls)), "ns/stmt")
+	}
 }
 
 func BenchmarkParseE2E(b *testing.B) {
@@ -275,13 +277,24 @@ func TestBenchMatrixErrorCasesFailInTheirStage(t *testing.T) {
 		if !ec.tokenize && !errors.Is(err, gosqlx.ErrSyntax) {
 			t.Errorf("%s: want a syntax error, got %v", ec.name, err)
 		}
-		if gosqlx.Validate(ec.sql) == nil {
-			t.Errorf("%s: Validate accepted the input", ec.name)
-		}
-		for _, d := range []keywords.SQLDialect{"postgresql", "mysql"} {
-			if _, err := gosqlx.ParseWithDialect(ec.sql, d); err == nil {
-				t.Errorf("%s: ParseWithDialect(%s) succeeded", ec.name, d)
+		// Validate and ParseWithDialect wrap every failure as ErrSyntax, so
+		// the stage is read from the message: tokenizer failures carry
+		// E1002 / "tokenization error", parser failures do not.
+		checkStage := func(api string, err error) {
+			if err == nil {
+				t.Errorf("%s: %s accepted the input", ec.name, api)
+				return
 			}
+			msg := err.Error()
+			isTok := strings.Contains(msg, "tokenization error") && strings.Contains(msg, "E1002")
+			if isTok != ec.tokenize {
+				t.Errorf("%s: %s tokenizer failure = %v, want %v (err: %v)", ec.name, api, isTok, ec.tokenize, err)
+			}
+		}
+		checkStage("Validate", gosqlx.Validate(ec.sql))
+		for _, d := range []keywords.SQLDialect{"postgresql", "mysql"} {
+			_, err := gosqlx.ParseWithDialect(ec.sql, d)
+			checkStage("ParseWithDialect("+string(d)+")", err)
 		}
 	}
 }

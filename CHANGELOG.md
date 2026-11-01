@@ -21,7 +21,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     `AllocsPerRun` budgets, a stack-depth test and a frame-size script (#909),
     high-level, render and transform (#911), transpile with a prefilter
     differential test (#912), interop benchmarks and a binary-size budget
-    (#908).
+    (#908), and lint, security and LSP (#910).
+  - Competitor harness: new pure-Go peers (dolthub/vitess, rqlite/sql,
+    AfterShip/clickhouse-sql-parser, auxten/postgresql-parser), ORM-style
+    queries, lexer, render, normalize, fresh-goroutine, parallel and
+    per-dialect cells with checked-in common-accept sets, and a schema v2
+    results file that keeps every v1 field (#914).
   - Gate: an interleaved A/B workflow in shadow mode (`GOGC=off`, `-cpu 1`,
     ABBA rounds, benchstat at alpha 0.01, A/A noise control; `allocs/op`, `B/op`
     and instruction-count gates) with `task bench:ab` and `task bench:gate`

@@ -1,0 +1,13 @@
+# Portable queries shared with benchmarks/compare/corpus.go (11 entries).
+# Format: id<TAB>name<TAB>sql. TestPortableQueriesMatchCompare keeps this equal to that file.
+simple_select	Simple SELECT	SELECT id, name FROM users
+select_where	SELECT with WHERE, ORDER BY, LIMIT	SELECT id, name, email FROM users WHERE active = 1 AND created_at > '2024-01-01' ORDER BY name LIMIT 10
+join	Two-table JOIN	SELECT u.id, u.name, o.total FROM users u JOIN orders o ON u.id = o.user_id WHERE o.total > 100 ORDER BY o.total DESC LIMIT 50
+aggregate	GROUP BY with HAVING	SELECT status, COUNT(*), SUM(total) FROM orders GROUP BY status HAVING COUNT(*) > 10
+subquery	IN subquery	SELECT name FROM users WHERE id IN (SELECT user_id FROM orders WHERE total > 1000)
+cte	Common table expression	WITH recent AS (SELECT user_id, total FROM orders WHERE total > 100) SELECT user_id, SUM(total) FROM recent GROUP BY user_id
+window	Window function	SELECT name, salary, ROW_NUMBER() OVER (PARTITION BY dept ORDER BY salary DESC) FROM employees
+complex	Multi-JOIN analytical query	SELECT c.name, p.category, COUNT(o.id), SUM(oi.quantity * oi.price) FROM customers c JOIN orders o ON c.id = o.customer_id JOIN order_items oi ON o.id = oi.order_id LEFT JOIN products p ON oi.product_id = p.id WHERE o.created_at >= '2024-01-01' AND p.category IS NOT NULL GROUP BY c.name, p.category HAVING SUM(oi.quantity * oi.price) > 500 ORDER BY c.name, p.category LIMIT 100
+insert	INSERT VALUES	INSERT INTO users (id, name, email) VALUES (1, 'alice', 'alice@example.com')
+update	UPDATE with WHERE	UPDATE users SET name = 'bob', active = 0 WHERE id = 42
+delete	DELETE with WHERE	DELETE FROM sessions WHERE expires_at < '2024-01-01'

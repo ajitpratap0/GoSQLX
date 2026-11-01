@@ -1068,9 +1068,19 @@ func isIdentifierStart(r rune) bool {
 // readIdentifier reads an identifier (e.g. foo or foo.bar)
 func (t *Tokenizer) readIdentifier() (models.Token, error) {
 	if (t.input[t.pos.Index] == 'U' || t.input[t.pos.Index] == 'u') && t.pos.Index+2 < len(t.input) &&
-		t.input[t.pos.Index+1] == '&' && (t.input[t.pos.Index+2] == '\'' || t.input[t.pos.Index+2] == '"') &&
-		t.dialect == keywords.DialectPostgreSQL {
-		return t.readUnicodeEscape()
+		t.input[t.pos.Index+1] == '&' && (t.input[t.pos.Index+2] == '\'' || t.input[t.pos.Index+2] == '"') {
+		switch t.dialect {
+		case keywords.DialectPostgreSQL:
+			return t.readUnicodeEscape()
+		case keywords.DialectOracle, keywords.DialectSnowflake, keywords.DialectClickHouse:
+			// These dialects have neither U& literals nor an & operator, so
+			// U&'...' cannot be read as U & '...' (formatting would turn it
+			// into BITAND(U, '...') or bitAnd(U, '...')).
+			return models.Token{}, errors.NewError(errors.ErrCodeUnsupportedFeature,
+				"unsupported feature: U& Unicode escape literals in "+string(t.dialect), t.toSQLPosition(t.pos)).
+				WithContext(t.src, 2).
+				WithHint("U&'...' is PostgreSQL syntax; write the characters directly")
+		}
 	}
 	start := t.pos.Index
 	r, size := utf8.DecodeRune(t.input[t.pos.Index:])

@@ -19,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   allocates nothing.
 
 ### Fixed
+- **AST**: `AlterTableStatement.SQL()` now separates multiple ALTER TABLE actions with commas, matching the compact formatter and preserving action boundaries when re-parsed.
 - **Playground**: the GoSQLX WebAssembly module now runs in a Web Worker, so
   loading the parser and every parse, format, lint, analyze, highlight and
   transpile call no longer block the page. The playground computes only the
@@ -26,6 +27,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   tab is opened. Total Blocking Time on `/playground/` dropped from ~490 ms to
   ~80 ms in local Lighthouse runs at CI-equivalent CPU throttling, which ends
   the Lighthouse CI performance failures on slower GitHub runners.
+- **ClickHouse and Snowflake lambdas keep their body** (#897): `->` in these
+  dialects is now parsed as the lambda operator, so `arrayMap(x -> x * 2, a)`
+  is `x -> (x * 2)`. It used to parse as the JSON arrow, `(x -> x) * 2`, and
+  formatting or transpiling for ClickHouse or Snowflake, including identity
+  transpiles, emitted `arrayMap((x -> x) * 2, a)`. The new
+  `BinaryExpression.Lambda` field marks these nodes. Transpiling a ClickHouse
+  or Snowflake lambda to the generic dialect now parenthesizes its body,
+  `arrayMap(x -> (x * 2), a)`, because the generic parser reads `->` as the
+  tight-binding JSON arrow; it used to emit `arrayMap(x -> x * 2, a)`, which
+  reads back as `(x -> x) * 2`. Transpiling a lambda to
+  a dialect without lambdas (PostgreSQL, MySQL, MariaDB, SQLite, SQL Server,
+  Oracle) now returns an error: written as that dialect's `->` it would mean
+  JSON extraction or regroup as `(x -> x) * 2`. In the other direction, a
+  JSON `->` or `->>` transpiled to ClickHouse or Snowflake now returns an
+  error, because there `->` is the lambda operator (and `->>` Snowflake's
+  flow operator) and the output would be read back as a lambda. Parsing
+  `->>` with the ClickHouse or Snowflake dialect is now an E4001
+  unsupported-feature error (`the ->> operator is not supported in ...`);
+  it used to parse as a JSON node, which formatted unchanged.
+- **`U&'...'` in Oracle, Snowflake and ClickHouse is an error** (#898): these
+  dialects have neither Unicode-escape literals nor an `&` operator. The
+  literal was read as `U & '...'`, and formatting or transpiling then emitted
+  `BITAND(U, '...')` or `bitAnd(U, '...')`. Tokenizing `U&'...'` or `U&"..."`
+  in these dialects now returns an E4001 unsupported-feature error. A spaced
+  `U & '...'` and all other dialects are unchanged: in MySQL, MariaDB, SQL
+  Server and SQLite `U&'x'` is still `U & 'x'`, and PostgreSQL still reads it
+  as a Unicode-escape literal.
 
 ## [1.17.0] - 2026-10-31 — Real-World Dialect Corpus, Dialect-Faithful Round Trips, Security Scanner & LSP Hardening
 

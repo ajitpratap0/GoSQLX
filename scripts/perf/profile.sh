@@ -130,7 +130,10 @@ fi
 
 # cachegrind_run q n: one simulated run of perfdriver; prints its counts.
 cachegrind_run() {
-	local q=$1 n=$2 log=$out/cachegrind-$q-$n.log
+	# Two statements: the words of one `local` are expanded before any of
+	# its assignments, so $n would still be unset in log=...
+	local q=$1 n=$2
+	local log=$out/cachegrind-$q-$n.log
 	(cd "$root" && env "${gcoff_env[@]}" GOMAXPROCS=1 GODEBUG=asyncpreemptoff=1 \
 		valgrind --tool=cachegrind "${cg_sim[@]}" --cachegrind-out-file="$out/cachegrind-$q-$n.out" \
 		"$out/perfdriver" -case "e2e/$q" -n "$n") >/dev/null 2>"$log" || return 1
@@ -139,6 +142,7 @@ cachegrind_run() {
 
 if [ $cg_ok -eq 1 ]; then
 	{
+		echo
 		echo "### Simulated caches (cachegrind, per operation)"
 		echo
 		echo "cmd/perfdriver -case e2e/<q>, ${gcoff_env[*]} GOMAXPROCS=1, \`${cg_sim[*]}\`; counts are (run of $cg_n2 - run of $cg_n1) / $((cg_n2 - cg_n1)) operations. Simulated, so they do not depend on the runner CPU."

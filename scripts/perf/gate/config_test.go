@@ -285,3 +285,67 @@ func TestMatrixSuiteCoversEveryBenchmarkPackage(t *testing.T) {
 		t.Errorf("matrix suite lists packages without benchmarks: %v", extra)
 	}
 }
+
+// TestProfileCachegrindTable runs scripts/perf/profile.sh end to end with a
+// stub valgrind on PATH (macOS and most dev machines have none) and checks
+// the per-operation table: the counts of the two runs are differenced and
+// divided by the extra iterations, so start-up cost cancels. The stub's
+// counts are 1e6 + 5000n instructions and 100 + 7n L1i misses for n
+// operations.
+func TestProfileCachegrindTable(t *testing.T) {
+	if testing.Short() {
+		t.Skip("builds and runs the gosqlx test binary")
+	}
+	if _, err := exec.LookPath("bash"); err != nil {
+		t.Skip("bash not installed")
+	}
+	stubDir := t.TempDir()
+	stub := `#!/usr/bin/env bash
+n=0 out=""
+for a in "$@"; do
+	case $prev in -n) n=$a ;; esac
+	case $a in --cachegrind-out-file=*) out=${a#*=} ;; --help|--version) echo valgrind-stub; exit 0 ;; esac
+	prev=$a
+done
+[ -n "$out" ] && : > "$out"
+{
+	echo "==1== I refs:        $((1000000 + 5000 * n))"
+	echo "==1== I1  misses:        $((100 + 7 * n))"
+	echo "==1== LLi misses:        $((50 + n))"
+	echo "==1== D refs:          $((400000 + 2000 * n))  (1 rd   + 1 wr)"
+	echo "==1== D1  misses:       $((300 + 3 * n))  ( 1 rd   +   1 wr)"
+	echo "==1== LLd misses:        $((200 + 2 * n))  (  1 rd   +   1 wr)"
+} >&2
+`
+	if err := os.WriteFile(filepath.Join(stubDir, "valgrind"), []byte(stub), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	out := t.TempDir()
+	root, err := filepath.Abs(repoRoot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.Command("bash", filepath.Join(root, "scripts", "perf", "profile.sh"), "-o", out, "-t", "1x", "-q", "join")
+	cmd.Dir = root
+	cmd.Env = append(os.Environ(), "PATH="+stubDir+string(os.PathListSeparator)+os.Getenv("PATH"), "CG_ITERS=10 110")
+	if b, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("profile.sh: %v\n%s", err, b)
+	}
+	summary, err := os.ReadFile(filepath.Join(out, "summary.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := "| join | 5000 | 7.00 | 0.1400 | 1.00 | 3.00 | 2.00 |"; !strings.Contains(string(summary), want) {
+		t.Errorf("summary lacks the cachegrind row %q:\n%s", want, summary)
+	}
+	if !strings.Contains(string(summary), "Runner CPU: `") {
+		t.Errorf("summary does not name the runner CPU:\n%s", summary)
+	}
+	env, err := os.ReadFile(filepath.Join(out, "env.txt"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(env), "gcoff env:   GOGC=off GOMEMLIMIT=") {
+		t.Errorf("env.txt does not record the GOGC=off environment:\n%s", env)
+	}
+}

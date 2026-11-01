@@ -12,9 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//go:build !race
+//go:build race
 
-package formatter_test
+package gosqlx_test
 
-// raceEnabled reports whether the race detector instruments this test binary.
-const raceEnabled = false
+// raceEnabled reports whether the race detector is compiled in. Race
+// instrumentation changes allocation counts and makes sync.Pool drop items at
+// random, so exact allocation budgets are skipped under it.
+const raceEnabled = true

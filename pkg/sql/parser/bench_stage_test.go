@@ -13,6 +13,10 @@ package parser_test
 // partition gosqlx.Parse as: tokenize (tokenizer matrix) + preprocess +
 // parseonly, where parseonly includes the ReleaseAST that returns the tree to
 // its pools; subtract the release stage to get the cost of building the tree.
+// The parser pool round trip (GetParser/PutParser) is counted once, in
+// parseonly; preprocess holds one parser outside its loop so a preprocess
+// change is not diluted by pool overhead (p.preprocess still clears tokenBuf
+// on every call, as Reset does in production).
 // Dialect coverage comes from the ParseRW matrix in package gosqlx.
 
 import (
@@ -58,11 +62,11 @@ func BenchmarkParseStage(b *testing.B) {
 		for _, q := range queries {
 			toks := stageTokens(b, q.SQL)
 			b.Run(q.ID, func(b *testing.B) {
+				p := parser.GetParser()
+				defer parser.PutParser(p)
 				b.ReportAllocs()
 				for b.Loop() {
-					p := parser.GetParser()
 					stageSink += parser.BenchPreprocess(p, toks)
-					parser.PutParser(p)
 				}
 			})
 		}

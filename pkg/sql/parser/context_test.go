@@ -21,6 +21,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ajitpratap0/GoSQLX/internal/scaletest"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/token"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/tokenizer"
 )
@@ -240,9 +241,12 @@ func TestParseContext_MultipleCallsWithSameParser(t *testing.T) {
 	}
 }
 
-// TestParseContext_CancellationResponseTime verifies fast cancellation (< 100ms requirement)
+// TestParseContext_CancellationResponseTime verifies that cancellation is
+// honoured promptly. The context turns cancelled after a fixed number of
+// polls instead of after a sleep, so the check does not depend on scheduler
+// load: the parser must unwind at the first check that reports cancellation
+// rather than keep parsing the remaining columns.
 func TestParseContext_CancellationResponseTime(t *testing.T) {
-	// Create a complex query with many columns to ensure parsing takes time
 	columns := make([]string, 100)
 	for i := range columns {
 		columns[i] = "column" + strings.Repeat(string(rune('a'+i%26)), 2)
@@ -250,32 +254,16 @@ func TestParseContext_CancellationResponseTime(t *testing.T) {
 	sql := "SELECT " + strings.Join(columns, ", ") + " FROM users WHERE id = 1"
 	tokens := tokenizeSQL(t, sql)
 
-	ctx, cancel := context.WithCancel(context.Background())
-
-	// Start parsing in goroutine
-	done := make(chan bool)
-	go func() {
-		p := NewParser()
-		defer p.Release()
-		_, _ = p.ParseContext(ctx, tokens)
-		done <- true
-	}()
-
-	// Wait a bit then cancel
-	time.Sleep(10 * time.Millisecond)
-	cancelTime := time.Now()
-	cancel()
-
-	// Wait for completion
-	<-done
-	responseTime := time.Since(cancelTime)
-
-	// Verify cancellation response time is < 100ms
-	if responseTime > 100*time.Millisecond {
-		t.Errorf("Cancellation response time %v exceeds 100ms requirement", responseTime)
+	// Entry check, statement check, then one check per parsed expression.
+	ctx := scaletest.NewTrippingContext(5)
+	p := NewParser()
+	defer p.Release()
+	if _, err := p.ParseContext(ctx, tokens); !errors.Is(err, context.Canceled) {
+		t.Fatalf("err = %v, want context.Canceled", err)
 	}
-
-	t.Logf("Cancellation response time: %v", responseTime)
+	if n := ctx.PollsAfterTrip(); n != 1 {
+		t.Errorf("%d context checks after cancellation, want 1 (parser must unwind)", n)
+	}
 }
 
 // TestParseContext_ConcurrentCalls verifies thread safety with concurrent context-aware calls

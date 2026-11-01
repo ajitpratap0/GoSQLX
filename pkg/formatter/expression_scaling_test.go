@@ -19,22 +19,29 @@ import (
 	"runtime"
 	"strings"
 	"testing"
-	"time"
 
+	"github.com/ajitpratap0/GoSQLX/internal/scaletest"
 	"github.com/ajitpratap0/GoSQLX/pkg/formatter"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
 )
 
 // Sixteenfold expression growth must stay far below the 256-fold cost of
-// repeatedly rendering or scanning every descendant: linear work grows ~16x,
-// and the 64x bound leaves room for noisy shared CI runners. Build ASTs outside the measurement so
-// parser limits and parsing time do not conceal formatter regressions.
+// repeatedly rendering or scanning every descendant: linear work grows ~16x.
+// The allocation-count bound is 64x; the bytes bound is 128x because the deep
+// nested shape legitimately measures up to ~58x bytes for 16x input (stack and
+// builder growth) while the injected quadratic measures 233-287x. Build ASTs outside the measurement
+// so parser limits and parsing time do not conceal formatter regressions.
+//
+// Two deterministic measures are used, both valid under the race detector
+// (CI runs every test with -race). Allocations per call catch regressions
+// that allocate per node. Bytes allocated per call catch regressions that
+// re-render or copy subtrees: those keep the allocation count linear but
+// make the bytes quadratic (a child rendered into a fresh builder and copied
+// into its parent grew bytes 233-287x for 16x input, against 58x or less for
+// the linear code, while allocs/op moved only 16x). No wall-clock check is
+// made: deep recursion legitimately grows time 30-70x for 16x input, so a
+// time bound loose enough to be stable would also let that regression through.
 func TestFormatASTExpressionLinearGrowth(t *testing.T) {
-	// Race instrumentation inflates allocation-heavy paths unevenly across
-	// input sizes, so the growth ratio is only meaningful without it.
-	if raceEnabled {
-		t.Skip("timing ratios are unreliable under the race detector")
-	}
 	for _, shape := range []struct {
 		name  string
 		small int
@@ -68,12 +75,16 @@ func TestFormatASTExpressionLinearGrowth(t *testing.T) {
 							t.Fatalf("formatted expression differs: got length %d, want %d", len(got), len(tc.want))
 						}
 					}
-					smallTime := expressionFormatDuration(small, opts)
-					largeTime := expressionFormatDuration(large, opts)
-					t.Logf("n=%d: %v; n=%d: %v; ratio %.2f", shape.small, smallTime, 16*shape.small, largeTime, float64(largeTime)/float64(smallTime))
-					if largeTime > 64*smallTime {
-						t.Fatalf("sixteenfold expression growth took %v -> %v, exceeding 64x", smallTime, largeTime)
+					format := func(tree *ast.AST) func() {
+						return func() { runtime.KeepAlive(formatter.FormatAST(tree, opts)) }
 					}
+					smallAllocs := testing.AllocsPerRun(5, format(small))
+					largeAllocs := testing.AllocsPerRun(5, format(large))
+					t.Logf("allocs/op n=%d: %.0f; n=%d: %.0f", shape.small, smallAllocs, 16*shape.small, largeAllocs)
+					if largeAllocs > 64*smallAllocs {
+						t.Errorf("sixteenfold expression growth went from %.0f to %.0f allocations, exceeding 64x", smallAllocs, largeAllocs)
+					}
+					scaletest.AssertLinearBytes(t, "FormatAST", 128, format(small), format(large))
 				})
 			}
 		})
@@ -144,27 +155,4 @@ func scalingMarkerLiterals(n int, lower bool) (*ast.AST, string) {
 	want.WriteString(")")
 	expr := &ast.FunctionCall{Name: "COALESCE", Arguments: args}
 	return &ast.AST{Statements: []ast.Statement{&ast.SelectStatement{Columns: []ast.Expression{expr}}}}, want.String()
-}
-
-// Use the minimum of repeated equal-size batches to limit scheduler and GC
-// noise. The assertion compares input sizes, never an absolute time budget.
-func expressionFormatDuration(tree *ast.AST, opts ast.FormatOptions) time.Duration {
-	// Repeat until a sample spans at least 20ms so coarse timers (Windows)
-	// and scheduler noise cannot dominate, then keep the best per-call time.
-	var best time.Duration
-	for sample := 0; sample < 3; sample++ {
-		runtime.GC()
-		calls := 0
-		start := time.Now()
-		for time.Since(start) < 20*time.Millisecond {
-			out := formatter.FormatAST(tree, opts)
-			runtime.KeepAlive(out)
-			calls++
-		}
-		perCall := time.Since(start) / time.Duration(calls)
-		if best == 0 || perCall < best {
-			best = perCall
-		}
-	}
-	return best
 }

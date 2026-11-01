@@ -606,8 +606,8 @@ func (t *Tokenizer) load(input []byte, src string) {
 // in t.tokBuf and stays owned by t; see tokBuf.
 func (t *Tokenizer) tokenize(ctx context.Context, input []byte, src string, haveSrc, scratch bool) ([]models.TokenWithSpan, error) {
 	// Read the clock only when metrics are enabled; time.Now is a measurable
-	// share of short tokenizations. If metrics are toggled on mid-call the
-	// duration is recorded as 0.
+	// share of short tokenizations. If metrics are enabled mid-call, that call
+	// is not recorded.
 	var startTime time.Time
 	metricsOn := metrics.IsEnabled()
 	if metricsOn {

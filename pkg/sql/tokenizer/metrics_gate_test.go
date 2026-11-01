@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/ajitpratap0/GoSQLX/pkg/metrics"
+	"github.com/ajitpratap0/GoSQLX/pkg/models"
 )
 
 // TestTokenize_MetricsGate verifies tokenization is recorded when metrics are
@@ -68,20 +69,33 @@ func TestTokenize_MetricsDoNotChangeTokens(t *testing.T) {
 		}
 	})
 	sql := []byte("SELECT a, COUNT(*) FROM t JOIN u ON t.id = u.id GROUP BY a")
-	get := func() int {
+	type tv struct {
+		typ models.TokenType
+		val string
+	}
+	get := func() []tv {
 		tkz := GetTokenizer()
 		defer PutTokenizer(tkz)
 		toks, err := tkz.Tokenize(sql)
 		if err != nil {
 			t.Fatal(err)
 		}
-		return len(toks)
+		out := make([]tv, len(toks))
+		for i, tk := range toks {
+			out[i] = tv{tk.Token.Type, tk.Token.Value}
+		}
+		return out
 	}
 	metrics.Enable()
 	a := get()
 	metrics.Disable()
 	b := get()
-	if a != b {
-		t.Fatalf("token count differs: on=%d off=%d", a, b)
+	if len(a) != len(b) {
+		t.Fatalf("token count differs: on=%d off=%d", len(a), len(b))
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			t.Fatalf("token %d differs: on=%v off=%v", i, a[i], b[i])
+		}
 	}
 }

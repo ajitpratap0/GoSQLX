@@ -46,25 +46,22 @@ func (r *TruncateTableRule) Check(ctx *linter.Context) ([]linter.Violation, erro
 		return nil, nil
 	}
 	var violations []linter.Violation
-	for _, stmt := range ctx.AST.Statements {
-		ast.Inspect(stmt, func(n ast.Node) bool {
-			trunc, ok := n.(*ast.TruncateStatement)
-			if !ok {
-				return true
-			}
-			tableName := ""
-			if len(trunc.Tables) > 0 {
-				tableName = strings.Join(trunc.Tables, ", ")
-			}
-			violations = append(violations, linter.Violation{
-				Rule:       r.ID(),
-				RuleName:   r.Name(),
-				Severity:   r.Severity(),
-				Message:    "TRUNCATE TABLE " + tableName + " is irreversible and bypasses triggers",
-				Location:   models.Location{Line: 1, Column: 1},
-				Suggestion: "Prefer DELETE FROM " + tableName + " WHERE ... for reversible partial deletes, or ensure TRUNCATE is intentional in migration scripts",
-			})
-			return true
+	for _, n := range ctx.Nodes() {
+		trunc, ok := n.(*ast.TruncateStatement)
+		if !ok {
+			continue
+		}
+		tableName := ""
+		if len(trunc.Tables) > 0 {
+			tableName = strings.Join(trunc.Tables, ", ")
+		}
+		violations = append(violations, linter.Violation{
+			Rule:       r.ID(),
+			RuleName:   r.Name(),
+			Severity:   r.Severity(),
+			Message:    "TRUNCATE TABLE " + tableName + " is irreversible and bypasses triggers",
+			Location:   models.Location{Line: 1, Column: 1},
+			Suggestion: "Prefer DELETE FROM " + tableName + " WHERE ... for reversible partial deletes, or ensure TRUNCATE is intentional in migration scripts",
 		})
 	}
 	return violations, nil

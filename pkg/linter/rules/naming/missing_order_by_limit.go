@@ -45,34 +45,31 @@ func (r *MissingOrderByLimitRule) Check(ctx *linter.Context) ([]linter.Violation
 		return nil, nil
 	}
 	var violations []linter.Violation
-	for _, stmt := range ctx.AST.Statements {
-		ast.Inspect(stmt, func(n ast.Node) bool {
-			sel, ok := n.(*ast.SelectStatement)
-			if !ok {
-				return true
+	for _, n := range ctx.Nodes() {
+		sel, ok := n.(*ast.SelectStatement)
+		if !ok {
+			continue
+		}
+		hasLimit := sel.Limit != nil || sel.DialectExtras().LimitExpr != nil || sel.Fetch != nil
+		if !hasLimit {
+			continue
+		}
+		hasOffset := sel.HasOffset() || (sel.Fetch != nil && sel.Fetch.OffsetValue != nil)
+		hasOrderBy := len(sel.OrderBy) > 0
+		if !hasOrderBy {
+			msg := "LIMIT without ORDER BY produces non-deterministic results"
+			if hasOffset {
+				msg = "LIMIT/OFFSET without ORDER BY produces non-deterministic pagination"
 			}
-			hasLimit := sel.Limit != nil || sel.DialectExtras().LimitExpr != nil || sel.Fetch != nil
-			if !hasLimit {
-				return true
-			}
-			hasOffset := sel.HasOffset() || (sel.Fetch != nil && sel.Fetch.OffsetValue != nil)
-			hasOrderBy := len(sel.OrderBy) > 0
-			if !hasOrderBy {
-				msg := "LIMIT without ORDER BY produces non-deterministic results"
-				if hasOffset {
-					msg = "LIMIT/OFFSET without ORDER BY produces non-deterministic pagination"
-				}
-				violations = append(violations, linter.Violation{
-					Rule:       r.ID(),
-					RuleName:   r.Name(),
-					Severity:   r.Severity(),
-					Message:    msg,
-					Location:   sel.Pos,
-					Suggestion: "Add ORDER BY to ensure deterministic row selection with LIMIT",
-				})
-			}
-			return true
-		})
+			violations = append(violations, linter.Violation{
+				Rule:       r.ID(),
+				RuleName:   r.Name(),
+				Severity:   r.Severity(),
+				Message:    msg,
+				Location:   sel.Pos,
+				Suggestion: "Add ORDER BY to ensure deterministic row selection with LIMIT",
+			})
+		}
 	}
 	return violations, nil
 }

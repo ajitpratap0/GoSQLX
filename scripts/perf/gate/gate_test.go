@@ -375,3 +375,14 @@ func TestFewRoundsNeverJudgeTimings(t *testing.T) {
 		t.Fatalf("%d time regressions from 2 rounds, want 0", res.TimeRegressed)
 	}
 }
+
+func TestOneNoisyBenchmarkInAShortRunDoesNotTripTheGeomean(t *testing.T) {
+	// Two rounds of a single benchmark that moved 10%: the geomean is +10%
+	// but two samples per arm are no evidence.
+	s := suite()[:1]
+	slow := modify(s, func(_ int, b *bench) { b.ns *= 1.10 })
+	in := Inputs{Base: mustParse(t, arm(1, 2, s)), Head: mustParse(t, arm(2, 2, slow))}
+	if res := Evaluate(in, DefaultConfig()); res.Verdict != Pass {
+		t.Fatalf("verdict = %s (%v), want pass", res.Verdict, res.Reasons)
+	}
+}

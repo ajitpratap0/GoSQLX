@@ -170,6 +170,21 @@ if [ "${PIN_CPU:-}" != none ] && command -v taskset >/dev/null 2>&1; then
 	pin_desc="pinned to CPU $cpu (SMT siblings $siblings) with taskset"
 fi
 
+# --------------------------------------------- instruction counter ---
+ir_backend=""
+if [ $ir -eq 1 ]; then
+	if command -v perf >/dev/null 2>&1 &&
+		perf stat -x, -e instructions:u -- true 2>&1 | grep -Eq '^[0-9]+,'; then
+		ir_backend=perf
+	elif command -v valgrind >/dev/null 2>&1; then
+		ir_backend=cachegrind
+	elif [ "$(uname -s)" = Darwin ] && /usr/bin/time -l true 2>&1 | grep -q 'instructions retired'; then
+		ir_backend=time
+	else
+		ir=0 ir_note="no instruction counter on this machine (perf stat lacks instructions:u, no valgrind)"
+	fi
+fi
+
 # ----------------------------------------------------------- environment ---
 {
 	echo "date:        $(date -u +%Y-%m-%dT%H:%M:%SZ)"
@@ -180,6 +195,7 @@ fi
 	echo "pinning:     $pin_desc"
 	echo "clocksource: $(cat /sys/devices/system/clocksource/clocksource0/current_clocksource 2>/dev/null || echo n/a)"
 	echo "load:        $(uptime | sed 's/.*load average[s]*: //')"
+	echo "instr count: ${ir_backend:-none}${ir_note:+ ($ir_note)}"
 	if command -v lscpu >/dev/null 2>&1; then
 		echo
 		lscpu | grep -E '^(Model name|Architecture|CPU\(s\)|Thread\(s\) per core|Core\(s\) per socket|Socket\(s\)|L1d|L1i|L2|L3|Hypervisor vendor)'
@@ -232,39 +248,30 @@ started=$(date +%s)
 measure gcoff "${primary_arms[@]}"
 [ $sec -eq 1 ] && measure gcon base head
 
-# ------------------------------------------------------ instruction count ---
-ir_backend=""
-if [ $ir -eq 1 ]; then
-	if command -v perf >/dev/null 2>&1 &&
-		perf stat -x, -e instructions:u -- true 2>&1 | grep -Eq '^[0-9]+,'; then
-		ir_backend=perf
-	elif command -v valgrind >/dev/null 2>&1; then
-		ir_backend=cachegrind
-	elif [ "$(uname -s)" = Darwin ] && /usr/bin/time -l true 2>&1 | grep -q 'instructions retired'; then
-		ir_backend=time
-	else
-		ir=0 ir_note="no instruction counter on this machine (perf stat lacks instructions:u, no valgrind)"
-	fi
-fi
-
 count_instructions() { # arm case n -> prints the count
 	local arm=$1 c=$2 n=$3 tree log=$out/ir.log
 	case $arm in base) tree=$base_tree ;; head) tree=$head_tree ;; esac
-	local cmd=(env GOGC=off GOMAXPROCS=1 GODEBUG=asyncpreemptoff=1 "$out/bin/$arm/perfdriver" -case "$c" -n "$n")
+	# The environment is set outside the counter so that the counted
+	# process is perfdriver itself, not env (valgrind does not follow exec).
+	local envs=(GOGC=off GOMAXPROCS=1 GODEBUG=asyncpreemptoff=1)
+	local drv=("$out/bin/$arm/perfdriver" -case "$c" -n "$n")
 	case $ir_backend in
 		perf)
-			(cd "$tree" && perf stat -x, -e instructions:u -o "$log" -- "${cmd[@]}") >/dev/null
+			(cd "$tree" && env "${envs[@]}" perf stat -x, -e instructions:u -o "$log" -- "${drv[@]}") >/dev/null || return 1
 			awk -F, '/instructions/ {print $1; exit}' "$log" ;;
 		cachegrind)
-			(cd "$tree" && valgrind --tool=cachegrind --cache-sim=no --cachegrind-out-file=/dev/null "${cmd[@]}") >/dev/null 2>"$log"
+			(cd "$tree" && env "${envs[@]}" valgrind --tool=cachegrind --cache-sim=no --cachegrind-out-file=/dev/null "${drv[@]}") >/dev/null 2>"$log" || return 1
 			sed -n 's/.*I *refs: *\([0-9,]*\).*/\1/p' "$log" | tr -d , | head -n 1 ;;
 		time)
-			(cd "$tree" && /usr/bin/time -l "${cmd[@]}") >/dev/null 2>"$log"
+			(cd "$tree" && env "${envs[@]}" /usr/bin/time -l "${drv[@]}") >/dev/null 2>"$log" || return 1
 			awk '/instructions retired/ {print $1; exit}' "$log" ;;
 	esac
 }
 
-if [ $ir -eq 1 ]; then
+# measure_ir writes raw/ir-{base,head}.txt; it returns 1 (with ir_note set)
+# when a count fails, so the timing verdict is still produced.
+measure_ir() {
+	local samples cases c s arm n1 n2 i1 i2
 	samples=${IR_SAMPLES:-3}
 	[ $ir_backend = cachegrind ] && samples=${IR_SAMPLES:-1}
 	cases=$(cd "$head_tree" && "$out/bin/head/perfdriver" -list)
@@ -283,14 +290,19 @@ if [ $ir -eq 1 ]; then
 		fi
 		for ((s = 0; s < samples; s++)); do
 			for arm in base head; do
-				i1=$(count_instructions $arm "$c" $n1) && i2=$(count_instructions $arm "$c" $n2) ||
-					die "perfdriver $arm -case $c failed (see $out/ir.log)"
-				[ -n "$i1" ] && [ -n "$i2" ] || die "no instruction count for $arm $c (see $out/ir.log)"
+				if ! i1=$(count_instructions $arm "$c" $n1) || ! i2=$(count_instructions $arm "$c" $n2) ||
+					[ -z "$i1" ] || [ -z "$i2" ]; then
+					ir_note="$ir_backend gave no count for $arm $c (see ir.log in the artifact)"
+					log "$ir_note"
+					return 1
+				fi
 				echo "BenchmarkPerfdriver/$c 1 $(((i2 - i1) / (n2 - n1))) instructions/op" >>"$out/raw/ir-$arm.txt"
 			done
 		done
 	done
-fi
+}
+
+if [ $ir -eq 1 ] && ! measure_ir; then ir=0; fi
 
 # ------------------------------------------------------------------ judge ---
 benchstat_cmd() {

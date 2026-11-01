@@ -139,6 +139,7 @@ type Result struct {
 	Rows           []Row
 	IrRows         []IrRow
 	Geomean        float64 // head/base time geomean ratio, NaN if unknown
+	GeomeanP       float64 // p-value of the per-round suite geomeans, NaN if unknown
 	AAGeomean      float64
 	SecGeomean     float64
 	AANoisy        int // A/A benchmarks with |delta| > AADeltaPct
@@ -161,6 +162,7 @@ type Result struct {
 func Evaluate(in Inputs, cfg Config) Result {
 	res := Result{
 		Geomean:    math.NaN(),
+		GeomeanP:   math.NaN(),
 		AAGeomean:  math.NaN(),
 		SecGeomean: math.NaN(),
 		HasAA:      in.AA != nil,
@@ -214,6 +216,9 @@ func Evaluate(in Inputs, cfg Config) Result {
 		}
 	}
 	res.Geomean = geomean(ratios)
+	if in.Base != nil && in.Head != nil {
+		res.GeomeanP = roundGeomeanP(in.Base, in.Head, res.Rows)
+	}
 	res.AAGeomean = geomean(aaRatios)
 	res.SecGeomean = geomean(secRatios)
 
@@ -271,7 +276,11 @@ func Evaluate(in Inputs, cfg Config) Result {
 	}
 	res.HardRegressed = moreAllocs + moreBytes + moreIr
 
-	geoRegressed := !aaNoisy && !math.IsNaN(res.Geomean) && (res.Geomean-1)*100 >= cfg.GeomeanPct
+	// The geomean is a regression only when the per-round suite geomeans
+	// of the two arms also differ significantly; one noisy benchmark in a
+	// short run must not trip it.
+	geoRegressed := !aaNoisy && !math.IsNaN(res.Geomean) && (res.Geomean-1)*100 >= cfg.GeomeanPct &&
+		!math.IsNaN(res.GeomeanP) && res.GeomeanP < cfg.Alpha
 
 	if moreAllocs > 0 {
 		res.Reasons = append(res.Reasons, fmt.Sprintf("allocs/op increased in %d benchmark(s)", moreAllocs))
@@ -294,7 +303,7 @@ func Evaluate(in Inputs, cfg Config) Result {
 			res.Reasons = append(res.Reasons, fmt.Sprintf("%d benchmark(s) slower by %.3g%% or more at p < %.3g", res.TimeRegressed, cfg.TimePct, cfg.Alpha))
 		}
 		if geoRegressed {
-			res.Reasons = append(res.Reasons, fmt.Sprintf("time geomean %s (threshold +%.3g%%)", pct((res.Geomean-1)*100), cfg.GeomeanPct))
+			res.Reasons = append(res.Reasons, fmt.Sprintf("time geomean %s at p = %.2g (threshold +%.3g%%)", pct((res.Geomean-1)*100), res.GeomeanP, cfg.GeomeanPct))
 		}
 	}
 	if faster > 0 && !aaNoisy {
@@ -314,6 +323,43 @@ func Evaluate(in Inputs, cfg Config) Result {
 		res.Verdict = Pass
 	}
 	return res
+}
+
+// roundGeomeanP compares the suite geomean of each round between the arms.
+// Sample i of every benchmark comes from round i (ab.sh runs each benchmark
+// once per arm per round), so when every compared benchmark has the same
+// sample count the i-th suite geomean of an arm is a valid per-round sample.
+// It returns NaN when the counts differ.
+func roundGeomeanP(base, head *Run, rows []Row) float64 {
+	n := -1
+	var names []string
+	for _, r := range rows {
+		if !r.Time.OK {
+			continue
+		}
+		if n == -1 {
+			n = r.Time.NBase
+		}
+		if r.Time.NBase != n || r.Time.NHead != n {
+			return math.NaN()
+		}
+		names = append(names, r.Name)
+	}
+	if n < 1 || len(names) == 0 {
+		return math.NaN()
+	}
+	perRound := func(run *Run) []float64 {
+		out := make([]float64, n)
+		for i := 0; i < n; i++ {
+			var s float64
+			for _, name := range names {
+				s += math.Log(run.Get(name, unitTime)[i])
+			}
+			out[i] = math.Exp(s / float64(len(names)))
+		}
+		return out
+	}
+	return mannWhitney(perRound(base), perRound(head))
 }
 
 func pct(d float64) string {
@@ -379,7 +425,7 @@ func Markdown(res Result, cfg Config, meta Meta) string {
 	} else {
 		b.WriteString("- no gated metric moved past its threshold\n\n")
 	}
-	fmt.Fprintf(&b, "Rules: time regresses at >= +%.3g%% with p < %.3g (Mann-Whitney U), or a geomean >= +%.3g%%; "+
+	fmt.Fprintf(&b, "Rules: time regresses at >= +%.3g%% with p < %.3g (Mann-Whitney U), or a suite geomean >= +%.3g%% (per-round geomeans, same test); "+
 		"allocs/op must not increase; B/op must not rise more than %.3g%%; instructions/op must not rise more than %.3g%%. "+
 		"An A/A control with more than %.3g%% of benchmarks moving over %.3g%% is noisy: re-run once, then inconclusive (neutral).\n\n",
 		cfg.TimePct, cfg.Alpha, cfg.GeomeanPct, cfg.BytesPct, cfg.IrPct, cfg.AANoisyFraction, cfg.AADeltaPct)
@@ -407,7 +453,11 @@ func Markdown(res Result, cfg Config, meta Meta) string {
 		fmt.Fprintf(&b, "| `%s` | %s | %s | %s | %s | %s | %s |\n",
 			strings.TrimPrefix(r.Name, "Benchmark"), pct(r.Time.DeltaPct), pval(r.Time), aa, bytes, allocs, status)
 	}
-	fmt.Fprintf(&b, "| **geomean** | %s | | %s | | | |\n\n", pct((res.Geomean-1)*100), pct((res.AAGeomean-1)*100))
+	geoP := ""
+	if !math.IsNaN(res.GeomeanP) {
+		geoP = pval(Cmp{OK: true, P: res.GeomeanP})
+	}
+	fmt.Fprintf(&b, "| **geomean** | %s | %s | %s | | | |\n\n", pct((res.Geomean-1)*100), geoP, pct((res.AAGeomean-1)*100))
 	if res.HasAA {
 		fmt.Fprintf(&b, "A/A control: %d of %d benchmarks moved more than %.3g%%.\n\n", res.AANoisy, res.AACompared, cfg.AADeltaPct)
 	}

@@ -559,6 +559,7 @@ func (p *Parser) parseArrayAccessExpression(arrayExpr ast.Expression) (ast.Expre
 
 			// Create ArraySliceExpression with no start
 			sliceExpr := ast.GetArraySliceExpression()
+			p.notePooledDraw()
 			sliceExpr.Array = result
 			sliceExpr.Start = nil
 			sliceExpr.End = endExpr
@@ -602,6 +603,7 @@ func (p *Parser) parseArrayAccessExpression(arrayExpr ast.Expression) (ast.Expre
 
 			// Create ArraySliceExpression
 			sliceExpr := ast.GetArraySliceExpression()
+			p.notePooledDraw()
 			sliceExpr.Array = result
 			sliceExpr.Start = firstExpr
 			sliceExpr.End = endExpr
@@ -616,6 +618,7 @@ func (p *Parser) parseArrayAccessExpression(arrayExpr ast.Expression) (ast.Expre
 
 			// Create ArraySubscriptExpression with single index
 			subscriptExpr := ast.GetArraySubscriptExpression()
+			p.notePooledDraw()
 			subscriptExpr.Array = result
 			subscriptExpr.Indices = append(subscriptExpr.Indices, firstExpr)
 			result = subscriptExpr

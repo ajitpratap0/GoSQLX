@@ -26,6 +26,7 @@ import (
 
 	"github.com/ajitpratap0/GoSQLX/internal/poolstats"
 	"github.com/ajitpratap0/GoSQLX/pkg/models"
+	"github.com/ajitpratap0/GoSQLX/pkg/sql/internal/astrelease"
 )
 
 // poolLeakCount counts expressions that exceeded PutExpression's iterative
@@ -500,6 +501,12 @@ func NewAST() *AST {
 // reused in future NewAST() calls. This is critical for memory efficiency
 // and performance.
 //
+// Fast path: when the parser built the tree and drew no node from a pool, the
+// release walk is skipped (it would Put only heap-built nodes into pools the
+// parser never draws from); hand-built trees and parser trees with pooled
+// draws always take the walk. The flag is a parse-time snapshot: pooled nodes
+// spliced into the tree later only lose recycling to the GC.
+//
 // Cleanup Process:
 //  1. Walks every statement and Puts only these node types: TupleExpression,
 //     ArrayConstructorExpression, ArraySubscriptExpression and
@@ -554,10 +561,18 @@ func ReleaseAST(ast *AST) {
 		return
 	}
 
-	// Clean up all statements
-	for i := range ast.Statements {
-		releaseStatement(ast.Statements[i], releaseDrawn)
-		ast.Statements[i] = nil
+	if ast.noPooledDraws {
+		// The parser built this tree and drew no pooled node into it, so the
+		// release walk would Put only heap-built nodes into pools the parser
+		// never draws from (e.g. DROP/CREATE VIEW). Drop the references only.
+		clear(ast.Statements)
+		ast.noPooledDraws = false
+	} else {
+		// Clean up all statements
+		for i := range ast.Statements {
+			releaseStatement(ast.Statements[i], releaseDrawn)
+			ast.Statements[i] = nil
+		}
 	}
 
 	// Reset slice but keep capacity
@@ -959,4 +974,12 @@ func NewAlterSequenceStatement() *AlterSequenceStatement {
 func ReleaseAlterSequenceStatement(s *AlterSequenceStatement) {
 	*s = AlterSequenceStatement{} // zero all fields
 	alterSequencePool.Put(s)
+}
+
+func init() {
+	astrelease.MarkParserBuilt = func(tree any, pooledDraws int) {
+		if a, ok := tree.(*AST); ok && a != nil {
+			a.noPooledDraws = pooledDraws == 0
+		}
+	}
 }

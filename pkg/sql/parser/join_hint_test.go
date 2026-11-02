@@ -251,6 +251,24 @@ func TestJoinsCapParenGroupThenOuter(t *testing.T) {
 	}
 }
 
+// A full slice handed in by a parenthesized group must be re-sized from the
+// hint of the joins ahead in one step. Without that, append doubles the cap
+// repeatedly (1 -> 2 -> 4 -> 8 for the four outer joins below) and the final
+// capacity overshoots the join count. Guards the len(joins) == cap(joins)
+// condition in parseJoinClauses against regressing to cap(joins) == 0.
+func TestJoinsFullSliceRegrownFromHint(t *testing.T) {
+	sql := "SELECT * FROM (a JOIN b ON a.i=b.i) JOIN c ON c.i=a.i JOIN d ON d.i=a.i JOIN e ON e.i=a.i JOIN f ON f.i=a.i"
+	got := joinsOf(t, sql)
+	if len(got) != 5 {
+		t.Fatalf("joins=%d want 5", len(got))
+	}
+	// Grow(1 slot, hint 4) reserves 5 slots; allocator rounding may add a few
+	// but never reaches the 8 produced by repeated doubling.
+	if cap(got) >= 8 {
+		t.Errorf("cap=%d: full slice was doubled by append instead of grown from the hint", cap(got))
+	}
+}
+
 // Known trade-off: a comma table after a single JOIN appends to the cap-1
 // slice, costing one growth. Content must still be correct.
 func TestJoinsCommaAfterJoin(t *testing.T) {

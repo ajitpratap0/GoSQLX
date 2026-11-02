@@ -1270,7 +1270,9 @@ const joinHintWindow = 256
 // ')' closing the enclosing level, so neighbouring statements, set-operation
 // branches and nested subqueries never inflate the hint. It also looks at most
 // joinHintWindow tokens ahead. It runs only when a JOIN is about to be
-// appended to an empty slice, so join-free statements pay nothing. The result
+// appended to an empty or full slice (a full one is handed in by a
+// parenthesized join group or a comma join), so join-free statements pay
+// nothing. The result
 // is a capacity hint only; append still grows past it. Oracle MINUS is
 // tokenized as an identifier, so it is not a boundary and a MINUS chain may
 // over-count later branches' JOINs (bounded by the cap and window).

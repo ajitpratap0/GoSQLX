@@ -44,6 +44,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     are removed.
 
 ### Performance
+- **Parser joins slice sized from a JOIN-count hint [W4-03]**: the preprocess pass counts JOIN tokens and `parseJoinClauses` allocates its slice with capacity clamped to [1, 8] instead of a fixed 2. `ParseE2E/join` and `complex` B/op drop about 20%; no API or AST change.
 - **Linter**: `linter.Context` gains an additive `Nodes()` method returning every AST node in `ast.Inspect` preorder, built once per `Context` and cached (reset by `WithAST`). The 13 AST rules that each walked the tree with `ast.Inspect` now iterate that shared list; violations are unchanged (none of those walks pruned a subtree). [W6-05a]
 - **Security**: `Scanner.ScanSQL` now skips the dollar-quote stripping lexer, the identifier-tautology regex and the ClickHouse table-function regex on inputs that provably cannot match them, using linear-time necessary-condition guards (`hasDollarOpener`, `hasEqualIdentPair`, `hasTableFnCandidate`). The regexes still confirm every finding, so results are byte-identical (guarded by a guards-on/off equivalence test over the real-world corpus and 200k random inputs); no API or behaviour change. [W6-01]
 - **Tokenizer**: `time.Now`/`time.Since` are now read only when metrics are enabled (previously twice per tokenization even when disabled). If metrics are toggled on mid-call the call is not recorded. No API or token-output change [W1-02].

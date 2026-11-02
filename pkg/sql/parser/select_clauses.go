@@ -410,7 +410,7 @@ func (p *Parser) parseJoinClauses(firstRef ast.TableReference, joins []ast.JoinC
 		}
 
 		if cap(joins) == 0 {
-			joins = make([]ast.JoinClause, 0, 2)
+			joins = make([]ast.JoinClause, 0, p.joinsCap())
 		}
 		jc.Type = joinType
 		jc.Left = leftTable
@@ -1254,4 +1254,17 @@ func (p *Parser) isOrderByAll() bool {
 		return true
 	}
 	return equalsUpper(p.peekToken().Token.Value, "NULLS")
+}
+
+// joinsCap returns the initial capacity for a statement's joins slice: the
+// JOIN token count of the stream clamped to [1, 8], or 2 when no hint exists.
+func (p *Parser) joinsCap() int {
+	switch h := p.joinHint; {
+	case h <= 0:
+		return 2
+	case h > 8:
+		return 8
+	default:
+		return h
+	}
 }

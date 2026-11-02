@@ -60,6 +60,7 @@ func (p *Parser) isMariaDBClauseStartAt() bool {
 // The caller has already consumed CREATE and SEQUENCE.
 func (p *Parser) parseCreateSequenceStatement(orReplace bool) (*ast.CreateSequenceStatement, error) {
 	stmt := ast.NewCreateSequenceStatement()
+	p.notePooledDraw()
 	stmt.OrReplace = orReplace
 
 	// IF NOT EXISTS
@@ -94,6 +95,7 @@ func (p *Parser) parseCreateSequenceStatement(orReplace bool) (*ast.CreateSequen
 // The caller has already consumed DROP and SEQUENCE.
 func (p *Parser) parseDropSequenceStatement() (*ast.DropSequenceStatement, error) {
 	stmt := ast.NewDropSequenceStatement()
+	p.notePooledDraw()
 
 	if strings.EqualFold(p.currentToken.Token.Value, "IF") {
 		p.advance()
@@ -127,6 +129,7 @@ func (p *Parser) parseDropSequenceStatement() (*ast.DropSequenceStatement, error
 // The caller has already consumed ALTER and SEQUENCE.
 func (p *Parser) parseAlterSequenceStatement() (*ast.AlterSequenceStatement, error) {
 	stmt := ast.NewAlterSequenceStatement()
+	p.notePooledDraw()
 
 	if strings.EqualFold(p.currentToken.Token.Value, "IF") {
 		p.advance()

@@ -15,11 +15,14 @@
 package tokenizer
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"strings"
 	"testing"
+	"unsafe"
 
+	tkerrors "github.com/ajitpratap0/GoSQLX/pkg/errors"
 	"github.com/ajitpratap0/GoSQLX/pkg/models"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/keywords"
 )
@@ -54,6 +57,11 @@ var atParamInputs = []string{
 	"SELECT @group\nby x",
 	"SELECT @order by, @left join, @right outer, @inner join, @cross join",
 	"SELECT @natural join, @full outer join, @grouping sets, @outer apply",
+	"SELECT @rıght join x",
+	"SELECT @ınner join x",
+	"SELECT @groupıng sets",
+	"SELECT @@rıght join x",
+	"SELECT @select, @From, @Where",
 	"SELECT @group",
 	"SELECT @group, @order",
 	"SELECT @@group by",
@@ -83,7 +91,14 @@ func renderAtParam(dialect keywords.SQLDialect, sql string) string {
 			tw.Start.Line, tw.Start.Column, tw.End.Line, tw.End.Column)
 	}
 	if err != nil {
-		fmt.Fprintf(&b, "ERR %v\n", err)
+		// Only code and position: the full rendering carries wording, context
+		// lines and help URLs that are not tokenization behaviour.
+		var te *tkerrors.Error
+		if errors.As(err, &te) {
+			fmt.Fprintf(&b, "ERR %s %d:%d\n", te.Code, te.Location.Line, te.Location.Column)
+		} else {
+			fmt.Fprintf(&b, "ERR other\n")
+		}
 	}
 	return b.String()
 }
@@ -115,21 +130,32 @@ func TestAtParam_Golden(t *testing.T) {
 	}
 }
 
-// TestAtParam_ValueIsSourceSlice checks the plain-name behaviour directly.
+// TestAtParam_ValueIsSourceSlice checks that plain @name / @@name values are
+// substrings of the TokenizeString input (same backing bytes, no copy).
 func TestAtParam_ValueIsSourceSlice(t *testing.T) {
 	tkz, err := NewWithDialect(keywords.DialectSQLServer)
 	if err != nil {
 		t.Fatal(err)
 	}
-	toks, err := tkz.Tokenize([]byte("SELECT @id, @@ROWCOUNT"))
+	src := "SELECT @id, @@ROWCOUNT"
+	toks, err := tkz.TokenizeString(src)
 	if err != nil {
 		t.Fatal(err)
 	}
+	base := uintptr(unsafe.Pointer(unsafe.StringData(src)))
 	var got []string
 	for _, tw := range toks {
-		switch tw.Token.Type {
-		case models.TokenTypePlaceholder, models.TokenTypeIdentifier:
-			got = append(got, tw.Token.Value)
+		if tw.Token.Type != models.TokenTypePlaceholder && tw.Token.Type != models.TokenTypeIdentifier {
+			continue
+		}
+		v := tw.Token.Value
+		if !strings.HasPrefix(v, "@") {
+			continue
+		}
+		got = append(got, v)
+		p := uintptr(unsafe.Pointer(unsafe.StringData(v)))
+		if p < base || p+uintptr(len(v)) > base+uintptr(len(src)) {
+			t.Fatalf("value %q does not alias the input", v)
 		}
 	}
 	if strings.Join(got, ",") != "@id,@@ROWCOUNT" {

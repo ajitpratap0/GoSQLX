@@ -23,8 +23,20 @@ import "github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
 // exactly the final length, instead of growing a fresh slice with append.
 // Nested lists (a function call inside a select item, a subquery inside an
 // argument) push above their parent's region and pop back to their own mark, so
-// the stack is strictly LIFO. Every user takes a mark, defers a drop to that
-// mark (so error returns leave the stack balanced) and pops at the end.
+// the stack is strictly LIFO.
+//
+// Contract for the recursive builders (parseFunctionCall, parseGroupByClause,
+// parseOrderByList, parseSelectStatement):
+//   - No defer. A defer would grow the frame of every recursive parse call and
+//     slow ParseFresh, so cleanup is explicit.
+//   - Drop to the builder's own mark (exprDrop/orderDrop) before EVERY error
+//     return. A caller may swallow the error and carry on; an enclosing region
+//     would otherwise copy the stale items into a later list.
+//   - Move the list into its node (exprPop/orderPop, or newFunctionCall plus a
+//     drop) as soon as it is complete, so no later return has anything to unwind.
+//
+// Only parseSelectColumnList, which is cold (OUTPUT / RETURNING), still uses a
+// deferred drop.
 //
 // INVARIANT: scratch[len:cap] is always zeroed, so a pooled parser never keeps
 // AST nodes (and through them the previous query text) alive. scratchPop and

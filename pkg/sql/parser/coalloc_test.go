@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
+	"github.com/ajitpratap0/GoSQLX/pkg/sql/keywords"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/tokenizer"
 )
 
@@ -289,5 +290,90 @@ func TestCoallocatedTreesIndependentAcrossParses(t *testing.T) {
 	}
 	if got := first.SQL(); got != wantFirst {
 		t.Errorf("first tree changed by later parses:\n got %s\nwant %s", got, wantFirst)
+	}
+}
+
+// A builder that fails must drop its own scratch region before returning: a
+// caller can swallow the error and carry on, and a stale item would then be
+// copied into a later list. Checking balance after a whole parse cannot see a
+// missing drop, because an enclosing region (the SELECT list) clears everything
+// above its mark when the error propagates. These cases therefore run one
+// builder directly, with a sentinel sitting below it on each stack, and fail
+// at the builder's own nesting level so no outer region masks the result.
+func TestScratchErrorPathsDropOwnRegion(t *testing.T) {
+	type entry int
+	const (
+		expr entry = iota
+		groupBy
+		orderBy
+	)
+	cases := []struct {
+		name    string
+		dialect string
+		entry   entry
+		sql     string
+	}{
+		// parseFunctionCall argument loop.
+		{"named arg value", "postgresql", expr, "f(a, x => )"},
+		{"named arg separator", "postgresql", expr, "f(a, x => 1 2)"},
+		{"plain arg", "postgresql", expr, "f(a, b +)"},
+		{"missing comma or paren", "postgresql", expr, "f(a b)"},
+		{"oracle CURSOR subquery error", "oracle", expr, "CURSOR(a, SELECT b FROM t WHERE )"},
+		{"oracle CURSOR missing paren", "oracle", expr, "CURSOR(SELECT 1 FROM t foo bar)"},
+		{"json_object arg", "postgresql", expr, "JSON_OBJECT(a, KEY b VALUE )"},
+		{"sqlserver OPENROWSET BULK", "sqlserver", expr, "OPENROWSET(a, BULK 'p' +)"},
+		{"XMLFOREST alias", "postgresql", expr, "XMLFOREST(a, b AS 1)"},
+		{"mysql JSON_TABLE COLUMNS", "mysql", expr, "JSON_TABLE(d, '$' COLUMNS (a INT"},
+		// parseGroupByClause.
+		{"group by expr", "postgresql", groupBy, "GROUP BY a, )"},
+		// parseOrderByList.
+		{"order by expr", "postgresql", orderBy, "ORDER BY a, )"},
+		{"order by USING", "postgresql", orderBy, "ORDER BY a, b USING"},
+		{"order by NULLS", "postgresql", orderBy, "ORDER BY a, b NULLS x"},
+		{"clickhouse WITH FILL", "clickhouse", orderBy, "ORDER BY a, b WITH FILL FROM"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			tkz, err := tokenizer.NewWithDialect(keywords.SQLDialect(tc.dialect))
+			if err != nil {
+				t.Fatalf("tokenizer: %v", err)
+			}
+			tokens, err := tkz.Tokenize([]byte(tc.sql))
+			if err != nil {
+				t.Fatalf("tokenize %q: %v", tc.sql, err)
+			}
+			p := NewParser(WithDialect(tc.dialect))
+			defer p.Release()
+			toks := p.preprocess(tokens)
+			p.tokens, p.currentPos, p.currentToken = toks, 0, &toks[0]
+
+			markE := &ast.Identifier{Name: "sentinel"}
+			markO := ast.OrderByExpression{Expression: markE}
+			p.exprPush(markE)
+			p.orderPush(markO)
+
+			switch tc.entry {
+			case expr:
+				_, err = p.parseExpression()
+			case groupBy:
+				_, err = p.parseGroupByClause(&ast.SelectStatement{})
+			case orderBy:
+				_, err = p.parseOrderByClause()
+			}
+			if err == nil {
+				t.Fatalf("%q parsed without error; the case no longer reaches its error path", tc.sql)
+			}
+			if len(p.exprScratch) != 1 || p.exprScratch[0] != ast.Expression(markE) {
+				t.Errorf("%q: expr stack not restored: len=%d", tc.sql, len(p.exprScratch))
+			}
+			if len(p.orderScratch) != 1 || p.orderScratch[0].Expression != ast.Expression(markE) {
+				t.Errorf("%q: order stack not restored: len=%d", tc.sql, len(p.orderScratch))
+			}
+			for i, e := range p.exprScratch[1:cap(p.exprScratch)] {
+				if e != nil {
+					t.Errorf("%q: exprScratch[%d] retains %T", tc.sql, i+1, e)
+				}
+			}
+		})
 	}
 }

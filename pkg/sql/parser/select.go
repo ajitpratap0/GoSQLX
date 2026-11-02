@@ -522,8 +522,9 @@ func (p *Parser) parseSelectColumnList() ([]ast.Expression, error) {
 }
 
 // pushSelectColumns parses the SELECT list onto the expression scratch stack.
-// The caller owns the region it grows: it takes a mark first, defers a drop to
-// that mark, and copies the region out once the list is complete.
+// The caller owns the region it grows: it takes a mark first, drops back to it
+// on every error return (see scratch.go), and copies the region out once the
+// list is complete.
 func (p *Parser) pushSelectColumns() error {
 	// Guard: SELECT immediately followed by FROM is an error.
 	if p.isType(models.TokenTypeFrom) {

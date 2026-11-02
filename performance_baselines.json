@@ -1,6 +1,7 @@
 {
   "version": "1.17.0",
   "updated": "2026-10-22",
+  "purpose": "SMOKE TEST ONLY. These ns/op ceilings and their 60-65% tolerances exist so TestPerformanceRegression catches order-of-magnitude breakage on noisy CI. They are not a performance gate and must not be tightened to act as one. Regressions are judged by the interleaved A/B gate (scripts/perf/ab.sh, task bench:gate) and the deterministic allocs/op and B/op baselines in benchmarks/baselines/. See docs/PERFORMANCE_METHODOLOGY.md.",
   "baselines": {
     "SimpleSelect": {
       "ns_per_op": 800,
@@ -36,18 +37,6 @@
       "description": "Simple INSERT statement",
       "current_performance": "~406 ns/op on Apple M4 (median of 20 runs, re-measured 2026-10-22); ~605-1169 ns/op typical on CI (GitHub ubuntu-latest Benchmark job, range over the last 9 Tests runs on main, 0715bb9..61ca6c8)",
       "note": "Measured with BenchmarkPerformanceBaseline (ParseFromModelTokens production path), -count=10 -benchmem, median. Baseline set at ~2.5x the M4 median: GitHub ubuntu-latest runners measure about 1.5-3.2x slower than M4 on these queries (up to ~3.2x), so a 1.5x baseline (limit ~2.4x M4 at this tolerance) would fail CI's slowest runs."
-    },
-    "TokenizationThroughput": {
-      "tokens_per_sec": 8000000,
-      "tolerance_percent": 20,
-      "description": "Tokenizer throughput in tokens per second",
-      "note": "Measured separately via tokenizer benchmarks"
-    },
-    "EndToEndSustained": {
-      "ops_per_sec": 1380000,
-      "tolerance_percent": 20,
-      "description": "End-to-end sustained throughput in operations per second",
-      "note": "Measured via sustained load tests"
     }
   }
 }

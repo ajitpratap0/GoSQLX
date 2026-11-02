@@ -44,6 +44,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     are removed.
 
 ### Performance
+- **`ast.ReleaseAST` is O(1) for parser-built trees that hold no pooled nodes
+  (W4-01)**: the parser counts the nodes it draws from the AST pools and tells
+  `ReleaseAST` through an internal hook (`pkg/sql/internal/astrelease`). When
+  the count is zero, which covers ordinary SELECT/INSERT/UPDATE/DELETE
+  without tuples or arrays, the release walk is skipped. Trees with pooled
+  draws and all hand-built trees keep the full walk. No exported API or
+  output changes.
 - **Linter**: `linter.Context` gains an additive `Nodes()` method returning every AST node in `ast.Inspect` preorder, built once per `Context` and cached (reset by `WithAST`). The 13 AST rules that each walked the tree with `ast.Inspect` now iterate that shared list; violations are unchanged (none of those walks pruned a subtree). [W6-05a]
 - **Security**: `Scanner.ScanSQL` now skips the dollar-quote stripping lexer, the identifier-tautology regex and the ClickHouse table-function regex on inputs that provably cannot match them, using linear-time necessary-condition guards (`hasDollarOpener`, `hasEqualIdentPair`, `hasTableFnCandidate`). The regexes still confirm every finding, so results are byte-identical (guarded by a guards-on/off equivalence test over the real-world corpus and 200k random inputs); no API or behaviour change. [W6-01]
 - **Tokenizer**: `time.Now`/`time.Since` are now read only when metrics are enabled (previously twice per tokenization even when disabled). If metrics are toggled on mid-call the call is not recorded. No API or token-output change [W1-02].

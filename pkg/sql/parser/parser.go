@@ -25,6 +25,7 @@ import (
 	"github.com/ajitpratap0/GoSQLX/pkg/models"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/dialect"
+	"github.com/ajitpratap0/GoSQLX/pkg/sql/internal/astrelease"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/keywords"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/token"
 )
@@ -160,6 +161,7 @@ func (p *Parser) Reset() {
 	p.currentPos = 0
 	p.implicitEnd = 0
 	p.openBlockWork = 0
+	p.pooledDraws = 0
 	p.currentToken = &p.eof
 	p.depth = 0
 	p.ctx = nil
@@ -314,7 +316,13 @@ func (p *Parser) Dialect() string {
 // For dialect-aware parsing or strict mode, use NewParser with options, or call
 // ApplyOptions on a pooled instance before parsing.
 type Parser struct {
-	tokens []models.TokenWithSpan
+	// pooledDraws counts the nodes this parse drew from the ast pools
+	// (ast.Get*/ast.New* other than NewAST). The parser reports it to
+	// ast.ReleaseAST through astrelease.MarkParserBuilt: a tree with no
+	// pooled draws is released in O(1). Every such draw site must call
+	// notePooledDraw (TestReleaseDrawnPolicy_ParserCountsDraws enforces it).
+	pooledDraws int
+	tokens      []models.TokenWithSpan
 	// tokenBuf is parser-owned scratch holding the preprocessed token stream
 	// (see preprocess). It is reused across parses and never exposed to
 	// callers. INVARIANT: tokenBuf[len:cap] is always zeroed.
@@ -434,6 +442,7 @@ func (p *Parser) parseTokens(tokens []models.TokenWithSpan) (*ast.AST, error) {
 	p.currentPos = 0
 	p.implicitEnd = 0
 	p.openBlockWork = 0
+	p.pooledDraws = 0
 	if len(tokens) > 0 {
 		p.currentToken = &tokens[0]
 	} else {
@@ -487,6 +496,7 @@ func (p *Parser) parseTokens(tokens []models.TokenWithSpan) (*ast.AST, error) {
 		result.ExecuteSlash = append(result.ExecuteSlash, make([]bool, len(result.Statements)-len(result.ExecuteSlash))...)
 		result.ExecuteSlashPositions = append(result.ExecuteSlashPositions, make([]models.Location, len(result.Statements)-len(result.ExecuteSlashPositions))...)
 	}
+	astrelease.MarkParserBuilt(result, p.pooledDraws)
 	return result, nil
 }
 
@@ -666,6 +676,7 @@ func (p *Parser) parseContextTokens(ctx context.Context, tokens []models.TokenWi
 	p.currentPos = 0
 	p.implicitEnd = 0
 	p.openBlockWork = 0
+	p.pooledDraws = 0
 	if len(tokens) > 0 {
 		p.currentToken = &tokens[0]
 	} else {
@@ -722,8 +733,12 @@ func (p *Parser) parseContextTokens(ctx context.Context, tokens []models.TokenWi
 		result.ExecuteSlash = append(result.ExecuteSlash, make([]bool, len(result.Statements)-len(result.ExecuteSlash))...)
 		result.ExecuteSlashPositions = append(result.ExecuteSlashPositions, make([]models.Location, len(result.Statements)-len(result.ExecuteSlashPositions))...)
 	}
+	astrelease.MarkParserBuilt(result, p.pooledDraws)
 	return result, nil
 }
+
+// notePooledDraw records one node drawn from an ast pool; see Parser.pooledDraws.
+func (p *Parser) notePooledDraw() { p.pooledDraws++ }
 
 // Release releases any resources held by the parser
 func (p *Parser) Release() {

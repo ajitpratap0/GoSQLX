@@ -118,3 +118,120 @@ func TestJoinsCapMultiStatement(t *testing.T) {
 		}
 	}
 }
+
+func selectStatements(t *testing.T, sql string) []*ast.SelectStatement {
+	t.Helper()
+	p := &Parser{}
+	tree, err := p.parseTokens(joinHintTokens(t, sql))
+	if err != nil {
+		t.Fatalf("parse %q: %v", sql, err)
+	}
+	var out []*ast.SelectStatement
+	var walk func(st ast.Statement)
+	walk = func(st ast.Statement) {
+		switch s := st.(type) {
+		case *ast.SelectStatement:
+			out = append(out, s)
+			for _, f := range s.From {
+				if f.Subquery != nil {
+					walk(f.Subquery)
+				}
+			}
+		case *ast.SetOperation:
+			walk(s.Left)
+			walk(s.Right)
+		}
+	}
+	for _, st := range tree.Statements {
+		walk(st)
+	}
+	return out
+}
+
+// The hint must not look past the current statement, set-operation branch or
+// subquery: every one-join SELECT below must get capacity exactly 1.
+func TestJoinsCapStopsAtBoundaries(t *testing.T) {
+	cases := []struct {
+		name string
+		sql  string
+		want []int // cap of Joins for each SELECT with joins, in order
+	}{
+		{"script of single-join statements",
+			strings.Repeat("SELECT * FROM a JOIN b ON a.i=b.i; ", 5), []int{1, 1, 1, 1, 1}},
+		{"union branches",
+			"SELECT a.x FROM a JOIN b ON a.i=b.i UNION ALL SELECT c.x FROM c JOIN d ON c.i=d.i", []int{1, 1}},
+		{"except branches",
+			"SELECT a.x FROM a JOIN b ON a.i=b.i EXCEPT SELECT c.x FROM c JOIN d ON c.i=d.i JOIN e ON e.i=d.i", []int{1, 2}},
+		{"intersect branches",
+			"SELECT a.x FROM a JOIN b ON a.i=b.i INTERSECT SELECT c.x FROM c JOIN d ON c.i=d.i", []int{1, 1}},
+		{"mixed one and two join statements",
+			"SELECT * FROM a JOIN b ON a.i=b.i; SELECT * FROM c JOIN d ON c.i=d.i JOIN e ON e.i=d.i; SELECT * FROM f JOIN g ON f.i=g.i", []int{1, 2, 1}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var got []int
+			for _, s := range selectStatements(t, tc.sql) {
+				if len(s.Joins) > 0 {
+					got = append(got, cap(s.Joins))
+				}
+			}
+			if fmt.Sprint(got) != fmt.Sprint(tc.want) {
+				t.Errorf("caps=%v want %v", got, tc.want)
+			}
+		})
+	}
+}
+
+// A subquery's join must not count the outer query's later joins, and the
+// outer query must not count joins nested in subqueries.
+func TestJoinsCapSubqueryDepth(t *testing.T) {
+	sql := "SELECT * FROM (SELECT * FROM a JOIN b ON a.i=b.i) s JOIN c ON c.i=s.i JOIN d ON d.i=c.i"
+	var inner, outer *ast.SelectStatement
+	for _, s := range selectStatements(t, sql) {
+		if len(s.Joins) == 2 {
+			outer = s
+		} else if len(s.Joins) == 1 {
+			inner = s
+		}
+	}
+	if inner == nil || outer == nil {
+		t.Fatalf("did not find inner and outer selects (inner=%v outer=%v)", inner != nil, outer != nil)
+	}
+	if cap(inner.Joins) != 1 {
+		t.Errorf("subquery joins cap=%d want 1", cap(inner.Joins))
+	}
+	if cap(outer.Joins) != 2 {
+		t.Errorf("outer joins cap=%d want 2", cap(outer.Joins))
+	}
+
+	// Joins nested inside a parenthesised subquery ahead do not count.
+	sql = "SELECT * FROM a JOIN b ON b.i IN (SELECT x FROM c JOIN d ON c.i=d.i JOIN e ON e.i=d.i)"
+	for _, s := range selectStatements(t, sql) {
+		if len(s.Joins) == 1 && cap(s.Joins) != 1 {
+			t.Errorf("outer cap=%d want 1", cap(s.Joins))
+		}
+	}
+}
+
+// BenchmarkParseManyShortJoinStatements keeps the multi-statement trade-off
+// visible: each statement has one JOIN, so each joins slice must stay cap 1.
+func BenchmarkParseManyShortJoinStatements(b *testing.B) {
+	sql := strings.Repeat("SELECT * FROM a JOIN b ON a.i=b.i; ", 50)
+	tkz := tokenizer.GetTokenizer()
+	toks, err := tkz.Tokenize([]byte(sql))
+	if err != nil {
+		b.Fatal(err)
+	}
+	pt := preprocessTokens(toks)
+	tokenizer.PutTokenizer(tkz)
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		p := &Parser{}
+		tree, err := p.parseTokens(pt)
+		if err != nil {
+			b.Fatal(err)
+		}
+		ast.ReleaseAST(tree)
+	}
+}

@@ -1260,17 +1260,34 @@ func (p *Parser) isOrderByAll() bool {
 // scan stays O(1) per statement on huge scripts.
 const joinHintWindow = 256
 
-// joinsCap returns the initial capacity for a statement's joins slice: the
-// 1 plus the number of JOIN tokens in the next joinHintWindow tokens, capped at 8.
-// It runs only when a JOIN is about to be appended to an empty slice, so
-// join-free statements pay nothing. The count is a capacity hint only (it may
-// include joins of nested subqueries or of the next statement).
+// joinsCap returns the initial capacity for a statement's joins slice: 1 plus
+// the number of JOIN tokens that follow at the same parenthesis depth, capped
+// at 8. The scan stops at a depth-0 ';', UNION, EXCEPT or INTERSECT, or at the
+// ')' closing the enclosing level, so neighbouring statements, set-operation
+// branches and nested subqueries never inflate the hint. It also looks at most
+// joinHintWindow tokens ahead. It runs only when a JOIN is about to be
+// appended to an empty slice, so join-free statements pay nothing. The result
+// is a capacity hint only; append still grows past it.
 func (p *Parser) joinsCap() int {
 	end := min(p.currentPos+joinHintWindow, len(p.tokens))
-	n := 1 // the join being appended; its JOIN token is already consumed
+	n, depth := 1, 0 // n counts the join being appended; its JOIN token is already consumed
 	for i := p.currentPos; i < end && n < 8; i++ {
-		if p.tokens[i].Token.Type == models.TokenTypeJoin {
-			n++
+		switch p.tokens[i].Token.Type {
+		case models.TokenTypeJoin:
+			if depth == 0 {
+				n++
+			}
+		case models.TokenTypeLParen:
+			depth++
+		case models.TokenTypeRParen:
+			if depth == 0 {
+				return n
+			}
+			depth--
+		case models.TokenTypeSemicolon, models.TokenTypeUnion, models.TokenTypeExcept, models.TokenTypeIntersect:
+			if depth == 0 {
+				return n
+			}
 		}
 	}
 	return n

@@ -44,14 +44,25 @@ func (r *SubqueryInSelectRule) Check(ctx *linter.Context) ([]linter.Violation, e
 		return nil, nil
 	}
 	var violations []linter.Violation
-	for _, stmt := range ctx.AST.Statements {
-		ast.Inspect(stmt, func(n ast.Node) bool {
-			sel, ok := n.(*ast.SelectStatement)
-			if !ok {
-				return true
+	for _, n := range ctx.Nodes() {
+		sel, ok := n.(*ast.SelectStatement)
+		if !ok {
+			continue
+		}
+		for _, col := range sel.Columns {
+			if sub, ok := col.(*ast.SubqueryExpression); ok {
+				violations = append(violations, linter.Violation{
+					Rule:       r.ID(),
+					RuleName:   r.Name(),
+					Severity:   r.Severity(),
+					Message:    "Scalar subquery in SELECT column list executes once per row",
+					Location:   sub.Pos,
+					Suggestion: "Rewrite as a JOIN or use a lateral join to avoid per-row execution",
+				})
 			}
-			for _, col := range sel.Columns {
-				if sub, ok := col.(*ast.SubqueryExpression); ok {
+			// Also check aliased subqueries: (SELECT ...) AS col
+			if alias, ok := col.(*ast.AliasedExpression); ok {
+				if sub, ok := alias.Expr.(*ast.SubqueryExpression); ok {
 					violations = append(violations, linter.Violation{
 						Rule:       r.ID(),
 						RuleName:   r.Name(),
@@ -61,22 +72,8 @@ func (r *SubqueryInSelectRule) Check(ctx *linter.Context) ([]linter.Violation, e
 						Suggestion: "Rewrite as a JOIN or use a lateral join to avoid per-row execution",
 					})
 				}
-				// Also check aliased subqueries: (SELECT ...) AS col
-				if alias, ok := col.(*ast.AliasedExpression); ok {
-					if sub, ok := alias.Expr.(*ast.SubqueryExpression); ok {
-						violations = append(violations, linter.Violation{
-							Rule:       r.ID(),
-							RuleName:   r.Name(),
-							Severity:   r.Severity(),
-							Message:    "Scalar subquery in SELECT column list executes once per row",
-							Location:   sub.Pos,
-							Suggestion: "Rewrite as a JOIN or use a lateral join to avoid per-row execution",
-						})
-					}
-				}
 			}
-			return true
-		})
+		}
 	}
 	return violations, nil
 }

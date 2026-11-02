@@ -61,10 +61,9 @@ func scratchDrop[T any](s *[]T, base int) {
 // parse that finished normally leaves them empty, so the common case is two
 // length checks and two capacity checks.
 func (p *Parser) resetScratch() {
-	if len(p.exprScratch) != 0 || cap(p.exprScratch) > maxPooledScratch {
+	if len(p.exprScratch) != 0 || len(p.orderScratch) != 0 ||
+		cap(p.exprScratch) > maxPooledScratch || cap(p.orderScratch) > maxPooledScratch {
 		p.exprScratch = resetScratchSlice(p.exprScratch)
-	}
-	if len(p.orderScratch) != 0 || cap(p.orderScratch) > maxPooledScratch {
 		p.orderScratch = resetScratchSlice(p.orderScratch)
 	}
 }

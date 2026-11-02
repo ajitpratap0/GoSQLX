@@ -327,12 +327,8 @@ type Parser struct {
 	// tokenBuf is parser-owned scratch holding the preprocessed token stream
 	// (see preprocess). It is reused across parses and never exposed to
 	// callers. INVARIANT: tokenBuf[len:cap] is always zeroed.
-	tokenBuf []models.TokenWithSpan
-	// exprScratch and orderScratch are the list-building stacks described in
-	// scratch.go. INVARIANT: [len:cap] is zeroed.
-	exprScratch  []ast.Expression
-	orderScratch []ast.OrderByExpression
-	currentPos   int
+	tokenBuf   []models.TokenWithSpan
+	currentPos int
 	// currentToken points at p.tokens[currentPos], or at p.eof once the cursor
 	// is past the stream. It is a pointer, not a copy, so advance moves 8
 	// bytes instead of a 72 B pointerful struct (which cost a GC write barrier
@@ -400,6 +396,11 @@ type Parser struct {
 	// token applies, which is also what makes a zero-value &Parser{} usable.
 	// Nothing may write through currentToken.
 	eof models.TokenWithSpan
+
+	// exprScratch and orderScratch are the list-building stacks described in
+	// scratch.go. INVARIANT: [len:cap] is zeroed.
+	exprScratch  []ast.Expression
+	orderScratch []ast.OrderByExpression
 }
 
 // Deprecated: Parse is provided for backward compatibility only and is scheduled for

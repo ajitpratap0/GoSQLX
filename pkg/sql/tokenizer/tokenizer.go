@@ -1235,6 +1235,47 @@ func (t *Tokenizer) readIdentifier(out *models.Token) error {
 	})
 }
 
+// scanAtName consumes the name after '@' or '@@' (t.pos is on its first
+// character, already known to start an identifier) when that name is plain,
+// so the caller can use the zero-copy slice t.src[atStart:t.pos.Index] as the
+// token value instead of concatenating "@"+name. It reports false, with the
+// position untouched, for every name readIdentifier would treat specially:
+// U&"..." escapes, a single letter directly before a quote (N'..' style
+// prefixed strings), a possible compound-keyword start (which readIdentifier
+// joins with the following word), and any non-ASCII name (Unicode case
+// folding can make it a keyword). The caller then takes the readIdentifier
+// path, so those inputs behave exactly as before.
+func (t *Tokenizer) scanAtName() bool {
+	start := t.pos.Index
+	c := t.input[start]
+	if c >= utf8.RuneSelf {
+		return false
+	}
+	if (c == 'U' || c == 'u') && start+2 < len(t.input) && t.input[start+1] == '&' &&
+		(t.input[start+2] == '\'' || t.input[start+2] == '"') {
+		return false
+	}
+	saved := t.pos
+	t.scanIdentifierTail()
+	end := t.pos.Index
+	ident := t.src[start:end]
+	if !isASCII(ident) ||
+		(len(ident) == 1 && end < len(t.input) && t.input[end] == '\'') {
+		t.pos = saved
+		return false
+	}
+	if len(ident) <= keywordKeyBufLen {
+		var kbuf [keywordKeyBufLen]byte
+		if kh, ok := asciiUpperHash(kbuf[:len(ident)], ident); ok {
+			if e := kwLookup(kh, kbuf[:len(ident)]); e != nil && e.compoundStart {
+				t.pos = saved
+				return false
+			}
+		}
+	}
+	return true
+}
+
 // compoundKeywordStarts is a set of keywords that can start compound keywords
 var compoundKeywordStarts = map[string]bool{
 	"GROUP":    true,
@@ -2362,6 +2403,7 @@ func (t *Tokenizer) readPunctuation(out *models.Token) error {
 		// Just a standalone & symbol
 		return setToken(out, models.Token{Type: models.TokenTypeAmpersand, Value: "&"})
 	case '@':
+		atStart := t.pos.Index
 		t.pos.AdvanceRune(r, size)
 		// Check for PostgreSQL array operators and parameter syntax
 		if t.pos.Index < len(t.input) {
@@ -2380,6 +2422,12 @@ func (t *Tokenizer) readPunctuation(out *models.Token) error {
 				if t.dialect == keywords.DialectSQLServer && t.pos.Index < len(t.input) {
 					peekR, _ := utf8.DecodeRune(t.input[t.pos.Index:])
 					if isIdentifierStart(peekR) {
+						if t.scanAtName() {
+							return setToken(out, models.Token{
+								Type:  models.TokenTypeIdentifier,
+								Value: t.src[atStart:t.pos.Index],
+							})
+						}
 						if err := t.readIdentifier(out); err != nil {
 							return err
 						}
@@ -2394,6 +2442,12 @@ func (t *Tokenizer) readPunctuation(out *models.Token) error {
 
 			// Check for parameter syntax (@variable)
 			if isIdentifierStart(nextR) {
+				if t.scanAtName() {
+					return setToken(out, models.Token{
+						Type:  models.TokenTypePlaceholder,
+						Value: t.src[atStart:t.pos.Index],
+					})
+				}
 				// This is a parameter like @variable, read the identifier part
 				if err := t.readIdentifier(out); err != nil {
 					return err
@@ -2730,7 +2784,8 @@ func (t *Tokenizer) scanIdentifierTail() {
 				// '$' continues a name (Oracle v$session, Snowflake
 				// SYSTEM$TYPEOF, PostgreSQL a$b) and so does '#' in Oracle (a#).
 				// Neither can start one; scanIdentifierTail is only called
-				// after the first character.
+				// after the first character, or on a first character the
+				// caller has already checked with isIdentifierStart.
 				if c == '$' || (c == '#' && t.dialect == keywords.DialectOracle) {
 					t.pos.Index++
 					t.pos.Column++

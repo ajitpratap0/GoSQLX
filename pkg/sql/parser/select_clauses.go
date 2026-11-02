@@ -20,6 +20,7 @@ package parser
 
 import (
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -409,8 +410,11 @@ func (p *Parser) parseJoinClauses(firstRef ast.TableReference, joins []ast.JoinC
 			}
 		}
 
-		if cap(joins) == 0 {
-			joins = make([]ast.JoinClause, 0, p.joinsCap())
+		if len(joins) == cap(joins) {
+			// Empty slice: size it from the JOINs ahead. Full slice handed in
+			// by a caller (parenthesized group, comma join): grow by the hint
+			// once instead of letting append double repeatedly.
+			joins = slices.Grow(joins, p.joinsCap())
 		}
 		jc.Type = joinType
 		jc.Left = leftTable
@@ -1267,7 +1271,9 @@ const joinHintWindow = 256
 // branches and nested subqueries never inflate the hint. It also looks at most
 // joinHintWindow tokens ahead. It runs only when a JOIN is about to be
 // appended to an empty slice, so join-free statements pay nothing. The result
-// is a capacity hint only; append still grows past it.
+// is a capacity hint only; append still grows past it. Oracle MINUS is
+// tokenized as an identifier, so it is not a boundary and a MINUS chain may
+// over-count later branches' JOINs (bounded by the cap and window).
 func (p *Parser) joinsCap() int {
 	end := min(p.currentPos+joinHintWindow, len(p.tokens))
 	n, depth := 1, 0 // n counts the join being appended; its JOIN token is already consumed

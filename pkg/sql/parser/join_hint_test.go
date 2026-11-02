@@ -204,12 +204,59 @@ func TestJoinsCapSubqueryDepth(t *testing.T) {
 		t.Errorf("outer joins cap=%d want 2", cap(outer.Joins))
 	}
 
-	// Joins nested inside a parenthesised subquery ahead do not count.
-	sql = "SELECT * FROM a JOIN b ON b.i IN (SELECT x FROM c JOIN d ON c.i=d.i JOIN e ON e.i=d.i)"
-	for _, s := range selectStatements(t, sql) {
-		if len(s.Joins) == 1 && cap(s.Joins) != 1 {
-			t.Errorf("outer cap=%d want 1", cap(s.Joins))
+	// Joins nested in a subquery that sits after the first join (WHERE, or a
+	// derived table in a later join) must not count toward the outer cap.
+	for _, tc := range []struct {
+		sql  string
+		want int
+	}{
+		{"SELECT * FROM a JOIN b ON a.i=b.i WHERE a.x IN (SELECT x FROM c JOIN d ON c.i=d.i JOIN e ON e.i=d.i)", 1},
+		{"SELECT * FROM a JOIN b ON a.i=b.i JOIN (SELECT * FROM c JOIN d ON c.i=d.i JOIN e ON e.i=d.i) s ON s.i=a.i", 2},
+	} {
+		found := false
+		for _, s := range selectStatements(t, tc.sql) {
+			if s.Joins != nil && s.Joins[0].Left.Name == "a" {
+				found = true
+				if cap(s.Joins) != tc.want {
+					t.Errorf("%s: outer cap=%d want %d", tc.sql, cap(s.Joins), tc.want)
+				}
+			}
 		}
+		if !found {
+			t.Errorf("%s: outer select not found", tc.sql)
+		}
+	}
+}
+
+// A parenthesized join group hands its slice to the outer join loop; the outer
+// joins must grow it by the hint rather than reallocating, so the capacity is
+// reached in at most one extra growth and never exceeds the join count rounded
+// to the hint.
+func TestJoinsCapParenGroupThenOuter(t *testing.T) {
+	for _, tc := range []struct {
+		sql    string
+		joins  int
+		maxCap int
+	}{
+		{"SELECT * FROM (a JOIN b ON a.i=b.i) JOIN c ON c.i=a.i", 2, 3},
+		{"SELECT * FROM (a JOIN b ON a.i=b.i) JOIN c ON c.i=a.i JOIN d ON d.i=a.i", 3, 4},
+	} {
+		got := joinsOf(t, tc.sql)
+		if len(got) != tc.joins {
+			t.Fatalf("%s: joins=%d want %d", tc.sql, len(got), tc.joins)
+		}
+		if cap(got) > tc.maxCap {
+			t.Errorf("%s: cap=%d want <= %d", tc.sql, cap(got), tc.maxCap)
+		}
+	}
+}
+
+// Known trade-off: a comma table after a single JOIN appends to the cap-1
+// slice, costing one growth. Content must still be correct.
+func TestJoinsCommaAfterJoin(t *testing.T) {
+	got := joinsOf(t, "SELECT * FROM a JOIN b ON a.i=b.i, c")
+	if len(got) != 2 || !got[1].Comma || got[1].Type != "CROSS" {
+		t.Fatalf("unexpected joins: %+v", got)
 	}
 }
 

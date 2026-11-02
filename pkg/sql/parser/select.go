@@ -511,7 +511,9 @@ func (p *Parser) parseTopClause() (*ast.TopClause, error) {
 }
 
 // parseSelectColumnList parses the comma-separated column/expression list in
-// SELECT and returns it as an exact-size slice.
+// SELECT and returns it as an exact-size slice. Only the OUTPUT / RETURNING
+// clauses (dml_common.go) use it; parseSelectStatement calls pushSelectColumns
+// directly so it can copy the list straight into its co-allocated block.
 func (p *Parser) parseSelectColumnList() ([]ast.Expression, error) {
 	base := p.exprMark()
 	defer p.exprDrop(base)
@@ -630,7 +632,16 @@ func (p *Parser) isStringAlias() bool {
 
 // Co-allocation blocks for SELECT statements. The sizes are chosen against Go's
 // size classes: SelectStatement is 392 bytes and TableReference 144, so
-// statement + From[1] + Columns[2] is exactly the 576-byte class.
+// statement + From[1] + Columns[2] is 568 bytes and fills the 576-byte class
+// (statement + From[1] alone, 536 bytes, lands in the same class).
+// TestCoallocBlockSizes pins these sizes.
+//
+// Lifetime trade-off: a block is one heap object, so it stays alive while any
+// part of it is referenced. A caller that keeps only stmt.Columns or
+// stmt.From (and drops the statement) pins the whole block, up to 600 bytes,
+// where separate allocations would have let the statement be collected. Parse
+// trees are normally kept or released whole, so this costs nothing in the
+// common case and saves one or two allocations per SELECT.
 type selectStmt2 struct {
 	stmt ast.SelectStatement
 	from [1]ast.TableReference

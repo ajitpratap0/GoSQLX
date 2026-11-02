@@ -803,6 +803,9 @@ func hasQuirkyArgs(funcName string) bool {
 
 // Co-allocation blocks: a FunctionCall and its argument array in one object.
 // Most calls take one or two arguments (COUNT(*), SUM(x), COALESCE(a, b)).
+// The blocks are 200, 216 and 232 bytes (size classes 208, 224 and 240);
+// TestCoallocBlockSizes pins them. As with the SELECT blocks (select.go), a
+// caller that keeps only a call's Arguments slice pins the whole block.
 type functionCall1 struct {
 	fc ast.FunctionCall
 	a  [1]ast.Expression

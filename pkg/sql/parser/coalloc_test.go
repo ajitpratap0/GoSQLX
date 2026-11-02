@@ -8,6 +8,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"unsafe"
 
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/keywords"
@@ -110,6 +111,35 @@ func TestScratchResetClearsAndBounds(t *testing.T) {
 	p.Reset()
 	if p.exprScratch != nil || p.orderScratch != nil {
 		t.Errorf("oversized scratch kept: expr cap %d, order cap %d", cap(p.exprScratch), cap(p.orderScratch))
+	}
+}
+
+// The co-allocation blocks are sized against Go's malloc size classes
+// (runtime/sizeclasses.go). A field added to ast.SelectStatement,
+// ast.TableReference or ast.FunctionCall changes these sizes and can push a
+// block into the next class, a silent allocation regression; this test makes
+// it a failure, so the block shapes are revisited instead.
+func TestCoallocBlockSizes(t *testing.T) {
+	cases := []struct {
+		name        string
+		size, want  uintptr
+		sizeClass   uintptr // the class the block is meant to fill
+		classBefore uintptr // the class below it
+	}{
+		{"selectStmtFrom", unsafe.Sizeof(selectStmtFrom{}), 536, 576, 512},
+		{"selectStmt2", unsafe.Sizeof(selectStmt2{}), 568, 576, 512},
+		{"selectStmt4", unsafe.Sizeof(selectStmt4{}), 600, 640, 576},
+		{"functionCall1", unsafe.Sizeof(functionCall1{}), 200, 208, 192},
+		{"functionCall2", unsafe.Sizeof(functionCall2{}), 216, 224, 208},
+		{"functionCall3", unsafe.Sizeof(functionCall3{}), 232, 240, 224},
+	}
+	for _, c := range cases {
+		if c.size != c.want {
+			t.Errorf("unsafe.Sizeof(%s{}) = %d, want %d: re-check the block against the size classes", c.name, c.size, c.want)
+		}
+		if c.size <= c.classBefore || c.size > c.sizeClass {
+			t.Errorf("%s is %d bytes, outside its size class (%d, %d]", c.name, c.size, c.classBefore, c.sizeClass)
+		}
 	}
 }
 

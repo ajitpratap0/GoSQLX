@@ -43,25 +43,22 @@ func (r *ImplicitColumnListRule) Check(ctx *linter.Context) ([]linter.Violation,
 		return nil, nil
 	}
 	var violations []linter.Violation
-	for _, stmt := range ctx.AST.Statements {
-		ast.Inspect(stmt, func(n ast.Node) bool {
-			ins, ok := n.(*ast.InsertStatement)
-			if !ok {
-				return true
-			}
-			// If there are VALUES but no explicit column list, flag it
-			if len(ins.Values) > 0 && len(ins.Columns) == 0 {
-				violations = append(violations, linter.Violation{
-					Rule:       r.ID(),
-					RuleName:   r.Name(),
-					Severity:   r.Severity(),
-					Message:    "INSERT INTO " + ins.TableName + " has no explicit column list",
-					Location:   ins.Pos,
-					Suggestion: "Specify columns explicitly: INSERT INTO " + ins.TableName + " (col1, col2, ...) VALUES (...)",
-				})
-			}
-			return true
-		})
+	for _, n := range ctx.Nodes() {
+		ins, ok := n.(*ast.InsertStatement)
+		if !ok {
+			continue
+		}
+		// If there are VALUES but no explicit column list, flag it
+		if len(ins.Values) > 0 && len(ins.Columns) == 0 {
+			violations = append(violations, linter.Violation{
+				Rule:       r.ID(),
+				RuleName:   r.Name(),
+				Severity:   r.Severity(),
+				Message:    "INSERT INTO " + ins.TableName + " has no explicit column list",
+				Location:   ins.Pos,
+				Suggestion: "Specify columns explicitly: INSERT INTO " + ins.TableName + " (col1, col2, ...) VALUES (...)",
+			})
+		}
 	}
 	return violations, nil
 }

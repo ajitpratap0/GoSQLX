@@ -31,8 +31,9 @@ import (
 
 // parseFromClause parses the FROM clause including comma-separated table references
 // and any subsequent JOIN clauses.  Returns the primary table name (for compatibility),
-// the full table-reference slice, and the join slice.
-func (p *Parser) parseFromClause() (tableName string, tables []ast.TableReference, joins []ast.JoinClause, err error) {
+// the full table-reference slice, and the join slice. buf, which may be nil, is
+// zero-length spare capacity the table list is built in (see newSelectStatement).
+func (p *Parser) parseFromClause(buf []ast.TableReference) (tableName string, tables []ast.TableReference, joins []ast.JoinClause, err error) {
 	// FROM is optional (e.g. SELECT 1).  Validate that the next token makes sense.
 	if !p.isType(models.TokenTypeFrom) {
 		// advance() sets a zero-value sentinel (TokenType == TokenTypeEOF == 0) when
@@ -106,7 +107,7 @@ func (p *Parser) parseFromClause() (tableName string, tables []ast.TableReferenc
 		p.advance() // consume FINAL
 	}
 
-	tables, joins, err = p.parseTableListAndJoins(&firstRef, joins)
+	tables, joins, err = p.parseTableListAndJoins(&firstRef, joins, buf)
 	if err != nil {
 		return "", nil, nil, err
 	}
@@ -118,9 +119,10 @@ func (p *Parser) parseFromClause() (tableName string, tables []ast.TableReferenc
 // references, then the JOIN clauses, including a comma after an explicit join.
 // joins holds the joins already read from a parenthesized group that opened
 // the list, or nil.
-func (p *Parser) parseTableListAndJoins(first *ast.TableReference, joins []ast.JoinClause) (tables []ast.TableReference, _ []ast.JoinClause, err error) {
+func (p *Parser) parseTableListAndJoins(first *ast.TableReference, joins []ast.JoinClause, buf []ast.TableReference) (tables []ast.TableReference, _ []ast.JoinClause, err error) {
 	firstRef := *first
-	tables = []ast.TableReference{firstRef}
+	tables = buf[:0]
+	tables = append(tables, firstRef)
 
 	// Additional comma-separated table references (implicit cross joins)
 	for p.isType(models.TokenTypeComma) {
@@ -827,7 +829,8 @@ func (p *Parser) parseGroupByClause(stmt *ast.SelectStatement) ([]ast.Expression
 		return nil, nil
 	}
 
-	groupByExprs := make([]ast.Expression, 0, 4)
+	base := p.exprMark()
+	defer p.exprDrop(base)
 	for {
 		var (
 			expr ast.Expression
@@ -848,7 +851,7 @@ func (p *Parser) parseGroupByClause(stmt *ast.SelectStatement) ([]ast.Expression
 		if err != nil {
 			return nil, err
 		}
-		groupByExprs = append(groupByExprs, expr)
+		p.exprPush(expr)
 
 		if !p.isType(models.TokenTypeComma) {
 			break
@@ -859,7 +862,7 @@ func (p *Parser) parseGroupByClause(stmt *ast.SelectStatement) ([]ast.Expression
 	// MySQL / SQL Server / ClickHouse: GROUP BY col1 WITH ROLLUP / WITH CUBE / WITH TOTALS
 	p.parseGroupByWithModifiers(stmt)
 
-	return groupByExprs, nil
+	return p.exprPop(base), nil
 }
 
 // supportsGroupByAll reports whether GROUP BY ALL is accepted.
@@ -921,7 +924,8 @@ func (p *Parser) parseOrderByList() ([]ast.OrderByExpression, error) {
 	}
 	p.advance() // Consume BY
 
-	var orderByExprs []ast.OrderByExpression
+	base := p.orderMark()
+	defer p.orderDrop(base)
 	for {
 		var expr ast.Expression
 		if p.isOrderByAll() {
@@ -977,14 +981,14 @@ func (p *Parser) parseOrderByList() ([]ast.OrderByExpression, error) {
 			entry.WithFill = fill
 		}
 
-		orderByExprs = append(orderByExprs, entry)
+		p.orderPush(entry)
 
 		if !p.isType(models.TokenTypeComma) {
 			break
 		}
 		p.advance()
 	}
-	return orderByExprs, nil
+	return p.orderPop(base), nil
 }
 
 // parseClickHouseWithFill consumes "WITH FILL [FROM x] [TO y] [STEP z]" and

@@ -82,10 +82,14 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 	}
 
 	// Column list
-	columns, err := p.parseSelectColumnList()
-	if err != nil {
+	// The list stays on the scratch stack until the statement exists, so its
+	// columns can be copied into the statement's own allocation.
+	colBase := p.exprMark()
+	defer p.exprDrop(colBase)
+	if err = p.pushSelectColumns(); err != nil {
 		return nil, err
 	}
+	colEnd := len(p.exprScratch)
 
 	// SELECT ... INTO target (SQL Server, PostgreSQL, MySQL, Oracle PL/SQL)
 	var into *ast.SelectInto
@@ -96,21 +100,21 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 	}
 
 	// FROM … JOIN clauses
-	tableName, tables, joins, err := p.parseFromClause()
+	// The statement is allocated before the FROM clause so that its column
+	// list and single table reference share its allocation.
+	selectStmt, fromBuf := newSelectStatement(p.exprScratch[colBase:colEnd], p.isType(models.TokenTypeFrom))
+	tableName, tables, joins, err := p.parseFromClause(fromBuf)
 	if err != nil {
 		return nil, err
 	}
 
 	// Initialise the statement early so clause parsers can check dialect etc.
-	selectStmt := &ast.SelectStatement{
-		Distinct:          isDistinct,
-		DistinctOnColumns: distinctOnColumns,
-		Top:               topClause,
-		Columns:           columns,
-		From:              tables,
-		Joins:             joins,
-		TableName:         tableName,
-	}
+	selectStmt.Distinct = isDistinct
+	selectStmt.DistinctOnColumns = distinctOnColumns
+	selectStmt.Top = topClause
+	selectStmt.From = tables
+	selectStmt.Joins = joins
+	selectStmt.TableName = tableName
 	if len(selectModifiers) > 0 || into != nil {
 		selectStmt.Extras = &ast.SelectExtras{SelectModifiers: selectModifiers, Into: into}
 	}
@@ -505,11 +509,24 @@ func (p *Parser) parseTopClause() (*ast.TopClause, error) {
 	return topClause, nil
 }
 
-// parseSelectColumnList parses the comma-separated column/expression list in SELECT.
+// parseSelectColumnList parses the comma-separated column/expression list in
+// SELECT and returns it as an exact-size slice.
 func (p *Parser) parseSelectColumnList() ([]ast.Expression, error) {
+	base := p.exprMark()
+	defer p.exprDrop(base)
+	if err := p.pushSelectColumns(); err != nil {
+		return nil, err
+	}
+	return p.exprPop(base), nil
+}
+
+// pushSelectColumns parses the SELECT list onto the expression scratch stack.
+// The caller owns the region it grows: it takes a mark first, defers a drop to
+// that mark, and copies the region out once the list is complete.
+func (p *Parser) pushSelectColumns() error {
 	// Guard: SELECT immediately followed by FROM is an error.
 	if p.isType(models.TokenTypeFrom) {
-		return nil, goerrors.ExpectedTokenError(
+		return goerrors.ExpectedTokenError(
 			"column expression",
 			"FROM",
 			p.currentLocation(),
@@ -517,7 +534,6 @@ func (p *Parser) parseSelectColumnList() ([]ast.Expression, error) {
 		).WithHint("SELECT requires at least one column expression before FROM")
 	}
 
-	columns := make([]ast.Expression, 0, 8)
 	for {
 		var expr ast.Expression
 
@@ -528,24 +544,24 @@ func (p *Parser) parseSelectColumnList() ([]ast.Expression, error) {
 			p.advance()
 			var err error
 			if expr, err = p.parseStarModifiers(expr); err != nil {
-				return nil, err
+				return err
 			}
 		} else {
 			var err error
 			expr, err = p.parseExpression()
 			if err != nil {
-				return nil, err
+				return err
 			}
 			// t.* EXCLUDE (...) and other wildcard modifiers
 			if id, ok := expr.(*ast.Identifier); ok && id.Name == "*" {
 				if expr, err = p.parseStarModifiers(expr); err != nil {
-					return nil, err
+					return err
 				}
 			} else if fc, ok := expr.(*ast.FunctionCall); ok && p.dialect == string(keywords.DialectClickHouse) &&
 				strings.EqualFold(fc.Name, "COLUMNS") && p.isStarModifierStart() {
 				// ClickHouse COLUMNS('regexp') APPLY (fn) ...
 				if expr, err = p.parseStarModifiers(expr); err != nil {
-					return nil, err
+					return err
 				}
 			}
 
@@ -568,7 +584,7 @@ func (p *Parser) parseSelectColumnList() ([]ast.Expression, error) {
 					p.advance()
 				} else {
 					if !p.isAliasAfterAS() {
-						return nil, p.expectedError("alias name after AS")
+						return p.expectedError("alias name after AS")
 					}
 					alias = p.currentToken.Token.Value
 					aliasQuote = p.currentNameQuote()
@@ -591,14 +607,14 @@ func (p *Parser) parseSelectColumnList() ([]ast.Expression, error) {
 			}
 		}
 
-		columns = append(columns, expr)
+		p.exprPush(expr)
 
 		if !p.isType(models.TokenTypeComma) {
 			break
 		}
 		p.advance() // Consume comma
 	}
-	return columns, nil
+	return nil
 }
 
 // isStringAlias reports whether the current token is a string literal used as
@@ -608,4 +624,59 @@ func (p *Parser) isStringAlias() bool {
 		return false
 	}
 	return p.isType(models.TokenTypeString) || p.isType(models.TokenTypeSingleQuotedString)
+}
+
+// Co-allocation blocks for SELECT statements. The sizes are chosen against Go's
+// size classes: SelectStatement is 392 bytes and TableReference 144, so
+// statement + From[1] + Columns[2] is exactly the 576-byte class.
+type selectStmt2 struct {
+	stmt ast.SelectStatement
+	from [1]ast.TableReference
+	cols [2]ast.Expression
+}
+
+type selectStmt4 struct {
+	stmt ast.SelectStatement
+	from [1]ast.TableReference
+	cols [4]ast.Expression
+}
+
+type selectStmtFrom struct {
+	stmt ast.SelectStatement
+	from [1]ast.TableReference
+}
+
+// newSelectStatement returns a SelectStatement whose Columns is a copy of cols
+// with len == cap. When hasFrom, it also returns a one-element, zeroed buffer
+// in the same allocation for the FROM clause's table list (nil otherwise; a
+// caller that needs more than one table appends and reallocates).
+func newSelectStatement(cols []ast.Expression, hasFrom bool) (*ast.SelectStatement, []ast.TableReference) {
+	n := len(cols)
+	if !hasFrom {
+		stmt := &ast.SelectStatement{}
+		if n > 0 {
+			stmt.Columns = make([]ast.Expression, n)
+			copy(stmt.Columns, cols)
+		}
+		return stmt, nil
+	}
+	switch {
+	case n == 0:
+		b := &selectStmtFrom{}
+		return &b.stmt, b.from[:0:1]
+	case n <= 2:
+		b := &selectStmt2{}
+		copy(b.cols[:], cols)
+		b.stmt.Columns = b.cols[:n:n]
+		return &b.stmt, b.from[:0:1]
+	case n <= 4:
+		b := &selectStmt4{}
+		copy(b.cols[:], cols)
+		b.stmt.Columns = b.cols[:n:n]
+		return &b.stmt, b.from[:0:1]
+	}
+	b := &selectStmtFrom{}
+	b.stmt.Columns = make([]ast.Expression, n)
+	copy(b.stmt.Columns, cols)
+	return &b.stmt, b.from[:0:1]
 }

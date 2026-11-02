@@ -44,6 +44,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     are removed.
 
 ### Performance
+- **Parser**: function arguments, the SELECT list, GROUP BY and ORDER BY are now collected on parser-owned scratch stacks and copied once into exact-size slices (previously grown with `append` from a fixed capacity). A `FunctionCall` with up to three arguments shares one allocation with its argument array, and a `SelectStatement` shares one with its single `From` entry and, for up to four columns, its `Columns` array. Parse allocations drop 28% on `aggregate` (18 to 13) and 12% on `complex` (50 to 44), with no time regression. User-visible: `Columns`, `GroupBy`, `OrderBy` and `FunctionCall.Arguments` now have `len == cap` (they used to carry spare capacity), so a caller that appends to them reallocates instead of writing into spare space; trees are otherwise identical (guarded by the behaviour goldens). No exported API change. [W4-04]
 - **`ast.ReleaseAST` is O(1) for parser-built trees that hold no pooled nodes**: the parser counts the nodes it draws from the AST pools and tells
   `ReleaseAST` through an internal hook (`pkg/sql/internal/astrelease`). When
   the count is zero, which covers ordinary SELECT/INSERT/UPDATE/DELETE

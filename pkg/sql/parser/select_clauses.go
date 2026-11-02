@@ -1256,15 +1256,22 @@ func (p *Parser) isOrderByAll() bool {
 	return equalsUpper(p.peekToken().Token.Value, "NULLS")
 }
 
+// joinHintWindow bounds how far joinsCap looks ahead for JOIN tokens, so the
+// scan stays O(1) per statement on huge scripts.
+const joinHintWindow = 256
+
 // joinsCap returns the initial capacity for a statement's joins slice: the
-// JOIN token count of the stream clamped to [1, 8], or 2 when no hint exists.
+// 1 plus the number of JOIN tokens in the next joinHintWindow tokens, capped at 8.
+// It runs only when a JOIN is about to be appended to an empty slice, so
+// join-free statements pay nothing. The count is a capacity hint only (it may
+// include joins of nested subqueries or of the next statement).
 func (p *Parser) joinsCap() int {
-	switch h := p.joinHint; {
-	case h <= 0:
-		return 2
-	case h > 8:
-		return 8
-	default:
-		return h
+	end := min(p.currentPos+joinHintWindow, len(p.tokens))
+	n := 1 // the join being appended; its JOIN token is already consumed
+	for i := p.currentPos; i < end && n < 8; i++ {
+		if p.tokens[i].Token.Type == models.TokenTypeJoin {
+			n++
+		}
 	}
+	return n
 }

@@ -19,7 +19,7 @@ func (p *Parser) parseWithSource(tokens []models.TokenWithSpan, in sqlText) (*as
 		return p.ParseFromModelTokens(tokens)
 	}
 	clear(p.tokenBuf)
-	p.tokenBuf, p.joinHint = preprocessTokensCount(p.tokenBuf, tokens)
+	p.tokenBuf = preprocessTokensInto(p.tokenBuf, tokens)
 	p.oracleExecuteLines(in.source())
 	return p.parseTokens(p.tokenBuf)
 }

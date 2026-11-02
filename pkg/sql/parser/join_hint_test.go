@@ -16,7 +16,6 @@ package parser
 
 import (
 	"fmt"
-	"reflect"
 	"strings"
 	"testing"
 
@@ -25,17 +24,7 @@ import (
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/tokenizer"
 )
 
-func TestJoinsCap(t *testing.T) {
-	cases := map[int]int{-1: 2, 0: 2, 1: 1, 2: 2, 5: 5, 8: 8, 9: 8, 100: 8}
-	for hint, want := range cases {
-		p := &Parser{joinHint: hint}
-		if got := p.joinsCap(); got != want {
-			t.Errorf("joinHint=%d: cap=%d want %d", hint, got, want)
-		}
-	}
-}
-
-func lexForHint(t *testing.T, sql string) []models.TokenWithSpan {
+func joinHintTokens(t *testing.T, sql string) []models.TokenWithSpan {
 	t.Helper()
 	tkz := tokenizer.GetTokenizer()
 	defer tokenizer.PutTokenizer(tkz)
@@ -43,84 +32,89 @@ func lexForHint(t *testing.T, sql string) []models.TokenWithSpan {
 	if err != nil {
 		t.Fatalf("tokenize %q: %v", sql, err)
 	}
-	return append([]models.TokenWithSpan(nil), toks...)
+	return preprocessTokens(toks)
 }
 
-// The hint equals the number of JOIN tokens in the normalised stream and the
-// token output is identical to preprocessTokensInto.
-func TestPreprocessTokensCount(t *testing.T) {
-	cases := []struct {
-		sql  string
-		want int
-	}{
-		{"SELECT 1", 0},
-		{"SELECT * FROM a JOIN b ON a.id = b.id", 1},
-		{"SELECT * FROM a INNER JOIN b ON a.id = b.id LEFT JOIN c ON c.id = b.id", 2},
-		{"SELECT * FROM a CROSS JOIN b", 1},
-		{"SELECT * FROM a LEFT OUTER JOIN b ON a.x = b.x", 1},
-		{"SELECT * FROM a JOIN (SELECT * FROM b JOIN c ON b.i = c.i) d ON a.i = d.i", 2},
-	}
-	for _, c := range cases {
-		toks := lexForHint(t, c.sql)
-		got, n := preprocessTokensCount(nil, toks)
-		if n != c.want {
-			t.Errorf("%q: hint=%d want %d", c.sql, n, c.want)
-		}
-		if ref := preprocessTokensInto(nil, toks); !reflect.DeepEqual(got, ref) {
-			t.Errorf("%q: token stream differs from preprocessTokensInto", c.sql)
-		}
-	}
-}
-
-// Parsing must not depend on the hint: every hint value yields an identical AST.
-func TestJoinHintDoesNotChangeAST(t *testing.T) {
-	var parts []string
-	for i := 1; i <= 12; i++ {
-		parts = append(parts, fmt.Sprintf("JOIN t%d ON t%d.id = t0.id", i, i))
-	}
-	queries := []string{
-		"SELECT * FROM t0 " + strings.Join(parts[:1], " "),
-		"SELECT * FROM t0 " + strings.Join(parts[:3], " "),
-		"SELECT * FROM t0 " + strings.Join(parts, " "),
-		"SELECT * FROM t0 LEFT JOIN t1 ON t1.id = t0.id CROSS JOIN t2",
-		"SELECT * FROM (t0 JOIN t1 ON t1.id = t0.id) JOIN t2 ON t2.id = t0.id",
-		"SELECT * FROM t0, t1 JOIN t2 ON t2.id = t1.id",
-	}
-	for _, q := range queries {
-		toks := lexForHint(t, q)
-		var base *ast.AST
-		for _, hint := range []int{-1, 0, 1, 2, 3, 8, 50} {
-			p := &Parser{}
-			pre := preprocessTokensInto(nil, toks)
-			p.joinHint = hint
-			tree, err := p.parseTokens(pre)
-			if err != nil {
-				t.Fatalf("%q hint=%d: %v", q, hint, err)
-			}
-			if base == nil {
-				base = tree
-				continue
-			}
-			if !reflect.DeepEqual(base.Statements, tree.Statements) {
-				t.Errorf("%q: AST differs for hint=%d", q, hint)
-			}
-		}
-	}
-}
-
-// Reset clears a stale hint, and preprocess refreshes it on every parse.
-func TestJoinHintResetAndRefresh(t *testing.T) {
+func joinsOf(t *testing.T, sql string) []ast.JoinClause {
+	t.Helper()
 	p := &Parser{}
-	p.preprocess(lexForHint(t, "SELECT * FROM a JOIN b ON a.i=b.i JOIN c ON c.i=b.i"))
-	if p.joinHint != 2 {
-		t.Fatalf("joinHint=%d want 2", p.joinHint)
+	tree, err := p.parseTokens(joinHintTokens(t, sql))
+	if err != nil {
+		t.Fatalf("parse %q: %v", sql, err)
 	}
-	p.Reset()
-	if p.joinHint != 0 {
-		t.Fatalf("Reset left joinHint=%d", p.joinHint)
+	sel, ok := tree.Statements[0].(*ast.SelectStatement)
+	if !ok {
+		t.Fatalf("expected SelectStatement, got %T", tree.Statements[0])
 	}
-	p.preprocess(lexForHint(t, "SELECT 1"))
-	if p.joinHint != 0 {
-		t.Fatalf("joinHint=%d want 0 after join-free stream", p.joinHint)
+	return sel.Joins
+}
+
+func joinQuery(n int) string {
+	var b strings.Builder
+	b.WriteString("SELECT * FROM t0")
+	for i := 1; i <= n; i++ {
+		fmt.Fprintf(&b, " JOIN t%d ON t%d.id = t0.id", i, i)
+	}
+	return b.String()
+}
+
+// The initial joins capacity is 1 plus the JOINs ahead, capped at 8, and the
+// parsed joins are complete and ordered for every count, including above the cap.
+func TestJoinsSliceCapacityAndContent(t *testing.T) {
+	for _, n := range []int{1, 2, 3, 5, 8, 9, 12} {
+		joins := joinsOf(t, joinQuery(n))
+		if len(joins) != n {
+			t.Fatalf("n=%d: got %d joins", n, len(joins))
+		}
+		for i, j := range joins {
+			if want := fmt.Sprintf("t%d", i+1); j.Right.Name != want {
+				t.Errorf("n=%d join %d: right=%q want %q", n, i, j.Right.Name, want)
+			}
+		}
+		wantCap := min(n, 8)
+		if n <= 8 && cap(joins) != wantCap {
+			t.Errorf("n=%d: cap=%d want %d", n, cap(joins), wantCap)
+		}
+		if n > 8 && cap(joins) < n {
+			t.Errorf("n=%d: cap=%d below len", n, cap(joins))
+		}
+	}
+}
+
+func TestJoinsCapWindowAndCap(t *testing.T) {
+	p := &Parser{}
+	p.tokens = joinHintTokens(t, joinQuery(20))
+	p.currentPos = 0
+	if got := p.joinsCap(); got != 8 {
+		t.Errorf("cap=%d want 8", got)
+	}
+	// Past the end of the stream there is nothing to look at.
+	p.currentPos = len(p.tokens)
+	if got := p.joinsCap(); got != 1 {
+		t.Errorf("cap=%d want 1 at end of stream", got)
+	}
+}
+
+// A join-free statement among join statements must not be affected, and a
+// multi-statement script parses identically statement by statement.
+func TestJoinsCapMultiStatement(t *testing.T) {
+	script := "SELECT * FROM a JOIN b ON a.i=b.i; SELECT 1; SELECT * FROM c JOIN d ON c.i=d.i JOIN e ON e.i=d.i"
+	p := &Parser{}
+	tree, err := p.parseTokens(joinHintTokens(t, script))
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []int{1, 0, 2}
+	if len(tree.Statements) != len(want) {
+		t.Fatalf("got %d statements", len(tree.Statements))
+	}
+	for i, st := range tree.Statements {
+		sel, ok := st.(*ast.SelectStatement)
+		if !ok {
+			t.Fatalf("stmt %d: %T", i, st)
+		}
+		if len(sel.Joins) != want[i] {
+			t.Errorf("stmt %d: %d joins want %d", i, len(sel.Joins), want[i])
+		}
 	}
 }

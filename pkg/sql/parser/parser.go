@@ -157,7 +157,6 @@ func (p *Parser) Reset() {
 		clear(p.tokenBuf)
 		p.tokenBuf = p.tokenBuf[:0]
 	}
-	p.joinHint = 0
 	p.currentPos = 0
 	p.implicitEnd = 0
 	p.openBlockWork = 0
@@ -319,10 +318,7 @@ type Parser struct {
 	// tokenBuf is parser-owned scratch holding the preprocessed token stream
 	// (see preprocess). It is reused across parses and never exposed to
 	// callers. INVARIANT: tokenBuf[len:cap] is always zeroed.
-	tokenBuf []models.TokenWithSpan
-	// joinHint is the JOIN token count of the preprocessed stream; it sizes
-	// the joins slice in parseJoinClauses (0 = unknown, use the default).
-	joinHint   int
+	tokenBuf   []models.TokenWithSpan
 	currentPos int
 	// currentToken points at p.tokens[currentPos], or at p.eof once the cursor
 	// is past the stream. It is a pointer, not a copy, so advance moves 8
@@ -425,7 +421,7 @@ func (p *Parser) preprocess(tokens []models.TokenWithSpan) []models.TokenWithSpa
 	// on the pooled path; on a parser reused without Reset it scrubs the
 	// previous stream so a shorter one cannot leave stale strings in the tail.
 	clear(p.tokenBuf)
-	p.tokenBuf, p.joinHint = preprocessTokensCount(p.tokenBuf, tokens)
+	p.tokenBuf = preprocessTokensInto(p.tokenBuf, tokens)
 	p.oracleExecuteLines("")
 	return p.tokenBuf
 }

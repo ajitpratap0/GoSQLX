@@ -59,43 +59,28 @@ func preprocessTokens(tokens []models.TokenWithSpan) []models.TokenWithSpan {
 // so it must not be handed to anyone who could outlive the next call with the
 // same dst.
 func preprocessTokensInto(dst, tokens []models.TokenWithSpan) []models.TokenWithSpan {
-	dst, _ = preprocessTokensCount(dst, tokens)
-	return dst
-}
-
-// preprocessTokensCount is preprocessTokensInto that also returns the number
-// of JOIN tokens in the normalised stream (compound INNER_JOIN etc. expand to
-// [INNER, JOIN], so each counts once). The count only sizes the joins slice
-// (Parser.joinHint); it is not a correctness input.
-func preprocessTokensCount(dst, tokens []models.TokenWithSpan) ([]models.TokenWithSpan, int) {
-	joins := 0
 	dst = dst[:0]
 	if need := len(tokens) + 4; cap(dst) < need {
 		dst = make([]models.TokenWithSpan, 0, need)
 	}
 	for i := range tokens {
 		t := &tokens[i]
-		before := len(dst)
 		switch typ := t.Token.Type; {
 		case typ == models.TokenTypeIdentifier || typ == models.TokenTypeKeyword ||
 			(typ >= models.TokenTypeCount && typ <= models.TokenTypeMax) ||
 			(typ >= models.TokenTypeGroupBy && typ <= models.TokenTypeCrossJoin) ||
 			typ == models.TokenTypeGroupingSets:
 			var ok bool
-			if dst, ok = appendCompound(dst, t); !ok {
-				dst = append(dst, *t)
-				normalizeTokenInPlace(&dst[len(dst)-1])
+			if dst, ok = appendCompound(dst, t); ok {
+				continue
 			}
+			dst = append(dst, *t)
+			normalizeTokenInPlace(&dst[len(dst)-1])
 		default:
 			dst = append(dst, *t)
 		}
-		for k := before; k < len(dst); k++ {
-			if dst[k].Token.Type == models.TokenTypeJoin {
-				joins++
-			}
-		}
 	}
-	return dst, joins
+	return dst
 }
 
 // normalizeTokenInPlace remaps one token's type (and records a backtick quote)

@@ -70,14 +70,24 @@ func scratchDrop[T any](s *[]T, base int) {
 }
 
 // resetScratch empties the stacks, releasing oversized backing arrays. A
-// parse that finished normally leaves them empty, so the common case is two
-// length checks and two capacity checks.
+// parse that finished normally leaves them empty, so the common case is a few
+// length and capacity checks; the work lives in resetScratchSlow, out of line,
+// so this stays small enough to inline into Reset without growing it (Reset is
+// on the parser pool's Get/Put path).
 func (p *Parser) resetScratch() {
-	if len(p.exprScratch) != 0 || len(p.orderScratch) != 0 ||
-		cap(p.exprScratch) > maxPooledScratch || cap(p.orderScratch) > maxPooledScratch {
-		p.exprScratch = resetScratchSlice(p.exprScratch)
-		p.orderScratch = resetScratchSlice(p.orderScratch)
+	// Two branches, not four: OR-ing the lengths and the capacities is
+	// conservative (it may send a pair of in-bounds capacities down the slow
+	// path, which re-checks each one), never optimistic.
+	if len(p.exprScratch)|len(p.orderScratch) != 0 ||
+		cap(p.exprScratch)|cap(p.orderScratch) > maxPooledScratch {
+		p.resetScratchSlow()
 	}
+}
+
+//go:noinline
+func (p *Parser) resetScratchSlow() {
+	p.exprScratch = resetScratchSlice(p.exprScratch)
+	p.orderScratch = resetScratchSlice(p.orderScratch)
 }
 
 func resetScratchSlice[T any](s []T) []T {

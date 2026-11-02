@@ -64,6 +64,7 @@ func TestPrefilterEquivalence(t *testing.T) {
 		}
 	}
 	files := 0
+	var statements []string
 	err := filepath.WalkDir("../../testdata/realworld", func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
@@ -78,18 +79,13 @@ func TestPrefilterEquivalence(t *testing.T) {
 		}
 		// Deliberately split exactly on semicolons, including chunks inside quoted
 		// strings: malformed fragments also pin equality of parse errors.
-		statements := strings.Split(string(data), ";")
-		if testing.Short() && len(statements) > 2 {
-			statements = statements[:2]
+		chunks := strings.Split(string(data), ";")
+		if testing.Short() && len(chunks) > 2 {
+			chunks = chunks[:2]
 		}
-		for _, sql := range statements {
-			if strings.TrimSpace(sql) == "" {
-				continue
-			}
-			for _, from := range dialects {
-				for _, to := range dialects {
-					checkPrefilterEquivalent(t, sql, from, to)
-				}
+		for _, sql := range chunks {
+			if strings.TrimSpace(sql) != "" {
+				statements = append(statements, sql)
 			}
 		}
 		return nil
@@ -100,6 +96,20 @@ func TestPrefilterEquivalence(t *testing.T) {
 	if files == 0 {
 		t.Fatal("realworld corpus contained no SQL files")
 	}
+	// The corpus × dialect² sweep dominates this package's race-test time, so
+	// each source dialect runs as its own parallel subtest; coverage is unchanged.
+	t.Run("realworld", func(t *testing.T) {
+		for _, from := range dialects {
+			t.Run(string(from), func(t *testing.T) {
+				t.Parallel()
+				for _, sql := range statements {
+					for _, to := range dialects {
+						checkPrefilterEquivalent(t, sql, from, to)
+					}
+				}
+			})
+		}
+	})
 }
 
 func TestScanSourceStringOpeners(t *testing.T) {

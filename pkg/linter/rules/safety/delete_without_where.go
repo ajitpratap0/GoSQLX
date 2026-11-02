@@ -44,24 +44,21 @@ func (r *DeleteWithoutWhereRule) Check(ctx *linter.Context) ([]linter.Violation,
 		return nil, nil
 	}
 	var violations []linter.Violation
-	for _, stmt := range ctx.AST.Statements {
-		ast.Inspect(stmt, func(n ast.Node) bool {
-			del, ok := n.(*ast.DeleteStatement)
-			if !ok {
-				return true
-			}
-			if del.Where == nil {
-				violations = append(violations, linter.Violation{
-					Rule:       r.ID(),
-					RuleName:   r.Name(),
-					Severity:   r.Severity(),
-					Message:    "DELETE statement has no WHERE clause",
-					Location:   del.Pos,
-					Suggestion: "Add a WHERE clause to restrict which rows are deleted, or use TRUNCATE TABLE for full-table removal",
-				})
-			}
-			return true
-		})
+	for _, n := range ctx.Nodes() {
+		del, ok := n.(*ast.DeleteStatement)
+		if !ok {
+			continue
+		}
+		if del.Where == nil {
+			violations = append(violations, linter.Violation{
+				Rule:       r.ID(),
+				RuleName:   r.Name(),
+				Severity:   r.Severity(),
+				Message:    "DELETE statement has no WHERE clause",
+				Location:   del.Pos,
+				Suggestion: "Add a WHERE clause to restrict which rows are deleted, or use TRUNCATE TABLE for full-table removal",
+			})
+		}
 	}
 	return violations, nil
 }

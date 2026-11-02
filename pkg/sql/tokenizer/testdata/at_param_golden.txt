@@ -1,0 +1,2235 @@
+=== generic "SELECT @id"
+201 "SELECT" q=0 1:1-1:7
+15 "@id" q=0 1:8-1:11
+0 "" q=0 1:11-1:11
+=== generic "SELECT @id, @name FROM t WHERE a = @a1 AND b=@b_2"
+201 "SELECT" q=0 1:1-1:7
+15 "@id" q=0 1:8-1:11
+51 "," q=0 1:11-1:12
+15 "@name" q=0 1:13-1:18
+202 "FROM" q=0 1:19-1:23
+14 "t" q=0 1:24-1:25
+203 "WHERE" q=0 1:26-1:31
+14 "a" q=0 1:32-1:33
+52 "=" q=0 1:34-1:35
+15 "@a1" q=0 1:36-1:39
+211 "AND" q=0 1:40-1:43
+14 "b" q=0 1:44-1:45
+52 "=" q=0 1:45-1:46
+15 "@b_2" q=0 1:46-1:50
+0 "" q=0 1:50-1:50
+=== generic "SELECT @@ROWCOUNT, @@version"
+201 "SELECT" q=0 1:1-1:7
+122 "@@" q=0 1:8-1:10
+14 "ROWCOUNT" q=0 1:10-1:18
+51 "," q=0 1:18-1:19
+122 "@@" q=0 1:20-1:22
+14 "version" q=0 1:22-1:29
+0 "" q=0 1:29-1:29
+=== generic "SELECT @@ROWCOUNT"
+201 "SELECT" q=0 1:1-1:7
+122 "@@" q=0 1:8-1:10
+14 "ROWCOUNT" q=0 1:10-1:18
+0 "" q=0 1:18-1:18
+=== generic "SELECT @@ x"
+201 "SELECT" q=0 1:1-1:7
+122 "@@" q=0 1:8-1:10
+14 "x" q=0 1:11-1:12
+0 "" q=0 1:12-1:12
+=== generic "SELECT @"
+201 "SELECT" q=0 1:1-1:7
+86 "@" q=0 1:8-1:9
+0 "" q=0 1:9-1:9
+=== generic "SELECT @ id"
+201 "SELECT" q=0 1:1-1:7
+86 "@" q=0 1:8-1:9
+14 "id" q=0 1:10-1:12
+0 "" q=0 1:12-1:12
+=== generic "SELECT @>"
+201 "SELECT" q=0 1:1-1:7
+118 "@>" q=0 1:8-1:10
+0 "" q=0 1:10-1:10
+=== generic "SELECT a @> b, a @@ b"
+201 "SELECT" q=0 1:1-1:7
+14 "a" q=0 1:8-1:9
+118 "@>" q=0 1:10-1:12
+14 "b" q=0 1:13-1:14
+51 "," q=0 1:14-1:15
+14 "a" q=0 1:16-1:17
+122 "@@" q=0 1:18-1:20
+14 "b" q=0 1:21-1:22
+0 "" q=0 1:22-1:22
+=== generic "SELECT @1"
+201 "SELECT" q=0 1:1-1:7
+86 "@" q=0 1:8-1:9
+11 "1" q=0 1:9-1:10
+0 "" q=0 1:10-1:10
+=== generic "SELECT @_x$y#z"
+201 "SELECT" q=0 1:1-1:7
+15 "@_x$y" q=0 1:8-1:13
+83 "#" q=0 1:13-1:14
+14 "z" q=0 1:14-1:15
+0 "" q=0 1:15-1:15
+=== generic "SELECT @x.y"
+201 "SELECT" q=0 1:1-1:7
+15 "@x" q=0 1:8-1:10
+69 "." q=0 1:10-1:11
+14 "y" q=0 1:11-1:12
+0 "" q=0 1:12-1:12
+=== generic "SELECT @x::int"
+201 "SELECT" q=0 1:1-1:7
+15 "@x" q=0 1:8-1:10
+71 "::" q=0 1:10-1:12
+14 "int" q=0 1:12-1:15
+0 "" q=0 1:15-1:15
+=== generic "SELECT @é, @@ü, @日本"
+201 "SELECT" q=0 1:1-1:7
+15 "@é" q=0 1:8-1:11
+51 "," q=0 1:11-1:12
+122 "@@" q=0 1:13-1:15
+14 "ü" q=0 1:15-1:17
+51 "," q=0 1:17-1:18
+15 "@日本" q=0 1:19-1:26
+0 "" q=0 1:26-1:26
+=== generic "SELECT @ſ, @ı"
+201 "SELECT" q=0 1:1-1:7
+15 "@ſ" q=0 1:8-1:11
+51 "," q=0 1:11-1:12
+15 "@ı" q=0 1:13-1:16
+0 "" q=0 1:16-1:16
+=== generic "SELECT @N'x'"
+201 "SELECT" q=0 1:1-1:7
+15 "@N" q=0 1:8-1:10
+31 "x" q=39 1:10-1:13
+0 "" q=0 1:13-1:13
+=== generic "SELECT @n'x', @X'ab', @B'1', @E'a\\nb', @q'[x]'"
+201 "SELECT" q=0 1:1-1:7
+15 "@n" q=0 1:8-1:10
+31 "x" q=39 1:10-1:13
+51 "," q=0 1:13-1:14
+15 "@X" q=0 1:15-1:17
+31 "ab" q=39 1:17-1:21
+51 "," q=0 1:21-1:22
+15 "@B" q=0 1:23-1:25
+31 "1" q=39 1:25-1:28
+51 "," q=0 1:28-1:29
+15 "@E" q=0 1:30-1:32
+31 "a\\nb" q=39 1:32-1:38
+51 "," q=0 1:38-1:39
+15 "@q" q=0 1:40-1:42
+31 "[x]" q=39 1:42-1:47
+0 "" q=0 1:47-1:47
+=== generic "SELECT @a'x'"
+201 "SELECT" q=0 1:1-1:7
+15 "@a" q=0 1:8-1:10
+31 "x" q=39 1:10-1:13
+0 "" q=0 1:13-1:13
+=== generic "SELECT @U&'d\\0061t'"
+201 "SELECT" q=0 1:1-1:7
+15 "@U" q=0 1:8-1:10
+77 "&" q=0 1:10-1:11
+31 "d\\0061t" q=39 1:11-1:20
+0 "" q=0 1:20-1:20
+=== generic "SELECT @u&\"d\""
+201 "SELECT" q=0 1:1-1:7
+15 "@u" q=0 1:8-1:10
+77 "&" q=0 1:10-1:11
+32 "d" q=34 1:11-1:14
+0 "" q=0 1:14-1:14
+=== generic "SELECT @@U&'x'"
+201 "SELECT" q=0 1:1-1:7
+122 "@@" q=0 1:8-1:10
+14 "U" q=0 1:10-1:11
+77 "&" q=0 1:11-1:12
+31 "x" q=39 1:12-1:15
+0 "" q=0 1:15-1:15
+=== generic "SELECT @group by x"
+201 "SELECT" q=0 1:1-1:7
+15 "@group by" q=0 1:8-1:17
+14 "x" q=0 1:18-1:19
+0 "" q=0 1:19-1:19
+=== generic "SELECT @GROUP   BY x"
+201 "SELECT" q=0 1:1-1:7
+15 "@GROUP BY" q=0 1:8-1:19
+14 "x" q=0 1:20-1:21
+0 "" q=0 1:21-1:21
+=== generic "SELECT @group\nby x"
+201 "SELECT" q=0 1:1-1:7
+15 "@group by" q=0 1:8-2:3
+14 "x" q=0 2:4-2:5
+0 "" q=0 2:5-2:5
+=== generic "SELECT @order by, @left join, @right outer, @inner join, @cross join"
+201 "SELECT" q=0 1:1-1:7
+15 "@order by" q=0 1:8-1:17
+51 "," q=0 1:17-1:18
+15 "@left join" q=0 1:19-1:29
+51 "," q=0 1:29-1:30
+15 "@right" q=0 1:31-1:37
+208 "outer" q=0 1:38-1:43
+51 "," q=0 1:43-1:44
+15 "@inner join" q=0 1:45-1:56
+51 "," q=0 1:56-1:57
+15 "@cross join" q=0 1:58-1:69
+0 "" q=0 1:69-1:69
+=== generic "SELECT @natural join, @full outer join, @grouping sets, @outer apply"
+201 "SELECT" q=0 1:1-1:7
+15 "@natural" q=0 1:8-1:16
+204 "join" q=0 1:17-1:21
+51 "," q=0 1:21-1:22
+15 "@full" q=0 1:23-1:28
+275 "outer join" q=0 1:29-1:39
+51 "," q=0 1:39-1:40
+15 "@grouping sets" q=0 1:41-1:55
+51 "," q=0 1:55-1:56
+15 "@outer" q=0 1:57-1:63
+14 "apply" q=0 1:64-1:69
+0 "" q=0 1:69-1:69
+=== generic "SELECT @group"
+201 "SELECT" q=0 1:1-1:7
+15 "@group" q=0 1:8-1:14
+0 "" q=0 1:14-1:14
+=== generic "SELECT @group, @order"
+201 "SELECT" q=0 1:1-1:7
+15 "@group" q=0 1:8-1:14
+51 "," q=0 1:14-1:15
+15 "@order" q=0 1:16-1:22
+0 "" q=0 1:22-1:22
+=== generic "SELECT @@group by"
+201 "SELECT" q=0 1:1-1:7
+122 "@@" q=0 1:8-1:10
+270 "group by" q=0 1:10-1:18
+0 "" q=0 1:18-1:18
+=== generic "SELECT @@Left Outer Join"
+201 "SELECT" q=0 1:1-1:7
+122 "@@" q=0 1:8-1:10
+206 "Left" q=0 1:10-1:14
+275 "Outer Join" q=0 1:15-1:25
+0 "" q=0 1:25-1:25
+=== generic "SELECT\n  @a,\n  @@b,\r\n  @c"
+201 "SELECT" q=0 1:1-1:7
+15 "@a" q=0 2:3-2:5
+51 "," q=0 2:5-2:6
+122 "@@" q=0 3:3-3:5
+14 "b" q=0 3:5-3:6
+51 "," q=0 3:6-3:7
+15 "@c" q=0 4:3-4:5
+0 "" q=0 4:5-4:5
+=== generic "SELECT '@id', \"@id\", -- @id\n 1 /* @id */"
+201 "SELECT" q=0 1:1-1:7
+31 "@id" q=39 1:8-1:13
+51 "," q=0 1:13-1:14
+32 "@id" q=34 1:15-1:20
+51 "," q=0 1:20-1:21
+11 "1" q=0 2:2-2:3
+0 "" q=0 2:13-2:13
+0 "" q=0 2:13-2:13
+=== generic "EXEC p @a = 1, @b = @c OUTPUT"
+14 "EXEC" q=0 1:1-1:5
+14 "p" q=0 1:6-1:7
+15 "@a" q=0 1:8-1:10
+52 "=" q=0 1:11-1:12
+11 "1" q=0 1:13-1:14
+51 "," q=0 1:14-1:15
+15 "@b" q=0 1:16-1:18
+52 "=" q=0 1:19-1:20
+15 "@c" q=0 1:21-1:23
+14 "OUTPUT" q=0 1:24-1:30
+0 "" q=0 1:30-1:30
+=== generic "SELECT @x\u00a0"
+ERR Error E1001 at line 1, column 10: unexpected character ' '
+
+   1 | SELECT @x 
+                ^
+
+
+Hint: Remove or escape the character ' '
+Help: https://github.com/ajitpratap0/GoSQLX/blob/main/docs/ERROR_CODES.md#E1001
+=== generic "SELECT @abcdefghijklmnopqrstuvwxyz0123456789abcdefghijklmnopqrstuvwxyz0123456789"
+201 "SELECT" q=0 1:1-1:7
+15 "@abcdefghijklmnopqrstuvwxyz0123456789abcdefghijklmnopqrstuvwxyz0123456789" q=0 1:8-1:81
+0 "" q=0 1:81-1:81
+=== sqlserver "SELECT @id"
+201 "SELECT" q=0 1:1-1:7
+15 "@id" q=0 1:8-1:11
+0 "" q=0 1:11-1:11
+=== sqlserver "SELECT @id, @name FROM t WHERE a = @a1 AND b=@b_2"
+201 "SELECT" q=0 1:1-1:7
+15 "@id" q=0 1:8-1:11
+51 "," q=0 1:11-1:12
+15 "@name" q=0 1:13-1:18
+202 "FROM" q=0 1:19-1:23
+14 "t" q=0 1:24-1:25
+203 "WHERE" q=0 1:26-1:31
+14 "a" q=0 1:32-1:33
+52 "=" q=0 1:34-1:35
+15 "@a1" q=0 1:36-1:39
+211 "AND" q=0 1:40-1:43
+14 "b" q=0 1:44-1:45
+52 "=" q=0 1:45-1:46
+15 "@b_2" q=0 1:46-1:50
+0 "" q=0 1:50-1:50
+=== sqlserver "SELECT @@ROWCOUNT, @@version"
+201 "SELECT" q=0 1:1-1:7
+14 "@@ROWCOUNT" q=0 1:8-1:18
+51 "," q=0 1:18-1:19
+14 "@@version" q=0 1:20-1:29
+0 "" q=0 1:29-1:29
+=== sqlserver "SELECT @@ROWCOUNT"
+201 "SELECT" q=0 1:1-1:7
+14 "@@ROWCOUNT" q=0 1:8-1:18
+0 "" q=0 1:18-1:18
+=== sqlserver "SELECT @@ x"
+201 "SELECT" q=0 1:1-1:7
+122 "@@" q=0 1:8-1:10
+14 "x" q=0 1:11-1:12
+0 "" q=0 1:12-1:12
+=== sqlserver "SELECT @"
+201 "SELECT" q=0 1:1-1:7
+86 "@" q=0 1:8-1:9
+0 "" q=0 1:9-1:9
+=== sqlserver "SELECT @ id"
+201 "SELECT" q=0 1:1-1:7
+86 "@" q=0 1:8-1:9
+14 "id" q=0 1:10-1:12
+0 "" q=0 1:12-1:12
+=== sqlserver "SELECT @>"
+201 "SELECT" q=0 1:1-1:7
+118 "@>" q=0 1:8-1:10
+0 "" q=0 1:10-1:10
+=== sqlserver "SELECT a @> b, a @@ b"
+201 "SELECT" q=0 1:1-1:7
+14 "a" q=0 1:8-1:9
+118 "@>" q=0 1:10-1:12
+14 "b" q=0 1:13-1:14
+51 "," q=0 1:14-1:15
+14 "a" q=0 1:16-1:17
+122 "@@" q=0 1:18-1:20
+14 "b" q=0 1:21-1:22
+0 "" q=0 1:22-1:22
+=== sqlserver "SELECT @1"
+201 "SELECT" q=0 1:1-1:7
+86 "@" q=0 1:8-1:9
+11 "1" q=0 1:9-1:10
+0 "" q=0 1:10-1:10
+=== sqlserver "SELECT @_x$y#z"
+201 "SELECT" q=0 1:1-1:7
+15 "@_x$y" q=0 1:8-1:13
+14 "#z" q=0 1:13-1:15
+0 "" q=0 1:15-1:15
+=== sqlserver "SELECT @x.y"
+201 "SELECT" q=0 1:1-1:7
+15 "@x" q=0 1:8-1:10
+69 "." q=0 1:10-1:11
+14 "y" q=0 1:11-1:12
+0 "" q=0 1:12-1:12
+=== sqlserver "SELECT @x::int"
+201 "SELECT" q=0 1:1-1:7
+15 "@x" q=0 1:8-1:10
+71 "::" q=0 1:10-1:12
+14 "int" q=0 1:12-1:15
+0 "" q=0 1:15-1:15
+=== sqlserver "SELECT @é, @@ü, @日本"
+201 "SELECT" q=0 1:1-1:7
+15 "@é" q=0 1:8-1:11
+51 "," q=0 1:11-1:12
+14 "@@ü" q=0 1:13-1:17
+51 "," q=0 1:17-1:18
+15 "@日本" q=0 1:19-1:26
+0 "" q=0 1:26-1:26
+=== sqlserver "SELECT @ſ, @ı"
+201 "SELECT" q=0 1:1-1:7
+15 "@ſ" q=0 1:8-1:11
+51 "," q=0 1:11-1:12
+15 "@ı" q=0 1:13-1:16
+0 "" q=0 1:16-1:16
+=== sqlserver "SELECT @N'x'"
+201 "SELECT" q=0 1:1-1:7
+15 "@x" q=0 1:8-1:13
+0 "" q=0 1:13-1:13
+=== sqlserver "SELECT @n'x', @X'ab', @B'1', @E'a\\nb', @q'[x]'"
+201 "SELECT" q=0 1:1-1:7
+15 "@x" q=0 1:8-1:13
+51 "," q=0 1:13-1:14
+15 "@X" q=0 1:15-1:17
+31 "ab" q=39 1:17-1:21
+51 "," q=0 1:21-1:22
+15 "@B" q=0 1:23-1:25
+31 "1" q=39 1:25-1:28
+51 "," q=0 1:28-1:29
+15 "@E" q=0 1:30-1:32
+31 "a\\nb" q=39 1:32-1:38
+51 "," q=0 1:38-1:39
+15 "@q" q=0 1:40-1:42
+31 "[x]" q=39 1:42-1:47
+0 "" q=0 1:47-1:47
+=== sqlserver "SELECT @a'x'"
+201 "SELECT" q=0 1:1-1:7
+15 "@a" q=0 1:8-1:10
+31 "x" q=39 1:10-1:13
+0 "" q=0 1:13-1:13
+=== sqlserver "SELECT @U&'d\\0061t'"
+201 "SELECT" q=0 1:1-1:7
+15 "@U" q=0 1:8-1:10
+77 "&" q=0 1:10-1:11
+31 "d\\0061t" q=39 1:11-1:20
+0 "" q=0 1:20-1:20
+=== sqlserver "SELECT @u&\"d\""
+201 "SELECT" q=0 1:1-1:7
+15 "@u" q=0 1:8-1:10
+77 "&" q=0 1:10-1:11
+32 "d" q=34 1:11-1:14
+0 "" q=0 1:14-1:14
+=== sqlserver "SELECT @@U&'x'"
+201 "SELECT" q=0 1:1-1:7
+14 "@@U" q=0 1:8-1:11
+77 "&" q=0 1:11-1:12
+31 "x" q=39 1:12-1:15
+0 "" q=0 1:15-1:15
+=== sqlserver "SELECT @group by x"
+201 "SELECT" q=0 1:1-1:7
+15 "@group by" q=0 1:8-1:17
+14 "x" q=0 1:18-1:19
+0 "" q=0 1:19-1:19
+=== sqlserver "SELECT @GROUP   BY x"
+201 "SELECT" q=0 1:1-1:7
+15 "@GROUP BY" q=0 1:8-1:19
+14 "x" q=0 1:20-1:21
+0 "" q=0 1:21-1:21
+=== sqlserver "SELECT @group\nby x"
+201 "SELECT" q=0 1:1-1:7
+15 "@group by" q=0 1:8-2:3
+14 "x" q=0 2:4-2:5
+0 "" q=0 2:5-2:5
+=== sqlserver "SELECT @order by, @left join, @right outer, @inner join, @cross join"
+201 "SELECT" q=0 1:1-1:7
+15 "@order by" q=0 1:8-1:17
+51 "," q=0 1:17-1:18
+15 "@left join" q=0 1:19-1:29
+51 "," q=0 1:29-1:30
+15 "@right" q=0 1:31-1:37
+208 "outer" q=0 1:38-1:43
+51 "," q=0 1:43-1:44
+15 "@inner join" q=0 1:45-1:56
+51 "," q=0 1:56-1:57
+15 "@cross join" q=0 1:58-1:69
+0 "" q=0 1:69-1:69
+=== sqlserver "SELECT @natural join, @full outer join, @grouping sets, @outer apply"
+201 "SELECT" q=0 1:1-1:7
+15 "@natural" q=0 1:8-1:16
+204 "join" q=0 1:17-1:21
+51 "," q=0 1:21-1:22
+15 "@full" q=0 1:23-1:28
+275 "outer join" q=0 1:29-1:39
+51 "," q=0 1:39-1:40
+15 "@grouping sets" q=0 1:41-1:55
+51 "," q=0 1:55-1:56
+15 "@outer" q=0 1:57-1:63
+14 "apply" q=0 1:64-1:69
+0 "" q=0 1:69-1:69
+=== sqlserver "SELECT @group"
+201 "SELECT" q=0 1:1-1:7
+15 "@group" q=0 1:8-1:14
+0 "" q=0 1:14-1:14
+=== sqlserver "SELECT @group, @order"
+201 "SELECT" q=0 1:1-1:7
+15 "@group" q=0 1:8-1:14
+51 "," q=0 1:14-1:15
+15 "@order" q=0 1:16-1:22
+0 "" q=0 1:22-1:22
+=== sqlserver "SELECT @@group by"
+201 "SELECT" q=0 1:1-1:7
+14 "@@group by" q=0 1:8-1:18
+0 "" q=0 1:18-1:18
+=== sqlserver "SELECT @@Left Outer Join"
+201 "SELECT" q=0 1:1-1:7
+14 "@@Left" q=0 1:8-1:14
+275 "Outer Join" q=0 1:15-1:25
+0 "" q=0 1:25-1:25
+=== sqlserver "SELECT\n  @a,\n  @@b,\r\n  @c"
+201 "SELECT" q=0 1:1-1:7
+15 "@a" q=0 2:3-2:5
+51 "," q=0 2:5-2:6
+14 "@@b" q=0 3:3-3:6
+51 "," q=0 3:6-3:7
+15 "@c" q=0 4:3-4:5
+0 "" q=0 4:5-4:5
+=== sqlserver "SELECT '@id', \"@id\", -- @id\n 1 /* @id */"
+201 "SELECT" q=0 1:1-1:7
+31 "@id" q=39 1:8-1:13
+51 "," q=0 1:13-1:14
+32 "@id" q=34 1:15-1:20
+51 "," q=0 1:20-1:21
+11 "1" q=0 2:2-2:3
+0 "" q=0 2:13-2:13
+0 "" q=0 2:13-2:13
+=== sqlserver "EXEC p @a = 1, @b = @c OUTPUT"
+14 "EXEC" q=0 1:1-1:5
+14 "p" q=0 1:6-1:7
+15 "@a" q=0 1:8-1:10
+52 "=" q=0 1:11-1:12
+11 "1" q=0 1:13-1:14
+51 "," q=0 1:14-1:15
+15 "@b" q=0 1:16-1:18
+52 "=" q=0 1:19-1:20
+15 "@c" q=0 1:21-1:23
+14 "OUTPUT" q=0 1:24-1:30
+0 "" q=0 1:30-1:30
+=== sqlserver "SELECT @x\u00a0"
+ERR Error E1001 at line 1, column 10: unexpected character ' '
+
+   1 | SELECT @x 
+                ^
+
+
+Hint: Remove or escape the character ' '
+Help: https://github.com/ajitpratap0/GoSQLX/blob/main/docs/ERROR_CODES.md#E1001
+=== sqlserver "SELECT @abcdefghijklmnopqrstuvwxyz0123456789abcdefghijklmnopqrstuvwxyz0123456789"
+201 "SELECT" q=0 1:1-1:7
+15 "@abcdefghijklmnopqrstuvwxyz0123456789abcdefghijklmnopqrstuvwxyz0123456789" q=0 1:8-1:81
+0 "" q=0 1:81-1:81
+=== postgresql "SELECT @id"
+201 "SELECT" q=0 1:1-1:7
+15 "@id" q=0 1:8-1:11
+0 "" q=0 1:11-1:11
+=== postgresql "SELECT @id, @name FROM t WHERE a = @a1 AND b=@b_2"
+201 "SELECT" q=0 1:1-1:7
+15 "@id" q=0 1:8-1:11
+51 "," q=0 1:11-1:12
+15 "@name" q=0 1:13-1:18
+202 "FROM" q=0 1:19-1:23
+14 "t" q=0 1:24-1:25
+203 "WHERE" q=0 1:26-1:31
+14 "a" q=0 1:32-1:33
+52 "=" q=0 1:34-1:35
+15 "@a1" q=0 1:36-1:39
+211 "AND" q=0 1:40-1:43
+14 "b" q=0 1:44-1:45
+52 "=" q=0 1:45-1:46
+15 "@b_2" q=0 1:46-1:50
+0 "" q=0 1:50-1:50
+=== postgresql "SELECT @@ROWCOUNT, @@version"
+201 "SELECT" q=0 1:1-1:7
+122 "@@" q=0 1:8-1:10
+14 "ROWCOUNT" q=0 1:10-1:18
+51 "," q=0 1:18-1:19
+122 "@@" q=0 1:20-1:22
+14 "version" q=0 1:22-1:29
+0 "" q=0 1:29-1:29
+=== postgresql "SELECT @@ROWCOUNT"
+201 "SELECT" q=0 1:1-1:7
+122 "@@" q=0 1:8-1:10
+14 "ROWCOUNT" q=0 1:10-1:18
+0 "" q=0 1:18-1:18
+=== postgresql "SELECT @@ x"
+201 "SELECT" q=0 1:1-1:7
+122 "@@" q=0 1:8-1:10
+14 "x" q=0 1:11-1:12
+0 "" q=0 1:12-1:12
+=== postgresql "SELECT @"
+201 "SELECT" q=0 1:1-1:7
+86 "@" q=0 1:8-1:9
+0 "" q=0 1:9-1:9
+=== postgresql "SELECT @ id"
+201 "SELECT" q=0 1:1-1:7
+86 "@" q=0 1:8-1:9
+14 "id" q=0 1:10-1:12
+0 "" q=0 1:12-1:12
+=== postgresql "SELECT @>"
+201 "SELECT" q=0 1:1-1:7
+118 "@>" q=0 1:8-1:10
+0 "" q=0 1:10-1:10
+=== postgresql "SELECT a @> b, a @@ b"
+201 "SELECT" q=0 1:1-1:7
+14 "a" q=0 1:8-1:9
+118 "@>" q=0 1:10-1:12
+14 "b" q=0 1:13-1:14
+51 "," q=0 1:14-1:15
+14 "a" q=0 1:16-1:17
+122 "@@" q=0 1:18-1:20
+14 "b" q=0 1:21-1:22
+0 "" q=0 1:22-1:22
+=== postgresql "SELECT @1"
+201 "SELECT" q=0 1:1-1:7
+86 "@" q=0 1:8-1:9
+11 "1" q=0 1:9-1:10
+0 "" q=0 1:10-1:10
+=== postgresql "SELECT @_x$y#z"
+201 "SELECT" q=0 1:1-1:7
+15 "@_x$y" q=0 1:8-1:13
+83 "#" q=0 1:13-1:14
+14 "z" q=0 1:14-1:15
+0 "" q=0 1:15-1:15
+=== postgresql "SELECT @x.y"
+201 "SELECT" q=0 1:1-1:7
+15 "@x" q=0 1:8-1:10
+69 "." q=0 1:10-1:11
+14 "y" q=0 1:11-1:12
+0 "" q=0 1:12-1:12
+=== postgresql "SELECT @x::int"
+201 "SELECT" q=0 1:1-1:7
+15 "@x" q=0 1:8-1:10
+71 "::" q=0 1:10-1:12
+14 "int" q=0 1:12-1:15
+0 "" q=0 1:15-1:15
+=== postgresql "SELECT @é, @@ü, @日本"
+201 "SELECT" q=0 1:1-1:7
+15 "@é" q=0 1:8-1:11
+51 "," q=0 1:11-1:12
+122 "@@" q=0 1:13-1:15
+14 "ü" q=0 1:15-1:17
+51 "," q=0 1:17-1:18
+15 "@日本" q=0 1:19-1:26
+0 "" q=0 1:26-1:26
+=== postgresql "SELECT @ſ, @ı"
+201 "SELECT" q=0 1:1-1:7
+15 "@ſ" q=0 1:8-1:11
+51 "," q=0 1:11-1:12
+15 "@ı" q=0 1:13-1:16
+0 "" q=0 1:16-1:16
+=== postgresql "SELECT @N'x'"
+201 "SELECT" q=0 1:1-1:7
+15 "@x" q=0 1:8-1:13
+0 "" q=0 1:13-1:13
+=== postgresql "SELECT @n'x', @X'ab', @B'1', @E'a\\nb', @q'[x]'"
+201 "SELECT" q=0 1:1-1:7
+15 "@x" q=0 1:8-1:13
+51 "," q=0 1:13-1:14
+15 "@ab" q=0 1:15-1:21
+51 "," q=0 1:21-1:22
+15 "@1" q=0 1:23-1:28
+51 "," q=0 1:28-1:29
+15 "@a\nb" q=0 1:30-1:38
+51 "," q=0 1:38-1:39
+15 "@q" q=0 1:40-1:42
+31 "[x]" q=39 1:42-1:47
+0 "" q=0 1:47-1:47
+=== postgresql "SELECT @a'x'"
+201 "SELECT" q=0 1:1-1:7
+15 "@a" q=0 1:8-1:10
+31 "x" q=39 1:10-1:13
+0 "" q=0 1:13-1:13
+=== postgresql "SELECT @U&'d\\0061t'"
+201 "SELECT" q=0 1:1-1:7
+15 "@U&'d\\0061t'" q=0 1:8-1:20
+0 "" q=0 1:20-1:20
+=== postgresql "SELECT @u&\"d\""
+201 "SELECT" q=0 1:1-1:7
+15 "@d" q=0 1:8-1:14
+0 "" q=0 1:14-1:14
+=== postgresql "SELECT @@U&'x'"
+201 "SELECT" q=0 1:1-1:7
+122 "@@" q=0 1:8-1:10
+39 "U&'x'" q=85 1:10-1:15
+0 "" q=0 1:15-1:15
+=== postgresql "SELECT @group by x"
+201 "SELECT" q=0 1:1-1:7
+15 "@group by" q=0 1:8-1:17
+14 "x" q=0 1:18-1:19
+0 "" q=0 1:19-1:19
+=== postgresql "SELECT @GROUP   BY x"
+201 "SELECT" q=0 1:1-1:7
+15 "@GROUP BY" q=0 1:8-1:19
+14 "x" q=0 1:20-1:21
+0 "" q=0 1:21-1:21
+=== postgresql "SELECT @group\nby x"
+201 "SELECT" q=0 1:1-1:7
+15 "@group by" q=0 1:8-2:3
+14 "x" q=0 2:4-2:5
+0 "" q=0 2:5-2:5
+=== postgresql "SELECT @order by, @left join, @right outer, @inner join, @cross join"
+201 "SELECT" q=0 1:1-1:7
+15 "@order by" q=0 1:8-1:17
+51 "," q=0 1:17-1:18
+15 "@left join" q=0 1:19-1:29
+51 "," q=0 1:29-1:30
+15 "@right" q=0 1:31-1:37
+208 "outer" q=0 1:38-1:43
+51 "," q=0 1:43-1:44
+15 "@inner join" q=0 1:45-1:56
+51 "," q=0 1:56-1:57
+15 "@cross join" q=0 1:58-1:69
+0 "" q=0 1:69-1:69
+=== postgresql "SELECT @natural join, @full outer join, @grouping sets, @outer apply"
+201 "SELECT" q=0 1:1-1:7
+15 "@natural" q=0 1:8-1:16
+204 "join" q=0 1:17-1:21
+51 "," q=0 1:21-1:22
+15 "@full" q=0 1:23-1:28
+275 "outer join" q=0 1:29-1:39
+51 "," q=0 1:39-1:40
+15 "@grouping sets" q=0 1:41-1:55
+51 "," q=0 1:55-1:56
+15 "@outer" q=0 1:57-1:63
+14 "apply" q=0 1:64-1:69
+0 "" q=0 1:69-1:69
+=== postgresql "SELECT @group"
+201 "SELECT" q=0 1:1-1:7
+15 "@group" q=0 1:8-1:14
+0 "" q=0 1:14-1:14
+=== postgresql "SELECT @group, @order"
+201 "SELECT" q=0 1:1-1:7
+15 "@group" q=0 1:8-1:14
+51 "," q=0 1:14-1:15
+15 "@order" q=0 1:16-1:22
+0 "" q=0 1:22-1:22
+=== postgresql "SELECT @@group by"
+201 "SELECT" q=0 1:1-1:7
+122 "@@" q=0 1:8-1:10
+270 "group by" q=0 1:10-1:18
+0 "" q=0 1:18-1:18
+=== postgresql "SELECT @@Left Outer Join"
+201 "SELECT" q=0 1:1-1:7
+122 "@@" q=0 1:8-1:10
+206 "Left" q=0 1:10-1:14
+275 "Outer Join" q=0 1:15-1:25
+0 "" q=0 1:25-1:25
+=== postgresql "SELECT\n  @a,\n  @@b,\r\n  @c"
+201 "SELECT" q=0 1:1-1:7
+15 "@a" q=0 2:3-2:5
+51 "," q=0 2:5-2:6
+122 "@@" q=0 3:3-3:5
+14 "b" q=0 3:5-3:6
+51 "," q=0 3:6-3:7
+15 "@c" q=0 4:3-4:5
+0 "" q=0 4:5-4:5
+=== postgresql "SELECT '@id', \"@id\", -- @id\n 1 /* @id */"
+201 "SELECT" q=0 1:1-1:7
+31 "@id" q=39 1:8-1:13
+51 "," q=0 1:13-1:14
+32 "@id" q=34 1:15-1:20
+51 "," q=0 1:20-1:21
+11 "1" q=0 2:2-2:3
+0 "" q=0 2:13-2:13
+0 "" q=0 2:13-2:13
+=== postgresql "EXEC p @a = 1, @b = @c OUTPUT"
+14 "EXEC" q=0 1:1-1:5
+14 "p" q=0 1:6-1:7
+15 "@a" q=0 1:8-1:10
+52 "=" q=0 1:11-1:12
+11 "1" q=0 1:13-1:14
+51 "," q=0 1:14-1:15
+15 "@b" q=0 1:16-1:18
+52 "=" q=0 1:19-1:20
+15 "@c" q=0 1:21-1:23
+14 "OUTPUT" q=0 1:24-1:30
+0 "" q=0 1:30-1:30
+=== postgresql "SELECT @x\u00a0"
+ERR Error E1001 at line 1, column 10: unexpected character ' '
+
+   1 | SELECT @x 
+                ^
+
+
+Hint: Remove or escape the character ' '
+Help: https://github.com/ajitpratap0/GoSQLX/blob/main/docs/ERROR_CODES.md#E1001
+=== postgresql "SELECT @abcdefghijklmnopqrstuvwxyz0123456789abcdefghijklmnopqrstuvwxyz0123456789"
+201 "SELECT" q=0 1:1-1:7
+15 "@abcdefghijklmnopqrstuvwxyz0123456789abcdefghijklmnopqrstuvwxyz0123456789" q=0 1:8-1:81
+0 "" q=0 1:81-1:81
+=== mysql "SELECT @id"
+201 "SELECT" q=0 1:1-1:7
+15 "@id" q=0 1:8-1:11
+0 "" q=0 1:11-1:11
+=== mysql "SELECT @id, @name FROM t WHERE a = @a1 AND b=@b_2"
+201 "SELECT" q=0 1:1-1:7
+15 "@id" q=0 1:8-1:11
+51 "," q=0 1:11-1:12
+15 "@name" q=0 1:13-1:18
+202 "FROM" q=0 1:19-1:23
+14 "t" q=0 1:24-1:25
+203 "WHERE" q=0 1:26-1:31
+14 "a" q=0 1:32-1:33
+52 "=" q=0 1:34-1:35
+15 "@a1" q=0 1:36-1:39
+211 "AND" q=0 1:40-1:43
+14 "b" q=0 1:44-1:45
+52 "=" q=0 1:45-1:46
+15 "@b_2" q=0 1:46-1:50
+0 "" q=0 1:50-1:50
+=== mysql "SELECT @@ROWCOUNT, @@version"
+201 "SELECT" q=0 1:1-1:7
+122 "@@" q=0 1:8-1:10
+14 "ROWCOUNT" q=0 1:10-1:18
+51 "," q=0 1:18-1:19
+122 "@@" q=0 1:20-1:22
+14 "version" q=0 1:22-1:29
+0 "" q=0 1:29-1:29
+=== mysql "SELECT @@ROWCOUNT"
+201 "SELECT" q=0 1:1-1:7
+122 "@@" q=0 1:8-1:10
+14 "ROWCOUNT" q=0 1:10-1:18
+0 "" q=0 1:18-1:18
+=== mysql "SELECT @@ x"
+201 "SELECT" q=0 1:1-1:7
+122 "@@" q=0 1:8-1:10
+14 "x" q=0 1:11-1:12
+0 "" q=0 1:12-1:12
+=== mysql "SELECT @"
+201 "SELECT" q=0 1:1-1:7
+86 "@" q=0 1:8-1:9
+0 "" q=0 1:9-1:9
+=== mysql "SELECT @ id"
+201 "SELECT" q=0 1:1-1:7
+86 "@" q=0 1:8-1:9
+14 "id" q=0 1:10-1:12
+0 "" q=0 1:12-1:12
+=== mysql "SELECT @>"
+201 "SELECT" q=0 1:1-1:7
+118 "@>" q=0 1:8-1:10
+0 "" q=0 1:10-1:10
+=== mysql "SELECT a @> b, a @@ b"
+201 "SELECT" q=0 1:1-1:7
+14 "a" q=0 1:8-1:9
+118 "@>" q=0 1:10-1:12
+14 "b" q=0 1:13-1:14
+51 "," q=0 1:14-1:15
+14 "a" q=0 1:16-1:17
+122 "@@" q=0 1:18-1:20
+14 "b" q=0 1:21-1:22
+0 "" q=0 1:22-1:22
+=== mysql "SELECT @1"
+201 "SELECT" q=0 1:1-1:7
+86 "@" q=0 1:8-1:9
+11 "1" q=0 1:9-1:10
+0 "" q=0 1:10-1:10
+=== mysql "SELECT @_x$y#z"
+201 "SELECT" q=0 1:1-1:7
+15 "@_x$y" q=0 1:8-1:13
+0 "" q=0 1:15-1:15
+0 "" q=0 1:15-1:15
+=== mysql "SELECT @x.y"
+201 "SELECT" q=0 1:1-1:7
+15 "@x" q=0 1:8-1:10
+69 "." q=0 1:10-1:11
+14 "y" q=0 1:11-1:12
+0 "" q=0 1:12-1:12
+=== mysql "SELECT @x::int"
+201 "SELECT" q=0 1:1-1:7
+15 "@x" q=0 1:8-1:10
+71 "::" q=0 1:10-1:12
+14 "int" q=0 1:12-1:15
+0 "" q=0 1:15-1:15
+=== mysql "SELECT @é, @@ü, @日本"
+201 "SELECT" q=0 1:1-1:7
+15 "@é" q=0 1:8-1:11
+51 "," q=0 1:11-1:12
+122 "@@" q=0 1:13-1:15
+14 "ü" q=0 1:15-1:17
+51 "," q=0 1:17-1:18
+15 "@日本" q=0 1:19-1:26
+0 "" q=0 1:26-1:26
+=== mysql "SELECT @ſ, @ı"
+201 "SELECT" q=0 1:1-1:7
+15 "@ſ" q=0 1:8-1:11
+51 "," q=0 1:11-1:12
+15 "@ı" q=0 1:13-1:16
+0 "" q=0 1:16-1:16
+=== mysql "SELECT @N'x'"
+201 "SELECT" q=0 1:1-1:7
+15 "@x" q=0 1:8-1:13
+0 "" q=0 1:13-1:13
+=== mysql "SELECT @n'x', @X'ab', @B'1', @E'a\\nb', @q'[x]'"
+201 "SELECT" q=0 1:1-1:7
+15 "@x" q=0 1:8-1:13
+51 "," q=0 1:13-1:14
+15 "@ab" q=0 1:15-1:21
+51 "," q=0 1:21-1:22
+15 "@1" q=0 1:23-1:28
+51 "," q=0 1:28-1:29
+15 "@E" q=0 1:30-1:32
+31 "a\nb" q=39 1:32-1:38
+51 "," q=0 1:38-1:39
+15 "@q" q=0 1:40-1:42
+31 "[x]" q=39 1:42-1:47
+0 "" q=0 1:47-1:47
+=== mysql "SELECT @a'x'"
+201 "SELECT" q=0 1:1-1:7
+15 "@a" q=0 1:8-1:10
+31 "x" q=39 1:10-1:13
+0 "" q=0 1:13-1:13
+=== mysql "SELECT @U&'d\\0061t'"
+201 "SELECT" q=0 1:1-1:7
+15 "@U" q=0 1:8-1:10
+77 "&" q=0 1:10-1:11
+31 "d\x00061t" q=39 1:11-1:20
+0 "" q=0 1:20-1:20
+=== mysql "SELECT @u&\"d\""
+201 "SELECT" q=0 1:1-1:7
+15 "@u" q=0 1:8-1:10
+77 "&" q=0 1:10-1:11
+32 "d" q=34 1:11-1:14
+0 "" q=0 1:14-1:14
+=== mysql "SELECT @@U&'x'"
+201 "SELECT" q=0 1:1-1:7
+122 "@@" q=0 1:8-1:10
+14 "U" q=0 1:10-1:11
+77 "&" q=0 1:11-1:12
+31 "x" q=39 1:12-1:15
+0 "" q=0 1:15-1:15
+=== mysql "SELECT @group by x"
+201 "SELECT" q=0 1:1-1:7
+15 "@group by" q=0 1:8-1:17
+14 "x" q=0 1:18-1:19
+0 "" q=0 1:19-1:19
+=== mysql "SELECT @GROUP   BY x"
+201 "SELECT" q=0 1:1-1:7
+15 "@GROUP BY" q=0 1:8-1:19
+14 "x" q=0 1:20-1:21
+0 "" q=0 1:21-1:21
+=== mysql "SELECT @group\nby x"
+201 "SELECT" q=0 1:1-1:7
+15 "@group by" q=0 1:8-2:3
+14 "x" q=0 2:4-2:5
+0 "" q=0 2:5-2:5
+=== mysql "SELECT @order by, @left join, @right outer, @inner join, @cross join"
+201 "SELECT" q=0 1:1-1:7
+15 "@order by" q=0 1:8-1:17
+51 "," q=0 1:17-1:18
+15 "@left join" q=0 1:19-1:29
+51 "," q=0 1:29-1:30
+15 "@right" q=0 1:31-1:37
+208 "outer" q=0 1:38-1:43
+51 "," q=0 1:43-1:44
+15 "@inner join" q=0 1:45-1:56
+51 "," q=0 1:56-1:57
+15 "@cross join" q=0 1:58-1:69
+0 "" q=0 1:69-1:69
+=== mysql "SELECT @natural join, @full outer join, @grouping sets, @outer apply"
+201 "SELECT" q=0 1:1-1:7
+15 "@natural" q=0 1:8-1:16
+204 "join" q=0 1:17-1:21
+51 "," q=0 1:21-1:22
+15 "@full" q=0 1:23-1:28
+275 "outer join" q=0 1:29-1:39
+51 "," q=0 1:39-1:40
+15 "@grouping sets" q=0 1:41-1:55
+51 "," q=0 1:55-1:56
+15 "@outer" q=0 1:57-1:63
+14 "apply" q=0 1:64-1:69
+0 "" q=0 1:69-1:69
+=== mysql "SELECT @group"
+201 "SELECT" q=0 1:1-1:7
+15 "@group" q=0 1:8-1:14
+0 "" q=0 1:14-1:14
+=== mysql "SELECT @group, @order"
+201 "SELECT" q=0 1:1-1:7
+15 "@group" q=0 1:8-1:14
+51 "," q=0 1:14-1:15
+15 "@order" q=0 1:16-1:22
+0 "" q=0 1:22-1:22
+=== mysql "SELECT @@group by"
+201 "SELECT" q=0 1:1-1:7
+122 "@@" q=0 1:8-1:10
+270 "group by" q=0 1:10-1:18
+0 "" q=0 1:18-1:18
+=== mysql "SELECT @@Left Outer Join"
+201 "SELECT" q=0 1:1-1:7
+122 "@@" q=0 1:8-1:10
+206 "Left" q=0 1:10-1:14
+275 "Outer Join" q=0 1:15-1:25
+0 "" q=0 1:25-1:25
+=== mysql "SELECT\n  @a,\n  @@b,\r\n  @c"
+201 "SELECT" q=0 1:1-1:7
+15 "@a" q=0 2:3-2:5
+51 "," q=0 2:5-2:6
+122 "@@" q=0 3:3-3:5
+14 "b" q=0 3:5-3:6
+51 "," q=0 3:6-3:7
+15 "@c" q=0 4:3-4:5
+0 "" q=0 4:5-4:5
+=== mysql "SELECT '@id', \"@id\", -- @id\n 1 /* @id */"
+201 "SELECT" q=0 1:1-1:7
+31 "@id" q=39 1:8-1:13
+51 "," q=0 1:13-1:14
+32 "@id" q=34 1:15-1:20
+51 "," q=0 1:20-1:21
+11 "1" q=0 2:2-2:3
+0 "" q=0 2:13-2:13
+0 "" q=0 2:13-2:13
+=== mysql "EXEC p @a = 1, @b = @c OUTPUT"
+14 "EXEC" q=0 1:1-1:5
+14 "p" q=0 1:6-1:7
+15 "@a" q=0 1:8-1:10
+52 "=" q=0 1:11-1:12
+11 "1" q=0 1:13-1:14
+51 "," q=0 1:14-1:15
+15 "@b" q=0 1:16-1:18
+52 "=" q=0 1:19-1:20
+15 "@c" q=0 1:21-1:23
+14 "OUTPUT" q=0 1:24-1:30
+0 "" q=0 1:30-1:30
+=== mysql "SELECT @x\u00a0"
+ERR Error E1001 at line 1, column 10: unexpected character ' '
+
+   1 | SELECT @x 
+                ^
+
+
+Hint: Remove or escape the character ' '
+Help: https://github.com/ajitpratap0/GoSQLX/blob/main/docs/ERROR_CODES.md#E1001
+=== mysql "SELECT @abcdefghijklmnopqrstuvwxyz0123456789abcdefghijklmnopqrstuvwxyz0123456789"
+201 "SELECT" q=0 1:1-1:7
+15 "@abcdefghijklmnopqrstuvwxyz0123456789abcdefghijklmnopqrstuvwxyz0123456789" q=0 1:8-1:81
+0 "" q=0 1:81-1:81
+=== mariadb "SELECT @id"
+201 "SELECT" q=0 1:1-1:7
+15 "@id" q=0 1:8-1:11
+0 "" q=0 1:11-1:11
+=== mariadb "SELECT @id, @name FROM t WHERE a = @a1 AND b=@b_2"
+201 "SELECT" q=0 1:1-1:7
+15 "@id" q=0 1:8-1:11
+51 "," q=0 1:11-1:12
+15 "@name" q=0 1:13-1:18
+202 "FROM" q=0 1:19-1:23
+14 "t" q=0 1:24-1:25
+203 "WHERE" q=0 1:26-1:31
+14 "a" q=0 1:32-1:33
+52 "=" q=0 1:34-1:35
+15 "@a1" q=0 1:36-1:39
+211 "AND" q=0 1:40-1:43
+14 "b" q=0 1:44-1:45
+52 "=" q=0 1:45-1:46
+15 "@b_2" q=0 1:46-1:50
+0 "" q=0 1:50-1:50
+=== mariadb "SELECT @@ROWCOUNT, @@version"
+201 "SELECT" q=0 1:1-1:7
+122 "@@" q=0 1:8-1:10
+14 "ROWCOUNT" q=0 1:10-1:18
+51 "," q=0 1:18-1:19
+122 "@@" q=0 1:20-1:22
+14 "version" q=0 1:22-1:29
+0 "" q=0 1:29-1:29
+=== mariadb "SELECT @@ROWCOUNT"
+201 "SELECT" q=0 1:1-1:7
+122 "@@" q=0 1:8-1:10
+14 "ROWCOUNT" q=0 1:10-1:18
+0 "" q=0 1:18-1:18
+=== mariadb "SELECT @@ x"
+201 "SELECT" q=0 1:1-1:7
+122 "@@" q=0 1:8-1:10
+14 "x" q=0 1:11-1:12
+0 "" q=0 1:12-1:12
+=== mariadb "SELECT @"
+201 "SELECT" q=0 1:1-1:7
+86 "@" q=0 1:8-1:9
+0 "" q=0 1:9-1:9
+=== mariadb "SELECT @ id"
+201 "SELECT" q=0 1:1-1:7
+86 "@" q=0 1:8-1:9
+14 "id" q=0 1:10-1:12
+0 "" q=0 1:12-1:12
+=== mariadb "SELECT @>"
+201 "SELECT" q=0 1:1-1:7
+118 "@>" q=0 1:8-1:10
+0 "" q=0 1:10-1:10
+=== mariadb "SELECT a @> b, a @@ b"
+201 "SELECT" q=0 1:1-1:7
+14 "a" q=0 1:8-1:9
+118 "@>" q=0 1:10-1:12
+14 "b" q=0 1:13-1:14
+51 "," q=0 1:14-1:15
+14 "a" q=0 1:16-1:17
+122 "@@" q=0 1:18-1:20
+14 "b" q=0 1:21-1:22
+0 "" q=0 1:22-1:22
+=== mariadb "SELECT @1"
+201 "SELECT" q=0 1:1-1:7
+86 "@" q=0 1:8-1:9
+11 "1" q=0 1:9-1:10
+0 "" q=0 1:10-1:10
+=== mariadb "SELECT @_x$y#z"
+201 "SELECT" q=0 1:1-1:7
+15 "@_x$y" q=0 1:8-1:13
+0 "" q=0 1:15-1:15
+0 "" q=0 1:15-1:15
+=== mariadb "SELECT @x.y"
+201 "SELECT" q=0 1:1-1:7
+15 "@x" q=0 1:8-1:10
+69 "." q=0 1:10-1:11
+14 "y" q=0 1:11-1:12
+0 "" q=0 1:12-1:12
+=== mariadb "SELECT @x::int"
+201 "SELECT" q=0 1:1-1:7
+15 "@x" q=0 1:8-1:10
+71 "::" q=0 1:10-1:12
+14 "int" q=0 1:12-1:15
+0 "" q=0 1:15-1:15
+=== mariadb "SELECT @é, @@ü, @日本"
+201 "SELECT" q=0 1:1-1:7
+15 "@é" q=0 1:8-1:11
+51 "," q=0 1:11-1:12
+122 "@@" q=0 1:13-1:15
+14 "ü" q=0 1:15-1:17
+51 "," q=0 1:17-1:18
+15 "@日本" q=0 1:19-1:26
+0 "" q=0 1:26-1:26
+=== mariadb "SELECT @ſ, @ı"
+201 "SELECT" q=0 1:1-1:7
+15 "@ſ" q=0 1:8-1:11
+51 "," q=0 1:11-1:12
+15 "@ı" q=0 1:13-1:16
+0 "" q=0 1:16-1:16
+=== mariadb "SELECT @N'x'"
+201 "SELECT" q=0 1:1-1:7
+15 "@x" q=0 1:8-1:13
+0 "" q=0 1:13-1:13
+=== mariadb "SELECT @n'x', @X'ab', @B'1', @E'a\\nb', @q'[x]'"
+201 "SELECT" q=0 1:1-1:7
+15 "@x" q=0 1:8-1:13
+51 "," q=0 1:13-1:14
+15 "@ab" q=0 1:15-1:21
+51 "," q=0 1:21-1:22
+15 "@1" q=0 1:23-1:28
+51 "," q=0 1:28-1:29
+15 "@E" q=0 1:30-1:32
+31 "a\nb" q=39 1:32-1:38
+51 "," q=0 1:38-1:39
+15 "@q" q=0 1:40-1:42
+31 "[x]" q=39 1:42-1:47
+0 "" q=0 1:47-1:47
+=== mariadb "SELECT @a'x'"
+201 "SELECT" q=0 1:1-1:7
+15 "@a" q=0 1:8-1:10
+31 "x" q=39 1:10-1:13
+0 "" q=0 1:13-1:13
+=== mariadb "SELECT @U&'d\\0061t'"
+201 "SELECT" q=0 1:1-1:7
+15 "@U" q=0 1:8-1:10
+77 "&" q=0 1:10-1:11
+31 "d\x00061t" q=39 1:11-1:20
+0 "" q=0 1:20-1:20
+=== mariadb "SELECT @u&\"d\""
+201 "SELECT" q=0 1:1-1:7
+15 "@u" q=0 1:8-1:10
+77 "&" q=0 1:10-1:11
+32 "d" q=34 1:11-1:14
+0 "" q=0 1:14-1:14
+=== mariadb "SELECT @@U&'x'"
+201 "SELECT" q=0 1:1-1:7
+122 "@@" q=0 1:8-1:10
+14 "U" q=0 1:10-1:11
+77 "&" q=0 1:11-1:12
+31 "x" q=39 1:12-1:15
+0 "" q=0 1:15-1:15
+=== mariadb "SELECT @group by x"
+201 "SELECT" q=0 1:1-1:7
+15 "@group by" q=0 1:8-1:17
+14 "x" q=0 1:18-1:19
+0 "" q=0 1:19-1:19
+=== mariadb "SELECT @GROUP   BY x"
+201 "SELECT" q=0 1:1-1:7
+15 "@GROUP BY" q=0 1:8-1:19
+14 "x" q=0 1:20-1:21
+0 "" q=0 1:21-1:21
+=== mariadb "SELECT @group\nby x"
+201 "SELECT" q=0 1:1-1:7
+15 "@group by" q=0 1:8-2:3
+14 "x" q=0 2:4-2:5
+0 "" q=0 2:5-2:5
+=== mariadb "SELECT @order by, @left join, @right outer, @inner join, @cross join"
+201 "SELECT" q=0 1:1-1:7
+15 "@order by" q=0 1:8-1:17
+51 "," q=0 1:17-1:18
+15 "@left join" q=0 1:19-1:29
+51 "," q=0 1:29-1:30
+15 "@right" q=0 1:31-1:37
+208 "outer" q=0 1:38-1:43
+51 "," q=0 1:43-1:44
+15 "@inner join" q=0 1:45-1:56
+51 "," q=0 1:56-1:57
+15 "@cross join" q=0 1:58-1:69
+0 "" q=0 1:69-1:69
+=== mariadb "SELECT @natural join, @full outer join, @grouping sets, @outer apply"
+201 "SELECT" q=0 1:1-1:7
+15 "@natural" q=0 1:8-1:16
+204 "join" q=0 1:17-1:21
+51 "," q=0 1:21-1:22
+15 "@full" q=0 1:23-1:28
+275 "outer join" q=0 1:29-1:39
+51 "," q=0 1:39-1:40
+15 "@grouping sets" q=0 1:41-1:55
+51 "," q=0 1:55-1:56
+15 "@outer" q=0 1:57-1:63
+14 "apply" q=0 1:64-1:69
+0 "" q=0 1:69-1:69
+=== mariadb "SELECT @group"
+201 "SELECT" q=0 1:1-1:7
+15 "@group" q=0 1:8-1:14
+0 "" q=0 1:14-1:14
+=== mariadb "SELECT @group, @order"
+201 "SELECT" q=0 1:1-1:7
+15 "@group" q=0 1:8-1:14
+51 "," q=0 1:14-1:15
+15 "@order" q=0 1:16-1:22
+0 "" q=0 1:22-1:22
+=== mariadb "SELECT @@group by"
+201 "SELECT" q=0 1:1-1:7
+122 "@@" q=0 1:8-1:10
+270 "group by" q=0 1:10-1:18
+0 "" q=0 1:18-1:18
+=== mariadb "SELECT @@Left Outer Join"
+201 "SELECT" q=0 1:1-1:7
+122 "@@" q=0 1:8-1:10
+206 "Left" q=0 1:10-1:14
+275 "Outer Join" q=0 1:15-1:25
+0 "" q=0 1:25-1:25
+=== mariadb "SELECT\n  @a,\n  @@b,\r\n  @c"
+201 "SELECT" q=0 1:1-1:7
+15 "@a" q=0 2:3-2:5
+51 "," q=0 2:5-2:6
+122 "@@" q=0 3:3-3:5
+14 "b" q=0 3:5-3:6
+51 "," q=0 3:6-3:7
+15 "@c" q=0 4:3-4:5
+0 "" q=0 4:5-4:5
+=== mariadb "SELECT '@id', \"@id\", -- @id\n 1 /* @id */"
+201 "SELECT" q=0 1:1-1:7
+31 "@id" q=39 1:8-1:13
+51 "," q=0 1:13-1:14
+32 "@id" q=34 1:15-1:20
+51 "," q=0 1:20-1:21
+11 "1" q=0 2:2-2:3
+0 "" q=0 2:13-2:13
+0 "" q=0 2:13-2:13
+=== mariadb "EXEC p @a = 1, @b = @c OUTPUT"
+14 "EXEC" q=0 1:1-1:5
+14 "p" q=0 1:6-1:7
+15 "@a" q=0 1:8-1:10
+52 "=" q=0 1:11-1:12
+11 "1" q=0 1:13-1:14
+51 "," q=0 1:14-1:15
+15 "@b" q=0 1:16-1:18
+52 "=" q=0 1:19-1:20
+15 "@c" q=0 1:21-1:23
+14 "OUTPUT" q=0 1:24-1:30
+0 "" q=0 1:30-1:30
+=== mariadb "SELECT @x\u00a0"
+ERR Error E1001 at line 1, column 10: unexpected character ' '
+
+   1 | SELECT @x 
+                ^
+
+
+Hint: Remove or escape the character ' '
+Help: https://github.com/ajitpratap0/GoSQLX/blob/main/docs/ERROR_CODES.md#E1001
+=== mariadb "SELECT @abcdefghijklmnopqrstuvwxyz0123456789abcdefghijklmnopqrstuvwxyz0123456789"
+201 "SELECT" q=0 1:1-1:7
+15 "@abcdefghijklmnopqrstuvwxyz0123456789abcdefghijklmnopqrstuvwxyz0123456789" q=0 1:8-1:81
+0 "" q=0 1:81-1:81
+=== oracle "SELECT @id"
+201 "SELECT" q=0 1:1-1:7
+15 "@id" q=0 1:8-1:11
+0 "" q=0 1:11-1:11
+=== oracle "SELECT @id, @name FROM t WHERE a = @a1 AND b=@b_2"
+201 "SELECT" q=0 1:1-1:7
+15 "@id" q=0 1:8-1:11
+51 "," q=0 1:11-1:12
+15 "@name" q=0 1:13-1:18
+202 "FROM" q=0 1:19-1:23
+14 "t" q=0 1:24-1:25
+203 "WHERE" q=0 1:26-1:31
+14 "a" q=0 1:32-1:33
+52 "=" q=0 1:34-1:35
+15 "@a1" q=0 1:36-1:39
+211 "AND" q=0 1:40-1:43
+14 "b" q=0 1:44-1:45
+52 "=" q=0 1:45-1:46
+15 "@b_2" q=0 1:46-1:50
+0 "" q=0 1:50-1:50
+=== oracle "SELECT @@ROWCOUNT, @@version"
+201 "SELECT" q=0 1:1-1:7
+122 "@@" q=0 1:8-1:10
+14 "ROWCOUNT" q=0 1:10-1:18
+51 "," q=0 1:18-1:19
+122 "@@" q=0 1:20-1:22
+14 "version" q=0 1:22-1:29
+0 "" q=0 1:29-1:29
+=== oracle "SELECT @@ROWCOUNT"
+201 "SELECT" q=0 1:1-1:7
+122 "@@" q=0 1:8-1:10
+14 "ROWCOUNT" q=0 1:10-1:18
+0 "" q=0 1:18-1:18
+=== oracle "SELECT @@ x"
+201 "SELECT" q=0 1:1-1:7
+122 "@@" q=0 1:8-1:10
+14 "x" q=0 1:11-1:12
+0 "" q=0 1:12-1:12
+=== oracle "SELECT @"
+201 "SELECT" q=0 1:1-1:7
+86 "@" q=0 1:8-1:9
+0 "" q=0 1:9-1:9
+=== oracle "SELECT @ id"
+201 "SELECT" q=0 1:1-1:7
+86 "@" q=0 1:8-1:9
+14 "id" q=0 1:10-1:12
+0 "" q=0 1:12-1:12
+=== oracle "SELECT @>"
+201 "SELECT" q=0 1:1-1:7
+118 "@>" q=0 1:8-1:10
+0 "" q=0 1:10-1:10
+=== oracle "SELECT a @> b, a @@ b"
+201 "SELECT" q=0 1:1-1:7
+14 "a" q=0 1:8-1:9
+118 "@>" q=0 1:10-1:12
+14 "b" q=0 1:13-1:14
+51 "," q=0 1:14-1:15
+14 "a" q=0 1:16-1:17
+122 "@@" q=0 1:18-1:20
+14 "b" q=0 1:21-1:22
+0 "" q=0 1:22-1:22
+=== oracle "SELECT @1"
+201 "SELECT" q=0 1:1-1:7
+86 "@" q=0 1:8-1:9
+11 "1" q=0 1:9-1:10
+0 "" q=0 1:10-1:10
+=== oracle "SELECT @_x$y#z"
+201 "SELECT" q=0 1:1-1:7
+15 "@_x$y#z" q=0 1:8-1:15
+0 "" q=0 1:15-1:15
+=== oracle "SELECT @x.y"
+201 "SELECT" q=0 1:1-1:7
+15 "@x" q=0 1:8-1:10
+69 "." q=0 1:10-1:11
+14 "y" q=0 1:11-1:12
+0 "" q=0 1:12-1:12
+=== oracle "SELECT @x::int"
+201 "SELECT" q=0 1:1-1:7
+15 "@x" q=0 1:8-1:10
+71 "::" q=0 1:10-1:12
+14 "int" q=0 1:12-1:15
+0 "" q=0 1:15-1:15
+=== oracle "SELECT @é, @@ü, @日本"
+201 "SELECT" q=0 1:1-1:7
+15 "@é" q=0 1:8-1:11
+51 "," q=0 1:11-1:12
+122 "@@" q=0 1:13-1:15
+14 "ü" q=0 1:15-1:17
+51 "," q=0 1:17-1:18
+15 "@日本" q=0 1:19-1:26
+0 "" q=0 1:26-1:26
+=== oracle "SELECT @ſ, @ı"
+201 "SELECT" q=0 1:1-1:7
+15 "@ſ" q=0 1:8-1:11
+51 "," q=0 1:11-1:12
+15 "@ı" q=0 1:13-1:16
+0 "" q=0 1:16-1:16
+=== oracle "SELECT @N'x'"
+201 "SELECT" q=0 1:1-1:7
+15 "@x" q=0 1:8-1:13
+0 "" q=0 1:13-1:13
+=== oracle "SELECT @n'x', @X'ab', @B'1', @E'a\\nb', @q'[x]'"
+201 "SELECT" q=0 1:1-1:7
+15 "@x" q=0 1:8-1:13
+51 "," q=0 1:13-1:14
+15 "@X" q=0 1:15-1:17
+31 "ab" q=39 1:17-1:21
+51 "," q=0 1:21-1:22
+15 "@B" q=0 1:23-1:25
+31 "1" q=39 1:25-1:28
+51 "," q=0 1:28-1:29
+15 "@E" q=0 1:30-1:32
+31 "a\\nb" q=39 1:32-1:38
+51 "," q=0 1:38-1:39
+15 "@x" q=0 1:40-1:47
+0 "" q=0 1:47-1:47
+=== oracle "SELECT @a'x'"
+201 "SELECT" q=0 1:1-1:7
+15 "@a" q=0 1:8-1:10
+31 "x" q=39 1:10-1:13
+0 "" q=0 1:13-1:13
+=== oracle "SELECT @U&'d\\0061t'"
+ERR Error E4001 at line 1, column 9: unsupported feature: U& Unicode escape literals in oracle
+
+   1 | SELECT @U&'d\0061t'
+               ^^
+
+
+Hint: U&'...' is PostgreSQL syntax; write the characters directly
+Help: https://github.com/ajitpratap0/GoSQLX/blob/main/docs/ERROR_CODES.md#E4001
+=== oracle "SELECT @u&\"d\""
+ERR Error E4001 at line 1, column 9: unsupported feature: U& Unicode escape literals in oracle
+
+   1 | SELECT @u&"d"
+               ^^
+
+
+Hint: U&'...' is PostgreSQL syntax; write the characters directly
+Help: https://github.com/ajitpratap0/GoSQLX/blob/main/docs/ERROR_CODES.md#E4001
+=== oracle "SELECT @@U&'x'"
+ERR Error E4001 at line 1, column 10: unsupported feature: U& Unicode escape literals in oracle
+
+   1 | SELECT @@U&'x'
+                ^^
+
+
+Hint: U&'...' is PostgreSQL syntax; write the characters directly
+Help: https://github.com/ajitpratap0/GoSQLX/blob/main/docs/ERROR_CODES.md#E4001
+=== oracle "SELECT @group by x"
+201 "SELECT" q=0 1:1-1:7
+15 "@group by" q=0 1:8-1:17
+14 "x" q=0 1:18-1:19
+0 "" q=0 1:19-1:19
+=== oracle "SELECT @GROUP   BY x"
+201 "SELECT" q=0 1:1-1:7
+15 "@GROUP BY" q=0 1:8-1:19
+14 "x" q=0 1:20-1:21
+0 "" q=0 1:21-1:21
+=== oracle "SELECT @group\nby x"
+201 "SELECT" q=0 1:1-1:7
+15 "@group by" q=0 1:8-2:3
+14 "x" q=0 2:4-2:5
+0 "" q=0 2:5-2:5
+=== oracle "SELECT @order by, @left join, @right outer, @inner join, @cross join"
+201 "SELECT" q=0 1:1-1:7
+15 "@order by" q=0 1:8-1:17
+51 "," q=0 1:17-1:18
+15 "@left join" q=0 1:19-1:29
+51 "," q=0 1:29-1:30
+15 "@right" q=0 1:31-1:37
+208 "outer" q=0 1:38-1:43
+51 "," q=0 1:43-1:44
+15 "@inner join" q=0 1:45-1:56
+51 "," q=0 1:56-1:57
+15 "@cross join" q=0 1:58-1:69
+0 "" q=0 1:69-1:69
+=== oracle "SELECT @natural join, @full outer join, @grouping sets, @outer apply"
+201 "SELECT" q=0 1:1-1:7
+15 "@natural" q=0 1:8-1:16
+204 "join" q=0 1:17-1:21
+51 "," q=0 1:21-1:22
+15 "@full" q=0 1:23-1:28
+275 "outer join" q=0 1:29-1:39
+51 "," q=0 1:39-1:40
+15 "@grouping sets" q=0 1:41-1:55
+51 "," q=0 1:55-1:56
+15 "@outer" q=0 1:57-1:63
+14 "apply" q=0 1:64-1:69
+0 "" q=0 1:69-1:69
+=== oracle "SELECT @group"
+201 "SELECT" q=0 1:1-1:7
+15 "@group" q=0 1:8-1:14
+0 "" q=0 1:14-1:14
+=== oracle "SELECT @group, @order"
+201 "SELECT" q=0 1:1-1:7
+15 "@group" q=0 1:8-1:14
+51 "," q=0 1:14-1:15
+15 "@order" q=0 1:16-1:22
+0 "" q=0 1:22-1:22
+=== oracle "SELECT @@group by"
+201 "SELECT" q=0 1:1-1:7
+122 "@@" q=0 1:8-1:10
+270 "group by" q=0 1:10-1:18
+0 "" q=0 1:18-1:18
+=== oracle "SELECT @@Left Outer Join"
+201 "SELECT" q=0 1:1-1:7
+122 "@@" q=0 1:8-1:10
+206 "Left" q=0 1:10-1:14
+275 "Outer Join" q=0 1:15-1:25
+0 "" q=0 1:25-1:25
+=== oracle "SELECT\n  @a,\n  @@b,\r\n  @c"
+201 "SELECT" q=0 1:1-1:7
+15 "@a" q=0 2:3-2:5
+51 "," q=0 2:5-2:6
+122 "@@" q=0 3:3-3:5
+14 "b" q=0 3:5-3:6
+51 "," q=0 3:6-3:7
+15 "@c" q=0 4:3-4:5
+0 "" q=0 4:5-4:5
+=== oracle "SELECT '@id', \"@id\", -- @id\n 1 /* @id */"
+201 "SELECT" q=0 1:1-1:7
+31 "@id" q=39 1:8-1:13
+51 "," q=0 1:13-1:14
+32 "@id" q=34 1:15-1:20
+51 "," q=0 1:20-1:21
+11 "1" q=0 2:2-2:3
+0 "" q=0 2:13-2:13
+0 "" q=0 2:13-2:13
+=== oracle "EXEC p @a = 1, @b = @c OUTPUT"
+14 "EXEC" q=0 1:1-1:5
+14 "p" q=0 1:6-1:7
+15 "@a" q=0 1:8-1:10
+52 "=" q=0 1:11-1:12
+11 "1" q=0 1:13-1:14
+51 "," q=0 1:14-1:15
+15 "@b" q=0 1:16-1:18
+52 "=" q=0 1:19-1:20
+15 "@c" q=0 1:21-1:23
+14 "OUTPUT" q=0 1:24-1:30
+0 "" q=0 1:30-1:30
+=== oracle "SELECT @x\u00a0"
+ERR Error E1001 at line 1, column 10: unexpected character ' '
+
+   1 | SELECT @x 
+                ^
+
+
+Hint: Remove or escape the character ' '
+Help: https://github.com/ajitpratap0/GoSQLX/blob/main/docs/ERROR_CODES.md#E1001
+=== oracle "SELECT @abcdefghijklmnopqrstuvwxyz0123456789abcdefghijklmnopqrstuvwxyz0123456789"
+201 "SELECT" q=0 1:1-1:7
+15 "@abcdefghijklmnopqrstuvwxyz0123456789abcdefghijklmnopqrstuvwxyz0123456789" q=0 1:8-1:81
+0 "" q=0 1:81-1:81
+=== sqlite "SELECT @id"
+201 "SELECT" q=0 1:1-1:7
+15 "@id" q=0 1:8-1:11
+0 "" q=0 1:11-1:11
+=== sqlite "SELECT @id, @name FROM t WHERE a = @a1 AND b=@b_2"
+201 "SELECT" q=0 1:1-1:7
+15 "@id" q=0 1:8-1:11
+51 "," q=0 1:11-1:12
+15 "@name" q=0 1:13-1:18
+202 "FROM" q=0 1:19-1:23
+14 "t" q=0 1:24-1:25
+203 "WHERE" q=0 1:26-1:31
+14 "a" q=0 1:32-1:33
+52 "=" q=0 1:34-1:35
+15 "@a1" q=0 1:36-1:39
+211 "AND" q=0 1:40-1:43
+14 "b" q=0 1:44-1:45
+52 "=" q=0 1:45-1:46
+15 "@b_2" q=0 1:46-1:50
+0 "" q=0 1:50-1:50
+=== sqlite "SELECT @@ROWCOUNT, @@version"
+201 "SELECT" q=0 1:1-1:7
+122 "@@" q=0 1:8-1:10
+14 "ROWCOUNT" q=0 1:10-1:18
+51 "," q=0 1:18-1:19
+122 "@@" q=0 1:20-1:22
+14 "version" q=0 1:22-1:29
+0 "" q=0 1:29-1:29
+=== sqlite "SELECT @@ROWCOUNT"
+201 "SELECT" q=0 1:1-1:7
+122 "@@" q=0 1:8-1:10
+14 "ROWCOUNT" q=0 1:10-1:18
+0 "" q=0 1:18-1:18
+=== sqlite "SELECT @@ x"
+201 "SELECT" q=0 1:1-1:7
+122 "@@" q=0 1:8-1:10
+14 "x" q=0 1:11-1:12
+0 "" q=0 1:12-1:12
+=== sqlite "SELECT @"
+201 "SELECT" q=0 1:1-1:7
+86 "@" q=0 1:8-1:9
+0 "" q=0 1:9-1:9
+=== sqlite "SELECT @ id"
+201 "SELECT" q=0 1:1-1:7
+86 "@" q=0 1:8-1:9
+14 "id" q=0 1:10-1:12
+0 "" q=0 1:12-1:12
+=== sqlite "SELECT @>"
+201 "SELECT" q=0 1:1-1:7
+118 "@>" q=0 1:8-1:10
+0 "" q=0 1:10-1:10
+=== sqlite "SELECT a @> b, a @@ b"
+201 "SELECT" q=0 1:1-1:7
+14 "a" q=0 1:8-1:9
+118 "@>" q=0 1:10-1:12
+14 "b" q=0 1:13-1:14
+51 "," q=0 1:14-1:15
+14 "a" q=0 1:16-1:17
+122 "@@" q=0 1:18-1:20
+14 "b" q=0 1:21-1:22
+0 "" q=0 1:22-1:22
+=== sqlite "SELECT @1"
+201 "SELECT" q=0 1:1-1:7
+86 "@" q=0 1:8-1:9
+11 "1" q=0 1:9-1:10
+0 "" q=0 1:10-1:10
+=== sqlite "SELECT @_x$y#z"
+201 "SELECT" q=0 1:1-1:7
+15 "@_x$y" q=0 1:8-1:13
+83 "#" q=0 1:13-1:14
+14 "z" q=0 1:14-1:15
+0 "" q=0 1:15-1:15
+=== sqlite "SELECT @x.y"
+201 "SELECT" q=0 1:1-1:7
+15 "@x" q=0 1:8-1:10
+69 "." q=0 1:10-1:11
+14 "y" q=0 1:11-1:12
+0 "" q=0 1:12-1:12
+=== sqlite "SELECT @x::int"
+201 "SELECT" q=0 1:1-1:7
+15 "@x" q=0 1:8-1:10
+71 "::" q=0 1:10-1:12
+14 "int" q=0 1:12-1:15
+0 "" q=0 1:15-1:15
+=== sqlite "SELECT @é, @@ü, @日本"
+201 "SELECT" q=0 1:1-1:7
+15 "@é" q=0 1:8-1:11
+51 "," q=0 1:11-1:12
+122 "@@" q=0 1:13-1:15
+14 "ü" q=0 1:15-1:17
+51 "," q=0 1:17-1:18
+15 "@日本" q=0 1:19-1:26
+0 "" q=0 1:26-1:26
+=== sqlite "SELECT @ſ, @ı"
+201 "SELECT" q=0 1:1-1:7
+15 "@ſ" q=0 1:8-1:11
+51 "," q=0 1:11-1:12
+15 "@ı" q=0 1:13-1:16
+0 "" q=0 1:16-1:16
+=== sqlite "SELECT @N'x'"
+201 "SELECT" q=0 1:1-1:7
+15 "@N" q=0 1:8-1:10
+31 "x" q=39 1:10-1:13
+0 "" q=0 1:13-1:13
+=== sqlite "SELECT @n'x', @X'ab', @B'1', @E'a\\nb', @q'[x]'"
+201 "SELECT" q=0 1:1-1:7
+15 "@n" q=0 1:8-1:10
+31 "x" q=39 1:10-1:13
+51 "," q=0 1:13-1:14
+15 "@ab" q=0 1:15-1:21
+51 "," q=0 1:21-1:22
+15 "@B" q=0 1:23-1:25
+31 "1" q=39 1:25-1:28
+51 "," q=0 1:28-1:29
+15 "@E" q=0 1:30-1:32
+31 "a\\nb" q=39 1:32-1:38
+51 "," q=0 1:38-1:39
+15 "@q" q=0 1:40-1:42
+31 "[x]" q=39 1:42-1:47
+0 "" q=0 1:47-1:47
+=== sqlite "SELECT @a'x'"
+201 "SELECT" q=0 1:1-1:7
+15 "@a" q=0 1:8-1:10
+31 "x" q=39 1:10-1:13
+0 "" q=0 1:13-1:13
+=== sqlite "SELECT @U&'d\\0061t'"
+201 "SELECT" q=0 1:1-1:7
+15 "@U" q=0 1:8-1:10
+77 "&" q=0 1:10-1:11
+31 "d\\0061t" q=39 1:11-1:20
+0 "" q=0 1:20-1:20
+=== sqlite "SELECT @u&\"d\""
+201 "SELECT" q=0 1:1-1:7
+15 "@u" q=0 1:8-1:10
+77 "&" q=0 1:10-1:11
+32 "d" q=34 1:11-1:14
+0 "" q=0 1:14-1:14
+=== sqlite "SELECT @@U&'x'"
+201 "SELECT" q=0 1:1-1:7
+122 "@@" q=0 1:8-1:10
+14 "U" q=0 1:10-1:11
+77 "&" q=0 1:11-1:12
+31 "x" q=39 1:12-1:15
+0 "" q=0 1:15-1:15
+=== sqlite "SELECT @group by x"
+201 "SELECT" q=0 1:1-1:7
+15 "@group by" q=0 1:8-1:17
+14 "x" q=0 1:18-1:19
+0 "" q=0 1:19-1:19
+=== sqlite "SELECT @GROUP   BY x"
+201 "SELECT" q=0 1:1-1:7
+15 "@GROUP BY" q=0 1:8-1:19
+14 "x" q=0 1:20-1:21
+0 "" q=0 1:21-1:21
+=== sqlite "SELECT @group\nby x"
+201 "SELECT" q=0 1:1-1:7
+15 "@group by" q=0 1:8-2:3
+14 "x" q=0 2:4-2:5
+0 "" q=0 2:5-2:5
+=== sqlite "SELECT @order by, @left join, @right outer, @inner join, @cross join"
+201 "SELECT" q=0 1:1-1:7
+15 "@order by" q=0 1:8-1:17
+51 "," q=0 1:17-1:18
+15 "@left join" q=0 1:19-1:29
+51 "," q=0 1:29-1:30
+15 "@right" q=0 1:31-1:37
+208 "outer" q=0 1:38-1:43
+51 "," q=0 1:43-1:44
+15 "@inner join" q=0 1:45-1:56
+51 "," q=0 1:56-1:57
+15 "@cross join" q=0 1:58-1:69
+0 "" q=0 1:69-1:69
+=== sqlite "SELECT @natural join, @full outer join, @grouping sets, @outer apply"
+201 "SELECT" q=0 1:1-1:7
+15 "@natural" q=0 1:8-1:16
+204 "join" q=0 1:17-1:21
+51 "," q=0 1:21-1:22
+15 "@full" q=0 1:23-1:28
+275 "outer join" q=0 1:29-1:39
+51 "," q=0 1:39-1:40
+15 "@grouping sets" q=0 1:41-1:55
+51 "," q=0 1:55-1:56
+15 "@outer" q=0 1:57-1:63
+14 "apply" q=0 1:64-1:69
+0 "" q=0 1:69-1:69
+=== sqlite "SELECT @group"
+201 "SELECT" q=0 1:1-1:7
+15 "@group" q=0 1:8-1:14
+0 "" q=0 1:14-1:14
+=== sqlite "SELECT @group, @order"
+201 "SELECT" q=0 1:1-1:7
+15 "@group" q=0 1:8-1:14
+51 "," q=0 1:14-1:15
+15 "@order" q=0 1:16-1:22
+0 "" q=0 1:22-1:22
+=== sqlite "SELECT @@group by"
+201 "SELECT" q=0 1:1-1:7
+122 "@@" q=0 1:8-1:10
+270 "group by" q=0 1:10-1:18
+0 "" q=0 1:18-1:18
+=== sqlite "SELECT @@Left Outer Join"
+201 "SELECT" q=0 1:1-1:7
+122 "@@" q=0 1:8-1:10
+206 "Left" q=0 1:10-1:14
+275 "Outer Join" q=0 1:15-1:25
+0 "" q=0 1:25-1:25
+=== sqlite "SELECT\n  @a,\n  @@b,\r\n  @c"
+201 "SELECT" q=0 1:1-1:7
+15 "@a" q=0 2:3-2:5
+51 "," q=0 2:5-2:6
+122 "@@" q=0 3:3-3:5
+14 "b" q=0 3:5-3:6
+51 "," q=0 3:6-3:7
+15 "@c" q=0 4:3-4:5
+0 "" q=0 4:5-4:5
+=== sqlite "SELECT '@id', \"@id\", -- @id\n 1 /* @id */"
+201 "SELECT" q=0 1:1-1:7
+31 "@id" q=39 1:8-1:13
+51 "," q=0 1:13-1:14
+32 "@id" q=34 1:15-1:20
+51 "," q=0 1:20-1:21
+11 "1" q=0 2:2-2:3
+0 "" q=0 2:13-2:13
+0 "" q=0 2:13-2:13
+=== sqlite "EXEC p @a = 1, @b = @c OUTPUT"
+14 "EXEC" q=0 1:1-1:5
+14 "p" q=0 1:6-1:7
+15 "@a" q=0 1:8-1:10
+52 "=" q=0 1:11-1:12
+11 "1" q=0 1:13-1:14
+51 "," q=0 1:14-1:15
+15 "@b" q=0 1:16-1:18
+52 "=" q=0 1:19-1:20
+15 "@c" q=0 1:21-1:23
+14 "OUTPUT" q=0 1:24-1:30
+0 "" q=0 1:30-1:30
+=== sqlite "SELECT @x\u00a0"
+ERR Error E1001 at line 1, column 10: unexpected character ' '
+
+   1 | SELECT @x 
+                ^
+
+
+Hint: Remove or escape the character ' '
+Help: https://github.com/ajitpratap0/GoSQLX/blob/main/docs/ERROR_CODES.md#E1001
+=== sqlite "SELECT @abcdefghijklmnopqrstuvwxyz0123456789abcdefghijklmnopqrstuvwxyz0123456789"
+201 "SELECT" q=0 1:1-1:7
+15 "@abcdefghijklmnopqrstuvwxyz0123456789abcdefghijklmnopqrstuvwxyz0123456789" q=0 1:8-1:81
+0 "" q=0 1:81-1:81
+=== snowflake "SELECT @id"
+201 "SELECT" q=0 1:1-1:7
+15 "@id" q=0 1:8-1:11
+0 "" q=0 1:11-1:11
+=== snowflake "SELECT @id, @name FROM t WHERE a = @a1 AND b=@b_2"
+201 "SELECT" q=0 1:1-1:7
+15 "@id" q=0 1:8-1:11
+51 "," q=0 1:11-1:12
+15 "@name" q=0 1:13-1:18
+202 "FROM" q=0 1:19-1:23
+14 "t" q=0 1:24-1:25
+203 "WHERE" q=0 1:26-1:31
+14 "a" q=0 1:32-1:33
+52 "=" q=0 1:34-1:35
+15 "@a1" q=0 1:36-1:39
+211 "AND" q=0 1:40-1:43
+14 "b" q=0 1:44-1:45
+52 "=" q=0 1:45-1:46
+15 "@b_2" q=0 1:46-1:50
+0 "" q=0 1:50-1:50
+=== snowflake "SELECT @@ROWCOUNT, @@version"
+201 "SELECT" q=0 1:1-1:7
+122 "@@" q=0 1:8-1:10
+14 "ROWCOUNT" q=0 1:10-1:18
+51 "," q=0 1:18-1:19
+122 "@@" q=0 1:20-1:22
+14 "version" q=0 1:22-1:29
+0 "" q=0 1:29-1:29
+=== snowflake "SELECT @@ROWCOUNT"
+201 "SELECT" q=0 1:1-1:7
+122 "@@" q=0 1:8-1:10
+14 "ROWCOUNT" q=0 1:10-1:18
+0 "" q=0 1:18-1:18
+=== snowflake "SELECT @@ x"
+201 "SELECT" q=0 1:1-1:7
+122 "@@" q=0 1:8-1:10
+14 "x" q=0 1:11-1:12
+0 "" q=0 1:12-1:12
+=== snowflake "SELECT @"
+201 "SELECT" q=0 1:1-1:7
+86 "@" q=0 1:8-1:9
+0 "" q=0 1:9-1:9
+=== snowflake "SELECT @ id"
+201 "SELECT" q=0 1:1-1:7
+86 "@" q=0 1:8-1:9
+14 "id" q=0 1:10-1:12
+0 "" q=0 1:12-1:12
+=== snowflake "SELECT @>"
+201 "SELECT" q=0 1:1-1:7
+118 "@>" q=0 1:8-1:10
+0 "" q=0 1:10-1:10
+=== snowflake "SELECT a @> b, a @@ b"
+201 "SELECT" q=0 1:1-1:7
+14 "a" q=0 1:8-1:9
+118 "@>" q=0 1:10-1:12
+14 "b" q=0 1:13-1:14
+51 "," q=0 1:14-1:15
+14 "a" q=0 1:16-1:17
+122 "@@" q=0 1:18-1:20
+14 "b" q=0 1:21-1:22
+0 "" q=0 1:22-1:22
+=== snowflake "SELECT @1"
+201 "SELECT" q=0 1:1-1:7
+86 "@" q=0 1:8-1:9
+11 "1" q=0 1:9-1:10
+0 "" q=0 1:10-1:10
+=== snowflake "SELECT @_x$y#z"
+201 "SELECT" q=0 1:1-1:7
+15 "@_x$y" q=0 1:8-1:13
+83 "#" q=0 1:13-1:14
+14 "z" q=0 1:14-1:15
+0 "" q=0 1:15-1:15
+=== snowflake "SELECT @x.y"
+201 "SELECT" q=0 1:1-1:7
+15 "@x" q=0 1:8-1:10
+69 "." q=0 1:10-1:11
+14 "y" q=0 1:11-1:12
+0 "" q=0 1:12-1:12
+=== snowflake "SELECT @x::int"
+201 "SELECT" q=0 1:1-1:7
+15 "@x" q=0 1:8-1:10
+71 "::" q=0 1:10-1:12
+14 "int" q=0 1:12-1:15
+0 "" q=0 1:15-1:15
+=== snowflake "SELECT @é, @@ü, @日本"
+201 "SELECT" q=0 1:1-1:7
+15 "@é" q=0 1:8-1:11
+51 "," q=0 1:11-1:12
+122 "@@" q=0 1:13-1:15
+14 "ü" q=0 1:15-1:17
+51 "," q=0 1:17-1:18
+15 "@日本" q=0 1:19-1:26
+0 "" q=0 1:26-1:26
+=== snowflake "SELECT @ſ, @ı"
+201 "SELECT" q=0 1:1-1:7
+15 "@ſ" q=0 1:8-1:11
+51 "," q=0 1:11-1:12
+15 "@ı" q=0 1:13-1:16
+0 "" q=0 1:16-1:16
+=== snowflake "SELECT @N'x'"
+201 "SELECT" q=0 1:1-1:7
+15 "@N" q=0 1:8-1:10
+31 "x" q=39 1:10-1:13
+0 "" q=0 1:13-1:13
+=== snowflake "SELECT @n'x', @X'ab', @B'1', @E'a\\nb', @q'[x]'"
+201 "SELECT" q=0 1:1-1:7
+15 "@n" q=0 1:8-1:10
+31 "x" q=39 1:10-1:13
+51 "," q=0 1:13-1:14
+15 "@ab" q=0 1:15-1:21
+51 "," q=0 1:21-1:22
+15 "@B" q=0 1:23-1:25
+31 "1" q=39 1:25-1:28
+51 "," q=0 1:28-1:29
+15 "@E" q=0 1:30-1:32
+31 "a\nb" q=39 1:32-1:38
+51 "," q=0 1:38-1:39
+15 "@q" q=0 1:40-1:42
+31 "[x]" q=39 1:42-1:47
+0 "" q=0 1:47-1:47
+=== snowflake "SELECT @a'x'"
+201 "SELECT" q=0 1:1-1:7
+15 "@a" q=0 1:8-1:10
+31 "x" q=39 1:10-1:13
+0 "" q=0 1:13-1:13
+=== snowflake "SELECT @U&'d\\0061t'"
+ERR Error E4001 at line 1, column 9: unsupported feature: U& Unicode escape literals in snowflake
+
+   1 | SELECT @U&'d\0061t'
+               ^^
+
+
+Hint: U&'...' is PostgreSQL syntax; write the characters directly
+Help: https://github.com/ajitpratap0/GoSQLX/blob/main/docs/ERROR_CODES.md#E4001
+=== snowflake "SELECT @u&\"d\""
+ERR Error E4001 at line 1, column 9: unsupported feature: U& Unicode escape literals in snowflake
+
+   1 | SELECT @u&"d"
+               ^^
+
+
+Hint: U&'...' is PostgreSQL syntax; write the characters directly
+Help: https://github.com/ajitpratap0/GoSQLX/blob/main/docs/ERROR_CODES.md#E4001
+=== snowflake "SELECT @@U&'x'"
+ERR Error E4001 at line 1, column 10: unsupported feature: U& Unicode escape literals in snowflake
+
+   1 | SELECT @@U&'x'
+                ^^
+
+
+Hint: U&'...' is PostgreSQL syntax; write the characters directly
+Help: https://github.com/ajitpratap0/GoSQLX/blob/main/docs/ERROR_CODES.md#E4001
+=== snowflake "SELECT @group by x"
+201 "SELECT" q=0 1:1-1:7
+15 "@group by" q=0 1:8-1:17
+14 "x" q=0 1:18-1:19
+0 "" q=0 1:19-1:19
+=== snowflake "SELECT @GROUP   BY x"
+201 "SELECT" q=0 1:1-1:7
+15 "@GROUP BY" q=0 1:8-1:19
+14 "x" q=0 1:20-1:21
+0 "" q=0 1:21-1:21
+=== snowflake "SELECT @group\nby x"
+201 "SELECT" q=0 1:1-1:7
+15 "@group by" q=0 1:8-2:3
+14 "x" q=0 2:4-2:5
+0 "" q=0 2:5-2:5
+=== snowflake "SELECT @order by, @left join, @right outer, @inner join, @cross join"
+201 "SELECT" q=0 1:1-1:7
+15 "@order by" q=0 1:8-1:17
+51 "," q=0 1:17-1:18
+15 "@left join" q=0 1:19-1:29
+51 "," q=0 1:29-1:30
+15 "@right" q=0 1:31-1:37
+208 "outer" q=0 1:38-1:43
+51 "," q=0 1:43-1:44
+15 "@inner join" q=0 1:45-1:56
+51 "," q=0 1:56-1:57
+15 "@cross join" q=0 1:58-1:69
+0 "" q=0 1:69-1:69
+=== snowflake "SELECT @natural join, @full outer join, @grouping sets, @outer apply"
+201 "SELECT" q=0 1:1-1:7
+15 "@natural" q=0 1:8-1:16
+204 "join" q=0 1:17-1:21
+51 "," q=0 1:21-1:22
+15 "@full" q=0 1:23-1:28
+275 "outer join" q=0 1:29-1:39
+51 "," q=0 1:39-1:40
+15 "@grouping sets" q=0 1:41-1:55
+51 "," q=0 1:55-1:56
+15 "@outer" q=0 1:57-1:63
+14 "apply" q=0 1:64-1:69
+0 "" q=0 1:69-1:69
+=== snowflake "SELECT @group"
+201 "SELECT" q=0 1:1-1:7
+15 "@group" q=0 1:8-1:14
+0 "" q=0 1:14-1:14
+=== snowflake "SELECT @group, @order"
+201 "SELECT" q=0 1:1-1:7
+15 "@group" q=0 1:8-1:14
+51 "," q=0 1:14-1:15
+15 "@order" q=0 1:16-1:22
+0 "" q=0 1:22-1:22
+=== snowflake "SELECT @@group by"
+201 "SELECT" q=0 1:1-1:7
+122 "@@" q=0 1:8-1:10
+270 "group by" q=0 1:10-1:18
+0 "" q=0 1:18-1:18
+=== snowflake "SELECT @@Left Outer Join"
+201 "SELECT" q=0 1:1-1:7
+122 "@@" q=0 1:8-1:10
+206 "Left" q=0 1:10-1:14
+275 "Outer Join" q=0 1:15-1:25
+0 "" q=0 1:25-1:25
+=== snowflake "SELECT\n  @a,\n  @@b,\r\n  @c"
+201 "SELECT" q=0 1:1-1:7
+15 "@a" q=0 2:3-2:5
+51 "," q=0 2:5-2:6
+122 "@@" q=0 3:3-3:5
+14 "b" q=0 3:5-3:6
+51 "," q=0 3:6-3:7
+15 "@c" q=0 4:3-4:5
+0 "" q=0 4:5-4:5
+=== snowflake "SELECT '@id', \"@id\", -- @id\n 1 /* @id */"
+201 "SELECT" q=0 1:1-1:7
+31 "@id" q=39 1:8-1:13
+51 "," q=0 1:13-1:14
+32 "@id" q=34 1:15-1:20
+51 "," q=0 1:20-1:21
+11 "1" q=0 2:2-2:3
+0 "" q=0 2:13-2:13
+0 "" q=0 2:13-2:13
+=== snowflake "EXEC p @a = 1, @b = @c OUTPUT"
+14 "EXEC" q=0 1:1-1:5
+14 "p" q=0 1:6-1:7
+15 "@a" q=0 1:8-1:10
+52 "=" q=0 1:11-1:12
+11 "1" q=0 1:13-1:14
+51 "," q=0 1:14-1:15
+15 "@b" q=0 1:16-1:18
+52 "=" q=0 1:19-1:20
+15 "@c" q=0 1:21-1:23
+14 "OUTPUT" q=0 1:24-1:30
+0 "" q=0 1:30-1:30
+=== snowflake "SELECT @x\u00a0"
+ERR Error E1001 at line 1, column 10: unexpected character ' '
+
+   1 | SELECT @x 
+                ^
+
+
+Hint: Remove or escape the character ' '
+Help: https://github.com/ajitpratap0/GoSQLX/blob/main/docs/ERROR_CODES.md#E1001
+=== snowflake "SELECT @abcdefghijklmnopqrstuvwxyz0123456789abcdefghijklmnopqrstuvwxyz0123456789"
+201 "SELECT" q=0 1:1-1:7
+15 "@abcdefghijklmnopqrstuvwxyz0123456789abcdefghijklmnopqrstuvwxyz0123456789" q=0 1:8-1:81
+0 "" q=0 1:81-1:81
+=== clickhouse "SELECT @id"
+201 "SELECT" q=0 1:1-1:7
+15 "@id" q=0 1:8-1:11
+0 "" q=0 1:11-1:11
+=== clickhouse "SELECT @id, @name FROM t WHERE a = @a1 AND b=@b_2"
+201 "SELECT" q=0 1:1-1:7
+15 "@id" q=0 1:8-1:11
+51 "," q=0 1:11-1:12
+15 "@name" q=0 1:13-1:18
+202 "FROM" q=0 1:19-1:23
+14 "t" q=0 1:24-1:25
+203 "WHERE" q=0 1:26-1:31
+14 "a" q=0 1:32-1:33
+52 "=" q=0 1:34-1:35
+15 "@a1" q=0 1:36-1:39
+211 "AND" q=0 1:40-1:43
+14 "b" q=0 1:44-1:45
+52 "=" q=0 1:45-1:46
+15 "@b_2" q=0 1:46-1:50
+0 "" q=0 1:50-1:50
+=== clickhouse "SELECT @@ROWCOUNT, @@version"
+201 "SELECT" q=0 1:1-1:7
+122 "@@" q=0 1:8-1:10
+14 "ROWCOUNT" q=0 1:10-1:18
+51 "," q=0 1:18-1:19
+122 "@@" q=0 1:20-1:22
+14 "version" q=0 1:22-1:29
+0 "" q=0 1:29-1:29
+=== clickhouse "SELECT @@ROWCOUNT"
+201 "SELECT" q=0 1:1-1:7
+122 "@@" q=0 1:8-1:10
+14 "ROWCOUNT" q=0 1:10-1:18
+0 "" q=0 1:18-1:18
+=== clickhouse "SELECT @@ x"
+201 "SELECT" q=0 1:1-1:7
+122 "@@" q=0 1:8-1:10
+14 "x" q=0 1:11-1:12
+0 "" q=0 1:12-1:12
+=== clickhouse "SELECT @"
+201 "SELECT" q=0 1:1-1:7
+86 "@" q=0 1:8-1:9
+0 "" q=0 1:9-1:9
+=== clickhouse "SELECT @ id"
+201 "SELECT" q=0 1:1-1:7
+86 "@" q=0 1:8-1:9
+14 "id" q=0 1:10-1:12
+0 "" q=0 1:12-1:12
+=== clickhouse "SELECT @>"
+201 "SELECT" q=0 1:1-1:7
+118 "@>" q=0 1:8-1:10
+0 "" q=0 1:10-1:10
+=== clickhouse "SELECT a @> b, a @@ b"
+201 "SELECT" q=0 1:1-1:7
+14 "a" q=0 1:8-1:9
+118 "@>" q=0 1:10-1:12
+14 "b" q=0 1:13-1:14
+51 "," q=0 1:14-1:15
+14 "a" q=0 1:16-1:17
+122 "@@" q=0 1:18-1:20
+14 "b" q=0 1:21-1:22
+0 "" q=0 1:22-1:22
+=== clickhouse "SELECT @1"
+201 "SELECT" q=0 1:1-1:7
+86 "@" q=0 1:8-1:9
+11 "1" q=0 1:9-1:10
+0 "" q=0 1:10-1:10
+=== clickhouse "SELECT @_x$y#z"
+201 "SELECT" q=0 1:1-1:7
+15 "@_x$y" q=0 1:8-1:13
+83 "#" q=0 1:13-1:14
+14 "z" q=0 1:14-1:15
+0 "" q=0 1:15-1:15
+=== clickhouse "SELECT @x.y"
+201 "SELECT" q=0 1:1-1:7
+15 "@x" q=0 1:8-1:10
+69 "." q=0 1:10-1:11
+14 "y" q=0 1:11-1:12
+0 "" q=0 1:12-1:12
+=== clickhouse "SELECT @x::int"
+201 "SELECT" q=0 1:1-1:7
+15 "@x" q=0 1:8-1:10
+71 "::" q=0 1:10-1:12
+14 "int" q=0 1:12-1:15
+0 "" q=0 1:15-1:15
+=== clickhouse "SELECT @é, @@ü, @日本"
+201 "SELECT" q=0 1:1-1:7
+15 "@é" q=0 1:8-1:11
+51 "," q=0 1:11-1:12
+122 "@@" q=0 1:13-1:15
+14 "ü" q=0 1:15-1:17
+51 "," q=0 1:17-1:18
+15 "@日本" q=0 1:19-1:26
+0 "" q=0 1:26-1:26
+=== clickhouse "SELECT @ſ, @ı"
+201 "SELECT" q=0 1:1-1:7
+15 "@ſ" q=0 1:8-1:11
+51 "," q=0 1:11-1:12
+15 "@ı" q=0 1:13-1:16
+0 "" q=0 1:16-1:16
+=== clickhouse "SELECT @N'x'"
+201 "SELECT" q=0 1:1-1:7
+15 "@N" q=0 1:8-1:10
+31 "x" q=39 1:10-1:13
+0 "" q=0 1:13-1:13
+=== clickhouse "SELECT @n'x', @X'ab', @B'1', @E'a\\nb', @q'[x]'"
+201 "SELECT" q=0 1:1-1:7
+15 "@n" q=0 1:8-1:10
+31 "x" q=39 1:10-1:13
+51 "," q=0 1:13-1:14
+15 "@X" q=0 1:15-1:17
+31 "ab" q=39 1:17-1:21
+51 "," q=0 1:21-1:22
+15 "@B" q=0 1:23-1:25
+31 "1" q=39 1:25-1:28
+51 "," q=0 1:28-1:29
+15 "@E" q=0 1:30-1:32
+31 "a\nb" q=39 1:32-1:38
+51 "," q=0 1:38-1:39
+15 "@q" q=0 1:40-1:42
+31 "[x]" q=39 1:42-1:47
+0 "" q=0 1:47-1:47
+=== clickhouse "SELECT @a'x'"
+201 "SELECT" q=0 1:1-1:7
+15 "@a" q=0 1:8-1:10
+31 "x" q=39 1:10-1:13
+0 "" q=0 1:13-1:13
+=== clickhouse "SELECT @U&'d\\0061t'"
+ERR Error E4001 at line 1, column 9: unsupported feature: U& Unicode escape literals in clickhouse
+
+   1 | SELECT @U&'d\0061t'
+               ^^
+
+
+Hint: U&'...' is PostgreSQL syntax; write the characters directly
+Help: https://github.com/ajitpratap0/GoSQLX/blob/main/docs/ERROR_CODES.md#E4001
+=== clickhouse "SELECT @u&\"d\""
+ERR Error E4001 at line 1, column 9: unsupported feature: U& Unicode escape literals in clickhouse
+
+   1 | SELECT @u&"d"
+               ^^
+
+
+Hint: U&'...' is PostgreSQL syntax; write the characters directly
+Help: https://github.com/ajitpratap0/GoSQLX/blob/main/docs/ERROR_CODES.md#E4001
+=== clickhouse "SELECT @@U&'x'"
+ERR Error E4001 at line 1, column 10: unsupported feature: U& Unicode escape literals in clickhouse
+
+   1 | SELECT @@U&'x'
+                ^^
+
+
+Hint: U&'...' is PostgreSQL syntax; write the characters directly
+Help: https://github.com/ajitpratap0/GoSQLX/blob/main/docs/ERROR_CODES.md#E4001
+=== clickhouse "SELECT @group by x"
+201 "SELECT" q=0 1:1-1:7
+15 "@group by" q=0 1:8-1:17
+14 "x" q=0 1:18-1:19
+0 "" q=0 1:19-1:19
+=== clickhouse "SELECT @GROUP   BY x"
+201 "SELECT" q=0 1:1-1:7
+15 "@GROUP BY" q=0 1:8-1:19
+14 "x" q=0 1:20-1:21
+0 "" q=0 1:21-1:21
+=== clickhouse "SELECT @group\nby x"
+201 "SELECT" q=0 1:1-1:7
+15 "@group by" q=0 1:8-2:3
+14 "x" q=0 2:4-2:5
+0 "" q=0 2:5-2:5
+=== clickhouse "SELECT @order by, @left join, @right outer, @inner join, @cross join"
+201 "SELECT" q=0 1:1-1:7
+15 "@order by" q=0 1:8-1:17
+51 "," q=0 1:17-1:18
+15 "@left join" q=0 1:19-1:29
+51 "," q=0 1:29-1:30
+15 "@right" q=0 1:31-1:37
+208 "outer" q=0 1:38-1:43
+51 "," q=0 1:43-1:44
+15 "@inner join" q=0 1:45-1:56
+51 "," q=0 1:56-1:57
+15 "@cross join" q=0 1:58-1:69
+0 "" q=0 1:69-1:69
+=== clickhouse "SELECT @natural join, @full outer join, @grouping sets, @outer apply"
+201 "SELECT" q=0 1:1-1:7
+15 "@natural" q=0 1:8-1:16
+204 "join" q=0 1:17-1:21
+51 "," q=0 1:21-1:22
+15 "@full" q=0 1:23-1:28
+275 "outer join" q=0 1:29-1:39
+51 "," q=0 1:39-1:40
+15 "@grouping sets" q=0 1:41-1:55
+51 "," q=0 1:55-1:56
+15 "@outer" q=0 1:57-1:63
+14 "apply" q=0 1:64-1:69
+0 "" q=0 1:69-1:69
+=== clickhouse "SELECT @group"
+201 "SELECT" q=0 1:1-1:7
+15 "@group" q=0 1:8-1:14
+0 "" q=0 1:14-1:14
+=== clickhouse "SELECT @group, @order"
+201 "SELECT" q=0 1:1-1:7
+15 "@group" q=0 1:8-1:14
+51 "," q=0 1:14-1:15
+15 "@order" q=0 1:16-1:22
+0 "" q=0 1:22-1:22
+=== clickhouse "SELECT @@group by"
+201 "SELECT" q=0 1:1-1:7
+122 "@@" q=0 1:8-1:10
+270 "group by" q=0 1:10-1:18
+0 "" q=0 1:18-1:18
+=== clickhouse "SELECT @@Left Outer Join"
+201 "SELECT" q=0 1:1-1:7
+122 "@@" q=0 1:8-1:10
+206 "Left" q=0 1:10-1:14
+275 "Outer Join" q=0 1:15-1:25
+0 "" q=0 1:25-1:25
+=== clickhouse "SELECT\n  @a,\n  @@b,\r\n  @c"
+201 "SELECT" q=0 1:1-1:7
+15 "@a" q=0 2:3-2:5
+51 "," q=0 2:5-2:6
+122 "@@" q=0 3:3-3:5
+14 "b" q=0 3:5-3:6
+51 "," q=0 3:6-3:7
+15 "@c" q=0 4:3-4:5
+0 "" q=0 4:5-4:5
+=== clickhouse "SELECT '@id', \"@id\", -- @id\n 1 /* @id */"
+201 "SELECT" q=0 1:1-1:7
+31 "@id" q=39 1:8-1:13
+51 "," q=0 1:13-1:14
+32 "@id" q=34 1:15-1:20
+51 "," q=0 1:20-1:21
+11 "1" q=0 2:2-2:3
+0 "" q=0 2:13-2:13
+0 "" q=0 2:13-2:13
+=== clickhouse "EXEC p @a = 1, @b = @c OUTPUT"
+14 "EXEC" q=0 1:1-1:5
+14 "p" q=0 1:6-1:7
+15 "@a" q=0 1:8-1:10
+52 "=" q=0 1:11-1:12
+11 "1" q=0 1:13-1:14
+51 "," q=0 1:14-1:15
+15 "@b" q=0 1:16-1:18
+52 "=" q=0 1:19-1:20
+15 "@c" q=0 1:21-1:23
+14 "OUTPUT" q=0 1:24-1:30
+0 "" q=0 1:30-1:30
+=== clickhouse "SELECT @x\u00a0"
+ERR Error E1001 at line 1, column 10: unexpected character ' '
+
+   1 | SELECT @x 
+                ^
+
+
+Hint: Remove or escape the character ' '
+Help: https://github.com/ajitpratap0/GoSQLX/blob/main/docs/ERROR_CODES.md#E1001
+=== clickhouse "SELECT @abcdefghijklmnopqrstuvwxyz0123456789abcdefghijklmnopqrstuvwxyz0123456789"
+201 "SELECT" q=0 1:1-1:7
+15 "@abcdefghijklmnopqrstuvwxyz0123456789abcdefghijklmnopqrstuvwxyz0123456789" q=0 1:8-1:81
+0 "" q=0 1:81-1:81

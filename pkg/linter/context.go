@@ -16,7 +16,8 @@ package linter
 
 import (
 	"strings"
-	"sync"
+	"sync/atomic"
+	"unsafe"
 
 	"github.com/ajitpratap0/GoSQLX/pkg/models"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
@@ -77,9 +78,10 @@ type Context struct {
 	// File metadata for violation reporting
 	Filename string
 
-	nodes      []ast.Node
-	nodesAST   *ast.AST // AST the cache was built for; a changed c.AST invalidates it
-	nodesBuilt bool
+	// nodesCache holds an immutable *nodeCollector snapshot for Nodes(), read and
+	// published with atomic pointer operations (no shared lock). A snapshot whose
+	// root differs from c.AST is stale.
+	nodesCache unsafe.Pointer
 }
 
 // NewContext creates a new linting context from SQL content and filename.
@@ -128,9 +130,7 @@ func (c *Context) WithTokens(tokens []models.TokenWithSpan) *Context {
 func (c *Context) WithAST(astObj *ast.AST, err error) *Context {
 	c.AST = astObj
 	c.ParseErr = err
-	nodesMu.Lock()
-	c.nodes, c.nodesAST, c.nodesBuilt = nil, nil, false
-	nodesMu.Unlock()
+	atomic.StorePointer(&c.nodesCache, nil)
 	return c
 }
 
@@ -162,13 +162,11 @@ func (c *Context) GetLineCount() int {
 	return len(c.Lines)
 }
 
-// nodesMu guards the lazily built Nodes cache of every Context. It is held only
-// for pointer-sized reads and writes, never while walking the AST, so rules may
-// call Nodes concurrently on one shared Context and Context stays copyable.
-var nodesMu sync.RWMutex
-
 // nodeCollector appends every visited node in preorder; it never prunes.
-type nodeCollector struct{ nodes []ast.Node }
+type nodeCollector struct {
+	nodes []ast.Node
+	root  *ast.AST // AST the snapshot was built for; a changed c.AST invalidates it
+}
 
 // Visit implements ast.Visitor.
 func (c *nodeCollector) Visit(n ast.Node) (ast.Visitor, error) {
@@ -181,37 +179,28 @@ func (c *nodeCollector) Visit(n ast.Node) (ast.Visitor, error) {
 // Nodes returns every node of every AST statement in preorder, matching
 // ast.Inspect. The list is built on first use and cached for this Context's AST.
 // It is safe to call from several goroutines at once (rules may Check one shared
-// Context concurrently); concurrent first calls may each walk the tree, and one
-// result is kept. Rules must not mutate the returned slice or the AST. Replacing
+// Context concurrently) without any process-wide lock; concurrent first calls
+// may each walk the tree, and one result is kept. Rules must not mutate the returned slice or the AST. Replacing
 // c.AST (directly or via WithAST) invalidates the cache; mutating the tree in
 // place does not. Separate Contexts have independent caches. Returns nil when no
 // AST is available.
 func (c *Context) Nodes() []ast.Node {
-	nodesMu.RLock()
-	if c.nodesBuilt && c.nodesAST == c.AST {
-		n := c.nodes
-		nodesMu.RUnlock()
-		return n
+	if p := (*nodeCollector)(atomic.LoadPointer(&c.nodesCache)); p != nil && p.root == c.AST {
+		return p.nodes
 	}
-	nodesMu.RUnlock()
 
 	root := c.AST
-	var built []ast.Node
+	// A Visitor (one allocation) instead of an ast.Inspect closure per statement:
+	// the walk order is identical and no state is captured by reference.
+	col := &nodeCollector{root: root}
 	if root != nil {
-		// A Visitor (one allocation) instead of an ast.Inspect closure per statement:
-		// the walk order is identical and no state is captured by reference.
-		col := &nodeCollector{nodes: make([]ast.Node, 0, 64)}
+		col.nodes = make([]ast.Node, 0, 64)
 		for _, stmt := range root.Statements {
 			_ = ast.Walk(col, stmt)
 		}
-		built = col.nodes
 	}
-
-	nodesMu.Lock()
-	defer nodesMu.Unlock()
-	if c.nodesBuilt && c.nodesAST == root {
-		return c.nodes // another goroutine published first
-	}
-	c.nodesBuilt, c.nodesAST, c.nodes = true, root, built
-	return built
+	// Last writer wins; concurrent snapshots have identical contents. The
+	// collector is never mutated after this point.
+	atomic.StorePointer(&c.nodesCache, unsafe.Pointer(col))
+	return col.nodes
 }

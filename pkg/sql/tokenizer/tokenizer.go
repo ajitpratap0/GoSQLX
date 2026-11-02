@@ -2774,7 +2774,8 @@ func (t *Tokenizer) scanIdentifierTail() {
 				// '$' continues a name (Oracle v$session, Snowflake
 				// SYSTEM$TYPEOF, PostgreSQL a$b) and so does '#' in Oracle (a#).
 				// Neither can start one; scanIdentifierTail is only called
-				// after the first character.
+				// after the first character, or on a first character the
+				// caller has already checked with isIdentifierStart.
 				if c == '$' || (c == '#' && t.dialect == keywords.DialectOracle) {
 					t.pos.Index++
 					t.pos.Column++

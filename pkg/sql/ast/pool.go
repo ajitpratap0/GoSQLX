@@ -502,8 +502,10 @@ func NewAST() *AST {
 // and performance.
 //
 // Fast path: when the parser built the tree and drew no node from a pool, the
-// release walk is skipped (it would Put nothing); hand-built trees and parser
-// trees with pooled draws always take the walk.
+// release walk is skipped (it would Put only heap-built nodes into pools the
+// parser never draws from); hand-built trees and parser trees with pooled
+// draws always take the walk. The flag is a parse-time snapshot: pooled nodes
+// spliced into the tree later only lose recycling to the GC.
 //
 // Cleanup Process:
 //  1. Walks every statement and Puts only these node types: TupleExpression,
@@ -561,7 +563,8 @@ func ReleaseAST(ast *AST) {
 
 	if ast.noPooledDraws {
 		// The parser built this tree and drew no pooled node into it, so the
-		// release walk would Put nothing. Drop the references only.
+		// release walk would Put only heap-built nodes into pools the parser
+		// never draws from (e.g. DROP/CREATE VIEW). Drop the references only.
 		clear(ast.Statements)
 		ast.noPooledDraws = false
 	} else {

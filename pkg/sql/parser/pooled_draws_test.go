@@ -4,6 +4,7 @@
 package parser
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -229,5 +230,48 @@ func TestPooledDraws_ResetPerParse(t *testing.T) {
 			t.Errorf("%q: pooledDraws=%d, want draws=%v", sql, p.pooledDraws, want)
 		}
 		ast.ReleaseAST(tree)
+	}
+}
+
+// TestPooledDraws_ParseMarksTree checks that real parses on both token entry
+// points mark the returned tree (AST.noPooledDraws) so ReleaseAST can take the
+// O(1) path: true for draw-free queries, false when a tuple was drawn.
+func TestPooledDraws_ParseMarksTree(t *testing.T) {
+	marked := func(tree *ast.AST) bool {
+		return reflect.ValueOf(tree).Elem().FieldByName("noPooledDraws").Bool()
+	}
+	tkz := tokenizer.GetTokenizer()
+	defer tokenizer.PutTokenizer(tkz)
+	p := NewParser()
+	defer p.Release()
+	for _, tc := range []struct {
+		sql  string
+		want bool
+	}{
+		{"SELECT a FROM t WHERE b = 1", true},
+		{"SELECT (1, 2)", false},
+		{"SELECT a FROM t", true}, // counter must reset after a drawing parse
+	} {
+		tokens, err := tkz.Tokenize([]byte(tc.sql))
+		if err != nil {
+			t.Fatal(err)
+		}
+		plain, err := p.ParseFromModelTokens(tokens)
+		if err != nil {
+			t.Fatalf("%q: %v", tc.sql, err)
+		}
+		if got := marked(plain); got != tc.want {
+			t.Errorf("ParseFromModelTokens %q: noPooledDraws=%v, want %v", tc.sql, got, tc.want)
+		}
+		ast.ReleaseAST(plain)
+
+		withCtx, err := p.ParseContextFromModelTokens(context.Background(), tokens)
+		if err != nil {
+			t.Fatalf("%q: %v", tc.sql, err)
+		}
+		if got := marked(withCtx); got != tc.want {
+			t.Errorf("ParseContextFromModelTokens %q: noPooledDraws=%v, want %v", tc.sql, got, tc.want)
+		}
+		ast.ReleaseAST(withCtx)
 	}
 }

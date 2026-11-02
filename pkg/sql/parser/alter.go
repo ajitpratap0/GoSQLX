@@ -61,6 +61,7 @@ func (p *Parser) parseAlterStatement() (ast.Statement, error) {
 		return nil, p.expectedError("TABLE")
 	}
 	stmt := ast.GetAlterStatement()
+	p.notePooledDraw()
 	stmt.Type = typ
 	stmt.Modifiers = modifiers
 	out, err := parse(stmt)

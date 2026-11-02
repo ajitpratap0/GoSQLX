@@ -49,7 +49,7 @@ func (p *Parser) parseFunctionCall(funcName string) (*ast.FunctionCall, error) {
 
 	// Parse arguments if not empty
 	var separator *ast.LiteralValue
-	argBase, argCount := 0, -1 // plain arguments held on exprScratch (argCount >= 0)
+	var funcCall *ast.FunctionCall
 	if form := specialFormOf(funcName); form != formNone && !p.isType(models.TokenTypeRParen) {
 		// Keyword-introduced arguments: SUBSTRING(s FROM 1 FOR 2), TRIM(BOTH ' ' FROM s), ...
 		args, err := p.parseSpecialFormArgs(form)
@@ -59,9 +59,11 @@ func (p *Parser) parseFunctionCall(funcName string) (*ast.FunctionCall, error) {
 		arguments = args
 	} else if !p.isType(models.TokenTypeRParen) {
 		// Arguments are collected on the parser's scratch stack and copied once
-		// into the call's co-allocated storage (see newFunctionCall).
-		argBase = p.exprMark()
-		defer p.exprDrop(argBase)
+		// into the call's co-allocated storage (see newFunctionCall). Every
+		// error return in the loop drops the stack back to argBase first: a
+		// caller that swallows the error and carries on must find the stack as
+		// it left it.
+		argBase := p.exprMark()
 		// A few functions take arguments with their own syntax (CURSOR(SELECT
 		// ...), JSON_OBJECT(k VALUE v), XMLTABLE(... COLUMNS ...)); every other
 		// call skips those checks.
@@ -83,9 +85,10 @@ func (p *Parser) parseFunctionCall(funcName string) (*ast.FunctionCall, error) {
 				p.advance() // =>
 				value, err := p.parseExpression()
 				if err != nil {
+					p.exprDrop(argBase)
 					return nil, err
 				}
-				p.exprPush(&ast.NamedArgument{
+				p.exprPushOutOfLine(&ast.NamedArgument{
 					Name:  argName,
 					Value: value,
 					Pos:   namePos,
@@ -97,6 +100,7 @@ func (p *Parser) parseFunctionCall(funcName string) (*ast.FunctionCall, error) {
 				if p.isType(models.TokenTypeRParen) {
 					break
 				}
+				p.exprDrop(argBase)
 				return nil, p.expectedError(", or )")
 			}
 
@@ -108,16 +112,19 @@ func (p *Parser) parseFunctionCall(funcName string) (*ast.FunctionCall, error) {
 				pos := p.currentLocation()
 				sub, err := p.parseSubquery()
 				if err != nil {
+					p.exprDrop(argBase)
 					return nil, err
 				}
-				p.exprPush(&ast.SubqueryExpression{Subquery: sub, Pos: pos, Bare: true})
+				p.exprPushOutOfLine(&ast.SubqueryExpression{Subquery: sub, Pos: pos, Bare: true})
 				if p.isType(models.TokenTypeRParen) {
 					break
 				}
+				p.exprDrop(argBase)
 				return nil, p.expectedError(")")
 			}
 			if quirky && p.isJSONObjectFunc(funcName) {
 				if arg, err = p.parseJSONObjectArg(); err != nil {
+					p.exprDrop(argBase)
 					return nil, err
 				}
 			} else if quirky && p.isOpenRowsetBulk(funcName) {
@@ -126,22 +133,25 @@ func (p *Parser) parseFunctionCall(funcName string) (*ast.FunctionCall, error) {
 				ka := &ast.KeywordArgument{Keyword: "BULK", Pos: p.currentLocation()}
 				p.advance() // Consume BULK
 				if ka.Value, err = p.parseExpression(); err != nil {
+					p.exprDrop(argBase)
 					return nil, err
 				}
 				arg = ka
 			} else if arg, err = p.parseExpression(); err != nil {
+				p.exprDrop(argBase)
 				return nil, err
 			}
 			if quirky && p.isType(models.TokenTypeAs) && isXMLNamedArgFunc(funcName) {
 				// XMLATTRIBUTES(col AS "name") / XMLFOREST(col AS name)
 				p.advance() // Consume AS
 				if !p.isAliasAfterAS() {
+					p.exprDrop(argBase)
 					return nil, p.expectedError("name after AS")
 				}
 				arg = &ast.AliasedExpression{Expr: arg, Alias: p.currentToken.Token.Value, AliasQuote: p.currentNameQuote()}
 				p.advance()
 			}
-			p.exprPush(arg)
+			p.exprPushOutOfLine(arg)
 
 			// Check for comma or end of arguments
 			if p.isType(models.TokenTypeComma) {
@@ -157,15 +167,20 @@ func (p *Parser) parseFunctionCall(funcName string) (*ast.FunctionCall, error) {
 				// argument.
 				last, err := p.parseClauseArgument(funcName, arg)
 				if err != nil {
+					p.exprDrop(argBase)
 					return nil, err
 				}
 				p.exprScratch[len(p.exprScratch)-1] = last
 				break
 			} else {
+				p.exprDrop(argBase)
 				return nil, p.expectedError(", or )")
 			}
 		}
-		argCount = len(p.exprScratch) - argBase
+		// The arguments move into the call's own storage now, so no later
+		// return has anything to unwind on the scratch stack.
+		funcCall = newFunctionCall(p.exprScratch[argBase:])
+		p.exprDrop(argBase)
 	}
 
 	// Parse ORDER BY clause inside aggregate functions (STRING_AGG, ARRAY_AGG, etc.)
@@ -243,12 +258,7 @@ func (p *Parser) parseFunctionCall(funcName string) (*ast.FunctionCall, error) {
 	p.advance() // Consume )
 
 	// Create function call
-	var funcCall *ast.FunctionCall
-	if argCount >= 0 {
-		// Nested parsing since the argument loop (ORDER BY, SEPARATOR) pushes
-		// above and pops back, so the arguments are still at [argBase, +argCount).
-		funcCall = newFunctionCall(p.exprScratch[argBase : argBase+argCount])
-	} else {
+	if funcCall == nil {
 		funcCall = &ast.FunctionCall{Arguments: arguments}
 	}
 	funcCall.Name = funcName

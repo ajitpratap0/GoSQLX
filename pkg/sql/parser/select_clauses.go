@@ -830,7 +830,6 @@ func (p *Parser) parseGroupByClause(stmt *ast.SelectStatement) ([]ast.Expression
 	}
 
 	base := p.exprMark()
-	defer p.exprDrop(base)
 	for {
 		var (
 			expr ast.Expression
@@ -849,6 +848,7 @@ func (p *Parser) parseGroupByClause(stmt *ast.SelectStatement) ([]ast.Expression
 		}
 
 		if err != nil {
+			p.exprDrop(base)
 			return nil, err
 		}
 		p.exprPush(expr)
@@ -925,7 +925,6 @@ func (p *Parser) parseOrderByList() ([]ast.OrderByExpression, error) {
 	p.advance() // Consume BY
 
 	base := p.orderMark()
-	defer p.orderDrop(base)
 	for {
 		var expr ast.Expression
 		if p.isOrderByAll() {
@@ -935,6 +934,7 @@ func (p *Parser) parseOrderByList() ([]ast.OrderByExpression, error) {
 		} else {
 			var err error
 			if expr, err = p.parseExpression(); err != nil {
+				p.orderDrop(base)
 				return nil, err
 			}
 		}
@@ -956,6 +956,7 @@ func (p *Parser) parseOrderByList() ([]ast.OrderByExpression, error) {
 			op := ast.OrderUsingOperatorText(p.peekToken().Token.Value)
 			if op == "" {
 				p.advance() // USING
+				p.orderDrop(base)
 				return nil, p.expectedError("sort operator after USING")
 			}
 			p.advance() // USING
@@ -965,6 +966,7 @@ func (p *Parser) parseOrderByList() ([]ast.OrderByExpression, error) {
 
 		nullsFirst, err := p.parseNullsClause()
 		if err != nil {
+			p.orderDrop(base)
 			return nil, err
 		}
 		entry.NullsFirst = nullsFirst
@@ -976,6 +978,7 @@ func (p *Parser) parseOrderByList() ([]ast.OrderByExpression, error) {
 			strings.EqualFold(p.peekToken().Token.Value, "FILL") {
 			fill, err := p.parseClickHouseWithFill()
 			if err != nil {
+				p.orderDrop(base)
 				return nil, err
 			}
 			entry.WithFill = fill

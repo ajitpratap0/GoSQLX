@@ -76,6 +76,13 @@ func TestScratchBalancedAfterParse(t *testing.T) {
 		"SELECT a FROM t GROUP BY a, ORDER",
 		"SELECT a FROM t ORDER BY a, b DESC, ,",
 		"SELECT a, (SELECT b, c FROM u ORDER BY",
+		"SELECT f(a, b => ) FROM t",
+		"SELECT f(a, b => g(c, )) FROM t",
+		"SELECT a FROM t GROUP BY a, (",
+		"SELECT a FROM t GROUP BY a, f(b,",
+		"SELECT a FROM t ORDER BY a, b USING",
+		"SELECT a, b INTO",
+		"SELECT a, f(b) FROM t ORDER BY a, g(c,",
 		"SELECT",
 	}
 	for _, sql := range queries {

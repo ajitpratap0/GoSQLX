@@ -82,14 +82,18 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 	}
 
 	// Column list
-	// The list stays on the scratch stack until the statement exists, so its
-	// columns can be copied into the statement's own allocation.
+	// The list is collected on the scratch stack and moved into the statement's
+	// own allocation at once, which also holds the single table reference of
+	// the FROM clause. After that nothing is left on the stack, so no later
+	// return has anything to unwind. FROM follows the list directly or after
+	// INTO, so the table slot is reserved unless the list ends the statement.
 	colBase := p.exprMark()
-	defer p.exprDrop(colBase)
 	if err = p.pushSelectColumns(); err != nil {
+		p.exprDrop(colBase)
 		return nil, err
 	}
-	colEnd := len(p.exprScratch)
+	selectStmt, fromBuf := newSelectStatement(p.exprScratch[colBase:], p.isType(models.TokenTypeFrom) || p.isType(models.TokenTypeInto))
+	p.exprDrop(colBase)
 
 	// SELECT ... INTO target (SQL Server, PostgreSQL, MySQL, Oracle PL/SQL)
 	var into *ast.SelectInto
@@ -100,9 +104,6 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 	}
 
 	// FROM … JOIN clauses
-	// The statement is allocated before the FROM clause so that its column
-	// list and single table reference share its allocation.
-	selectStmt, fromBuf := newSelectStatement(p.exprScratch[colBase:colEnd], p.isType(models.TokenTypeFrom))
 	tableName, tables, joins, err := p.parseFromClause(fromBuf)
 	if err != nil {
 		return nil, err

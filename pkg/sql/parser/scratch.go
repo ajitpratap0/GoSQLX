@@ -57,10 +57,16 @@ func scratchDrop[T any](s *[]T, base int) {
 	*s = (*s)[:base]
 }
 
-// resetScratch empties the stacks, releasing oversized backing arrays.
+// resetScratch empties the stacks, releasing oversized backing arrays. A
+// parse that finished normally leaves them empty, so the common case is two
+// length checks and two capacity checks.
 func (p *Parser) resetScratch() {
-	p.exprScratch = resetScratchSlice(p.exprScratch)
-	p.orderScratch = resetScratchSlice(p.orderScratch)
+	if len(p.exprScratch) != 0 || cap(p.exprScratch) > maxPooledScratch {
+		p.exprScratch = resetScratchSlice(p.exprScratch)
+	}
+	if len(p.orderScratch) != 0 || cap(p.orderScratch) > maxPooledScratch {
+		p.orderScratch = resetScratchSlice(p.orderScratch)
+	}
 }
 
 func resetScratchSlice[T any](s []T) []T {
@@ -74,11 +80,24 @@ func resetScratchSlice[T any](s []T) []T {
 func (p *Parser) exprMark() int                     { return len(p.exprScratch) }
 func (p *Parser) exprPush(e ast.Expression)         { scratchPush(&p.exprScratch, e) }
 func (p *Parser) exprPop(base int) []ast.Expression { return scratchPop(&p.exprScratch, base) }
-func (p *Parser) exprDrop(base int)                 { scratchDrop(&p.exprScratch, base) }
+
+// exprPushOutOfLine is exprPush for rare call sites, which would otherwise
+// each inline an append into a recursive function's frame.
+//
+//go:noinline
+func (p *Parser) exprPushOutOfLine(e ast.Expression) { scratchPush(&p.exprScratch, e) }
+
+// exprDrop and orderDrop are error-path cleanup. They are kept out of line so
+// their many call sites do not grow the frames of the recursive parse functions.
+//
+//go:noinline
+func (p *Parser) exprDrop(base int) { scratchDrop(&p.exprScratch, base) }
 
 func (p *Parser) orderMark() int                    { return len(p.orderScratch) }
 func (p *Parser) orderPush(o ast.OrderByExpression) { scratchPush(&p.orderScratch, o) }
 func (p *Parser) orderPop(base int) []ast.OrderByExpression {
 	return scratchPop(&p.orderScratch, base)
 }
+
+//go:noinline
 func (p *Parser) orderDrop(base int) { scratchDrop(&p.orderScratch, base) }

@@ -8,7 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Breaking Changes
-- **Pool statistics [W1-07]**: Get/Put operations are counted only while metrics are enabled. While disabled, `metrics.GetPoolStats` returns zero values for the three standard pools and omits custom pools. Counts collected earlier remain available when metrics are enabled again.
+- **Pool statistics [W1-07]**: Get/Put operations are counted only while metrics are enabled. While disabled, `metrics.GetPoolStats` returns zero values for the three standard pools and omits custom pools. Counts collected earlier remain available when metrics are enabled again. The `gosqlx stats` command never enables metrics, so a fresh process prints zeros (as it effectively did before); call `metrics.Enable()` before the work you want counted.
   - **Migration:** Call `metrics.Enable()` before the workload to be measured, for example at process start. Tests asserting pool balance through `GetPoolStats` deltas should enable metrics first and restore the previous state in cleanup. Counts are not retroactive.
 
 ### Added
@@ -105,7 +105,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     benchmarks that publish diagnostics no longer time a growing buffer.
 
 ### Performance
-- **Pools [W1-07]**: Skip atomic pool counter updates while metrics are disabled. <gate numbers>
+- **Pools [W1-07]**: Skip atomic pool counter updates while metrics are disabled. amd64 layout-randomized perf gate: `PoolGetPut/serial` -5.41% (Hodges-Lehmann, p<0.001, A/A' +0.30%, spread 0.20%; benchstat 56.89 -> 54.03 ns/op), not in the low-power list; no gated E2E change (`ParseE2E/simple_select` -0.32%, p=0.543); allocs/op and B/op unchanged. The gain is mainly in contended/parallel use, which the gate does not measure.
 - **gosqlx**: errors returned by `Parse`, `Validate`, `Lint` and the tree helpers now wrap the sentinel and the underlying error in an unexported `wrapErr` that builds its message lazily, instead of `fmt.Errorf("%w: %w", ...)` on every failure. Error text, `errors.Is` and `errors.As` behaviour are unchanged; only the unexported concrete error type differs. The saving applies to callers that only check `errors.Is`/`errors.As` or drop the message: when the message is built (`err.Error()`, as the LSP and CLI do) the gain is about 2 allocs/op and 3-4% B/op per error (syntax_mid 21 -> 19 allocs). Because the message is now built on demand, `Error()` reflects any later mutation of the inner `*errors.Error` reached through `errors.As`; previously the text was fixed at creation. [W1-03]
 - **Linter L010**: scans bytes in a single pass instead of rebuilding
   substrings and running a regular expression; `BenchmarkLintRule/L010` is 67.5% faster on the

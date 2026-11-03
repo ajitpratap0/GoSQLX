@@ -434,8 +434,8 @@ func init() {
 //	defer metrics.Disable()
 //	// All operations are now tracked
 func Enable() {
-	metricsgate.Set(true)
 	globalMetrics.startTime.Store(time.Now())
+	metricsgate.Set(true)
 }
 
 // Disable deactivates metrics collection globally.

@@ -74,8 +74,11 @@ func TestCompareLayoutsUsesTheLayoutAsTheUnit(t *testing.T) {
 	if !c.ByLayout || c.NBase != 3 || c.NHead != 3 {
 		t.Fatalf("cmp = %+v, want ByLayout with 3 layouts per arm", c)
 	}
-	if want := mean([]float64{100, 104, 98}); math.Abs(c.Base-want) > 1e-9 {
-		t.Fatalf("Base = %g, want the mean of the layout medians %g", c.Base, want)
+	if c.Base != 100 || c.Head != 105 {
+		t.Fatalf("Base, Head = %g, %g; want the medians of the layout medians, 100 and 105", c.Base, c.Head)
+	}
+	if want := hodgesLehmannRatio([]float64{100, 104, 98}, []float64{106, 103, 105}); math.Abs(c.Ratio-want) > 1e-12 || math.Abs(c.DeltaPct-(want-1)*100) > 1e-9 {
+		t.Fatalf("Ratio %g, DeltaPct %g; want the Hodges-Lehmann ratio %g", c.Ratio, c.DeltaPct, want)
 	}
 	if math.Abs(c.P-mannWhitney([]float64{100, 104, 98}, []float64{106, 103, 105})) > 1e-12 {
 		t.Fatalf("P = %g is not the Mann-Whitney p of the layout medians", c.P)
@@ -83,8 +86,8 @@ func TestCompareLayoutsUsesTheLayoutAsTheUnit(t *testing.T) {
 	if c.P < 0.05 {
 		t.Fatalf("P = %g: three layouts per arm cannot be significant", c.P)
 	}
-	if math.IsNaN(c.SpreadPct) || c.SpreadPct < 2 || c.SpreadPct > 5 {
-		t.Fatalf("SpreadPct = %g, want the relative sd of 100, 104, 98 (about 3%%)", c.SpreadPct)
+	if want := 1.4826 * 2; math.Abs(c.SpreadPct-want) > 1e-9 {
+		t.Fatalf("SpreadPct = %g, want 1.4826 x MAD(100, 104, 98) / 100 = %g%%", c.SpreadPct, want)
 	}
 	pooled := compare(flatten(base), flatten(head))
 	if pooled.P >= 0.01 {
@@ -309,16 +312,28 @@ func TestMinMWP(t *testing.T) {
 	}
 }
 
-func TestMeanAndRelSD(t *testing.T) {
-	if m := mean([]float64{1, 2, 3, 6}); m != 3 {
-		t.Errorf("mean = %g, want 3", m)
+func TestRobustSpreadAndHodgesLehmann(t *testing.T) {
+	if !math.IsNaN(robustRelSD([]float64{5})) || !math.IsNaN(robustRelSD([]float64{0, 0, 0})) {
+		t.Error("robustRelSD of one value or of a zero median must be NaN")
 	}
-	if !math.IsNaN(mean(nil)) || !math.IsNaN(relSD([]float64{5})) || !math.IsNaN(relSD([]float64{0, 0})) {
-		t.Error("mean(nil), relSD of one value and relSD of a zero mean must be NaN")
+	// median 100, |deviations| {2, 0, 2, 50}: MAD 2. The +50% outlier does not count.
+	if r := robustRelSD([]float64{98, 100, 102, 150}); math.Abs(r-1.4826*2/101*100) > 1e-9 {
+		t.Errorf("robustRelSD = %g, want %g", r, 1.4826*2/101*100)
 	}
-	// sd of {98, 100, 102} is 2, mean 100.
-	if r := relSD([]float64{98, 100, 102}); math.Abs(r-2) > 1e-9 {
-		t.Errorf("relSD = %g, want 2", r)
+	// Every head value is 10% above its base counterpart: the shift is 1.1
+	// exactly, and one wild head run does not move it.
+	base := []float64{100, 102, 98, 101, 99}
+	head := []float64{110, 112.2, 107.8, 111.1, 108.9}
+	if r := hodgesLehmannRatio(base, head); math.Abs(r-1.1) > 0.005 {
+		t.Errorf("hodgesLehmannRatio = %g, want about 1.1", r)
+	}
+	wild := append([]float64(nil), head...)
+	wild[0] = 300
+	if r := hodgesLehmannRatio(base, wild); math.Abs(r-1.1) > 0.02 {
+		t.Errorf("hodgesLehmannRatio with one wild head value = %g, want still about 1.1", r)
+	}
+	if !math.IsNaN(hodgesLehmannRatio(nil, head)) || !math.IsNaN(hodgesLehmannRatio([]float64{0}, head)) {
+		t.Error("hodgesLehmannRatio of an empty or non-positive sample must be NaN")
 	}
 	if g := groupMedians([][]float64{{3, 1, 2}, nil, {5}}); fmt.Sprint(g) != "[2 5]" {
 		t.Errorf("groupMedians = %v, want [2 5] (empty groups skipped)", g)
@@ -350,7 +365,7 @@ func TestReportShowsRunnerCPUAndLayouts(t *testing.T) {
 	for _, want := range []string{
 		"Runner CPU: **AMD EPYC 7763 64-Core Processor**.",
 		"each arm runs 10 randomized code layouts",
-		"| benchmark | time | p | A/A' | layout sd |",
+		"| benchmark | time | p | A/A' | spread |",
 		"A/A' control (base revision, disjoint layout seeds)",
 	} {
 		if !strings.Contains(md, want) {

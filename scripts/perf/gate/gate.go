@@ -74,8 +74,9 @@ type Inputs struct {
 // Cmp compares one metric of one benchmark between two arms.
 type Cmp struct {
 	OK         bool    // both arms have samples
-	Base, Head float64 // medians of the samples, or means of the per-layout medians
-	DeltaPct   float64 // (Head/Base - 1) * 100
+	Base, Head float64 // medians of the samples, or of the per-layout medians
+	Ratio      float64 // head/base effect: Head/Base, or the Hodges-Lehmann shift when ByLayout; 0 if unknown
+	DeltaPct   float64 // (Ratio - 1) * 100
 	P          float64 // Mann-Whitney two-sided p-value
 	Separated  bool    // every head sample (layout) is above every base one, or every one below
 	NBase      int     // samples, or layouts when ByLayout
@@ -83,9 +84,10 @@ type Cmp struct {
 	// ByLayout: both arms ran at least two randomized code layouts and the
 	// layout is the unit of comparison (see compareLayouts).
 	ByLayout bool
-	// SpreadPct is the base arm's layout-to-layout spread: the standard
-	// deviation of its per-layout medians relative to their mean, in percent.
-	// NaN unless ByLayout.
+	// SpreadPct is the base arm's spread across layouts: the robust standard
+	// deviation (1.4826 x MAD) of its per-layout medians relative to their
+	// median, in percent. With one round per layout it includes run-to-run
+	// noise as well as the layout effect. NaN unless ByLayout.
 	SpreadPct float64
 }
 
@@ -101,7 +103,8 @@ func compare(base, head []float64) Cmp {
 func finish(c Cmp, base, head []float64) Cmp {
 	switch {
 	case c.Base != 0:
-		c.DeltaPct = (c.Head/c.Base - 1) * 100
+		c.Ratio = c.Head / c.Base
+		c.DeltaPct = (c.Ratio - 1) * 100
 	case c.Head != 0:
 		c.DeltaPct = math.Inf(1)
 	}
@@ -131,15 +134,22 @@ func finish(c Cmp, base, head []float64) Cmp {
 // corresponding layouts; the unpaired test is the valid one (and only
 // conservative when they do correspond).
 //
-// The effect size is the ratio of the means of the per-layout medians: the
-// expected time over random layouts.
+// The effect size is the Hodges-Lehmann shift that goes with the U test: the
+// median over all (head layout, base layout) pairs of their time ratio. A
+// layout is often measured once, and on a busy runner a single run can be
+// tens of percent off; the mean of the layouts would move with it, the
+// Hodges-Lehmann ratio does not (it tolerates about 29% outliers).
 func compareLayouts(base, head [][]float64) Cmp {
 	bm, hm := groupMedians(base), groupMedians(head)
 	if len(bm) == 0 || len(hm) == 0 {
 		return Cmp{}
 	}
-	c := Cmp{OK: true, Base: mean(bm), Head: mean(hm), NBase: len(bm), NHead: len(hm), ByLayout: true, SpreadPct: relSD(bm)}
-	return finish(c, bm, hm)
+	c := finish(Cmp{OK: true, Base: median(bm), Head: median(hm), NBase: len(bm), NHead: len(hm), ByLayout: true, SpreadPct: robustRelSD(bm)}, bm, hm)
+	if r := hodgesLehmannRatio(bm, hm); r > 0 {
+		c.Ratio = r
+		c.DeltaPct = (r - 1) * 100
+	}
+	return c
 }
 
 // compareArms compares one benchmark's metric between two runs, by layout
@@ -256,18 +266,18 @@ func Evaluate(in Inputs, cfg Config) Result {
 			if res.HasSec {
 				row.Sec = compareArms(in.SecBase, in.SecHead, name, unitTime)
 			}
-			if row.Time.OK && row.Time.Base > 0 && row.Time.Head > 0 {
-				ratios = append(ratios, row.Time.Head/row.Time.Base)
+			if row.Time.OK && row.Time.Ratio > 0 {
+				ratios = append(ratios, row.Time.Ratio)
 			}
-			if row.AA.OK && row.AA.Base > 0 && row.AA.Head > 0 {
-				aaRatios = append(aaRatios, row.AA.Head/row.AA.Base)
+			if row.AA.OK && row.AA.Ratio > 0 {
+				aaRatios = append(aaRatios, row.AA.Ratio)
 				res.AACompared++
 				if math.Abs(row.AA.DeltaPct) > cfg.AADeltaPct {
 					res.AANoisy++
 				}
 			}
-			if row.Sec.OK && row.Sec.Base > 0 && row.Sec.Head > 0 {
-				secRatios = append(secRatios, row.Sec.Head/row.Sec.Base)
+			if row.Sec.OK && row.Sec.Ratio > 0 {
+				secRatios = append(secRatios, row.Sec.Ratio)
 			}
 			res.Rows = append(res.Rows, row)
 		}
@@ -638,7 +648,7 @@ func Markdown(res Result, cfg Config, meta Meta) string {
 
 	b.WriteString("### Gated suite (GOGC=off, GOMAXPROCS=1)\n\n")
 	if res.ByLayout {
-		b.WriteString("| benchmark | time | p | A/A' | layout sd | B/op | allocs/op | status |\n")
+		b.WriteString("| benchmark | time | p | A/A' | spread | B/op | allocs/op | status |\n")
 		b.WriteString("|---|---:|---:|---:|---:|---:|---:|---|\n")
 	} else {
 		b.WriteString("| benchmark | time | p | A/A | B/op | allocs/op | status |\n")
@@ -681,8 +691,9 @@ func Markdown(res Result, cfg Config, meta Meta) string {
 	}
 	fmt.Fprintf(&b, "| **geomean** | %s | %s | %s |%s | | |\n\n", pct((res.Geomean-1)*100), geoP, pct((res.AAGeomean-1)*100), extra)
 	if res.ByLayout {
-		b.WriteString("`layout sd`: the base arm's spread across its code layouts (standard deviation of the per-layout medians relative to their mean), " +
-			"i.e. how much this benchmark moves when only function placement changes.\n\n")
+		b.WriteString("`time` and `A/A'` are Hodges-Lehmann shifts over the per-layout medians. `spread`: the base arm's robust standard deviation " +
+			"across its layouts (1.4826 x MAD, relative), i.e. how much this benchmark moves between builds that differ only in function placement, plus run-to-run noise; " +
+			"a change much smaller than it cannot be resolved in one run.\n\n")
 	}
 	switch {
 	case res.HasAA && res.ByLayout:

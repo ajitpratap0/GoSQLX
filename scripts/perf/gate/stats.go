@@ -34,30 +34,40 @@ func groupMedians(groups [][]float64) []float64 {
 	return out
 }
 
-// mean returns the arithmetic mean of xs, or NaN for an empty slice.
-func mean(xs []float64) float64 {
-	if len(xs) == 0 {
-		return math.NaN()
-	}
-	var s float64
-	for _, x := range xs {
-		s += x
-	}
-	return s / float64(len(xs))
-}
-
-// relSD returns the sample standard deviation of xs relative to their mean,
-// in percent; NaN for fewer than two values or a zero mean.
-func relSD(xs []float64) float64 {
-	m := mean(xs)
+// robustRelSD returns a robust standard deviation of xs relative to their
+// median, in percent: 1.4826 x the median absolute deviation, which equals
+// the standard deviation for normal data and ignores a few wild values. NaN
+// for fewer than two values or a zero median.
+func robustRelSD(xs []float64) float64 {
+	m := median(xs)
 	if len(xs) < 2 || m == 0 || math.IsNaN(m) {
 		return math.NaN()
 	}
-	var ss float64
-	for _, x := range xs {
-		ss += (x - m) * (x - m)
+	dev := make([]float64, len(xs))
+	for i, x := range xs {
+		dev[i] = math.Abs(x - m)
 	}
-	return math.Sqrt(ss/float64(len(xs)-1)) / math.Abs(m) * 100
+	return 1.4826 * median(dev) / math.Abs(m) * 100
+}
+
+// hodgesLehmannRatio is the Hodges-Lehmann estimate of how much larger y is
+// than x, as a ratio: exp of the median of log(y_j) - log(x_i) over all
+// pairs. It is the estimator that goes with the Mann-Whitney U test. NaN
+// when a value is not positive or a sample is empty.
+func hodgesLehmannRatio(x, y []float64) float64 {
+	if len(x) == 0 || len(y) == 0 {
+		return math.NaN()
+	}
+	d := make([]float64, 0, len(x)*len(y))
+	for _, a := range x {
+		for _, b := range y {
+			if !(a > 0) || !(b > 0) {
+				return math.NaN()
+			}
+			d = append(d, math.Log(b)-math.Log(a))
+		}
+	}
+	return math.Exp(median(d))
 }
 
 // minMWP is the smallest two-sided p-value an exact Mann-Whitney U test can

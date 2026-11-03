@@ -407,49 +407,36 @@ func TestRedundantWhitespaceRule_Unicode(t *testing.T) {
 	}
 }
 
-func TestExtractNonStringParts(t *testing.T) {
+// TestRedundantWhitespaceRule_NamedColumns pins the reported columns for the
+// edge cases of the single-pass byte scan, independent of the frozen oracle.
+func TestRedundantWhitespaceRule_NamedColumns(t *testing.T) {
 	tests := []struct {
-		name          string
-		line          string
-		expectedParts int
+		name string
+		sql  string
+		cols []int // 1-indexed columns of expected violations
 	}{
-		{
-			name:          "No strings",
-			line:          "SELECT id FROM users",
-			expectedParts: 1,
-		},
-		{
-			name:          "Single quoted string",
-			line:          "SELECT 'hello' FROM users",
-			expectedParts: 2, // "SELECT " and " FROM users"
-		},
-		{
-			name:          "Double quoted string",
-			line:          `SELECT "hello" FROM users`,
-			expectedParts: 2,
-		},
-		{
-			name:          "Multiple strings",
-			line:          "SELECT 'hello', 'world' FROM users",
-			expectedParts: 3, // "SELECT ", ", ", " FROM users"
-		},
-		{
-			name:          "Empty line",
-			line:          "",
-			expectedParts: 0,
-		},
-		{
-			name:          "Only string",
-			line:          "'hello world'",
-			expectedParts: 0,
-		},
+		{"tab then spaces", "\t  x", []int{2}},
+		{"run right after closing quote", "'a'  x", []int{4}},
+		{"unterminated quote hides spaces", "x 'a   b", nil},
+		{"whitespace-only line", "      ", nil},
+		{"indent then inner run", "  a   b", []int{4}},
+		{"trailing run", "a   ", []int{2}},
+		{"run before opening quote", "a  'x'", []int{2}},
 	}
-
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			parts := extractNonStringParts(tt.line)
-			if len(parts) != tt.expectedParts {
-				t.Errorf("Expected %d parts, got %d: %+v", tt.expectedParts, len(parts), parts)
+			rule := NewRedundantWhitespaceRule()
+			vs, err := rule.Check(linter.NewContext(tt.sql, "test.sql"))
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if len(vs) != len(tt.cols) {
+				t.Fatalf("got %d violations, want %d: %+v", len(vs), len(tt.cols), vs)
+			}
+			for i, v := range vs {
+				if v.Location.Column != tt.cols[i] {
+					t.Errorf("violation %d column = %d, want %d", i, v.Location.Column, tt.cols[i])
+				}
 			}
 		})
 	}

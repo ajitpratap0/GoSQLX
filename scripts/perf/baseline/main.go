@@ -36,7 +36,7 @@ const externalFileComment = "ns_per_op is trend-only. bytes_per_op and allocs_pe
 	"Recorded from external benchmark output (-input); go_version is the toolchain declared with -go-version. Regenerate with: task bench:baseline:update"
 
 const fileComment = "ns_per_op is trend-only. bytes_per_op and allocs_per_op are gated by scripts/perf/baseline " +
-	"(allocs/op must not rise, B/op may rise at most 2 percent). Measured with GOGC=off, -cpu 1, medians. " +
+	"(allocs/op must not rise, B/op may rise at most 2 percent). Measured with GOGC=off and no GOMEMLIMIT (no GC, so no pool drains), -cpu 1, medians. " +
 	"Regenerate with: task bench:baseline:update"
 
 func main() {
@@ -168,6 +168,29 @@ func run(args []string, stdout, stderr io.Writer) error {
 	return nil
 }
 
+// gcOffEnv returns environ with GOGC=off and without GOGC or GOMEMLIMIT
+// settings of its own.
+//
+// Unlike scripts/perf/ab.sh (W0-15), the baseline deliberately sets no
+// GOMEMLIMIT: it gates absolute allocs/op and B/op only, and with no
+// collection at all no sync.Pool is drained mid-run, so those counts are
+// exact for every benchmark, large inputs and low iteration counts included.
+// A memory limit lets the collector run and drain the pools, which makes
+// allocs/op of large-input benchmarks vary from run to run. Its ns/op are
+// trend-only and include first-touch page faults; never compare them with
+// the A/B gate's timings. An inherited GOMEMLIMIT is dropped for the same
+// reason.
+func gcOffEnv(environ []string) []string {
+	env := make([]string, 0, len(environ)+1)
+	for _, kv := range environ {
+		if strings.HasPrefix(kv, "GOGC=") || strings.HasPrefix(kv, "GOMEMLIMIT=") {
+			continue
+		}
+		env = append(env, kv)
+	}
+	return append(env, "GOGC=off") // perf:no-gomemlimit (see above)
+}
+
 // measure runs every line of the suite file and returns the concatenated
 // `go test` output.
 func measure(suite, benchtime string, count int, log io.Writer) ([]byte, error) {
@@ -190,7 +213,7 @@ func measure(suite, benchtime string, count int, log io.Writer) ([]byte, error) 
 		fmt.Fprintf(log, "baseline: %s %s\n", parts[0], parts[1])
 		cmd := exec.Command("go", "test", "-run", "^$", "-bench", parts[1], "-benchmem",
 			"-benchtime", benchtime, "-count", fmt.Sprint(count), "-cpu", "1", parts[0])
-		cmd.Env = append(os.Environ(), "GOGC=off")
+		cmd.Env = gcOffEnv(os.Environ())
 		cmd.Stderr = log
 		out, err := cmd.Output()
 		if err != nil {

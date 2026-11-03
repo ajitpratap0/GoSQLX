@@ -21,6 +21,7 @@ import (
 	"sync"
 
 	"github.com/ajitpratap0/GoSQLX/internal/poolstats"
+	"github.com/ajitpratap0/GoSQLX/internal/stackgrow"
 	goerrors "github.com/ajitpratap0/GoSQLX/pkg/errors"
 	"github.com/ajitpratap0/GoSQLX/pkg/models"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
@@ -438,6 +439,7 @@ func (p *Parser) preprocess(tokens []models.TokenWithSpan) []models.TokenWithSpa
 // []models.TokenWithSpan (already normalised by preprocessTokens or p.preprocess) and returns
 // the parsed AST.
 func (p *Parser) parseTokens(tokens []models.TokenWithSpan) (*ast.AST, error) {
+	stackgrow.Reserve() // backstop for low-level callers; a no-op after tokscratch reserved
 	p.tokens = tokens
 	p.currentPos = 0
 	p.implicitEnd = 0
@@ -663,6 +665,7 @@ func (p *Parser) ParseContext(ctx context.Context, tokens []token.Token) (*ast.A
 // parseContextTokens is the core context-aware parsing routine. It takes
 // a preprocessed []models.TokenWithSpan and respects ctx for cancellation.
 func (p *Parser) parseContextTokens(ctx context.Context, tokens []models.TokenWithSpan) (*ast.AST, error) {
+	stackgrow.Reserve() // backstop for low-level callers; a no-op after tokscratch reserved
 	// Check context before starting
 	if err := ctx.Err(); err != nil {
 		return nil, err

@@ -17,6 +17,9 @@
 // slice, without adding that borrowed-result contract to the public
 // tokenizer API.
 //
+// These tokenize-then-parse entry points also reserve the parse's stack here,
+// before tokenizing, so a fresh goroutine grows its stack while frames are shallow.
+//
 // Package tokenizer registers the implementation in its init. Every function
 // here takes the *tokenizer.Tokenizer as t (typed any only to avoid an import
 // cycle) and returns the same tokens and errors as the matching public method
@@ -32,6 +35,7 @@ package tokscratch
 import (
 	"context"
 
+	"github.com/ajitpratap0/GoSQLX/internal/stackgrow"
 	"github.com/ajitpratap0/GoSQLX/pkg/models"
 )
 
@@ -54,18 +58,21 @@ func requireImplementation() {
 
 // Bytes is t.Tokenize(input) into t's scratch buffer.
 func Bytes(t any, input []byte) ([]models.TokenWithSpan, error) {
+	stackgrow.Reserve()
 	requireImplementation()
 	return impl(context.Background(), t, input, "", false)
 }
 
 // String is t.TokenizeString(s) into t's scratch buffer.
 func String(t any, s string) ([]models.TokenWithSpan, error) {
+	stackgrow.Reserve()
 	requireImplementation()
 	return impl(context.Background(), t, nil, s, true)
 }
 
 // StringContext is t.TokenizeStringContext(ctx, s) into t's scratch buffer.
 func StringContext(ctx context.Context, t any, s string) ([]models.TokenWithSpan, error) {
+	stackgrow.Reserve()
 	requireImplementation()
 	if err := ctx.Err(); err != nil {
 		return nil, err

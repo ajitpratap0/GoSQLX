@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/ajitpratap0/GoSQLX/internal/stackgrow"
 	"github.com/ajitpratap0/GoSQLX/internal/tokscratch"
 	goerrors "github.com/ajitpratap0/GoSQLX/pkg/errors"
 	"github.com/ajitpratap0/GoSQLX/pkg/models"
@@ -163,6 +164,7 @@ func ParseBytes(input []byte) (*ast.AST, error) {
 // ParseBytesWithTokens is like ParseBytes but also returns the preprocessed
 // token slice ([]models.TokenWithSpan) for callers that need both.
 func ParseBytesWithTokens(input []byte) (*ast.AST, []models.TokenWithSpan, error) {
+	stackgrow.Reserve()
 	tkz := tokenizer.GetTokenizer()
 	defer tokenizer.PutTokenizer(tkz)
 

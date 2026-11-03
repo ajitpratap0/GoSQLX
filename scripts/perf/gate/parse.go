@@ -15,13 +15,19 @@ import (
 )
 
 // Run holds every sample of one arm: benchmark name -> unit -> values, plus
-// the order in which names first appeared.
+// the order in which names first appeared. Layouts runs parallel to Values:
+// Layouts[name][unit][i] is the code layout (the -randlayout seed the binary
+// was linked with) that produced Values[name][unit][i], or "" when the input
+// carries no "layout:" lines.
 type Run struct {
-	Names  []string
-	Values map[string]map[string][]float64
+	Names   []string
+	Values  map[string]map[string][]float64
+	Layouts map[string]map[string][]string
 }
 
-func newRun() *Run { return &Run{Values: make(map[string]map[string][]float64)} }
+func newRun() *Run {
+	return &Run{Values: make(map[string]map[string][]float64), Layouts: make(map[string]map[string][]string)}
+}
 
 // Get returns the samples of name in unit (nil if absent).
 func (r *Run) Get(name, unit string) []float64 {
@@ -31,29 +37,69 @@ func (r *Run) Get(name, unit string) []float64 {
 	return r.Values[name][unit]
 }
 
-func (r *Run) add(name, unit string, v float64) {
+// ByLayout groups the samples of name in unit by code layout: the layouts in
+// the order they first appear and, for each, its samples. A run without
+// layout labels yields one group labelled "".
+func (r *Run) ByLayout(name, unit string) (labels []string, groups [][]float64) {
+	if r == nil {
+		return nil, nil
+	}
+	vals := r.Values[name][unit]
+	labs := r.Layouts[name][unit]
+	index := make(map[string]int)
+	for i, v := range vals {
+		l := ""
+		if i < len(labs) {
+			l = labs[i]
+		}
+		k, ok := index[l]
+		if !ok {
+			k = len(labels)
+			index[l] = k
+			labels = append(labels, l)
+			groups = append(groups, nil)
+		}
+		groups[k] = append(groups[k], v)
+	}
+	return labels, groups
+}
+
+func (r *Run) add(name, unit, layout string, v float64) {
 	units, ok := r.Values[name]
 	if !ok {
 		units = make(map[string][]float64)
 		r.Values[name] = units
+		r.Layouts[name] = make(map[string][]string)
 		r.Names = append(r.Names, name)
 	}
 	units[unit] = append(units[unit], v)
+	r.Layouts[name][unit] = append(r.Layouts[name][unit], layout)
 }
 
 // procSuffix is the "-<GOMAXPROCS>" suffix the testing package appends to a
 // benchmark name when GOMAXPROCS is not 1.
 var procSuffix = regexp.MustCompile(`-\d+$`)
 
+// layoutKey is the benchmark-format configuration key ab.sh writes before the
+// output of each binary: "layout: <seed>" (benchfmt "key: value" line). It
+// holds for every result line that follows until the next layout line.
+const layoutKey = "layout:"
+
 // parseBench reads Go benchmark output (the format of `go test -bench`):
-// lines of "BenchmarkName[-procs] <iterations> <value> <unit> ...". Every
-// other line (goos:, pkg:, PASS, logs) is ignored.
+// lines of "BenchmarkName[-procs] <iterations> <value> <unit> ...", labelled
+// with the most recent "layout: <seed>" line. Every other line (goos:, pkg:,
+// PASS, logs) is ignored.
 func parseBench(r io.Reader) (*Run, error) {
 	run := newRun()
+	layout := ""
 	sc := bufio.NewScanner(r)
 	sc.Buffer(make([]byte, 0, 64*1024), 1024*1024)
 	for line := 1; sc.Scan(); line++ {
 		f := strings.Fields(sc.Text())
+		if len(f) >= 1 && f[0] == layoutKey {
+			layout = strings.Join(f[1:], " ")
+			continue
+		}
 		if len(f) < 4 || !strings.HasPrefix(f[0], "Benchmark") {
 			continue
 		}
@@ -69,7 +115,7 @@ func parseBench(r io.Reader) (*Run, error) {
 			if err != nil {
 				return nil, fmt.Errorf("line %d: bad value %q: %w", line, f[i], err)
 			}
-			run.add(name, f[i+1], v)
+			run.add(name, f[i+1], layout, v)
 		}
 	}
 	return run, sc.Err()

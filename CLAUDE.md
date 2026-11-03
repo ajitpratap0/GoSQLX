@@ -39,8 +39,16 @@ GoSQLX is a **production-ready**, **race-free**, high-performance SQL parsing SD
   edits, docs and bulk fixes.
 - **When the work has to be done in Claude**, use Sonnet 5.5 for implementation and
   review and Haiku 5.5 for extraction, docs and simple checks.
-- **Opus 5.5 only orchestrates**: planning, final review of risky changes and
-  decisions. Use it only when it is needed, to save usage limits.
+- **Opus 5.5 plans and orchestrates.** It writes each change's plan and the
+  Codex brief, coordinates the work through dynamic workflows, reviews risky
+  changes and makes decisions. It does not do bulk implementation. Use it
+  only when it is needed, to save usage limits.
+- **Cleanup is part of every task.** When a task finishes (merged, closed or
+  skipped), remove its worktree and its local and remote branches, its Codex
+  run directories and per-run `GOCACHE` dirs, any probe or throwaway branches,
+  scratch builds, and leftover background processes. Never delete
+  `~/Library/Caches/go-build` or another task's files. An open PR keeps its
+  worktree as the handoff, with build junk removed.
 - Codex never commits or pushes. The orchestrator reviews the diff and runs the
   full gate (`task check`, `task test:cbinding`, `go test ./pkg/compatibility/...`,
   staticcheck) before any commit.

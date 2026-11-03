@@ -232,76 +232,134 @@ func equivalenceCorpus(t testing.TB) []string {
 }
 
 // TestRequiredLiterals_Golden pins the literal prefilter derived for every pattern
-// expression. If a pattern changes, re-derive and review the literal set: each
-// literal must be a substring of every possible match of its regex.
+// expression. If a pattern changes, re-derive and review the clauses: every
+// match must contain at least one literal from each clause.
+type literalGoldenCase struct {
+	expr string
+	want [][]string
+}
+
+var literalGoldenCases = []literalGoldenCase{
+	{`(?i)\bSLEEP\s*\(`, [][]string{{"sleep"}, {"("}}},
+	{`;\s*(?i)(DROP|DELETE|TRUNCATE|UPDATE|INSERT|ALTER)\b`, [][]string{{";"}, {"drop", "delete", "truncate", "update", "insert", "alter"}}},
+	{`/\*[^*]*\*+(?:[^/*][^*]*\*+)*/\s*$`, [][]string{{"/*"}}},
+	{`/\*!.*\*/`, [][]string{{"/*!"}, {"*/"}}},
+	{`(?i)UNION\s+(ALL\s+)?SELECT\s+(?:NULL,?\s*){2,}`, [][]string{{"union"}, {"select"}, {"null"}}},
+	{`(?i)é`, nil},
+	{`(?i)xé`, nil},
+	{`a|b`, nil},
+	{`(ab)*`, nil},
+	{`x+`, [][]string{{"x"}}},
+	{`(?i)ab{2,}`, [][]string{{"ab"}}},
+	{`(?i)ab{0,3}c`, [][]string{{"abbbc", "abbc", "abc", "ac"}}},
+	{`abc(?:def)?ghi`, [][]string{{"abcdefghi", "abcghi"}}},
+	{`[`, nil},
+	{`(?:foo|bar)baz`, [][]string{{"foobaz", "barbaz"}}},
+	{`(?:foo|bar)`, [][]string{{"foo", "bar"}}},
+	{`(?:foo|[a-z]+)`, nil},
+	{`(?:foo|)`, nil},
+	{`(?:ab)?`, nil},
+	{`(?:foo|x+y)`, [][]string{{"foo", "x"}}},
+	{`(?i)(?:DROP|DELETE)`, [][]string{{"drop", "delete"}}},
+	{`(?:a|b|c|d|e|f|g|h|i|j|k|l|m|n|o|p|q)x`, [][]string{{"x"}}},
+	{`(?:aa|bb|cc|dd|ee|ff|gg|hh|ii|jj|kk|ll|mm|nn|oo|pp|qq)x`, [][]string{{"aa", "bb", "cc", "dd", "ee", "ff", "gg", "hh", "ii", "jj", "kk", "ll", "mm", "nn", "oo", "pp", "qq"}, {"x"}}},
+	{`(?:ab|cd)(?:ef|gh)`, [][]string{{"abef", "abgh", "cdef", "cdgh"}}},
+	{`(?:a1|a2|a3|a4|a5)(?:b1|b2|b3|b4)`, [][]string{{"a"}, {"b"}}},
+	{`foo\bbar`, [][]string{{"foobar"}}},
+	{`(?:foo\s+bar|baz)`, [][]string{{"foo", "baz"}}},
+	{`(?:x[0-9]+y)+`, [][]string{{"x"}, {"y"}}},
+	{`(?:foo|bar|cat|dog|eel)(?:one|two|six|ten)`, [][]string{{"foo", "bar", "cat", "dog", "eel"}, {"one", "two", "six", "ten"}}},
+	{`(?i)\bWAITFOR\s+DELAY\b`, [][]string{{"waitfor"}, {"delay"}}},
+	{`(?i)\bpg_sleep\s*\(`, [][]string{{"pg_sleep"}, {"("}}},
+	{`(?i)\bBENCHMARK\s*\(`, [][]string{{"benchmark"}, {"("}}},
+	{`(?i)\bDBMS_LOCK\.SLEEP\s*\(`, [][]string{{"dbms_lock.sleep"}, {"("}}},
+	{`(?i)\bxp_cmdshell\b`, [][]string{{"xp_cmdshell"}}},
+	{`(?i)\bLOAD_FILE\s*\(`, [][]string{{"load_file"}, {"("}}},
+	{`(?i)\bINTO\s+OUTFILE\b`, [][]string{{"into"}, {"outfile"}}},
+	{`(?i)\bINTO\s+DUMPFILE\b`, [][]string{{"into"}, {"dumpfile"}}},
+	{`(?i)\bUTL_HTTP\b`, [][]string{{"utl_http"}}},
+	{`(?i)\bDBMS_LDAP\b`, [][]string{{"dbms_ldap"}}},
+	{`(?i)\bEXEC\s+master\b`, [][]string{{"exec"}, {"master"}}},
+	{`(?i)\bsp_oacreate\b`, [][]string{{"sp_oacreate"}}},
+	{`(?i)\bEXEC\s*\(`, [][]string{{"exec"}, {"("}}},
+	{`(?i)\bEXECUTE\s+IMMEDIATE\b`, [][]string{{"execute"}, {"immediate"}}},
+	{`(?i)\bsp_executesql\b`, [][]string{{"sp_executesql"}}},
+	{`(?i)\bPREPARE\s+\w+\s+FROM\b`, [][]string{{"prepare"}, {"from"}}},
+	{`(?i)\bOR\s+TRUE\b`, [][]string{{"or"}, {"true"}}},
+	{`(?i)UNION\s+(ALL\s+)?SELECT.*\b(information_schema|pg_catalog|mysql\b|sys\.)\b`, [][]string{{"union"}, {"select"}, {"information_schema", "pg_catalog", "mysql", "sys."}}},
+	{`(?i)\binformation_schema\b`, [][]string{{"information_schema"}}},
+	{`(?i)\bUNION\s+(ALL\s+)?SELECT\b`, [][]string{{"union"}, {"select"}}},
+	{`;\s*(?i)EXEC\b`, [][]string{{";"}, {"exec"}}},
+	{`;\s*(?i)EXECUTE\b`, [][]string{{";"}, {"execute"}}},
+	{`--\s*$`, [][]string{{"--"}}},
+	{`--\s*['")\]]`, [][]string{{"--"}}},
+	{`#\s*$`, [][]string{{"#"}}},
+	{`;\s*--`, [][]string{{";"}, {"--"}}},
+	{`(?i)\b(\d{1,6})\s*=\s*(\d{1,6})\b`, [][]string{{"="}}},
+	{`(?i)('[^']{0,50}')\s*=\s*('[^']{0,50}')`, [][]string{{"'"}, {"="}}},
+	{`(?i)\b([a-z_][a-z0-9_.]{0,50})\s*=\s*([a-z_][a-z0-9_.]{0,50})\b`, [][]string{{"="}}},
+}
+
 func TestRequiredLiterals_Golden(t *testing.T) {
-	tests := []struct {
-		expr string
-		want []string
-	}{
-		// Time-based
-		{`(?i)\bSLEEP\s*\(`, []string{"sleep", "("}},
-		{`(?i)\bWAITFOR\s+DELAY\b`, []string{"waitfor", "delay"}},
-		{`(?i)\bpg_sleep\s*\(`, []string{"pg_sleep", "("}},
-		{`(?i)\bBENCHMARK\s*\(`, []string{"benchmark", "("}},
-		{`(?i)\bDBMS_LOCK\.SLEEP\s*\(`, []string{"dbms_lock.sleep", "("}},
-		// Out-of-band
-		{`(?i)\bxp_cmdshell\b`, []string{"xp_cmdshell"}},
-		{`(?i)\bLOAD_FILE\s*\(`, []string{"load_file", "("}},
-		{`(?i)\bINTO\s+OUTFILE\b`, []string{"into", "outfile"}},
-		{`(?i)\bINTO\s+DUMPFILE\b`, []string{"into", "dumpfile"}},
-		{`(?i)\bUTL_HTTP\b`, []string{"utl_http"}},
-		{`(?i)\bDBMS_LDAP\b`, []string{"dbms_ldap"}},
-		{`(?i)\bEXEC\s+master\b`, []string{"exec", "master"}},
-		{`(?i)\bsp_oacreate\b`, []string{"sp_oacreate"}},
-		// Dangerous functions
-		{`(?i)\bEXEC\s*\(`, []string{"exec", "("}},
-		{`(?i)\bEXECUTE\s+IMMEDIATE\b`, []string{"execute", "immediate"}},
-		{`(?i)\bsp_executesql\b`, []string{"sp_executesql"}},
-		{`(?i)\bPREPARE\s+\w+\s+FROM\b`, []string{"prepare", "from"}},
-		// Tautology
-		{`(?i)\bOR\s+TRUE\b`, []string{"or", "true"}},
-		// UNION
-		{`(?i)UNION\s+(ALL\s+)?SELECT.*\b(information_schema|pg_catalog|mysql\b|sys\.)\b`, []string{"union", "select"}},
-		{`(?i)UNION\s+(ALL\s+)?SELECT\s+(?:NULL,?\s*){2,}`, []string{"union", "select", "null"}},
-		{`(?i)\binformation_schema\b`, []string{"information_schema"}},
-		{`(?i)\bUNION\s+(ALL\s+)?SELECT\b`, []string{"union", "select"}},
-		// Stacked queries
-		{`;\s*(?i)(DROP|DELETE|TRUNCATE|UPDATE|INSERT|ALTER)\b`, []string{";"}},
-		{`;\s*(?i)EXEC\b`, []string{";", "exec"}},
-		{`;\s*(?i)EXECUTE\b`, []string{";", "execute"}},
-		// Comments
-		{`--\s*$`, []string{"--"}},
-		{`--\s*['")\]]`, []string{"--"}},
-		{`/\*[^*]*\*+(?:[^/*][^*]*\*+)*/\s*$`, []string{"/*", "*", "/"}},
-		{`/\*!.*\*/`, []string{"/*!", "*/"}},
-		{`#\s*$`, []string{"#"}},
-		{`;\s*--`, []string{";", "--"}},
-		// Tautology captures
-		{`(?i)\b(\d{1,6})\s*=\s*(\d{1,6})\b`, []string{"="}},
-		{`(?i)('[^']{0,50}')\s*=\s*('[^']{0,50}')`, []string{"'", "="}},
-		{`(?i)\b([a-z_][a-z0-9_.]{0,50})\s*=\s*([a-z_][a-z0-9_.]{0,50})\b`, []string{"="}},
-		// Edge cases
-		{`(?i)é`, nil},        // non-ASCII literal dropped
-		{`(?i)xé`, nil},       // run containing non-ASCII dropped entirely
-		{`a|b`, nil},          // alternation contributes nothing
-		{`(ab)*`, nil},        // star contributes nothing
-		{`x+`, []string{"x"}}, // plus contributes its body
-		{`(?i)ab{2,}`, []string{"ab", "b"}},
-		{`(?i)ab{0,3}c`, []string{"a", "c"}},
-		{`abc(?:def)?ghi`, []string{"abc", "ghi"}},
-		{`[`, nil}, // unparsable: no prefilter
-	}
-	for _, tt := range tests {
+	for _, tt := range literalGoldenCases {
 		t.Run(tt.expr, func(t *testing.T) {
-			var got []string
-			for _, l := range requiredLiterals(tt.expr) {
-				got = append(got, string(l))
-			}
-			if !reflect.DeepEqual(got, tt.want) {
+			if got := requiredLiterals(tt.expr); !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("requiredLiterals(%q) = %q, want %q", tt.expr, got, tt.want)
 			}
 		})
+	}
+}
+
+func TestRequiredLiterals_ProductionPatterns(t *testing.T) {
+	want := []literalGoldenCase{
+		{`(?i)\bOR[\s\v]+TRUE\b`, [][]string{{"or"}, {"true"}}},
+		{`(?i)\|\|[\s\v]*TRUE\b`, [][]string{{"||"}, {"true"}}},
+		{`(?i)\bSLEEP[\s\v]*\(`, [][]string{{"sleep"}, {"("}}},
+		{`(?i)\bWAITFOR[\s\v]+DELAY\b`, [][]string{{"waitfor"}, {"delay"}}},
+		{`(?i)\bpg_sleep[\s\v]*\(`, [][]string{{"pg_sleep"}, {"("}}},
+		{`(?i)\bBENCHMARK[\s\v]*\(`, [][]string{{"benchmark"}, {"("}}},
+		{`(?i)\bDBMS_LOCK\.SLEEP[\s\v]*\(`, [][]string{{"dbms_lock.sleep"}, {"("}}},
+		{`(?i)\bxp_cmdshell\b`, [][]string{{"xp_cmdshell"}}},
+		{`(?i)\bLOAD_FILE[\s\v]*\(`, [][]string{{"load_file"}, {"("}}},
+		{`(?i)\bINTO[\s\v]+OUTFILE\b`, [][]string{{"into"}, {"outfile"}}},
+		{`(?i)\bINTO[\s\v]+DUMPFILE\b`, [][]string{{"into"}, {"dumpfile"}}},
+		{`(?i)\bUTL_HTTP\b`, [][]string{{"utl_http"}}},
+		{`(?i)\bDBMS_LDAP\b`, [][]string{{"dbms_ldap"}}},
+		{`(?i)\bEXEC[\s\v]+master\b`, [][]string{{"exec"}, {"master"}}},
+		{`(?i)\bsp_oacreate\b`, [][]string{{"sp_oacreate"}}},
+		{`(?i)\b(?:FROM|JOIN)[\s\v]+(?:url|urlCluster|file|fileCluster|remote|remoteSecure|s3|s3Cluster|gcs|azureBlobStorage|hdfs|hdfsCluster|jdbc|odbc|mysql|postgresql|mongodb|redis|sqlite|executable)[\s\v]*\(`, [][]string{{"from", "join"}, {"url", "file", "remote", "s3", "gcs", "azureblobstorage", "hdfs", "jdbc", "odbc", "mysql", "postgresql", "mongodb", "redis", "sqlite", "executable"}, {"("}}},
+		{`(?i)\bEXEC[\s\v]*\(`, [][]string{{"exec"}, {"("}}},
+		{`(?i)\bEXECUTE[\s\v]+IMMEDIATE\b`, [][]string{{"execute"}, {"immediate"}}},
+		{`(?i)\bsp_executesql\b`, [][]string{{"sp_executesql"}}},
+		{`(?i)\bPREPARE[\s\v]+\w+[\s\v]+FROM\b`, [][]string{{"prepare"}, {"from"}}},
+		{`(?i)UNION[\s\v]+(ALL[\s\v]+)?SELECT.*\b(information_schema|pg_catalog|mysql\b|sys\.)\b`, [][]string{{"union"}, {"select"}, {"information_schema", "pg_catalog", "mysql", "sys."}}},
+		{`(?i)UNION[\s\v]+(ALL[\s\v]+)?SELECT[\s\v]+(?:NULL,?[\s\v]*){2,}`, [][]string{{"union"}, {"select"}, {"null"}}},
+		{`(?i)\binformation_schema\b`, [][]string{{"information_schema"}}},
+		{`(?i)\bUNION[\s\v]+(ALL[\s\v]+)?SELECT\b`, [][]string{{"union"}, {"select"}}},
+		{`;[\s\v]*(?i)(DROP|DELETE|TRUNCATE|UPDATE|INSERT|ALTER)\b`, [][]string{{";"}, {"drop", "delete", "truncate", "update", "insert", "alter"}}},
+		{`;[\s\v]*(?i)EXEC\b`, [][]string{{";"}, {"exec"}}},
+		{`;[\s\v]*(?i)EXECUTE\b`, [][]string{{";"}, {"execute"}}},
+		{`--[\s\v]*$`, [][]string{{"--"}}},
+		{`--[\s\v]*['")\]]`, [][]string{{"--"}}},
+		{`/\*[^*]*\*+(?:[^/*][^*]*\*+)*/[\s\v]*$`, [][]string{{"/*"}}},
+		{`(?is)/\*(?:M)?!.*\*/`, [][]string{{"/*m!", "/*!"}, {"*/"}}},
+		{`#[\s\v]*$`, [][]string{{"#"}}},
+		{`;[\s\v]*--`, [][]string{{";"}, {"--"}}},
+		{`(?i)\b(\d{1,6})[\s\v]*=[\s\v]*(\d{1,6})\b`, [][]string{{"="}}},
+		{`(?i)('[^']{0,50}')[\s\v]*=[\s\v]*('[^']{0,50}')`, [][]string{{"'"}, {"="}}},
+		{`(?i)\b([a-z_][a-z0-9_.]{0,50})[\s\v]*=[\s\v]*([a-z_][a-z0-9_.]{0,50})\b`, [][]string{{"="}}},
+	}
+	all := allCompiledPatterns(t)
+	if len(all) != len(want) {
+		t.Fatalf("got %d patterns, want %d", len(all), len(want))
+	}
+	for i, p := range all {
+		if p.re.String() != want[i].expr {
+			t.Fatalf("pattern %d = %q, want %q", i, p.re, want[i].expr)
+		}
+		if !reflect.DeepEqual(p.cnf, want[i].want) {
+			t.Errorf("pattern %d %s: cnf=%q, want %q", i, p.re, p.cnf, want[i].want)
+		}
 	}
 }
 
@@ -336,16 +394,21 @@ func TestCompiledPatterns_AllHaveLiterals(t *testing.T) {
 		t.Errorf("expected 36 compiled patterns (27 group + 6 comment + 3 tautology), got %d", len(all))
 	}
 	for _, p := range all {
-		if len(p.lits) == 0 {
+		if len(p.cnf) == 0 {
 			t.Errorf("%s: no required literal", p.re)
 		}
-		for _, l := range p.lits {
-			if len(l) == 0 {
-				t.Errorf("%s: empty literal", p.re)
-			}
-			for _, c := range l {
-				if c >= utf8.RuneSelf || ('A' <= c && c <= 'Z') {
-					t.Errorf("%s: literal %q is not lowercase ASCII", p.re, l)
+		for _, clause := range p.cnf {
+			for _, l := range clause {
+				if len(l) == 0 {
+					t.Errorf("%s: empty literal", p.re)
+				}
+				for _, c := range l {
+					if strings.ContainsRune(" \t\n\r\f\v", c) {
+						t.Errorf("%s: literal %q contains whitespace", p.re, l)
+					}
+					if c >= utf8.RuneSelf || ('A' <= c && c <= 'Z') {
+						t.Errorf("%s: literal %q is not lowercase ASCII", p.re, l)
+					}
 				}
 			}
 		}
@@ -434,9 +497,9 @@ func TestScanSQL_PrefilterEquivalence(t *testing.T) {
 	}
 }
 
-// TestScanSQL_Concurrent_FoldPool exercises fold-buffer pool reuse across
+// TestScanSQL_Concurrent_Prefilter exercises shared matcher reads across
 // goroutines (run under -race) and checks results never get contaminated.
-func TestScanSQL_Concurrent_FoldPool(t *testing.T) {
+func TestScanSQL_Concurrent_Prefilter(t *testing.T) {
 	inputs := []string{
 		"SELECT id, name FROM users WHERE active = true",
 		"SELECT * FROM users WHERE id = 1 OR 1=1 --",
@@ -522,4 +585,30 @@ func TestScanSQL_ObfuscatedPayloadsDetected(t *testing.T) {
 			}
 		})
 	}
+}
+
+// foldASCII is the independent reference oracle for the literal matcher.
+func foldASCII(dst []byte, s string) []byte {
+	for i := 0; i < len(s); {
+		c := s[i]
+		if c < utf8.RuneSelf {
+			if 'A' <= c && c <= 'Z' {
+				c += 'a' - 'A'
+			}
+			dst = append(dst, c)
+			i++
+			continue
+		}
+		r, size := utf8.DecodeRuneInString(s[i:])
+		switch r {
+		case 0x017F: // LATIN SMALL LETTER LONG S
+			dst = append(dst, 's')
+		case 0x212A: // KELVIN SIGN
+			dst = append(dst, 'k')
+		default:
+			dst = append(dst, s[i:i+size]...)
+		}
+		i += size
+	}
+	return dst
 }

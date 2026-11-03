@@ -19,6 +19,7 @@ package main
 import (
 	"testing"
 
+	"github.com/ajitpratap0/GoSQLX/pkg/gosqlx"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
 )
 
@@ -34,7 +35,8 @@ func TestCBindingAllocations(t *testing.T) {
 	}{
 		{"parse", func() string { return callLegacyRaw(exportParse, &sql) }, func() string { return legacyParseRawForTest(sql) }, 4},
 		{"lint", func() string { return lintRaw(sql, nil) }, func() string { return legacyLintRawForTest(sql) }, 10},
-		{"extract_metadata", func() string { return callLegacyRaw(exportExtractMetadata, &sql) }, func() string { return legacyMetadataRawForTest(sql) }, 0},
+		{"extract_metadata", func() string { return callLegacyRaw(exportExtractMetadata, &sql) }, func() string { return legacyMetadataRawForTest(sql) }, 1},
+		{"extract_tables", func() string { return callLegacyRaw(exportExtractTables, &sql) }, func() string { return legacyTablesRawForTest(sql) }, 1},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			for i := 0; i < 20; i++ {
@@ -78,5 +80,105 @@ func TestCBindingAllocASTRelease(t *testing.T) {
 	t.Logf("released %.0f, unreleased %.0f allocs/op", withRelease, withoutRelease)
 	if withRelease > withoutRelease-1 {
 		t.Errorf("AST release must save at least one allocation: released %.0f, unreleased %.0f", withRelease, withoutRelease)
+	}
+}
+
+// extractWithoutRelease preserves the success path without releasing the AST.
+func extractWithoutRelease(sql, dialect, key string, extract func(*ast.AST) []string) any {
+	tree, err := parseFor(sql, dialect)
+	if err != nil {
+		return extractErrorResult{Error: err.Error(), ErrorCode: errorCodeFor(err)}
+	}
+
+	items := extract(tree)
+	if items == nil {
+		items = []string{}
+	}
+	switch key {
+	case "tables":
+		return extractTablesResult{Tables: items}
+	case "columns":
+		return extractColumnsResult{Columns: items}
+	case "functions":
+		return extractFunctionsResult{Functions: items}
+	default:
+		// Unreachable: callers supply one of the three export keys above.
+		panic("unknown extract result key: " + key)
+	}
+}
+
+// metadataWithoutRelease preserves the success path without releasing the AST.
+func metadataWithoutRelease(sql, dialect string) MetadataResult {
+	tree, err := parseFor(sql, dialect)
+	if err != nil {
+		return MetadataResult{Error: err.Error(), ErrorCode: errorCodeFor(err)}
+	}
+
+	metadata := gosqlx.ExtractMetadata(tree)
+
+	tablesQualified := make([]QualifiedNameJSON, 0, len(metadata.TablesQualified))
+	for _, tq := range metadata.TablesQualified {
+		tablesQualified = append(tablesQualified, QualifiedNameJSON{
+			Schema: tq.Schema,
+			Table:  tq.Table,
+			Name:   tq.Name,
+		})
+	}
+
+	columnsQualified := make([]QualifiedNameJSON, 0, len(metadata.ColumnsQualified))
+	for _, cq := range metadata.ColumnsQualified {
+		columnsQualified = append(columnsQualified, QualifiedNameJSON{
+			Schema: cq.Schema,
+			Table:  cq.Table,
+			Name:   cq.Name,
+		})
+	}
+
+	// Ensure non-nil slices for consistent JSON output.
+	tables := metadata.Tables
+	if tables == nil {
+		tables = []string{}
+	}
+	columns := metadata.Columns
+	if columns == nil {
+		columns = []string{}
+	}
+	functions := metadata.Functions
+	if functions == nil {
+		functions = []string{}
+	}
+
+	return MetadataResult{
+		Tables:           tables,
+		TablesQualified:  tablesQualified,
+		Columns:          columns,
+		ColumnsQualified: columnsQualified,
+		Functions:        functions,
+	}
+}
+
+var allocationMetadataSink MetadataResult
+var allocationExtractSink any
+
+func TestCBindingExtractASTRelease(t *testing.T) {
+	sql := benchQueries[1].sql
+	for _, tc := range []struct {
+		name                 string
+		released, unreleased func()
+	}{
+		{"metadata", func() { allocationMetadataSink = metadataFor(sql, "") }, func() { allocationMetadataSink = metadataWithoutRelease(sql, "") }},
+		{"tables", func() { allocationExtractSink = extractListFor(sql, "", "tables", gosqlx.ExtractTables) }, func() { allocationExtractSink = extractWithoutRelease(sql, "", "tables", gosqlx.ExtractTables) }},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			for i := 0; i < 20; i++ {
+				tc.released()
+			}
+			released := testing.AllocsPerRun(200, tc.released)
+			unreleased := testing.AllocsPerRun(200, tc.unreleased)
+			t.Logf("released %.0f, unreleased %.0f allocs/op", released, unreleased)
+			if released > unreleased-1 {
+				t.Errorf("AST release must save at least one allocation: released %.0f, unreleased %.0f", released, unreleased)
+			}
+		})
 	}
 }

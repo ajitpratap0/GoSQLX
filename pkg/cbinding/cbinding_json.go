@@ -57,6 +57,8 @@ func keepScratch(bufCap, stmtCap int) bool {
 	return bufCap <= maxPooledJSONBuf && stmtCap <= maxPooledStmtTypes
 }
 
+// putScratch clears result references; the buffer may retain up to 64 KiB of
+// encoded JSON, potentially including SQL text, until it is reused or collected.
 func putScratch(sc *exportScratch) {
 	sc.parse = ParseResult{}
 	sc.valid = ValidationResult{}

@@ -26,6 +26,8 @@ import "C"
 import (
 	"encoding/json"
 	"unsafe"
+
+	"github.com/ajitpratap0/GoSQLX/pkg/gosqlx"
 )
 
 // parseSQL calls the real gosqlx_parse C export and returns the decoded result.
@@ -329,4 +331,10 @@ func legacyMetadataRawForTest(sql string) string {
 	cSQL := C.CString(sql)
 	defer freeCString(cSQL)
 	return takeResult(legacyToJSONForTest(metadataFor(C.GoString(cSQL), "")))
+}
+
+func legacyTablesRawForTest(sql string) string {
+	cSQL := C.CString(sql)
+	defer freeCString(cSQL)
+	return takeResult(legacyToJSONForTest(extractListFor(C.GoString(cSQL), "", "tables", gosqlx.ExtractTables)))
 }

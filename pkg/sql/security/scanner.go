@@ -588,6 +588,7 @@ func isValidSeverity(severity Severity) bool {
 // tautologies, dangerous functions, UNION-based injection, and other attack vectors.
 //
 // The method is safe for concurrent use as it does not modify the Scanner state.
+// Walk state is drawn from a pool and exclusively owned for each call.
 //
 // Returns a ScanResult containing all detected findings that meet the MinSeverity
 // threshold, along with summary statistics by severity level.
@@ -615,88 +616,9 @@ func (s *Scanner) Scan(tree *ast.AST) *ScanResult {
 		return result
 	}
 
-	// Ancestry is local to the scan, so concurrent scans share no walk state.
-	// Preallocated so typical nesting depths need no regrowth.
-	ancestors := make([]ast.Node, 0, 16)
-	ast.Inspect(tree, func(node ast.Node) bool {
-		if node == nil {
-			ancestors = ancestors[:len(ancestors)-1]
-			return false
-		}
-		var parent ast.Node
-		if len(ancestors) > 0 {
-			parent = ancestors[len(ancestors)-1]
-		}
-		if join, ok := parent.(*ast.JoinClause); ok && node == &join.Left {
-			// Left repeats FROM or an earlier join's right reference,
-			// including its subquery and table function.
-			return false
-		}
-		switch n := node.(type) {
-		case *ast.FunctionCall:
-			s.scanFunctionCall(n, result)
-			s.scanCondition(n.Filter, result)
-		case *ast.TableReference:
-			s.scanTableReference(n, result)
-		case *ast.SetOperation:
-			// Direct operands are already checked by the outer operation.
-			// Operations inside CTEs and subqueries start a new check.
-			if _, nested := parent.(*ast.SetOperation); !nested {
-				s.checkUnionInjection(n, false, result)
-			}
-		case *ast.SelectStatement:
-			s.scanCondition(n.Where, result)
-			s.scanCondition(n.Having, result)
-			s.scanCondition(n.Qualify, result)
-			s.scanCondition(n.PrewhereClause, result)
-			s.scanCondition(n.StartWith, result)
-		case *ast.ConnectByClause:
-			s.scanCondition(n.Condition, result)
-		case *ast.JoinClause:
-			s.scanCondition(n.Condition, result)
-			s.scanCondition(n.MatchCondition, result)
-		case *ast.UpdateStatement:
-			s.scanCondition(n.Where, result)
-		case *ast.Update:
-			s.scanCondition(n.Where, result)
-		case *ast.DeleteStatement:
-			s.scanCondition(n.Where, result)
-		case *ast.Delete:
-			s.scanCondition(n.Where, result)
-		case *ast.MergeStatement:
-			s.scanCondition(n.OnCondition, result)
-		case *ast.MergeWhenClause:
-			s.scanCondition(n.Condition, result)
-		case *ast.MergeAction:
-			s.scanCondition(n.Where, result)
-			s.scanCondition(n.DeleteWhere, result)
-		case *ast.WhenClause:
-			s.scanCondition(n.Condition, result)
-		case *ast.OnConflict:
-			s.scanCondition(n.TargetWhere, result)
-			s.scanCondition(n.Action.Where, result)
-		case *ast.Values:
-			s.scanStatementText(n.SQL(), result)
-			return false
-		case *ast.UtilityStatement:
-			s.scanStatementText(n.Text, result)
-			return false
-		case *ast.SetStatement:
-			s.scanStatementText(n.Text, result)
-			return false
-		case *ast.TransactionStatement:
-			s.scanStatementText(n.Text, result)
-			return false
-		case *ast.UseStatement:
-			s.scanStatementText(n.Text, result)
-			return false
-		case *ast.UnsupportedStatement:
-			s.scanStatementText(n.RawSQL, result)
-			return false
-		}
-		ancestors = append(ancestors, node)
-		return true
-	})
+	w := acquireScanWalker(s, result)
+	_ = ast.Walk(w, tree)
+	w.release()
 
 	// Update counts
 	s.updateCounts(result)

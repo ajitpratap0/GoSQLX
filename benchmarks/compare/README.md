@@ -16,7 +16,9 @@ this directory.
   raw output is kept in `results/latest.txt` so you can re-summarise it with
   `benchstat`.
 - **Run matrix:** `-cpu 4` and `-cpu 1`, each with GOGC at its default and with
-  `GOGC=off`, to separate mutator CPU from GC cost. The first configuration
+  `GOGC=off`, to separate mutator CPU from GC cost. `GOGC=off` runs also set
+  `GOMEMLIMIT=64MiB` (`-gomemlimit`, same default as `scripts/perf/lib.sh`), so
+  the heap reuses pages instead of timing first-touch page faults. The first configuration
   (`cpu4-gogc-default`) feeds the v1 fields; the others are in `cells` of the
   v2 document and in `results/latest-<config>.txt`. Compare configurations of
   one run, not absolute numbers across machines.
@@ -160,4 +162,8 @@ benchmark on every change to this directory. Running it manually
 (`workflow_dispatch`) or pushing a release tag performs a full run and uploads
 the JSON, the raw output of every configuration and a benchstat summary per
 configuration as an artifact. The smoke run covers `-cpu 1,4,10`; the publish job
-runs the full `-cpu 4,1` x `GOGC=default,off` matrix.
+runs the full `-cpu 4,1` x `GOGC=default,off` matrix. Both jobs build with the Go
+release pinned in `PERF_GO_VERSION` (the perf gate pins the same one). The job
+summary leads with GoSQLX/peer time ratios (`-ratios`) and names the runner CPU,
+which is also in the artifact's `env.txt`: hosted runners differ in CPU model from
+job to job, so compare ratios across runs, never absolute ns/op.

@@ -31,8 +31,9 @@ import (
 // the regex cannot match and is skipped. A nil or empty lits means the regex always
 // runs.
 type compiledPattern struct {
-	re   *regexp.Regexp
-	lits [][]byte
+	re    *regexp.Regexp
+	lits  [][]byte
+	guard func(string) bool // optional exact necessary condition (ASCII input only)
 }
 
 // compilePattern compiles expr and derives its literal prefilter.

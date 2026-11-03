@@ -57,7 +57,8 @@
 #   -a          add the A/A' control arm
 #   -g          add the secondary (default GC) metric
 #   -i          measure instructions/op with cmd/perfdriver
-#   -G          gate mode: -a -g -i, and re-measure once when the A/A is noisy
+#   -G          gate mode: -a -g -i, and when the A/A' is noisy re-link every arm
+#               with fresh layout seeds and re-measure once
 #   -e          enforce: exit 1 on a regression (default: report only)
 #   -A          the regression is accepted (perf-regression-accepted label)
 #   -T TITLE    report-only comparison (not a gate): heading "TITLE: VERDICT
@@ -114,21 +115,35 @@ while getopts ":o:r:t:k:S:s:b:T:agiGeAh" opt; do
 done
 shift $((OPTIND - 1))
 [ $# -ge 1 ] && [ $# -le 2 ] || { usage >&2; exit 2; }
-case $rounds in '' | *[!0-9]* | 0) die "-r must be a positive integer, got '$rounds'" 2 ;; esac
+# Numbers are checked as decimal digits and then read as base 10: bash
+# arithmetic would take a leading 0 as octal ("08" fails, "010" is 8).
+case $rounds in '' | *[!0-9]*) die "-r must be a positive integer, got '$rounds'" 2 ;; esac
 case $layouts in '' | *[!0-9]*) die "-k must be a non-negative integer, got '$layouts'" 2 ;; esac
-[ "$rounds" -ge "$layouts" ] || die "-r ($rounds) must be at least -k ($layouts): every layout needs a round" 2
-if [ -z "$seed0" ]; then
-	seed0=$(((RANDOM << 15 | RANDOM) * 1000))
-fi
+[ -n "$seed0" ] || seed0=$(((RANDOM << 15 | RANDOM) * 1000))
 case $seed0 in *[!0-9]*) die "-S must be a non-negative integer, got '$seed0'" 2 ;; esac
+[ ${#rounds} -le 9 ] && [ ${#layouts} -le 9 ] && [ ${#seed0} -le 15 ] || die "-r, -k or -S is too large" 2
+rounds=$((10#$rounds)) layouts=$((10#$layouts)) seed0=$((10#$seed0))
+[ "$rounds" -gt 0 ] || die "-r must be a positive integer, got '$rounds'" 2
+[ "$rounds" -ge "$layouts" ] || die "-r ($rounds) must be at least -k ($layouts): every layout needs a round" 2
 
 # Layout seeds: base and head share seeds, the A/A' arm gets a disjoint set.
-# -randlayout=0 means "no randomization", so seeds start at seed0+1.
-seeds=() aa_seeds=()
-for ((j = 1; j <= layouts; j++)); do
-	seeds+=($((seed0 + j)))
-	aa_seeds+=($((seed0 + layouts + j)))
-done
+# -randlayout=0 means "no randomization", so seeds start at seed0+1. A
+# re-measurement after a noisy A/A' (set_seeds with a later block) gets
+# seeds disjoint from every earlier set.
+set_seeds() { # first-seed-offset
+	seed0=$1 seeds=() aa_seeds=()
+	local j
+	for ((j = 1; j <= layouts; j++)); do
+		seeds+=($((seed0 + j)))
+		aa_seeds+=($((seed0 + layouts + j)))
+	done
+	if [ "$layouts" -gt 0 ]; then
+		layout_desc="$layouts randomized code layouts per arm (-randlayout seeds $((seed0 + 1))..$((seed0 + layouts)); A/A' $((seed0 + layouts + 1))..$((seed0 + 2 * layouts)))"
+	else
+		layout_desc="code layout not randomized"
+	fi
+}
+set_seeds "$seed0"
 nbin=$layouts # binaries per arm and package
 [ "$nbin" -gt 0 ] || nbin=1
 [ -z "$title" ] || [ $enforce -eq 0 ] || die "-T (report only) and -e are exclusive" 2
@@ -167,9 +182,32 @@ fi
 [ ${#pkgs[@]} -gt 0 ] || die "empty benchmark suite" 2
 
 # ---------------------------------------------------------- source trees ---
+out_given=0
+[ -z "$out" ] || out_given=1
 out=${out:-$(mktemp -d "${TMPDIR:-/tmp}/gosqlx-ab.XXXXXX")}
 mkdir -p "$out"
 out=$(cd "$out" && pwd)
+
+# On any exit: stop build jobs still running (a failed build must not leave
+# the others linking) and, when the caller did not choose the output
+# directory, delete the test binaries and source trees (about 3 GB with 20
+# layouts) but keep the report and raw results.
+build_pids=()
+cleanup() {
+	local p
+	for p in ${build_pids[@]+"${build_pids[@]}"}; do
+		pkill -TERM -P "$p" 2>/dev/null || true
+		kill -TERM "$p" 2>/dev/null || true
+	done
+	for p in ${build_pids[@]+"${build_pids[@]}"}; do wait "$p" 2>/dev/null || true; done
+	build_pids=()
+	if [ "$out_given" -eq 0 ]; then
+		rm -rf "$out/bin" "$out/src"
+	fi
+}
+trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 rm -rf "$out/src" "$out/bin" "$out/raw" "$out"/build-*.log
 mkdir -p "$out/src/base" "$out/bin/base" "$out/bin/head" "$out/bin/base2" "$out/raw"
 log "output in $out"
@@ -207,7 +245,7 @@ build_arm() { # arm tree j seed
 	for pkg in "${pkgs[@]}"; do
 		case $seen in *" $pkg "*) continue ;; esac
 		seen="$seen$pkg "
-		(cd "$tree" && go test -c ${ld[@]+"${ld[@]}"} -o "$out/bin/$arm/L$j/$(slug "$pkg").test" "$pkg") ||
+		go -C "$tree" test -c ${ld[@]+"${ld[@]}"} -o "$out/bin/$arm/L$j/$(slug "$pkg").test" "$pkg" ||
 			return 1
 	done
 }
@@ -226,43 +264,52 @@ tree_of() { # arm -> source tree
 	case $1 in base | base2) echo "$base_tree" ;; head) echo "$head_tree" ;; esac
 }
 
-# Layout 1 of base and head first, one at a time: it compiles every package
-# (the logs show progress), so the remaining builds are links only.
-for arm in base head; do
-	log "building $arm layout 1 of $nbin (seed $(seed_of $arm 1))"
-	build_arm $arm "$(tree_of $arm)" 1 "$(seed_of $arm 1)" 2>&1 | tee "$out/build-$arm-L1.log" >&2 ||
-		die "building the $arm test binaries failed (see build-$arm-L1.log)"
-done
-
-# The rest in parallel batches. The A/A' arm (-a) has its own layouts only
-# when layouts are randomized; otherwise it reuses the base binary.
-jobs=()
-for ((j = 1; j <= nbin; j++)); do
-	for arm in base head base2; do
-		[ "$arm" != base2 ] || { [ $aa -eq 1 ] && [ "$layouts" -gt 0 ]; } || continue
-		[ "$j" -gt 1 ] || [ "$arm" = base2 ] || continue
-		jobs+=("$arm $j")
+# build_layouts builds every layout of every arm for the current seeds.
+build_layouts() {
+	local arm j i n jobs=() names=() par t0
+	t0=$(date +%s)
+	rm -rf "$out"/bin/base/L* "$out"/bin/head/L* "$out"/bin/base2/L* "$out"/build-*.log
+	# Layout 1 of base and head first, one at a time: on a cold cache it
+	# compiles every package (the logs show progress), so the remaining
+	# builds are links only.
+	for arm in base head; do
+		log "building $arm layout 1 of $nbin (seed $(seed_of $arm 1))"
+		build_arm $arm "$(tree_of $arm)" 1 "$(seed_of $arm 1)" 2>&1 | tee "$out/build-$arm-L1.log" >&2 ||
+			die "building the $arm test binaries failed (see build-$arm-L1.log)"
 	done
-done
-par=$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 2)
-[ "$par" -ge 1 ] || par=1
-if [ ${#jobs[@]} -gt 0 ]; then
-	log "linking ${#jobs[@]} more layout builds, $par at a time"
-fi
-for ((i = 0; i < ${#jobs[@]}; i += par)); do
-	pids=() names=()
-	for ((n = i; n < i + par && n < ${#jobs[@]}; n++)); do
-		read -r arm j <<<"${jobs[$n]}"
-		build_arm "$arm" "$(tree_of "$arm")" "$j" "$(seed_of "$arm" "$j")" >"$out/build-$arm-L$j.log" 2>&1 &
-		pids+=($!) names+=("$arm-L$j")
+	# The rest in parallel batches. The A/A' arm (-a) has its own layouts
+	# only when layouts are randomized; otherwise it reuses the base binary.
+	for ((j = 1; j <= nbin; j++)); do
+		for arm in base head base2; do
+			[ "$arm" != base2 ] || { [ $aa -eq 1 ] && [ "$layouts" -gt 0 ]; } || continue
+			[ "$j" -gt 1 ] || [ "$arm" = base2 ] || continue
+			jobs+=("$arm $j")
+		done
 	done
-	for n in "${!pids[@]}"; do
-		wait "${pids[$n]}" || {
-			cat "$out/build-${names[$n]}.log" >&2
-			die "building the ${names[$n]} test binaries failed"
-		}
+	par=$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 2)
+	[ "$par" -ge 1 ] || par=1
+	if [ ${#jobs[@]} -gt 0 ]; then
+		log "linking ${#jobs[@]} more layout builds, $par at a time"
+	fi
+	for ((i = 0; i < ${#jobs[@]}; i += par)); do
+		build_pids=() names=()
+		for ((n = i; n < i + par && n < ${#jobs[@]}; n++)); do
+			read -r arm j <<<"${jobs[$n]}"
+			build_arm "$arm" "$(tree_of "$arm")" "$j" "$(seed_of "$arm" "$j")" >"$out/build-$arm-L$j.log" 2>&1 &
+			build_pids+=($!) names+=("$arm-L$j")
+		done
+		for n in "${!build_pids[@]}"; do
+			if ! wait "${build_pids[$n]}"; then
+				cat "$out/build-${names[$n]}.log" >&2
+				# die exits through cleanup, which stops the other jobs.
+				die "building the ${names[$n]} test binaries failed"
+			fi
+		done
+		build_pids=()
 	done
-done
+	log "built the layouts in $(($(date +%s) - t0))s"
+}
+build_layouts
 
 ir_note=""
 if [ $ir -eq 1 ]; then
@@ -462,12 +509,6 @@ benchstat_cmd() {
 	fi
 }
 
-if [ "$layouts" -gt 0 ]; then
-	layout_desc="$layouts randomized code layouts per arm (-randlayout seeds $((seed0 + 1))..$((seed0 + layouts)); A/A' $((seed0 + layouts + 1))..$((seed0 + 2 * layouts)))"
-else
-	layout_desc="code layout not randomized"
-fi
-
 judge() { # extra gate flags...
 	benchstat_cmd -alpha 0.01 -ignore layout "base=$out/raw/gcoff-base.txt" "head=$out/raw/gcoff-head.txt" >"$out/benchstat.txt" 2>&1 ||
 		log "benchstat failed; the report embeds its error output"
@@ -499,10 +540,21 @@ gate_rc=0
 judge || gate_rc=$?
 log "gate exited $gate_rc"
 if [ $gate_rc -le 1 ] && [ $gate -eq 1 ] && [ "$(cat "$out/status")" = noisy ]; then
-	log "A/A control noisy; measuring the primary metric once more"
 	mkdir -p "$out/raw/attempt1"
 	mv "$out"/raw/gcoff-*.txt "$out/raw/attempt1/"
 	cp "$out/report.md" "$out/status" "$out/benchstat.txt" "$out/raw/attempt1/"
+	if [ "$layouts" -gt 0 ]; then
+		# Measuring the same binaries again would repeat whatever made the
+		# A/A' noisy if it was the layouts. Link every arm afresh with the
+		# next block of seeds (links only, compiles are cached), so the
+		# re-measurement is an independent draw of layouts.
+		set_seeds $((seed0 + 2 * layouts))
+		log "A/A' control noisy; re-linking with fresh layouts ($layout_desc) and measuring the primary metric once more"
+		echo "retry:       $layout_desc" >>"$out/env.txt"
+		build_layouts
+	else
+		log "A/A control noisy; measuring the primary metric once more"
+	fi
 	measure gcoff "$rounds" "${primary_arms[@]}"
 	gate_rc=0
 	judge -final || gate_rc=$?

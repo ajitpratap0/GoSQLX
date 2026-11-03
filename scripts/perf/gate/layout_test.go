@@ -24,8 +24,12 @@ func layoutArm(sampleSeed, layoutSeed uint64, firstSeed, rounds, k int, spread f
 	effect := make([][]float64, k)
 	for j := range effect {
 		effect[j] = make([]float64, len(benches))
-		for i := range benches {
-			effect[j][i] = 1 + spread*(2*lr.next()-1)
+		for i, bn := range benches {
+			sp := spread
+			if bn.layoutSpread != 0 {
+				sp = bn.layoutSpread
+			}
+			effect[j][i] = 1 + sp*(2*lr.next()-1)
 		}
 	}
 	r := lcg(sampleSeed)
@@ -390,5 +394,186 @@ func TestReportWarnsWhenLayoutsCannotReachAlpha(t *testing.T) {
 	}
 	if md := Markdown(res, DefaultConfig(), Meta{}); !strings.Contains(md, "**Warning:** with 4 layouts per arm") {
 		t.Fatal("report does not warn that 4 layouts per arm cannot reach alpha")
+	}
+}
+
+// TestFivePercentWithTwentyLayouts: a +5% slowdown of one benchmark among
+// 20, with per-layout effects of +-3% (a reported spread of about 2.2%,
+// typical of the EPYC 7763 runs), is flagged on its own.
+func TestFivePercentWithTwentyLayouts(t *testing.T) {
+	s := quiet()
+	slow := modify(s, func(i int, b *bench) {
+		if i == 9 {
+			b.ns *= 1.05
+		}
+	})
+	in := Inputs{
+		Base: mustParse(t, layoutArm(1, 100, 1, 20, 20, 0.03, s)),
+		Head: mustParse(t, layoutArm(2, 200, 1, 20, 20, 0.03, slow)),
+	}
+	res := Evaluate(in, DefaultConfig())
+	if res.TimeRegressed != 1 || !res.Rows[9].Regress {
+		t.Fatalf("%d time regressions, row 9 regress %v (delta %+.2f%%, p %g); want the +5%% row flagged",
+			res.TimeRegressed, res.Rows[9].Regress, res.Rows[9].Time.DeltaPct, res.Rows[9].Time.P)
+	}
+	if lp := LowPower(res, DefaultConfig()); len(lp) != 0 {
+		t.Fatalf("low-power list %v, want empty at a +-3%% layout spread", lp)
+	}
+}
+
+func TestLowPowerListsWideBenchmarks(t *testing.T) {
+	s := modify(quiet(), func(i int, b *bench) {
+		if i == 3 {
+			b.layoutSpread = 0.12 // reported spread about 9%
+		}
+	})
+	in := Inputs{
+		Base: mustParse(t, layoutArm(1, 100, 1, 20, 20, 0.02, s)),
+		Head: mustParse(t, layoutArm(2, 200, 1, 20, 20, 0.02, s)),
+	}
+	res := Evaluate(in, DefaultConfig())
+	lp := LowPower(res, DefaultConfig())
+	if len(lp) != 1 || lp[0].Name != s[3].name {
+		t.Fatalf("low-power list %+v, want only %s", lp, s[3].name)
+	}
+	if lp[0].Power >= 0.8 || !(lp[0].MinShift > 5) {
+		t.Fatalf("low-power row %+v: want power < 80%% and an 80%% shift above 5%%", lp[0])
+	}
+	md := Markdown(res, DefaultConfig(), Meta{})
+	for _, want := range []string{"### Low power", "1 benchmark(s) have under 80% estimated power", "`" + strings.TrimPrefix(s[3].name, "Benchmark") + "`"} {
+		if !strings.Contains(md, want) {
+			t.Errorf("report lacks %q", want)
+		}
+	}
+}
+
+func TestLayoutPowerMatchesSimulation(t *testing.T) {
+	// k = 20 layouts, m = 50 benchmarks: Benjamini-Hochberg's single-
+	// discovery level is 0.01/50. The simulation (reported spread, uniform
+	// layout effects) caught a +5% slowdown 93%, 47% and 6% of the time.
+	level := 0.01 / 50
+	for _, tc := range []struct{ spread, lo, hi float64 }{
+		{2.97, 0.85, 0.97},
+		{4.45, 0.30, 0.55},
+		{7.41, 0.02, 0.10},
+	} {
+		if p := layoutPower(tc.spread, 20, level, 5); p < tc.lo || p > tc.hi {
+			t.Errorf("layoutPower(spread %.2f%%) = %.3f, want in [%.2f, %.2f]", tc.spread, p, tc.lo, tc.hi)
+		}
+	}
+	// layoutMinShift inverts layoutPower.
+	shift := layoutMinShift(4, 20, level, 0.8)
+	if p := layoutPower(4, 20, level, shift); math.Abs(p-0.8) > 1e-6 {
+		t.Errorf("layoutPower at layoutMinShift = %g, want 0.8", p)
+	}
+	if !math.IsNaN(layoutPower(0, 20, level, 5)) || !math.IsNaN(layoutPower(3, 1, level, 5)) {
+		t.Error("layoutPower must be NaN for a zero spread or a single layout")
+	}
+}
+
+func TestCompareArmsWithLayoutsOnOneSideOnly(t *testing.T) {
+	// A head built without randomization (one unlabelled binary) against a
+	// randomized base cannot be compared by layout: the gate falls back to
+	// the sample-level test and the report says layouts were not used.
+	s := quiet()
+	base := mustParse(t, layoutArm(1, 100, 1, 20, 20, 0.03, s))
+	head := mustParse(t, arm(2, 20, s))
+	c := compareArms(base, head, s[0].name, unitTime)
+	if c.ByLayout || c.NBase != 20 || c.NHead != 20 {
+		t.Fatalf("one-sided layouts: %+v, want the sample-level comparison of 20 vs 20 samples", c)
+	}
+	res := Evaluate(Inputs{Base: base, Head: head}, DefaultConfig())
+	if res.ByLayout {
+		t.Fatal("ByLayout with an unrandomized head")
+	}
+	if md := Markdown(res, DefaultConfig(), Meta{}); !strings.Contains(md, "Code layouts were not randomized") {
+		t.Fatal("report does not say the layouts were not randomized")
+	}
+}
+
+func TestUnevenSamplesPerLayout(t *testing.T) {
+	// 30 rounds over 20 layouts: layouts 1-10 get two samples, 11-20 one.
+	// Every layout still counts once, through its median.
+	s := quiet()
+	base := mustParse(t, layoutArm(1, 100, 1, 30, 20, 0.03, s))
+	labels, groups := base.ByLayout(s[0].name, unitTime)
+	if len(labels) != 20 || len(groups[0]) != 2 || len(groups[19]) != 1 {
+		t.Fatalf("%d layouts, %d and %d samples in the first and last; want 20, 2, 1", len(labels), len(groups[0]), len(groups[19]))
+	}
+	head := mustParse(t, layoutArm(2, 200, 1, 30, 20, 0.03, s))
+	res := Evaluate(Inputs{Base: base, Head: head}, DefaultConfig())
+	if !res.ByLayout || res.Layouts != 20 || res.Rows[0].Time.NBase != 20 {
+		t.Fatalf("ByLayout %v, %d layouts, NBase %d; want true, 20, 20", res.ByLayout, res.Layouts, res.Rows[0].Time.NBase)
+	}
+	if math.IsNaN(res.GeomeanP) || res.Verdict != Pass {
+		t.Fatalf("geomean p %g, verdict %s; want a p-value and pass", res.GeomeanP, res.Verdict)
+	}
+}
+
+func TestBHAwareReachWarning(t *testing.T) {
+	// 5 layouts per arm (the matrix default): the smallest p, 2/252, is
+	// below alpha but far above alpha/m, so no single benchmark can be
+	// flagged; the report must say so and show both limits.
+	s := quiet()
+	in := Inputs{
+		Base: mustParse(t, layoutArm(1, 100, 1, 5, 5, 0.02, s)),
+		Head: mustParse(t, layoutArm(2, 200, 1, 5, 5, 0.02, s)),
+	}
+	res := Evaluate(in, DefaultConfig())
+	if res.TimeTests != len(s) || res.MinUnits != 5 {
+		t.Fatalf("m %d, units %d; want %d and 5", res.TimeTests, res.MinUnits, len(s))
+	}
+	md := Markdown(res, DefaultConfig(), Meta{})
+	for _, want := range []string{
+		"**Warning:** with 5 layouts per arm the smallest attainable p-value is 0.00794",
+		"below alpha = 0.01 but above alpha/m = 0.0005",
+		"a single benchmark's slowdown can never be flagged on its own",
+		"None of the 20 benchmarks can be flagged on its own",
+	} {
+		if !strings.Contains(md, want) {
+			t.Errorf("report lacks %q", want)
+		}
+	}
+	// 20 layouts reach alpha/m easily: no warning.
+	in = Inputs{
+		Base: mustParse(t, layoutArm(1, 100, 1, 20, 20, 0.02, s)),
+		Head: mustParse(t, layoutArm(2, 200, 1, 20, 20, 0.02, s)),
+	}
+	if md := Markdown(Evaluate(in, DefaultConfig()), DefaultConfig(), Meta{}); strings.Contains(md, "**Warning:**") {
+		t.Error("20 layouts per arm: unexpected warning")
+	}
+}
+
+func TestMissingLayoutIsReportedNotSilent(t *testing.T) {
+	// The head arm lost one benchmark's run in one layout: per-layout suite
+	// geomeans cannot be formed, and the report says the geomean rule was
+	// not judged.
+	s := quiet()
+	headText := layoutArm(2, 200, 1, 20, 20, 0.03, s)
+	i := strings.Index(headText, "layout: 5\n")
+	if i < 0 {
+		t.Fatal("no layout 5 in the head arm")
+	}
+	j := strings.Index(headText[i:], s[0].name+" ")
+	k := strings.IndexByte(headText[i+j:], '\n')
+	headText = headText[:i+j] + headText[i+j+k+1:]
+	in := Inputs{Base: mustParse(t, layoutArm(1, 100, 1, 20, 20, 0.03, s)), Head: mustParse(t, headText)}
+	res := Evaluate(in, DefaultConfig())
+	if !math.IsNaN(res.GeomeanP) || res.GeomeanNote == "" {
+		t.Fatalf("geomean p %g, note %q; want NaN and a note", res.GeomeanP, res.GeomeanNote)
+	}
+	if md := Markdown(res, DefaultConfig(), Meta{}); !strings.Contains(md, "**Note:** the time geomean rule was not judged") {
+		t.Fatal("report does not say the geomean rule was skipped")
+	}
+}
+
+func TestNonPositiveTimesFallBackToTheMedianRatio(t *testing.T) {
+	if !math.IsNaN(hodgesLehmannRatio([]float64{1, -2}, []float64{3, 4})) || !math.IsNaN(hodgesLehmannRatio([]float64{1, 2}, []float64{0, 4})) {
+		t.Fatal("hodgesLehmannRatio must be NaN with a zero or negative value")
+	}
+	// compareLayouts then keeps the ratio of the medians of layout medians.
+	c := compareLayouts([][]float64{{0}, {10}, {20}}, [][]float64{{20}, {30}, {40}})
+	if !c.OK || c.Ratio != 3 || math.Abs(c.DeltaPct-200) > 1e-9 {
+		t.Fatalf("cmp %+v, want Ratio 30/10 = 3", c)
 	}
 }

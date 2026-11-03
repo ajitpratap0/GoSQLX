@@ -120,6 +120,41 @@ func benjaminiHochberg(ps []float64, q float64) []bool {
 	return out
 }
 
+// layoutPower estimates the power of the two-sided exact U test over k vs k
+// per-layout values to detect a slowdown of shiftPct percent at level
+// alpha, when the per-layout values have a relative standard deviation of
+// spreadPct percent. It is Noether's normal approximation: the U test has
+// asymptotic efficiency 3/pi relative to the t test under normal data, so
+// power = Phi(d * sqrt(k/2) * sqrt(3/pi) - z(1 - alpha/2)) with
+// d = ln(1 + shift) / spread. Checked against simulation of the gate
+// (k = 20, m = 50, +5%, per-layout effects uniform, spread as the report
+// measures it): 91%, 37% and 5% at spreads of 3.0%, 4.4% and 7.4%, where
+// the simulation caught 93%, 47% and 6%, so the estimate is a little
+// conservative.
+func layoutPower(spreadPct float64, k int, alpha, shiftPct float64) float64 {
+	if !(spreadPct > 0) || k < 2 || !(alpha > 0) {
+		return math.NaN()
+	}
+	d := math.Log1p(shiftPct/100) / (spreadPct / 100)
+	x := d*math.Sqrt(float64(k)/2)*math.Sqrt(3/math.Pi) - normalQuantile(1-alpha/2)
+	return normalCDF(x)
+}
+
+// layoutMinShift inverts layoutPower: the slowdown in percent that is
+// detected with probability target.
+func layoutMinShift(spreadPct float64, k int, alpha, target float64) float64 {
+	if !(spreadPct > 0) || k < 2 || !(alpha > 0) {
+		return math.NaN()
+	}
+	d := (normalQuantile(1-alpha/2) + normalQuantile(target)) / (math.Sqrt(float64(k)/2) * math.Sqrt(3/math.Pi))
+	return math.Expm1(d*spreadPct/100) * 100
+}
+
+func normalCDF(x float64) float64 { return 0.5 * math.Erfc(-x/math.Sqrt2) }
+
+// normalQuantile is the inverse of normalCDF for 0 < p < 1.
+func normalQuantile(p float64) float64 { return math.Sqrt2 * math.Erfinv(2*p-1) }
+
 func minMax(xs []float64) (lo, hi float64) {
 	lo, hi = math.Inf(1), math.Inf(-1)
 	for _, x := range xs {

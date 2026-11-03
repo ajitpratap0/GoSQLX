@@ -6,6 +6,7 @@ package main
 import (
 	"fmt"
 	"math"
+	"sort"
 	"strings"
 )
 
@@ -43,6 +44,11 @@ type Config struct {
 	AANoisyFraction  float64 // the A/A run is noisy when more than this % of benchmarks are
 	FinalAttempt     bool    // a noisy A/A is now inconclusive instead of noisy
 	MinSamplesForSig int     // below this many samples per arm the p-value is not used
+	// LowPowerShiftPct and LowPowerTarget define the report's low-power
+	// list: benchmarks whose estimated chance of catching a slowdown of
+	// LowPowerShiftPct on its own is below LowPowerTarget (a fraction).
+	LowPowerShiftPct float64
+	LowPowerTarget   float64
 }
 
 // DefaultConfig is the configuration CI uses.
@@ -56,6 +62,8 @@ func DefaultConfig() Config {
 		AADeltaPct:       3,
 		AANoisyFraction:  10,
 		MinSamplesForSig: 3,
+		LowPowerShiftPct: 5,
+		LowPowerTarget:   0.8,
 	}
 }
 
@@ -215,8 +223,15 @@ type Result struct {
 	AAFlagged  int // A/A' benchmarks the time rule would have flagged (|delta| >= TimePct, p < Alpha)
 	// ByLayout: every timed comparison used randomized layouts as the unit;
 	// Layouts is the smallest number of layouts per arm among them.
-	ByLayout       bool
-	Layouts        int
+	ByLayout bool
+	Layouts  int
+	// TimeTests is m, the number of benchmarks in the false-discovery
+	// family of the time rule; MinUnits is the smallest number of layouts
+	// (or, without layouts, samples) per arm among them.
+	TimeTests int
+	MinUnits  int
+	// GeomeanNote explains why the geomean rule could not be judged, if so.
+	GeomeanNote    string
 	TimeRegressed  int
 	HardRegressed  int
 	MissingInHead  []string
@@ -291,7 +306,7 @@ func Evaluate(in Inputs, cfg Config) Result {
 	}
 	res.Geomean = geomean(ratios)
 	res.ByLayout, res.Layouts = layoutLevel(res.Rows)
-	timeSignificance(res.Rows, cfg, func(r *Row) (*Cmp, *bool) { return &r.Time, &r.TimeSig })
+	res.TimeTests, res.MinUnits = timeSignificance(res.Rows, cfg, func(r *Row) (*Cmp, *bool) { return &r.Time, &r.TimeSig })
 	timeSignificance(res.Rows, cfg, func(r *Row) (*Cmp, *bool) { return &r.AA, &r.AASig })
 	for _, r := range res.Rows {
 		if r.AASig && math.Abs(r.AA.DeltaPct) >= cfg.TimePct {
@@ -306,6 +321,14 @@ func Evaluate(in Inputs, cfg Config) Result {
 	}
 	res.AAGeomean = geomean(aaRatios)
 	res.SecGeomean = geomean(secRatios)
+	if !math.IsNaN(res.Geomean) && math.IsNaN(res.GeomeanP) {
+		unit := "round"
+		if res.ByLayout {
+			unit = "layout"
+		}
+		res.GeomeanNote = fmt.Sprintf("the time geomean rule was not judged: per-%s suite geomeans need every benchmark measured in every %s of both arms, "+
+			"and at least one benchmark lacks a %s (a missing or failed run; compare the raw files)", unit, unit, unit)
+	}
 
 	aaNoisy := res.AACompared > 0 &&
 		float64(res.AANoisy)*100/float64(res.AACompared) > cfg.AANoisyFraction
@@ -421,19 +444,59 @@ func Evaluate(in Inputs, cfg Config) Result {
 // the suite are judged together, with the false discovery rate held at alpha
 // (benjaminiHochberg). Rows without enough samples or layouts for a p-value
 // (significant's minimum) are left out of the family and never significant.
-func timeSignificance(rows []Row, cfg Config, pick func(*Row) (*Cmp, *bool)) {
+// It returns the family size m and the smallest per-arm unit count in it.
+func timeSignificance(rows []Row, cfg Config, pick func(*Row) (*Cmp, *bool)) (m, minUnits int) {
 	ps := make([]float64, len(rows))
 	for i := range rows {
 		c, _ := pick(&rows[i])
 		ps[i] = math.NaN()
 		if c.OK && c.NBase >= cfg.MinSamplesForSig && c.NHead >= cfg.MinSamplesForSig {
 			ps[i] = c.P
+			if n := min(c.NBase, c.NHead); m == 0 || n < minUnits {
+				minUnits = n
+			}
+			m++
 		}
 	}
 	for i, rejected := range benjaminiHochberg(ps, cfg.Alpha) {
 		_, sig := pick(&rows[i])
 		*sig = rejected
 	}
+	return m, minUnits
+}
+
+// LowPowerRow is a benchmark the time rule cannot reliably guard on its own.
+type LowPowerRow struct {
+	Name      string
+	SpreadPct float64
+	Power     float64 // estimated chance of flagging a LowPowerShiftPct slowdown of this benchmark alone
+	MinShift  float64 // slowdown (percent) caught with LowPowerTarget probability
+}
+
+// LowPower lists, weakest first, the layout-compared benchmarks whose
+// estimated power (layoutPower) to flag a slowdown of cfg.LowPowerShiftPct
+// on its own is below cfg.LowPowerTarget. "On its own" means the rest of the
+// suite did not move, so Benjamini-Hochberg's first step applies: p must
+// fall below alpha/m.
+func LowPower(res Result, cfg Config) []LowPowerRow {
+	if !res.ByLayout || res.TimeTests == 0 {
+		return nil
+	}
+	level := cfg.Alpha / float64(res.TimeTests)
+	var out []LowPowerRow
+	for _, r := range res.Rows {
+		c := r.Time
+		if !c.OK || !c.ByLayout || math.IsNaN(c.SpreadPct) {
+			continue
+		}
+		k := min(c.NBase, c.NHead)
+		p := layoutPower(c.SpreadPct, k, level, cfg.LowPowerShiftPct)
+		if p < cfg.LowPowerTarget {
+			out = append(out, LowPowerRow{Name: r.Name, SpreadPct: c.SpreadPct, Power: p, MinShift: layoutMinShift(c.SpreadPct, k, level, cfg.LowPowerTarget)})
+		}
+	}
+	sort.SliceStable(out, func(i, j int) bool { return out[i].Power < out[j].Power })
+	return out
 }
 
 // layoutLevel reports whether every timed row was compared by layout, and
@@ -639,10 +702,6 @@ func Markdown(res Result, cfg Config, meta Meta) string {
 			"The A/A' control runs the base revision under a disjoint set of layout seeds; when more than %.3g%% of benchmarks move over %.3g%% in it, "+
 			"the run is noisy: re-run once, then inconclusive (neutral).\n\n",
 			res.Layouts, cfg.TimePct, cfg.Alpha, cfg.GeomeanPct, cfg.BytesPct, cfg.IrPct, cfg.AANoisyFraction, cfg.AADeltaPct)
-		if p := minMWP(res.Layouts, res.Layouts); p >= cfg.Alpha {
-			fmt.Fprintf(&b, "**Warning:** with %d layouts per arm the smallest attainable p-value is %.3g, not below %.3g: no time change can be judged significant. Use more layouts.\n\n",
-				res.Layouts, p, cfg.Alpha)
-		}
 	} else {
 		fmt.Fprintf(&b, "Rules: time regresses at >= +%.3g%% when significant at a false discovery rate of %.3g over the suite (Benjamini-Hochberg on Mann-Whitney U p-values), "+
 			"or a suite geomean >= +%.3g%% (per-round geomeans, Mann-Whitney U); "+
@@ -650,6 +709,12 @@ func Markdown(res Result, cfg Config, meta Meta) string {
 			"An A/A control with more than %.3g%% of benchmarks moving over %.3g%% is noisy: re-run once, then inconclusive (neutral). "+
 			"Code layouts were not randomized, so a change that only moves code can look like a regression.\n\n",
 			cfg.TimePct, cfg.Alpha, cfg.GeomeanPct, cfg.BytesPct, cfg.IrPct, cfg.AANoisyFraction, cfg.AADeltaPct)
+	}
+	if w := reachWarning(res, cfg); w != "" {
+		fmt.Fprintf(&b, "**Warning:** %s\n\n", w)
+	}
+	if res.GeomeanNote != "" {
+		fmt.Fprintf(&b, "**Note:** %s.\n\n", res.GeomeanNote)
 	}
 
 	b.WriteString("### Gated suite (GOGC=off, GOMAXPROCS=1)\n\n")
@@ -715,6 +780,7 @@ func Markdown(res Result, cfg Config, meta Meta) string {
 	default:
 		b.WriteString("A/A control not run: timings were not checked against machine noise.\n\n")
 	}
+	writeLowPower(&b, res, cfg)
 	if len(res.MissingInHead) > 0 {
 		fmt.Fprintf(&b, "Missing in head (not judged): %s\n\n", codeList(res.MissingInHead))
 	}
@@ -778,6 +844,68 @@ func runnerCPU(env string) string {
 		}
 	}
 	return "unknown"
+}
+
+// reachWarning says when the run is too small for the time rule to flag
+// anything: the smallest p-value an exact U test can give (complete
+// separation of minUnits vs minUnits) is compared both with alpha and with
+// alpha/m, the Benjamini-Hochberg level a single discovery among m
+// benchmarks must reach.
+func reachWarning(res Result, cfg Config) string {
+	if res.TimeTests == 0 || res.MinUnits == 0 {
+		return ""
+	}
+	unit := "samples"
+	if res.ByLayout {
+		unit = "layouts"
+	}
+	p := minMWP(res.MinUnits, res.MinUnits)
+	single := cfg.Alpha / float64(res.TimeTests)
+	switch {
+	case p >= cfg.Alpha:
+		return fmt.Sprintf("with %d %s per arm the smallest attainable p-value is %.3g, not below alpha = %.3g: no time change can be judged significant. Use more %s.",
+			res.MinUnits, unit, p, cfg.Alpha, unit)
+	case p > single:
+		return fmt.Sprintf("with %d %s per arm the smallest attainable p-value is %.3g. That is below alpha = %.3g but above alpha/m = %.3g, "+
+			"the Benjamini-Hochberg level one benchmark must reach when it is the only one of the m = %d that moved: "+
+			"a single benchmark's slowdown can never be flagged on its own, only changes that move many benchmarks together (or the suite geomean). Use more %s.",
+			res.MinUnits, unit, p, cfg.Alpha, single, res.TimeTests, unit)
+	}
+	return ""
+}
+
+// writeLowPower renders the low-power section (layout runs only).
+func writeLowPower(b *strings.Builder, res Result, cfg Config) {
+	if !res.ByLayout || res.TimeTests == 0 {
+		return
+	}
+	level := cfg.Alpha / float64(res.TimeTests)
+	b.WriteString("### Low power\n\n")
+	if minMWP(res.MinUnits, res.MinUnits) > level {
+		fmt.Fprintf(b, "None of the %d benchmarks can be flagged on its own at this layout count (see the warning above): every one is under-guarded against a single-benchmark slowdown.\n\n", res.TimeTests)
+		return
+	}
+	rows := LowPower(res, cfg)
+	if len(rows) == 0 {
+		fmt.Fprintf(b, "Every benchmark has an estimated %.0f%% or better chance of being flagged on its own for a +%.3g%% slowdown.\n\n",
+			cfg.LowPowerTarget*100, cfg.LowPowerShiftPct)
+		return
+	}
+	fmt.Fprintf(b, "%d benchmark(s) have under %.0f%% estimated power to be flagged on their own for a +%.3g%% slowdown "+
+		"(their spread across layouts is too wide for %d layouts at the Benjamini-Hochberg level alpha/m = %.3g). "+
+		"A slowdown below the last column usually goes unflagged there; instructions/op, allocs/op and the suite geomean still guard them.\n\n",
+		len(rows), cfg.LowPowerTarget*100, cfg.LowPowerShiftPct, res.MinUnits, level)
+	b.WriteString("| benchmark | spread | power at +5% | slowdown caught 80% of the time |\n|---|---:|---:|---:|\n")
+	const maxRows = 30
+	for i, r := range rows {
+		if i == maxRows {
+			fmt.Fprintf(b, "| ... %d more | | | |\n", len(rows)-maxRows)
+			break
+		}
+		fmt.Fprintf(b, "| `%s` | %.2f%% | %.0f%% | +%.1f%% |\n", strings.TrimPrefix(r.Name, "Benchmark"), r.SpreadPct, r.Power*100, r.MinShift)
+	}
+	b.WriteString("\nPower is estimated with the normal approximation for the U test (Noether): " +
+		"power = Phi(ln(1+shift)/s * sqrt(K/2) * sqrt(3/pi) - z(1 - alpha/(2m))), with s the spread and K the layouts per arm.\n\n")
 }
 
 func codeList(names []string) string {

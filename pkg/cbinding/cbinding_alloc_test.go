@@ -160,7 +160,7 @@ func metadataWithoutRelease(sql, dialect string) MetadataResult {
 var allocationMetadataSink MetadataResult
 var allocationExtractSink any
 
-func TestCBindingExtractASTRelease(t *testing.T) {
+func TestCBindingAllocExtractASTRelease(t *testing.T) {
 	sql := benchQueries[1].sql
 	for _, tc := range []struct {
 		name                 string

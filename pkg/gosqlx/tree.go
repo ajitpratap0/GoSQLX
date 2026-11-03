@@ -329,7 +329,7 @@ func parseWithConfig(ctx context.Context, sql string, cfg parseOptions) (*ast.AS
 		if ctxErr := ctx.Err(); ctxErr != nil {
 			return nil, wrapContextErr(ctxErr)
 		}
-		return nil, fmt.Errorf("%w: %w", ErrTokenize, tokErr)
+		return nil, newWrap(ErrTokenize, tokErr)
 	}
 
 	p := parser.GetParser()
@@ -350,7 +350,7 @@ func parseWithConfig(ctx context.Context, sql string, cfg parseOptions) (*ast.AS
 			// Join all diagnostics but surface them under ErrSyntax so
 			// errors.Is(err, ErrSyntax) still matches.
 			joined := errors.Join(errs...)
-			return &ast.AST{Statements: stmts}, fmt.Errorf("%w: %w", ErrSyntax, joined)
+			return &ast.AST{Statements: stmts}, newWrap(ErrSyntax, joined)
 		}
 		recovered := &ast.AST{Statements: stmts}
 		if cfg.comments {
@@ -364,7 +364,7 @@ func parseWithConfig(ctx context.Context, sql string, cfg parseOptions) (*ast.AS
 		if ctxErr := ctx.Err(); ctxErr != nil {
 			return nil, wrapContextErr(ctxErr)
 		}
-		return nil, fmt.Errorf("%w: %w", ErrSyntax, err)
+		return nil, newWrap(ErrSyntax, err)
 	}
 	if cfg.comments {
 		attachComments(astNode, tkz.Comments)
@@ -388,7 +388,7 @@ func wrapContextErr(err error) error {
 	if err == nil {
 		return nil
 	}
-	return fmt.Errorf("%w: %w", ErrTimeout, err)
+	return newWrap(ErrTimeout, err)
 }
 
 // ─── Format options on the new top-level API ──────────────────────────────

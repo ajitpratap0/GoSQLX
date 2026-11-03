@@ -83,9 +83,9 @@ func lintResult(fileResult linter.FileResult) (*LintResult, error) {
 	res := &LintResult{Violations: fileResult.Violations}
 	switch {
 	case fileResult.TokenizeError != nil:
-		return res, fmt.Errorf("%w: %w", ErrTokenize, fileResult.TokenizeError)
+		return res, newWrap(ErrTokenize, fileResult.TokenizeError)
 	case fileResult.ParseError != nil:
-		return res, fmt.Errorf("%w: %w", ErrSyntax, fileResult.ParseError)
+		return res, newWrap(ErrSyntax, fileResult.ParseError)
 	}
 	return res, nil
 }

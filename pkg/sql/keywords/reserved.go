@@ -14,9 +14,8 @@
 
 package keywords
 
-import "strings"
-
+// GetKeyword returns the keyword associated with word, if present.
+// Pure-ASCII words up to 64 bytes are looked up without allocating.
 func (k *Keywords) GetKeyword(word string) (Keyword, bool) {
-	keyword, ok := k.keywordMap[strings.ToUpper(word)]
-	return keyword, ok
+	return lookupFold(k.keywordMap, word)
 }

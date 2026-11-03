@@ -322,3 +322,60 @@ func TestReleaseDrawnPolicy_EveryListedTypeIsReleased(t *testing.T) {
 		})
 	}
 }
+
+// TestReleaseDrawnPolicy_ParserCountsDraws guards the parser's draw counter
+// that lets ReleaseAST skip the release walk (W4-01). Every function in
+// pkg/sql/parser that draws a pooled node must also call notePooledDraw at
+// least once per draw, otherwise a tree holding a pooled node would be
+// released in O(1) and the node would never be recycled.
+func TestReleaseDrawnPolicy_ParserCountsDraws(t *testing.T) {
+	pooled := poolConstructors(t)
+	draws := 0
+	for _, f := range parseNonTestFiles(t, filepath.Join("..", "parser")) {
+		local := ""
+		for _, imp := range f.Imports {
+			path, err := strconv.Unquote(imp.Path.Value)
+			if err == nil && strings.HasSuffix(path, astImportSuffix) {
+				local = "ast"
+				if imp.Name != nil {
+					local = imp.Name.Name
+				}
+			}
+		}
+		if local == "" || local == "_" || local == "." {
+			continue
+		}
+		for _, decl := range f.Decls {
+			fn, ok := decl.(*ast.FuncDecl)
+			if !ok || fn.Body == nil {
+				continue
+			}
+			nDraw, nNote := 0, 0
+			ast.Inspect(fn.Body, func(n ast.Node) bool {
+				call, ok := n.(*ast.CallExpr)
+				if !ok {
+					return true
+				}
+				sel, ok := call.Fun.(*ast.SelectorExpr)
+				if !ok {
+					return true
+				}
+				if id, ok := sel.X.(*ast.Ident); ok && id.Name == local && pooled[sel.Sel.Name] && sel.Sel.Name != "NewAST" {
+					nDraw++
+				}
+				if sel.Sel.Name == "notePooledDraw" {
+					nNote++
+				}
+				return true
+			})
+			draws += nDraw
+			if nNote < nDraw {
+				t.Errorf("%s draws %d pooled node(s) but calls notePooledDraw %d time(s); "+
+					"call p.notePooledDraw() after every ast.Get*/ast.New* draw", fn.Name.Name, nDraw, nNote)
+			}
+		}
+	}
+	if draws == 0 {
+		t.Fatal("detector found no pooled draws in pkg/sql/parser: guard is vacuous")
+	}
+}

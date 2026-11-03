@@ -86,6 +86,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Performance
 - **gosqlx**: errors returned by `Parse`, `Validate`, `Lint` and the tree helpers now wrap the sentinel and the underlying error in an unexported `wrapErr` that builds its message lazily, instead of `fmt.Errorf("%w: %w", ...)` on every failure. Error text, `errors.Is` and `errors.As` behaviour are unchanged; only the unexported concrete error type differs. The saving applies to callers that only check `errors.Is`/`errors.As` or drop the message: when the message is built (`err.Error()`, as the LSP and CLI do) the gain is about 2 allocs/op and 3-4% B/op per error (syntax_mid 21 -> 19 allocs). Because the message is now built on demand, `Error()` reflects any later mutation of the inner `*errors.Error` reached through `errors.As`; previously the text was fixed at creation. [W1-03]
+- **Linter L010**: scans bytes in a single pass instead of rebuilding
+  substrings and running a regular expression; `BenchmarkLintRule/L010` is 67.5% faster on the
+  amd64 CI gate and allocates nothing (was 20,758 allocs/op); LintRW
+  allocs/op drop 2.3-3.2% across all dialects.
 - **Parser joins slice sized from a JOIN lookahead [W4-03]**: when the first JOIN of a FROM clause is appended, `parseJoinClauses` counts the JOIN tokens that follow at the same paren depth (within 256 tokens, stopping at `;`, UNION/EXCEPT/INTERSECT or the closing `)`) and allocates the slice with capacity 1 + that count (max 8) instead of a fixed 2. Join-free statements pay nothing. `ParseE2E/join` and `complex` B/op drop about 20%; no API or AST change. A full slice handed in by a parenthesized join group or a comma table is grown by the same hint. Known edge cost: shapes the lookahead cannot see (`(a JOIN b) JOIN c`, `a JOIN b, c`) incur one extra allocation per statement; the gated suite is unaffected.
 - **`ast.ReleaseAST` is O(1) for parser-built trees that hold no pooled nodes**: the parser counts the nodes it draws from the AST pools and tells
   `ReleaseAST` through an internal hook (`pkg/sql/internal/astrelease`). When
@@ -105,6 +109,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Parser**: the parser's current token is now a pointer into its token slice (with a per-parser zero EOF sentinel) instead of a 72-byte copy made on every `advance`, and `peekToken` returns a pointer, which removes most GC write-barrier work and struct copying from the parse loop. Parse results, errors and positions are byte-identical (behaviour goldens plus a recovery-path differential); no API change. A zero-value `&Parser{}` keeps working. [W3-02]
 - **Fingerprint, formatter, transform**: `fingerprint.Normalize`/`Fingerprint`, `Formatter.Format` and `transform.ParseSQL`/`ParseSQLWithDialect` tokenize through the internal pooled token scratch instead of the public `TokenizeString`. `Normalize` allocates 42-70% fewer bytes/op and `transform.ParseSQL` 49-78% fewer, with 2-3 fewer allocs/op and no output change. [W5-01]
 - **Formatter**: compact formatting (`ast.CompactStyle()`, no clause newlines, no semicolon, no line width, no target dialect, preserve or upper keyword case) now renders SELECT, INSERT, UPDATE and DELETE through each statement's `SQL()` instead of the visitor renderer, and a single compact statement skips the parts slice and join. `Render/compact/*` is 27-49% faster with 1 alloc/op (was 4-42) and 60-82% fewer bytes/op; `Normalize` and `Fingerprint` are 6-13% faster with 15-39% fewer allocs. Output is byte-identical (differential test over every corpus statement in 9 dialects and all option combinations); lowercase keywords, target-dialect rewrites, set operations and ALTER TABLE keep the visitor path. [W5-02]
+
+### Behavior changes
+- **Linter L010 (redundant whitespace)**: violation columns are byte
+  positions on lines with invalid UTF-8. They were shifted before because
+  invalid bytes were replaced with U+FFFD (3 bytes) while scanning. Valid
+  UTF-8 is unaffected.
 
 ### Fixed
 - **AST**: `AlterTableStatement.SQL()` now separates multiple ALTER TABLE actions with commas, matching the compact formatter and preserving action boundaries when re-parsed.

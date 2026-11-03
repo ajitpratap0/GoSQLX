@@ -32,7 +32,7 @@
 //   - ParseTree: parses SQL into an opaque *Tree configured with functional options
 //     (WithDialect, WithStrict, WithTimeout, WithRecovery); recommended for new code
 //   - Parse: tokenizes and parses SQL, returning an *ast.AST
-//   - Validate: checks whether SQL is syntactically valid without building a full AST
+//   - Validate: checks SQL syntax by tokenizing and parsing, then releasing the AST
 //   - Format: formats SQL text according to configurable style options
 //   - ParseWithDialect: parses SQL using dialect-specific rules (PostgreSQL, MySQL, etc.)
 //   - ParseMultiple: efficiently parses a batch of SQL statements by reusing pooled objects

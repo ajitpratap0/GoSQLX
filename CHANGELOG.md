@@ -128,6 +128,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Formatter**: compact formatting (`ast.CompactStyle()`, no clause newlines, no semicolon, no line width, no target dialect, preserve or upper keyword case) now renders SELECT, INSERT, UPDATE and DELETE through each statement's `SQL()` instead of the visitor renderer, and a single compact statement skips the parts slice and join. `Render/compact/*` is 27-49% faster with 1 alloc/op (was 4-42) and 60-82% fewer bytes/op; `Normalize` and `Fingerprint` are 6-13% faster with 15-39% fewer allocs. Output is byte-identical (differential test over every corpus statement in 9 dialects and all option combinations); lowercase keywords, target-dialect rewrites, set operations and ALTER TABLE keep the visitor path. [W5-02]
 
 ### Behavior changes
+- **Validate blank input errors**: `gosqlx.Validate` and dialect-aware C/Python
+  validation now return structured parser errors wrapped by `ErrSyntax` for
+  empty and whitespace-only input (E2005 for empty input, ASCII space/tab/CR/LF
+  and U+FEFF; E2004 wrapping tokenizer E1001 for vertical tab, form feed,
+  U+00A0, U+2003 and U+0085). The error text changes; callers should match
+  `errors.Is(err, gosqlx.ErrSyntax)` or inspect the structured error code.
+  Validate documentation now describes parsing and releasing the AST; it makes
+  no speed claim.
 - **Linter L010 (redundant whitespace)**: violation columns are byte
   positions on lines with invalid UTF-8. They were shifted before because
   invalid bytes were replaced with U+FFFD (3 bytes) while scanning. Valid

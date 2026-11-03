@@ -180,11 +180,9 @@ func (h *classifier) resolve(toks []models.TokenWithSpan, comments []Span, limit
 	out := h.sc.lexemes[:0]
 	if cap(out) < len(toks) {
 		out = make([]lexeme, 0, len(toks))
-		h.sc.lexHigh = 0
 	}
 	defer func() {
 		h.sc.lexemes = out
-		h.sc.lexHigh = max(h.sc.lexHigh, len(out))
 	}()
 	cursor, ci := 0, 0
 	for _, tok := range toks {

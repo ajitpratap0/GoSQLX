@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Breaking Changes
+- **Pool statistics [W1-07]**: Get/Put operations are counted only while metrics are enabled. While disabled, `metrics.GetPoolStats` returns zero values for the three standard pools and omits custom pools. Counts collected earlier remain available when metrics are enabled again.
+  - **Migration:** Call `metrics.Enable()` before the workload to be measured, for example at process start. Tests asserting pool balance through `GetPoolStats` deltas should enable metrics first and restore the previous state in cleanup. Counts are not retroactive.
+
 ### Added
 - **Benchmark and perf-gate infrastructure (performance overhaul, wave 0)**:
   pull requests are now judged by interleaved A/B measurements instead of
@@ -101,6 +105,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     benchmarks that publish diagnostics no longer time a growing buffer.
 
 ### Performance
+- **Pools [W1-07]**: Skip atomic pool counter updates while metrics are disabled. <gate numbers>
 - **gosqlx**: errors returned by `Parse`, `Validate`, `Lint` and the tree helpers now wrap the sentinel and the underlying error in an unexported `wrapErr` that builds its message lazily, instead of `fmt.Errorf("%w: %w", ...)` on every failure. Error text, `errors.Is` and `errors.As` behaviour are unchanged; only the unexported concrete error type differs. The saving applies to callers that only check `errors.Is`/`errors.As` or drop the message: when the message is built (`err.Error()`, as the LSP and CLI do) the gain is about 2 allocs/op and 3-4% B/op per error (syntax_mid 21 -> 19 allocs). Because the message is now built on demand, `Error()` reflects any later mutation of the inner `*errors.Error` reached through `errors.As`; previously the text was fixed at creation. [W1-03]
 - **Linter L010**: scans bytes in a single pass instead of rebuilding
   substrings and running a regular expression; `BenchmarkLintRule/L010` is 67.5% faster on the
@@ -120,7 +125,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Tokenizer**: token Start/End locations are now computed from a cached current-line window (a range check and a subtraction) instead of two calls to the non-inlinable position lookup per token; out-of-window offsets take the existing lookup. Token positions are identical, including after a UTF-8 BOM and across pooled-tokenizer reuse (guarded by an oracle test). [W2-02]
 - **Tokenizer**: `@param` and SQL Server `@@var` token values are now slices of the input instead of `"@"+name` concatenations, removing one string allocation per parameter (SQL Server real-world allocs/op -90% to -100%, MariaDB/MySQL/Snowflake -50% to -67% on the large cells). Names that `readIdentifier` treats specially (`U&` escapes, a single letter before a quote, compound-keyword starts such as `@group by`, non-ASCII names) keep the previous path, so token types, values and spans are identical (pinned by a golden over 9 dialects). [W2-03]
 - **Tokenizer**: tokens are now built in place. The scanner and its token readers write each token's fields directly into its slot of the output slice instead of returning a 40-byte `models.Token` by value that was then copied into a 72-byte `models.TokenWithSpan` and appended. On amd64 those copies reloaded just-spilled structs with 16-byte loads that cannot be store-forwarded. Token output, spans and errors are identical (token goldens unchanged); no API or behaviour change. [W2-10]
-- **Pools**: the tokenizer, parser and AST pools now count Get/Put through precreated, cache-line padded atomic counters (`internal/poolstats`) instead of an RWMutex-guarded map keyed by pool name, removing a lock, map lookup and string hash from every pool operation. `metrics.GetPoolStats` and `metrics.ResetPoolStats` behave exactly as before; named custom pools keep the map path. [W1-01]
+- **Pools**: the tokenizer, parser and AST pools now count Get/Put through precreated, cache-line padded atomic counters (`internal/poolstats`) instead of an RWMutex-guarded map keyed by pool name, removing a lock, map lookup and string hash from every pool operation. `metrics.GetPoolStats` and `metrics.ResetPoolStats` retain their previous behaviour until W1-07 (see Breaking Changes); named custom pools keep the map path. [W1-01]
 - **Parser**: token preprocessing now takes a type-gated fast path. Only identifier, keyword, aggregate and compound tokens take the normalisation path; every other token is appended with a single copy. Output is identical (guarded by an old-versus-new differential test); no API or behaviour change.
 - **Parser**: the parser's current token is now a pointer into its token slice (with a per-parser zero EOF sentinel) instead of a 72-byte copy made on every `advance`, and `peekToken` returns a pointer, which removes most GC write-barrier work and struct copying from the parse loop. Parse results, errors and positions are byte-identical (behaviour goldens plus a recovery-path differential); no API change. A zero-value `&Parser{}` keeps working. [W3-02]
 - **Fingerprint, formatter, transform**: `fingerprint.Normalize`/`Fingerprint`, `Formatter.Format` and `transform.ParseSQL`/`ParseSQLWithDialect` tokenize through the internal pooled token scratch instead of the public `TokenizeString`. `Normalize` allocates 42-70% fewer bytes/op and `transform.ParseSQL` 49-78% fewer, with 2-3 fewer allocs/op and no output change. [W5-01]

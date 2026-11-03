@@ -6,6 +6,7 @@ package main
 import (
 	"math"
 	"sort"
+	"sync"
 )
 
 // median returns the median of xs, or NaN for an empty slice. xs is not
@@ -120,34 +121,109 @@ func benjaminiHochberg(ps []float64, q float64) []bool {
 	return out
 }
 
-// layoutPower estimates the power of the two-sided exact U test over k vs k
-// per-layout values to detect a slowdown of shiftPct percent at level
-// alpha, when the per-layout values have a relative standard deviation of
-// spreadPct percent. It is Noether's normal approximation: the U test has
-// asymptotic efficiency 3/pi relative to the t test under normal data, so
-// power = Phi(d * sqrt(k/2) * sqrt(3/pi) - z(1 - alpha/2)) with
-// d = ln(1 + shift) / spread. Checked against simulation of the gate
-// (k = 20, m = 50, +5%, per-layout effects uniform, spread as the report
-// measures it): 91%, 37% and 5% at spreads of 3.0%, 4.4% and 7.4%, where
-// the simulation caught 93%, 47% and 6%, so the estimate is a little
-// conservative.
-func layoutPower(spreadPct float64, k int, alpha, shiftPct float64) float64 {
-	if !(spreadPct > 0) || k < 2 || !(alpha > 0) {
-		return math.NaN()
+// powerResiduals pools log per-layout medians after centring each arm by
+// its own median, removing real head shifts from the sizing distribution.
+// E1's runner evidence has long tails and layout clusters that MAD misses.
+func powerResiduals(name string, arms ...*Run) []float64 {
+	var residuals []float64
+	for _, arm := range arms {
+		labels, groups := arm.ByLayout(name, "ns/op")
+		if len(labels) < 2 || labels[0] == "" {
+			continue
+		}
+		values := groupMedians(groups)
+		center := median(values)
+		if !(center > 0) {
+			continue
+		}
+		for _, value := range values {
+			if !(value > 0) {
+				return nil
+			}
+			residuals = append(residuals, math.Log(value/center))
+		}
 	}
-	d := math.Log1p(shiftPct/100) / (spreadPct / 100)
-	x := d*math.Sqrt(float64(k)/2)*math.Sqrt(3/math.Pi) - normalQuantile(1-alpha/2)
-	return normalCDF(x)
+	return residuals
 }
 
-// layoutMinShift inverts layoutPower: the slowdown in percent that is
-// detected with probability target.
-func layoutMinShift(spreadPct float64, k int, alpha, target float64) float64 {
-	if !(spreadPct > 0) || k < 2 || !(alpha > 0) {
+// aucShift measures P(r_j + log(1+shift) > r_i), counting ties by halves
+// and excluding self-pairs, using sorting and binary search. E1 shows this
+// empirical effect size captures runner tails and clusters missed by MAD.
+func aucShift(resid []float64, shiftPct float64) float64 {
+	if len(resid) < 2 || !(shiftPct > -100) {
 		return math.NaN()
 	}
-	d := (normalQuantile(1-alpha/2) + normalQuantile(target)) / (math.Sqrt(float64(k)/2) * math.Sqrt(3/math.Pi))
-	return math.Expm1(d*spreadPct/100) * 100
+	values := append([]float64(nil), resid...)
+	sort.Float64s(values)
+	shift := math.Log1p(shiftPct / 100)
+	var wins float64
+	for _, value := range values {
+		shifted := value + shift
+		lower := sort.Search(len(values), func(i int) bool { return values[i] >= shifted })
+		upper := sort.Search(len(values), func(i int) bool { return values[i] > shifted })
+		wins += float64(lower) + float64(upper-lower)/2
+		if shifted > value {
+			wins--
+		} else if shifted == value {
+			wins -= 0.5
+		}
+	}
+	return wins / (float64(len(values)) * float64(len(values)-1))
+}
+
+// aucPower uses Noether's normal approximation with an empirical AUC
+// effect size from pooled within-arm residuals. In E1 it overestimates
+// Monte-Carlo power by at most 0.06, unlike the optimistic MAD model.
+func aucPower(resid []float64, n1, n2 int, level, shiftPct float64) float64 {
+	if len(resid) < 4 || n1 < 2 || n2 < 2 || !(level > 0 && level < 1) {
+		return math.NaN()
+	}
+	return aucPowerAt(aucShift(resid, shiftPct), n1, n2, level)
+}
+
+func aucPowerAt(auc float64, n1, n2 int, level float64) float64 {
+	return normalCDF((auc-0.5)*math.Sqrt(12*float64(n1)*float64(n2)/float64(n1+n2+1)) - normalQuantile(1-level/2))
+}
+
+// requiredLayouts finds the smallest balanced K reaching target under the
+// empirical-AUC Noether model, or kmax+1 if none does. E1 supports this
+// conservative sizing for the runner's long tails and discrete clusters.
+func requiredLayouts(resid []float64, level, shiftPct, target float64, kmax int) int {
+	if len(resid) < 4 || !(level > 0 && level < 1) {
+		return kmax + 1
+	}
+	auc := aucShift(resid, shiftPct)
+	if !(auc > 0.5) {
+		return kmax + 1
+	}
+	for k := 2; k <= kmax; k++ {
+		if aucPowerAt(auc, k, k, level) >= target {
+			return k
+		}
+	}
+	return kmax + 1
+}
+
+// aucMinShift bisects the empirical-AUC Noether power curve to 0.01
+// percentage points, returning +Inf when even +100% is insufficient.
+// E1 supports this conservative model over the former MAD normal model.
+func aucMinShift(resid []float64, n1, n2 int, level, target float64) float64 {
+	if len(resid) < 4 || n1 < 2 || n2 < 2 || !(level > 0 && level < 1) {
+		return math.NaN()
+	}
+	if !(aucPower(resid, n1, n2, level, 100) >= target) {
+		return math.Inf(1)
+	}
+	lo, hi := 0.0, 100.0
+	for hi-lo > 0.00001 {
+		mid := (lo + hi) / 2
+		if aucPower(resid, n1, n2, level, mid) >= target {
+			hi = mid
+		} else {
+			lo = mid
+		}
+	}
+	return hi
 }
 
 func normalCDF(x float64) float64 { return 0.5 * math.Erfc(-x/math.Sqrt2) }
@@ -248,8 +324,27 @@ func exactP(n1, n2, u int) float64 {
 
 // uDistribution returns, for each U in 0..n1*n2, the number of orderings of
 // n1 x-values and n2 y-values that produce it. It uses the recurrence
-// f(i, j)[u] = f(i-1, j)[u-j] + f(i, j-1)[u], keeping one row of i at a time.
+// f(i, j)[u] = f(i-1, j)[u-j] + f(i, j-1)[u], keeping one row of i at a time;
+// cached slices are shared and must never be mutated by callers.
 func uDistribution(n1, n2 int) []float64 {
+	key := [2]int{n1, n2}
+	if cached, ok := uDistributionCache.Load(key); ok {
+		if dist, ok := cached.([]float64); ok {
+			return dist
+		}
+	}
+	dist := uDistributionFresh(n1, n2)
+	cached, _ := uDistributionCache.LoadOrStore(key, dist)
+	if stored, ok := cached.([]float64); ok {
+		return stored
+	}
+	return dist
+}
+
+var uDistributionCache sync.Map
+
+// uDistributionFresh computes the recurrence without consulting the cache.
+func uDistributionFresh(n1, n2 int) []float64 {
 	prev := make([][]float64, n2+1) // f(i-1, j) for j = 0..n2
 	for j := range prev {
 		prev[j] = []float64{1} // f(0, j): only U = 0

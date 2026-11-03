@@ -5,7 +5,9 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"math"
+	"regexp"
 	"sort"
 	"strings"
 )
@@ -49,6 +51,8 @@ type Config struct {
 	// LowPowerShiftPct on its own is below LowPowerTarget (a fraction).
 	LowPowerShiftPct float64
 	LowPowerTarget   float64
+	ExtMax           int
+	ExtStatus        string
 }
 
 // DefaultConfig is the configuration CI uses.
@@ -64,6 +68,8 @@ func DefaultConfig() Config {
 		MinSamplesForSig: 3,
 		LowPowerShiftPct: 5,
 		LowPowerTarget:   0.8,
+		ExtMax:           200,
+		ExtStatus:        "off",
 	}
 }
 
@@ -75,6 +81,7 @@ func DefaultConfig() Config {
 // IrHead hold instructions/op from cmd/perfdriver.
 type Inputs struct {
 	Base, Head, AA   *Run
+	BaseExt, HeadExt *Run
 	SecBase, SecHead *Run
 	IrBase, IrHead   *Run
 }
@@ -188,16 +195,23 @@ func (c Cmp) significant(cfg Config, deterministic bool) bool {
 
 // Row is the per-benchmark result.
 type Row struct {
-	Name    string
-	Time    Cmp
-	TimeSig bool // the time change survives the suite-wide false-discovery control (timeSignificance)
-	AA      Cmp  // base vs the A/A' arm, time
-	AASig   bool
-	Bytes   Cmp
-	Allocs  Cmp
-	Sec     Cmp // secondary (default GC) time
-	Status  []string
-	Regress bool
+	Name      string
+	K         int
+	Power     float64
+	NeedK     int
+	residuals []float64
+	line      int
+	hasLine   bool
+	stageK    int
+	Time      Cmp
+	TimeSig   bool // the time change survives the suite-wide false-discovery control (timeSignificance)
+	AA        Cmp  // base vs the A/A' arm, time
+	AASig     bool
+	Bytes     Cmp
+	Allocs    Cmp
+	Sec       Cmp // secondary (default GC) time
+	Status    []string
+	Regress   bool
 }
 
 // IrRow is the instruction-count result of one perfdriver case.
@@ -223,8 +237,9 @@ type Result struct {
 	AAFlagged  int // A/A' benchmarks the time rule would have flagged (|delta| >= TimePct, p < Alpha)
 	// ByLayout: every timed comparison used randomized layouts as the unit;
 	// Layouts is the smallest number of layouts per arm among them.
-	ByLayout bool
-	Layouts  int
+	ByLayout     bool
+	Layouts      int
+	StageLayouts int
 	// TimeTests is m, the number of benchmarks in the false-discovery
 	// family of the time rule; MinUnits is the smallest number of layouts
 	// (or, without layouts, samples) per arm among them.
@@ -258,6 +273,8 @@ func Evaluate(in Inputs, cfg Config) Result {
 		HasSec:     in.SecBase != nil && in.SecHead != nil,
 		HasIr:      in.IrBase != nil && in.IrHead != nil,
 	}
+	baseTime, headTime := mergeRuns(in.Base, in.BaseExt), mergeRuns(in.Head, in.HeadExt)
+	var stageRows []Row
 	var ratios, aaRatios, secRatios []float64
 	headSeen := make(map[string]bool)
 	if in.Head != nil {
@@ -271,8 +288,16 @@ func Evaluate(in Inputs, cfg Config) Result {
 				res.MissingInHead = append(res.MissingInHead, name)
 				continue
 			}
-			row := Row{Name: name}
-			row.Time = compareArms(in.Base, in.Head, name, unitTime)
+			row := Row{Name: name, Power: math.NaN()}
+			stageTime := compareArms(in.Base, in.Head, name, unitTime)
+			stageRows = append(stageRows, Row{Name: name, Time: stageTime})
+			row.stageK = min(stageTime.NBase, stageTime.NHead)
+			row.Time = compareArms(baseTime, headTime, name, unitTime)
+			row.line, row.hasLine = baseTime.Line[name]
+			if row.Time.ByLayout {
+				row.K = min(row.Time.NBase, row.Time.NHead)
+				row.residuals = powerResiduals(name, baseTime, headTime, in.AA)
+			}
 			row.Bytes = compare(in.Base.Get(name, unitBytes), in.Head.Get(name, unitBytes))
 			row.Allocs = compare(in.Base.Get(name, unitAllocs), in.Head.Get(name, unitAllocs))
 			if in.AA != nil {
@@ -281,8 +306,8 @@ func Evaluate(in Inputs, cfg Config) Result {
 			if res.HasSec {
 				row.Sec = compareArms(in.SecBase, in.SecHead, name, unitTime)
 			}
-			if row.Time.OK && row.Time.Ratio > 0 {
-				ratios = append(ratios, row.Time.Ratio)
+			if stageTime.OK && stageTime.Ratio > 0 {
+				ratios = append(ratios, stageTime.Ratio)
 			}
 			if row.AA.OK && row.AA.Ratio > 0 {
 				aaRatios = append(aaRatios, row.AA.Ratio)
@@ -305,8 +330,19 @@ func Evaluate(in Inputs, cfg Config) Result {
 		}
 	}
 	res.Geomean = geomean(ratios)
-	res.ByLayout, res.Layouts = layoutLevel(res.Rows)
+	res.ByLayout, res.Layouts = layoutLevel(stageRows)
+	res.StageLayouts = res.Layouts
 	res.TimeTests, res.MinUnits = timeSignificance(res.Rows, cfg, func(r *Row) (*Cmp, *bool) { return &r.Time, &r.TimeSig })
+	if res.TimeTests > 0 {
+		level := cfg.Alpha / float64(res.TimeTests)
+		for i := range res.Rows {
+			r := &res.Rows[i]
+			if r.Time.ByLayout {
+				r.Power = aucPower(r.residuals, r.K, r.K, level, cfg.LowPowerShiftPct)
+				r.NeedK = requiredLayouts(r.residuals, level, cfg.LowPowerShiftPct, cfg.LowPowerTarget, cfg.ExtMax)
+			}
+		}
+	}
 	timeSignificance(res.Rows, cfg, func(r *Row) (*Cmp, *bool) { return &r.AA, &r.AASig })
 	for _, r := range res.Rows {
 		if r.AASig && math.Abs(r.AA.DeltaPct) >= cfg.TimePct {
@@ -314,7 +350,7 @@ func Evaluate(in Inputs, cfg Config) Result {
 		}
 	}
 	if in.Base != nil && in.Head != nil {
-		res.GeomeanP = suiteGeomeanP(in.Base, in.Head, res.Rows, func(r Row) Cmp { return r.Time })
+		res.GeomeanP = suiteGeomeanP(in.Base, in.Head, stageRows, func(r Row) Cmp { return r.Time })
 	}
 	if in.AA != nil {
 		res.AAGeomeanP = suiteGeomeanP(in.Base, in.AA, res.Rows, func(r Row) Cmp { return r.AA })
@@ -469,15 +505,14 @@ func timeSignificance(rows []Row, cfg Config, pick func(*Row) (*Cmp, *bool)) (m,
 type LowPowerRow struct {
 	Name      string
 	SpreadPct float64
-	Power     float64 // estimated chance of flagging a LowPowerShiftPct slowdown of this benchmark alone
-	MinShift  float64 // slowdown (percent) caught with LowPowerTarget probability
+	Power     float64
+	MinShift  float64
+	K, NeedK  int
+	Reason    string
 }
 
-// LowPower lists, weakest first, the layout-compared benchmarks whose
-// estimated power (layoutPower) to flag a slowdown of cfg.LowPowerShiftPct
-// on its own is below cfg.LowPowerTarget. "On its own" means the rest of the
-// suite did not move, so Benjamini-Hochberg's first step applies: p must
-// fall below alpha/m.
+// LowPower lists remaining underpowered layout comparisons, weakest first.
+// A lone discovery must reach the first Benjamini-Hochberg level alpha/m.
 func LowPower(res Result, cfg Config) []LowPowerRow {
 	if !res.ByLayout || res.TimeTests == 0 {
 		return nil
@@ -485,18 +520,90 @@ func LowPower(res Result, cfg Config) []LowPowerRow {
 	level := cfg.Alpha / float64(res.TimeTests)
 	var out []LowPowerRow
 	for _, r := range res.Rows {
-		c := r.Time
-		if !c.OK || !c.ByLayout || math.IsNaN(c.SpreadPct) {
+		if !r.Time.OK || !r.Time.ByLayout || r.Power >= cfg.LowPowerTarget {
 			continue
 		}
-		k := min(c.NBase, c.NHead)
-		p := layoutPower(c.SpreadPct, k, level, cfg.LowPowerShiftPct)
-		if p < cfg.LowPowerTarget {
-			out = append(out, LowPowerRow{Name: r.Name, SpreadPct: c.SpreadPct, Power: p, MinShift: layoutMinShift(c.SpreadPct, k, level, cfg.LowPowerTarget)})
+		var reason string
+		switch {
+		case r.NeedK > cfg.ExtMax:
+			reason = fmt.Sprintf("needs more than %d layouts per arm (cap)", cfg.ExtMax)
+		case cfg.ExtStatus == "off":
+			reason = "adaptive layouts off"
+		case cfg.ExtStatus == "budget":
+			reason = "time budget ran out"
+		case cfg.ExtStatus == "stages":
+			reason = "still short after the last extension stage"
+		case cfg.ExtStatus == "done":
+			reason = "estimate rose after the last extension"
+		}
+		out = append(out, LowPowerRow{Name: r.Name, SpreadPct: r.Time.SpreadPct, Power: r.Power, MinShift: aucMinShift(r.residuals, r.K, r.K, level, cfg.LowPowerTarget), K: r.K, NeedK: r.NeedK, Reason: reason})
+	}
+	sort.SliceStable(out, func(i, j int) bool {
+		if math.IsNaN(out[i].Power) {
+			return !math.IsNaN(out[j].Power)
+		}
+		return out[i].Power < out[j].Power
+	})
+	return out
+}
+
+// PlanNeed sizes one benchmark's next extension in its original suite line.
+type PlanNeed struct {
+	Line               int
+	Name, Regex        string
+	More, Have, Target int
+}
+
+// Plan returns additional layouts needed to reach the power target, up to the cap.
+// Sizing halfway from the reporting target to full power leaves a safety margin
+// for dispersion estimates that rise after new layouts, within the same budget.
+func Plan(res Result, cfg Config) []PlanNeed {
+	var needs []PlanNeed
+	for _, r := range res.Rows {
+		if !r.Time.ByLayout || !(r.Power < cfg.LowPowerTarget) || !r.hasLine || res.TimeTests == 0 {
+			continue
+		}
+		sizingTarget := cfg.LowPowerTarget + (1-cfg.LowPowerTarget)/2
+		target := min(requiredLayouts(r.residuals, cfg.Alpha/float64(res.TimeTests), cfg.LowPowerShiftPct, sizingTarget, cfg.ExtMax), cfg.ExtMax)
+		if r.K < target {
+			needs = append(needs, PlanNeed{Line: r.line, Name: r.Name, Regex: exactBenchRegex(r.Name), More: target - r.K, Have: r.K, Target: target})
 		}
 	}
-	sort.SliceStable(out, func(i, j int) bool { return out[i].Power < out[j].Power })
-	return out
+	return needs
+}
+
+// exactBenchRegex anchors every slash-separated benchmark level literally.
+func exactBenchRegex(name string) string {
+	levels := strings.Split(name, "/")
+	for i, level := range levels {
+		levels[i] = "^" + regexp.QuoteMeta(level) + "$"
+	}
+	return strings.Join(levels, "/")
+}
+
+// WritePlan writes the awk-readable adaptive layout plan and one warm-up per line.
+// The optional cap records a non-default CLI cap without changing the TSV contract.
+func WritePlan(w io.Writer, needs []PlanNeed, lineFirst map[int]string, level float64, m int, kmax ...int) error {
+	cap := 200
+	if len(kmax) > 0 {
+		cap = kmax[0]
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "# perf gate adaptive-layout plan (W0-16): level %.8g m %d shift 5 target 0.8 kmax %d\n", level, m, cap)
+	seen := make(map[int]bool)
+	for _, n := range needs {
+		if !seen[n.Line] {
+			if first, ok := lineFirst[n.Line]; ok {
+				fmt.Fprintf(&b, "warmup\t%d\t%s\n", n.Line, exactBenchRegex(first))
+			}
+			seen[n.Line] = true
+		}
+	}
+	for _, n := range needs {
+		fmt.Fprintf(&b, "need\t%d\t%d\t%d\t%d\t%s\t%s\n", n.Line, n.More, n.Have, n.Target, n.Regex, n.Name)
+	}
+	_, err := io.WriteString(w, b.String())
+	return err
 }
 
 // layoutLevel reports whether every timed row was compared by layout, and
@@ -700,8 +807,18 @@ func Markdown(res Result, cfg Config, meta Meta) string {
 			"or a suite geomean >= +%.3g%% (per-layout suite geomeans, same test); "+
 			"allocs/op must not increase; B/op must not rise more than %.3g%%; instructions/op must not rise more than %.3g%%. "+
 			"The A/A' control runs the base revision under a disjoint set of layout seeds; when more than %.3g%% of benchmarks move over %.3g%% in it, "+
-			"the run is noisy: re-run once, then inconclusive (neutral).\n\n",
+			"the run is noisy: re-run once, then inconclusive (neutral). Benchmarks under 80%% estimated power for a lone +5%% slowdown at alpha/m get extra layouts (adaptive, budget-limited); time is judged over all of each benchmark's layouts.\n\n",
 			res.Layouts, cfg.TimePct, cfg.Alpha, cfg.GeomeanPct, cfg.BytesPct, cfg.IrPct, cfg.AANoisyFraction, cfg.AADeltaPct)
+		extended, maxK := 0, res.Layouts
+		for _, r := range res.Rows {
+			if r.K > r.stageK {
+				extended++
+				maxK = max(maxK, r.K)
+			}
+		}
+		if extended > 0 {
+			fmt.Fprintf(&b, "Stage 1 used %d layouts per arm; %d benchmark(s) received adaptive extensions to up to %d layouts per arm. Only primary time uses those extra layouts; every other rule uses stage-1 data.\n\n", res.Layouts, extended, maxK)
+		}
 	} else {
 		fmt.Fprintf(&b, "Rules: time regresses at >= +%.3g%% when significant at a false discovery rate of %.3g over the suite (Benjamini-Hochberg on Mann-Whitney U p-values), "+
 			"or a suite geomean >= +%.3g%% (per-round geomeans, Mann-Whitney U); "+
@@ -719,8 +836,8 @@ func Markdown(res Result, cfg Config, meta Meta) string {
 
 	b.WriteString("### Gated suite (GOGC=off, GOMAXPROCS=1)\n\n")
 	if res.ByLayout {
-		b.WriteString("| benchmark | time | p | A/A' | spread | B/op | allocs/op | status |\n")
-		b.WriteString("|---|---:|---:|---:|---:|---:|---:|---|\n")
+		b.WriteString("| benchmark | time | p | A/A' | spread | K | power | B/op | allocs/op | status |\n")
+		b.WriteString("|---|---:|---:|---:|---:|---:|---:|---:|---:|---|\n")
 	} else {
 		b.WriteString("| benchmark | time | p | A/A | B/op | allocs/op | status |\n")
 		b.WriteString("|---|---:|---:|---:|---:|---:|---|\n")
@@ -735,7 +852,7 @@ func Markdown(res Result, cfg Config, meta Meta) string {
 			if !math.IsNaN(r.Time.SpreadPct) {
 				spread = fmt.Sprintf("%.2f%%", r.Time.SpreadPct)
 			}
-			aa += " | " + spread
+			aa += fmt.Sprintf(" | %s | %d | %.0f%%", spread, r.K, r.Power*100)
 		}
 		bytes := ""
 		if r.Bytes.OK {
@@ -758,13 +875,13 @@ func Markdown(res Result, cfg Config, meta Meta) string {
 	}
 	extra := ""
 	if res.ByLayout {
-		extra = " |"
+		extra = " | | |"
 	}
 	fmt.Fprintf(&b, "| **geomean** | %s | %s | %s |%s | | |\n\n", pct((res.Geomean-1)*100), geoP, pct((res.AAGeomean-1)*100), extra)
 	if res.ByLayout {
 		b.WriteString("`time` and `A/A'` are Hodges-Lehmann shifts over the per-layout medians. `spread`: the base arm's robust standard deviation " +
 			"across its layouts (1.4826 x MAD, relative), i.e. how much this benchmark moves between builds that differ only in function placement, plus run-to-run noise; " +
-			"a change much smaller than it cannot be resolved in one run.\n\n")
+			"`K` is layouts per arm. Power uses Noether's normal approximation with the effect size taken from the data: AUC = P(head layout slower than base layout) under a +5% shift over pooled within-arm residuals, a conservative estimate.\n\n")
 	}
 	switch {
 	case res.HasAA && res.ByLayout:
@@ -881,9 +998,23 @@ func writeLowPower(b *strings.Builder, res Result, cfg Config) {
 	}
 	level := cfg.Alpha / float64(res.TimeTests)
 	b.WriteString("### Low power\n\n")
-	if minMWP(res.MinUnits, res.MinUnits) > level {
+	extended, maxK := 0, res.StageLayouts
+	for _, r := range res.Rows {
+		if r.K > r.stageK {
+			extended++
+			maxK = max(maxK, r.K)
+		}
+	}
+	fmt.Fprintf(b, "Adaptive layouts: %d benchmark(s) extended from %d to up to %d layouts per arm (%s).\n\n", extended, res.StageLayouts, maxK, cfg.ExtStatus)
+	noneReach := true
+	for _, r := range res.Rows {
+		if r.Time.OK && minMWP(r.Time.NBase, r.Time.NHead) <= level {
+			noneReach = false
+			break
+		}
+	}
+	if noneReach {
 		fmt.Fprintf(b, "None of the %d benchmarks can be flagged on its own at this layout count (see the warning above): every one is under-guarded against a single-benchmark slowdown.\n\n", res.TimeTests)
-		return
 	}
 	rows := LowPower(res, cfg)
 	if len(rows) == 0 {
@@ -891,21 +1022,12 @@ func writeLowPower(b *strings.Builder, res Result, cfg Config) {
 			cfg.LowPowerTarget*100, cfg.LowPowerShiftPct)
 		return
 	}
-	fmt.Fprintf(b, "%d benchmark(s) have under %.0f%% estimated power to be flagged on their own for a +%.3g%% slowdown "+
-		"(their spread across layouts is too wide for %d layouts at the Benjamini-Hochberg level alpha/m = %.3g). "+
-		"A slowdown below the last column usually goes unflagged there; instructions/op, allocs/op and the suite geomean still guard them.\n\n",
-		len(rows), cfg.LowPowerTarget*100, cfg.LowPowerShiftPct, res.MinUnits, level)
-	b.WriteString("| benchmark | spread | power at +5% | slowdown caught 80% of the time |\n|---|---:|---:|---:|\n")
-	const maxRows = 30
-	for i, r := range rows {
-		if i == maxRows {
-			fmt.Fprintf(b, "| ... %d more | | | |\n", len(rows)-maxRows)
-			break
-		}
-		fmt.Fprintf(b, "| `%s` | %.2f%% | %.0f%% | +%.1f%% |\n", strings.TrimPrefix(r.Name, "Benchmark"), r.SpreadPct, r.Power*100, r.MinShift)
+	fmt.Fprintf(b, "%d benchmark(s) have under %.0f%% estimated power to be flagged on their own for a +%.3g%% slowdown at the Benjamini-Hochberg level alpha/m = %.3g. Instructions/op, allocs/op and the stage-1 suite geomean still guard them.\n\n", len(rows), cfg.LowPowerTarget*100, cfg.LowPowerShiftPct, level)
+	b.WriteString("| benchmark | K | power at +5% | slowdown caught 80% of the time | reason |\n|---|---:|---:|---:|---|\n")
+	for _, r := range rows {
+		fmt.Fprintf(b, "| `%s` | %d | %.0f%% | +%.1f%% | %s |\n", strings.TrimPrefix(r.Name, "Benchmark"), r.K, r.Power*100, r.MinShift, r.Reason)
 	}
-	b.WriteString("\nPower is estimated with the normal approximation for the U test (Noether): " +
-		"power = Phi(ln(1+shift)/s * sqrt(K/2) * sqrt(3/pi) - z(1 - alpha/(2m))), with s the spread and K the layouts per arm.\n\n")
+	b.WriteString("\nPower is estimated by Noether's normal approximation using the empirical AUC of pooled within-arm log residuals, excluding self-pairs and giving half credit for ties.\n\n")
 }
 
 func codeList(names []string) string {

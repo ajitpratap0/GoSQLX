@@ -18,6 +18,11 @@
 //     noisy: the caller re-runs once (exit status "noisy"), and a second noisy
 //     run is inconclusive, which is neutral, not a failure.
 //
+// Adaptive planning estimates power from pooled within-arm layout residuals
+// and sizes each benchmark for a lone +5% slowdown at alpha/m. Extension
+// arms enter only the time comparison; all other rules use stage-1 data.
+// With -plan PATH it writes an adaptive-layout TSV and exits without a report.
+//
 // It writes a Markdown report and a one-word status file (pass, regression,
 // noisy or inconclusive). It exits 1 only with -enforce, on a regression,
 // without -accepted; in shadow mode (the default) it exits 0 for any verdict.
@@ -30,6 +35,7 @@
 package main
 
 import (
+	"bytes"
 	"errors"
 	"flag"
 	"fmt"
@@ -63,6 +69,9 @@ func realMain(args []string, stdout io.Writer) (int, error) {
 	var (
 		basePath    = fs.String("base", "", "primary base arm (Go benchmark output)")
 		headPath    = fs.String("head", "", "primary head arm")
+		baseExtPath = fs.String("base-ext", "", "additional primary base layouts")
+		headExtPath = fs.String("head-ext", "", "additional primary head layouts")
+		planPath    = fs.String("plan", "", "write the adaptive-layout plan here and exit")
 		aaPath      = fs.String("aa", "", "A/A' control: the base revision under disjoint layout seeds")
 		secBasePath = fs.String("sec-base", "", "secondary (default GC) base arm")
 		secHeadPath = fs.String("sec-head", "", "secondary (default GC) head arm")
@@ -89,6 +98,8 @@ func realMain(args []string, stdout io.Writer) (int, error) {
 	fs.Float64Var(&cfg.AADeltaPct, "aa-delta-pct", cfg.AADeltaPct, "A/A per-benchmark noise threshold, %")
 	fs.Float64Var(&cfg.AANoisyFraction, "aa-noisy-pct", cfg.AANoisyFraction, "A/A noisy when more than this % of benchmarks are noisy")
 	fs.BoolVar(&cfg.FinalAttempt, "final", false, "this is the re-run: a noisy A/A is inconclusive")
+	fs.IntVar(&cfg.ExtMax, "ext-max", cfg.ExtMax, "maximum adaptive layouts per arm (at least 2)")
+	fs.StringVar(&cfg.ExtStatus, "ext-status", cfg.ExtStatus, "adaptive layout status: off, done, budget or stages")
 	if err := fs.Parse(args); err != nil {
 		return 0, err
 	}
@@ -107,6 +118,17 @@ func realMain(args []string, stdout io.Writer) (int, error) {
 	if (*irBasePath == "") != (*irHeadPath == "") {
 		return 0, errors.New("-ir-base and -ir-head go together")
 	}
+	if (*baseExtPath == "") != (*headExtPath == "") {
+		return 0, errors.New("-base-ext and -head-ext go together")
+	}
+	if cfg.ExtMax < 2 {
+		return 0, errors.New("-ext-max must be at least 2")
+	}
+	switch cfg.ExtStatus {
+	case "off", "done", "budget", "stages":
+	default:
+		return 0, errors.New("-ext-status must be off, done, budget or stages")
+	}
 
 	var in Inputs
 	for _, p := range []struct {
@@ -114,6 +136,7 @@ func realMain(args []string, stdout io.Writer) (int, error) {
 		path string
 	}{
 		{&in.Base, *basePath}, {&in.Head, *headPath}, {&in.AA, *aaPath},
+		{&in.BaseExt, *baseExtPath}, {&in.HeadExt, *headExtPath},
 		{&in.SecBase, *secBasePath}, {&in.SecHead, *secHeadPath},
 		{&in.IrBase, *irBasePath}, {&in.IrHead, *irHeadPath},
 	} {
@@ -125,6 +148,21 @@ func realMain(args []string, stdout io.Writer) (int, error) {
 	}
 	if len(in.Base.Names) == 0 || len(in.Head.Names) == 0 {
 		return 0, errors.New("no benchmark results in -base or -head")
+	}
+	res := Evaluate(in, cfg)
+	if *planPath != "" {
+		var plan bytes.Buffer
+		level := cfg.Alpha
+		if res.TimeTests > 0 {
+			level /= float64(res.TimeTests)
+		}
+		if err := WritePlan(&plan, Plan(res, cfg), mergeRuns(in.Base, in.BaseExt).LineFirst, level, res.TimeTests, cfg.ExtMax); err != nil {
+			return 0, err
+		}
+		if err := os.WriteFile(*planPath, plan.Bytes(), 0o644); err != nil {
+			return 0, err
+		}
+		return 0, nil
 	}
 
 	meta := Meta{BaseRef: *baseRef, HeadRef: *headRef, Settings: *settings, Accepted: *accepted, IrNote: *irNote, Mode: "shadow", Title: *title}
@@ -142,10 +180,11 @@ func realMain(args []string, stdout io.Writer) (int, error) {
 		return 0, err
 	}
 
-	res := Evaluate(in, cfg)
 	md := Markdown(res, cfg, meta)
 	if *mdPath == "" {
-		fmt.Fprint(stdout, md)
+		if _, err := fmt.Fprint(stdout, md); err != nil {
+			return 0, err
+		}
 	} else if err := os.WriteFile(*mdPath, []byte(md), 0o644); err != nil {
 		return 0, err
 	}

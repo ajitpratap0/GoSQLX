@@ -84,19 +84,24 @@ var reservedNameWords = map[string]bool{
 // is at least the length of the longest word in reservedNameWords.
 const maxReservedNameLen = 16
 
+// reservedNameEntry is one word of reservedNameWords in fixed-width form.
+// everyPosition mirrors the map value (true: reserved everywhere).
 type reservedNameEntry struct {
 	word          [maxReservedNameLen]byte
 	everyPosition bool
 }
 
-var reservedNameEntries, reservedNameIndex = func() ([]reservedNameEntry, [26][maxReservedNameLen + 1]struct {
+// reservedNameBucket locates the run of reservedNameEntries holding all
+// words with one first letter and one length: entries[start : start+n].
+type reservedNameBucket struct {
 	start uint16
 	n     uint8
-}) {
-	var index [26][maxReservedNameLen + 1]struct {
-		start uint16
-		n     uint8
-	}
+}
+
+// reservedNameIndex is laid out [firstLetter-'A'][length] -> bucket; the
+// entries slice is sorted by (first letter, length, word) to match.
+var reservedNameEntries, reservedNameIndex = func() ([]reservedNameEntry, [26][maxReservedNameLen + 1]reservedNameBucket) {
+	var index [26][maxReservedNameLen + 1]reservedNameBucket
 	words := make([]string, 0, len(reservedNameWords))
 	for w := range reservedNameWords {
 		valid := len(w) >= 2 && len(w) <= maxReservedNameLen

@@ -224,14 +224,11 @@ func (r *AliasingConsistencyRule) checkASTBased(ctx *linter.Context) ([]linter.V
 	astViolations := []linter.Violation{}
 
 	// Walk the AST to find aliasing patterns at every nesting level
-	for _, stmt := range ctx.AST.Statements {
-		ast.Inspect(stmt, func(n ast.Node) bool {
-			if selectStmt, ok := n.(*ast.SelectStatement); ok {
-				stmtViolations := r.checkSelectStatement(selectStmt, ctx)
-				astViolations = append(astViolations, stmtViolations...)
-			}
-			return true
-		})
+	for _, n := range ctx.Nodes() {
+		if selectStmt, ok := n.(*ast.SelectStatement); ok {
+			stmtViolations := r.checkSelectStatement(selectStmt, ctx)
+			astViolations = append(astViolations, stmtViolations...)
+		}
 	}
 
 	return astViolations, nil

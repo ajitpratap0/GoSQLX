@@ -180,26 +180,33 @@ func TestScanSQLGuardsEquivalence(t *testing.T) {
 // comparison length. Minima reduce scheduler noise; the generous ratio permits
 // linear scanning overhead without imposing an absolute timing threshold.
 func TestHasEqualIdentPairLinear(t *testing.T) {
-	measure := func(size int) time.Duration {
-		t.Helper()
+	input := func(size int) string {
 		n := (size - 2) / 2
-		sql := strings.Repeat("a", n) + "b=" + strings.Repeat("a", size-n-2)
-		var best time.Duration
-		for sample := 0; sample < 3; sample++ {
-			start := time.Now()
-			for repeat := 0; repeat < 4; repeat++ {
-				if hasEqualIdentPair(sql) {
-					t.Fatal("unequal identifier suffix unexpectedly passed guard")
-				}
-			}
-			elapsed := time.Since(start)
-			if sample == 0 || elapsed < best {
-				best = elapsed
+		return strings.Repeat("a", n) + "b=" + strings.Repeat("a", size-n-2)
+	}
+	sample := func(sql string) time.Duration {
+		t.Helper()
+		start := time.Now()
+		for repeat := 0; repeat < 4; repeat++ {
+			if hasEqualIdentPair(sql) {
+				t.Fatal("unequal identifier suffix unexpectedly passed guard")
 			}
 		}
-		return best
+		return time.Since(start)
 	}
-	small, large := measure(16*1024), measure(64*1024)
+	// Interleave the two sizes and keep each one's fastest round, so CPU
+	// contention from tests running in parallel (other packages, parallel
+	// subtests) hits both sizes alike instead of skewing the ratio.
+	smallSQL, largeSQL := input(16*1024), input(64*1024)
+	var small, large time.Duration
+	for round := 0; round < 9; round++ {
+		if s := sample(smallSQL); round == 0 || s < small {
+			small = s
+		}
+		if l := sample(largeSQL); round == 0 || l < large {
+			large = l
+		}
+	}
 	t.Logf("16 KiB: %v; 64 KiB: %v; ratio %.2f", small, large, float64(large)/float64(small))
 	if large > 10*small {
 		t.Fatalf("identifier guard scaling exceeds linear allowance: 16 KiB=%v, 64 KiB=%v", small, large)

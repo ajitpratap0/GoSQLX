@@ -2356,6 +2356,10 @@ func semanticTokensLegend() SemanticTokensLegend {
 // end a line. Spans covering several lines (block comments, multi-line
 // strings) are split into one token per line because clients are not required
 // to support multi-line tokens. Zero-length tokens are never emitted.
+//
+// The emit block is deliberately written out twice (newline branch and
+// end-of-span) so the hot loop stays free of closure calls; keep both copies
+// in sync.
 func encodeSemanticTokens(content string, spans []highlight.Span) []uint32 {
 	data := make([]uint32, 0, len(spans)*5)
 	pos, line, char := 0, uint32(0), uint32(0)

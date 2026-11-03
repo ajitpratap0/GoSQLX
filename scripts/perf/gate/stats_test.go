@@ -4,6 +4,7 @@
 package main
 
 import (
+	"fmt"
 	"math"
 	"strings"
 	"testing"
@@ -139,4 +140,38 @@ func TestParseBench(t *testing.T) {
 	if _, err := parseBench(strings.NewReader("BenchmarkX 10 abc ns/op\n")); err == nil {
 		t.Error("non-numeric value accepted")
 	}
+}
+
+func TestBenjaminiHochberg(t *testing.T) {
+	nan := math.NaN()
+	for _, tc := range []struct {
+		name string
+		ps   []float64
+		q    float64
+		want string
+	}{
+		// m = 4, q = 0.05: thresholds 0.0125, 0.025, 0.0375, 0.05. Rank 3
+		// (0.03) is the largest under its threshold, so ranks 1-3 go, even
+		// though 0.02 alone would miss Bonferroni's 0.0125.
+		{"step-up", []float64{0.03, 0.001, 0.2, 0.02}, 0.05, "[true true false true]"},
+		{"none", []float64{0.5, 0.02, 0.9}, 0.01, "[false false false]"},
+		// One p of 0.005 among 32: below alpha, above alpha/32.
+		{"single among many", append([]float64{0.005}, repeat(0.5, 31)...), 0.01, "[false" + strings.Repeat(" false", 31) + "]"},
+		{"strong single among many", append([]float64{0.0002}, repeat(0.5, 31)...), 0.01, "[true" + strings.Repeat(" false", 31) + "]"},
+		// NaN is not a test: it neither counts towards m nor is rejected.
+		{"nan", []float64{nan, 0.004, nan}, 0.01, "[false true false]"},
+		{"empty", nil, 0.01, "[]"},
+	} {
+		if got := fmt.Sprint(benjaminiHochberg(tc.ps, tc.q)); got != tc.want {
+			t.Errorf("%s: %s, want %s", tc.name, got, tc.want)
+		}
+	}
+}
+
+func repeat(v float64, n int) []float64 {
+	out := make([]float64, n)
+	for i := range out {
+		out[i] = v
+	}
+	return out
 }

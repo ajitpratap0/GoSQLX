@@ -97,8 +97,8 @@ func transpile(sql string, from, to keywords.SQLDialect, prefilter bool) (string
 		// RetargetOperators acts on ops spellings, $ money, { objects and U& escapes.
 		// Its formKeep regrouping is repeated by the formatter's dialect pass.
 		// Its 512 nesting guard cannot trigger on parser-built trees without these
-		// bytes: parser.MaxRecursionDepth is 100. <-, =>, := and U& are
-		// conservative entries; W7-05 owns pruning. This list mirrors
+		// bytes: parser.MaxRecursionDepth is 100. U& is caught by '&'; <-, =>,
+		// and := are conservative pairs; W7-05 owns pruning. This list mirrors
 		// pkg/sql/ast/retarget_operators.go and retarget_bitwise.go.
 		if !prefilter || src.ops {
 			if err := retargetOperators(stmt, from, to); err != nil {
@@ -148,7 +148,7 @@ const (
 	srcTypeDelim
 	srcOps
 	// srcPair marks bytes that set srcOps only when the next byte completes a
-	// retargetable two-byte spelling (<<, <-, >>, ->, =>, :=, U&).
+	// retargetable two-byte spelling (<<, <-, >>, ->, =>, :=).
 	srcPair
 )
 
@@ -164,7 +164,7 @@ var srcClass = func() (t [256]uint8) {
 	for _, c := range []byte("^&#~@?!{") {
 		t[c] = srcOps
 	}
-	for _, c := range []byte("<>-=:Uu") {
+	for _, c := range []byte("<>-=:") {
 		t[c] = srcPair
 	}
 	for c := 0x80; c < 256; c++ {
@@ -195,10 +195,6 @@ func scanSource(sql string) sourceFeatures {
 					}
 				case ':':
 					if n == '=' {
-						acc |= srcOps
-					}
-				default: // 'U', 'u'
-					if n == '&' {
 						acc |= srcOps
 					}
 				}

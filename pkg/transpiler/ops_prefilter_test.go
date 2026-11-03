@@ -19,7 +19,7 @@ import (
 
 func TestOpsSkipIsSafe(t *testing.T) {
 	dialects := prefilterDialects()
-	if testing.Short() {
+	if testing.Short() || raceDetector {
 		dialects = []keywords.SQLDialect{keywords.DialectPostgreSQL, keywords.DialectMySQL, keywords.DialectSQLServer}
 	}
 	stmts := []string{"SELECT a + 1 FROM t WHERE b <> 2 AND c <= 3", "SELECT a FROM t LIMIT 5", "UPDATE t SET a = a - 1 WHERE id = 7"}
@@ -35,7 +35,7 @@ func TestOpsSkipIsSafe(t *testing.T) {
 			return err
 		}
 		for i, c := range strings.Split(string(data), ";") {
-			if strings.TrimSpace(c) != "" && (!testing.Short() || i < 2) {
+			if strings.TrimSpace(c) != "" && (!(testing.Short() || raceDetector) || i < 2) {
 				stmts = append(stmts, c)
 			}
 		}
@@ -52,19 +52,22 @@ func TestOpsSkipIsSafe(t *testing.T) {
 	for i := 0; i < n; i++ {
 		stmts = append(stmts, vstmt(r))
 	}
-	skipped := 0
+	parseablePairs := 0
 	for _, sql := range stmts {
 		if scanSource(sql).ops {
 			continue
 		}
 		for _, from := range dialects {
-			for i, to := range dialects {
+			tree, err := parser.ParseWithDialect(sql, from)
+			if err != nil {
+				continue
+			}
+			ast.ReleaseAST(tree)
+			parseablePairs++
+			for _, to := range dialects {
 				tree, err := parser.ParseWithDialect(sql, from)
 				if err != nil {
-					continue
-				}
-				if i == 0 {
-					skipped++
+					t.Fatalf("reparse %s %q: %v", from, sql, err)
 				}
 				before := fmtTree(t, tree, to)
 				for _, stmt := range tree.Statements {
@@ -81,10 +84,10 @@ func TestOpsSkipIsSafe(t *testing.T) {
 			}
 		}
 	}
-	if skipped < 50 {
-		t.Fatalf("only %d parseable statements exercised", skipped)
+	if parseablePairs < 50 {
+		t.Fatalf("only %d parseable statement/source-dialect pairs exercised", parseablePairs)
 	}
-	t.Logf("skipped %d parseable statements", skipped)
+	t.Logf("skipped %d parseable statement/source-dialect pairs", parseablePairs)
 }
 
 func fmtTree(t *testing.T, tree *ast.AST, to keywords.SQLDialect) string {

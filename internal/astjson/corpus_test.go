@@ -237,6 +237,7 @@ func TestAppend_SyntheticFullyPopulated(t *testing.T) {
 				t.Fatal(err)
 			}
 			compareJSON(t, v.Interface(), out)
+			compareTypeGuided(t, v.Interface(), out, "synthetic "+typ.String())
 		})
 	}
 }

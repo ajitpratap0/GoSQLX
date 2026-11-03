@@ -17,6 +17,7 @@ package bridge
 import (
 	"encoding/json"
 	"fmt"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -100,4 +101,43 @@ func TestParseJSON_ReusedBufferIsolation(t *testing.T) {
 	if cap(*buf) > 1<<20 {
 		t.Fatalf("retained large buffer capacity %d", cap(*buf))
 	}
+}
+
+func TestParseJSON_ReleaseReuseCorpus(t *testing.T) {
+	corpus := goldens.Corpus(t)
+	// Retain every reference across both passes, without returning it or its
+	// nodes to any pool. Each fresh parse is interleaved with ParseJSON so a
+	// duplicate pool entry cannot hide behind strictly sequential reuse.
+	references := make([]*ast.AST, 0, 4*len(corpus))
+	for pass := 1; pass <= 2; pass++ {
+		for _, input := range corpus {
+			for _, dialect := range []string{input.Dialect, ""} {
+				tree, parseErr := Parse(input.SQL, dialect)
+				if parseErr != nil {
+					_, err := ParseJSON(input.SQL, dialect, astjson.Version)
+					if err == nil || err.Error() != parseErr.Error() {
+						t.Fatalf("pass %d %s dialect=%q sql=%q: got error %v, want %v", pass, input.Key(), dialect, input.SQL, err, parseErr)
+					}
+					continue
+				}
+				references = append(references, tree)
+				want, err := astjson.Marshal(tree)
+				if err != nil {
+					t.Fatalf("reference %s dialect=%q sql=%q: %v", input.Key(), dialect, input.SQL, err)
+				}
+				got, err := ParseJSON(input.SQL, dialect, astjson.Version)
+				if err != nil || got != string(want) {
+					t.Fatalf("pass %d %s dialect=%q sql=%q: got %q, error %v; want %q", pass, input.Key(), dialect, input.SQL, got, err, want)
+				}
+				// Marshal again after ParseJSON has released its own tree. If a double
+				// put made the two parses share pooled nodes, that release changes the
+				// never-released reference even when the returned JSON still matches.
+				afterRelease, err := astjson.Marshal(tree)
+				if err != nil || string(afterRelease) != string(want) {
+					t.Fatalf("pass %d %s dialect=%q sql=%q: reference changed after ParseJSON release: got %q, error %v; want %q", pass, input.Key(), dialect, input.SQL, afterRelease, err, want)
+				}
+			}
+		}
+	}
+	runtime.KeepAlive(references)
 }

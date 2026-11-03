@@ -49,6 +49,7 @@ import (
 	"fmt"
 	"reflect"
 	"slices"
+	"sort"
 	"strings"
 	"unicode"
 )
@@ -150,23 +151,23 @@ func typeFields(t reflect.Type) ([]field, error) {
 		}
 	}
 
-	slices.SortFunc(fields, func(a, b field) int {
+	// These sorts run only during plan construction. Share sort's machinery
+	// instead of adding a field-specific sorting implementation to the WASM.
+	sort.Slice(fields, func(i, j int) bool {
+		a, b := fields[i], fields[j]
 		// sort field by name, breaking ties with depth, then
 		// breaking ties with "name came from json tag", then
 		// breaking ties with index sequence.
 		if c := strings.Compare(a.name, b.name); c != 0 {
-			return c
+			return c < 0
 		}
 		if c := cmp.Compare(len(a.index), len(b.index)); c != 0 {
-			return c
+			return c < 0
 		}
 		if a.tag != b.tag {
-			if a.tag {
-				return -1
-			}
-			return +1
+			return a.tag
 		}
-		return slices.Compare(a.index, b.index)
+		return slices.Compare(a.index, b.index) < 0
 	})
 
 	// Delete all fields that are hidden by the Go rules for embedded fields,
@@ -198,8 +199,8 @@ func typeFields(t reflect.Type) ([]field, error) {
 	}
 
 	fields = out
-	slices.SortFunc(fields, func(i, j field) int {
-		return slices.Compare(i.index, j.index)
+	sort.Slice(fields, func(i, j int) bool {
+		return slices.Compare(fields[i].index, fields[j].index) < 0
 	})
 
 	return fields, nil

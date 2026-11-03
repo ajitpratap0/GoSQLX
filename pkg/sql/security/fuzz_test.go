@@ -16,6 +16,7 @@ package security
 
 import (
 	"testing"
+	"unicode"
 )
 
 // FuzzScanSQL fuzzes the security scanner's ScanSQL method with arbitrary SQL input.
@@ -98,4 +99,25 @@ func FuzzScanSQL(f *testing.F) {
 		scanner := NewScanner()
 		_ = scanner.ScanSQL(sql)
 	})
+}
+
+// FuzzLiteralMatcher compares the one-pass matcher with independent folding and
+// substring searches, including invalid UTF-8 and Unicode simple-fold aliases.
+func FuzzLiteralMatcher(f *testing.F) {
+	NewScanner()
+	for _, s := range scanSQLGuardSeeds {
+		f.Add(s)
+	}
+	for _, s := range literalMatcher.lits {
+		f.Add(s)
+	}
+	for c := rune('a'); c <= 'z'; c++ {
+		for r := unicode.SimpleFold(c); r != c; r = unicode.SimpleFold(r) {
+			f.Add(string(r))
+		}
+	}
+	for _, s := range []string{"\xc5", "\xe2\x84", "/*/", "unionull"} {
+		f.Add(s)
+	}
+	f.Fuzz(func(t *testing.T, s string) { checkLiteralPresence(t, literalMatcher, s) })
 }

@@ -13,7 +13,7 @@ v1 can ignore everything under "v2 additions".
 | `generatedAt`, `commit`, `dirty`, `goVersion` | provenance |
 | `hardware` | `{cpu, goos, goarch, numCPU}` of the machine that ran it |
 | `stage` | always `"e2e"` for the v1 view |
-| `method` | `{command, count, statistic, rawOutput}` of the **first** configuration. `command` is a quoted, copy-pasteable `go test` line (run it in `benchmarks/compare`) that reproduces `results[]`: `BenchmarkParse` only, with a `GOGC=off ` prefix only when that configuration sets it. |
+| `method` | `{command, count, statistic, rawOutput}` of the **first** configuration. `command` is a quoted, copy-pasteable `go test` line (run it in `benchmarks/compare`) that reproduces `results[]`: `BenchmarkParse` only, with a `GOGC=off GOMEMLIMIT=64MiB ` prefix only when that configuration sets GOGC=off. |
 | `caveat` | the like-for-like caveat the website prints |
 | `parsers[]` | the v1 parsers only: `gosqlx`, `pg_query_go`, `vitess`, `tidb`, `xwb1989` |
 | `queries[]` | the 11 portable queries `{id, name, sql}` |
@@ -33,7 +33,7 @@ The `-cpu 1` and `GOGC=off` data is in `cells[]`.
 |---|---|
 | `peers[]` | every library under test, same shape as `parsers[]` (`id, name, module, version, dialect, cgo, license, legacy, peerDialects`). `peerDialects` lists the corpus dialects the library is a like-for-like peer for. `gosqlx_norelease` is the GoSQLX variant that skips `ReleaseAST`. |
 | `ormQueries[]` | the ORM-style corpus `{id, name, shape, sql}`; `shape` is quoted, placeholders, lowercase, ddl, nesting or multistatement |
-| `configs[]` | the run matrix, first entry primary: `{id, cpu, gogc, command, rawOutput}`. `cpu` is the `-cpu` value (0 = go test default), `gogc` is `default` or `off`. `id` looks like `cpu4-gogc-off`. `command` is the quoted `go test` line of that run (all selected families). |
+| `configs[]` | the run matrix, first entry primary: `{id, cpu, gogc, gomemlimit, command, rawOutput}`. `cpu` is the `-cpu` value (0 = go test default), `gogc` is `default` or `off`. `gomemlimit` is the `GOMEMLIMIT` of a `gogc: off` configuration (default `64MiB`, set with `-gomemlimit`; omitted for default GC or `-gomemlimit=off`): without a limit a GC-off heap lands every allocation on a fresh page and times its page fault. `id` looks like `cpu4-gogc-off`. `command` is the quoted `go test` line of that run (all selected families). |
 | `cells[]` | one row per (benchmark cell, group, implementation, configuration) |
 | `acceptance[]` | `{dialect, parser, accepted, total, rate}` over all of `testdata/realworld/<dialect>`, legacy parsers included |
 | `commonAccept[]` | `{dialect, parsers, total, accepted, setSha256}` summarising `commonaccept/<dialect>.txt` |

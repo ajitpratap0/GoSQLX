@@ -14,6 +14,37 @@ GoSQLX is a **production-ready**, **race-free**, high-performance SQL parsing SD
 - ~80-85% SQL-99 compliance (window functions, CTEs, set operations, MERGE, etc.)
 - Multi-dialect support: PostgreSQL, MySQL, MariaDB, SQL Server, Oracle, SQLite, Snowflake, ClickHouse (8 dialects with dedicated grammar); `--dialect` also accepts `generic`, `bigquery`, `redshift` (11 names)
 
+## Engineering Principles (maintainer rules)
+
+- **Fix the root cause, the right way.** Prefer the correct fix over a
+  workaround, even when it is a larger refactor or changes public API or
+  behaviour. Never relax a test, threshold or timeout to hide a problem.
+- **Breaking changes are allowed when they are the right fix.** Ship them in
+  the current release (no separate major version or `/v2` module path) with
+  an explicit "Breaking Changes" / migration entry in CHANGELOG.md and the PR
+  body. Do not substitute an opt-in flag or compatibility shim for the right
+  design unless the maintainer asks for one.
+- **Nothing is deferred to a future major ("2.0", "v-next").** Work planned for
+  a later major ships in the current release. An idea with weak evidence is
+  prototyped and measured now, then shipped or closed with the numbers.
+- **Measure, don't assume.** Performance changes are judged by the amd64 perf
+  gate (`.github/workflows/perf-gate.yml`); missing a target is reported, not
+  hidden.
+
+## Agent Routing (AI-assisted work in this repo)
+
+- **Implementation and grunt work go to Codex** via `~/.claude/scripts/codex-implement`
+  (fast service tier). Use `--model gpt-6.1-sol` for hard or cross-cutting
+  changes, `gpt-6.1-terra` for standard tasks, and `gpt-6-luna` for mechanical
+  edits, docs and bulk fixes.
+- **When the work has to be done in Claude**, use Sonnet 5.5 for implementation and
+  review and Haiku 5.5 for extraction, docs and simple checks.
+- **Opus 5.5 only orchestrates**: planning, final review of risky changes and
+  decisions. Use it only when it is needed, to save usage limits.
+- Codex never commits or pushes. The orchestrator reviews the diff and runs the
+  full gate (`task check`, `task test:cbinding`, `go test ./pkg/compatibility/...`,
+  staticcheck) before any commit.
+
 ## Architecture
 
 ### Core Components

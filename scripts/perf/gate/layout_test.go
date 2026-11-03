@@ -347,6 +347,7 @@ func TestReportShowsRunnerCPUAndLayouts(t *testing.T) {
 		"base.txt": layoutArm(1, 100, 1, 20, 10, 0.03, s),
 		"head.txt": layoutArm(2, 200, 1, 20, 10, 0.03, s),
 		"aa.txt":   layoutArm(3, 300, 11, 20, 10, 0.03, s),
+		"env.txt":  "cpu model:   AMD EPYC 7763 64-Core Processor (x86_64)\n",
 	}
 	for name, content := range files {
 		if err := os.WriteFile(filepath.Join(dir, name), []byte(content), 0o644); err != nil {
@@ -356,14 +357,14 @@ func TestReportShowsRunnerCPUAndLayouts(t *testing.T) {
 	var out bytes.Buffer
 	code, err := realMain([]string{
 		"-base", filepath.Join(dir, "base.txt"), "-head", filepath.Join(dir, "head.txt"), "-aa", filepath.Join(dir, "aa.txt"),
-		"-cpu-model", "AMD EPYC 7763 64-Core Processor",
+		"-env", filepath.Join(dir, "env.txt"),
 	}, &out)
 	if err != nil || code != 0 {
 		t.Fatalf("realMain: code %d, err %v", code, err)
 	}
 	md := out.String()
 	for _, want := range []string{
-		"Runner CPU: **AMD EPYC 7763 64-Core Processor**.",
+		"Runner CPU: `AMD EPYC 7763 64-Core Processor (x86_64)`.",
 		"each arm runs 10 randomized code layouts",
 		"| benchmark | time | p | A/A' | spread |",
 		"A/A' control (base revision, disjoint layout seeds)",

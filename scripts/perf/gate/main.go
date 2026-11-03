@@ -78,7 +78,8 @@ func realMain(args []string, stdout io.Writer) (int, error) {
 		envPath     = fs.String("env", "", "environment description file to embed")
 		bstatPath   = fs.String("benchstat", "", "benchstat output file to embed")
 		irNote      = fs.String("ir-note", "", "why instruction counts were not measured")
-		cpuModel    = fs.String("cpu-model", "", "runner CPU model, for the report")
+		title       = fs.String("title", "", "report heading (default \"Perf gate\")")
+		reportOnly  = fs.Bool("report-only", false, "the run is a comparison, not a gate (heading says so); exclusive with -enforce")
 	)
 	fs.Float64Var(&cfg.Alpha, "alpha", cfg.Alpha, "significance level")
 	fs.Float64Var(&cfg.TimePct, "time-pct", cfg.TimePct, "per-benchmark time threshold, %")
@@ -93,6 +94,9 @@ func realMain(args []string, stdout io.Writer) (int, error) {
 	}
 	if fs.NArg() > 0 {
 		return 0, fmt.Errorf("unexpected arguments: %v", fs.Args())
+	}
+	if *reportOnly && *enforce {
+		return 0, errors.New("-report-only and -enforce are exclusive")
 	}
 	if *basePath == "" || *headPath == "" {
 		return 0, errors.New("-base and -head are required")
@@ -123,9 +127,12 @@ func realMain(args []string, stdout io.Writer) (int, error) {
 		return 0, errors.New("no benchmark results in -base or -head")
 	}
 
-	meta := Meta{BaseRef: *baseRef, HeadRef: *headRef, Settings: *settings, Accepted: *accepted, IrNote: *irNote, CPUModel: *cpuModel, Mode: "shadow"}
-	if *enforce {
+	meta := Meta{BaseRef: *baseRef, HeadRef: *headRef, Settings: *settings, Accepted: *accepted, IrNote: *irNote, Mode: "shadow", Title: *title}
+	switch {
+	case *enforce:
 		meta.Mode = "enforce"
+	case *reportOnly:
+		meta.Mode = "report"
 	}
 	var err error
 	if meta.Env, err = readOptional(*envPath); err != nil {

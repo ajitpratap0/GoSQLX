@@ -581,10 +581,10 @@ func pval(c Cmp) string {
 // Meta is free-form context printed above the tables.
 type Meta struct {
 	BaseRef, HeadRef string
-	Mode             string // "shadow" or "enforce"
+	Mode             string // "shadow", "enforce" or "report" (a comparison that is not a gate, e.g. the matrix)
+	Title            string // report heading; default "Perf gate"
 	Accepted         bool   // perf-regression-accepted label present
 	Settings         string // one line: rounds, layouts, benchtime, pinning
-	CPUModel         string // runner CPU model (/proc/cpuinfo "model name")
 	Env              string // lscpu / go version block
 	Benchstat        string // raw benchstat output
 	IrNote           string // why instruction counts were skipped, if they were
@@ -606,7 +606,14 @@ func Markdown(res Result, cfg Config, meta Meta) string {
 			mode = "enforced, regression accepted by the perf-regression-accepted label"
 		}
 	}
-	fmt.Fprintf(&b, "## Perf gate: %s (%s)\n\n", verdict, mode)
+	if meta.Mode == "report" {
+		mode = "report only, not a gate verdict"
+	}
+	title := meta.Title
+	if title == "" {
+		title = "Perf gate"
+	}
+	fmt.Fprintf(&b, "## %s: %s (%s)\n\n", title, verdict, mode)
 	if meta.BaseRef != "" || meta.HeadRef != "" {
 		fmt.Fprintf(&b, "Base `%s`, head `%s`.", meta.BaseRef, meta.HeadRef)
 		if meta.Settings != "" {
@@ -614,9 +621,8 @@ func Markdown(res Result, cfg Config, meta Meta) string {
 		}
 		b.WriteString("\n\n")
 	}
-	if meta.CPUModel != "" {
-		fmt.Fprintf(&b, "Runner CPU: **%s**.\n\n", meta.CPUModel)
-	}
+	fmt.Fprintf(&b, "Runner CPU: `%s`. Base and head ran interleaved in this job, so the tables show their ratios only; "+
+		"absolute timings (raw files in the artifact) hold for this CPU and this job alone and are never compared across jobs.\n\n", runnerCPU(meta.Env))
 	if len(res.Reasons) > 0 {
 		for _, r := range res.Reasons {
 			fmt.Fprintf(&b, "- %s\n", r)
@@ -756,6 +762,22 @@ func Markdown(res Result, cfg Config, meta Meta) string {
 		fmt.Fprintf(&b, "<details><summary>%s</summary>\n\n```\n%s\n```\n\n</details>\n", summary, strings.TrimSpace(meta.Benchstat))
 	}
 	return b.String()
+}
+
+// runnerCPU extracts the CPU model from the environment block: the
+// "cpu model:" line scripts/perf/lib.sh writes, else lscpu's "Model name:",
+// else "unknown".
+func runnerCPU(env string) string {
+	for _, prefix := range []string{"cpu model:", "Model name:"} {
+		for _, line := range strings.Split(env, "\n") {
+			if v, ok := strings.CutPrefix(strings.TrimSpace(line), prefix); ok {
+				if v = strings.TrimSpace(v); v != "" {
+					return v
+				}
+			}
+		}
+	}
+	return "unknown"
 }
 
 func codeList(names []string) string {

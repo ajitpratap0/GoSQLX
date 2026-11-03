@@ -8,7 +8,9 @@
 #     revisions with the same toolchain, in the same job.
 #   - Primary metric: GOGC=off GOMAXPROCS=1 (-test.cpu 1), pinned to one CPU
 #     with taskset when it exists. GC-free mutator time is low-variance and
-#     ranks queries like the -cpu 4 headline does.
+#     ranks queries like the -cpu 4 headline does. GOMEMLIMIT (default 64MiB,
+#     see scripts/perf/lib.sh) bounds the heap so the runs reuse pages instead
+#     of paying first-touch page faults.
 #   - Code-layout randomization: every arm is built as K test binaries per
 #     package, linked with -ldflags=-randlayout=<seed> (the linker shuffles
 #     the order of all Go functions). Base and head use the same K seeds;
@@ -30,7 +32,14 @@
 #   - Optional instruction counts (-i): cmd/perfdriver under `perf stat`,
 #     else cachegrind, else macOS `/usr/bin/time -l`, at two iteration counts;
 #     the difference divided by the extra iterations is instructions/op.
-#   - allocs/op and B/op come from the primary runs (GOGC=off: no pool drains).
+#   - allocs/op and B/op come from the primary runs. GOMEMLIMIT lets the
+#     collector (and with it sync.Pool drains) run about once per limit's
+#     worth of allocation, so allocs/op is exact for the gated suite
+#     (identical in every A/A and PR run so far) but not for large-input or
+#     low-N benchmarks (ParseRW/*/large, Handler_LargeDocument,
+#     *SustainedLoad*); docs/PERFORMANCE_METHODOLOGY.md covers this caveat.
+#   - env.txt and the report name the CPU model: hosted runners differ from
+#     job to job, so only the in-job base/head ratios are reported.
 #
 # Usage: scripts/perf/ab.sh [options] BASE [HEAD]
 #   BASE        git revision of the baseline
@@ -51,11 +60,15 @@
 #   -G          gate mode: -a -g -i, and re-measure once when the A/A is noisy
 #   -e          enforce: exit 1 on a regression (default: report only)
 #   -A          the regression is accepted (perf-regression-accepted label)
+#   -T TITLE    report-only comparison (not a gate): heading "TITLE: VERDICT
+#               (report only, not a gate verdict)"; exclusive with -e
 #   -h          show this help
 # Environment:
 #   PIN_CPU     CPU for taskset (default: the last online CPU; "none" disables pinning)
 #   BENCHSTAT   benchstat command (default: benchstat on PATH, else the pinned version via go run)
 #   IR_SAMPLES  samples per perfdriver case, median taken (default 3, every backend)
+#   PERF_GOMEMLIMIT  GOMEMLIMIT of the GOGC=off runs (default 64MiB; "off" unsets
+#               it; otherwise digits with an optional B/KiB/MiB/GiB/TiB suffix)
 #
 # Output: DIR/report.md (also printed), DIR/status (pass, regression,
 # inconclusive), DIR/raw/*.txt (raw benchmark output, each binary's results
@@ -66,13 +79,19 @@ set -euo pipefail
 
 BENCHSTAT_VERSION=v0.0.0-20260908200009-22c9c6c9d4da
 
+# shellcheck source=scripts/perf/lib.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib.sh"
+gcoff_env=()
+while IFS= read -r kv; do gcoff_env+=("$kv"); done < <(perf_gcoff_env)
+memlimit=$(perf_gomemlimit)
+
 usage() { sed -n '2,/^set -euo/p' "$0" | sed -e '$d' -e 's/^# \{0,1\}//'; }
-die() { echo "ab.sh: $*" >&2; exit "${2:-3}"; }
+die() { echo "ab.sh: $1" >&2; exit "${2:-3}"; }
 log() { echo "ab.sh: $*" >&2; }
 
-out="" rounds=20 benchtime=100ms layouts=20 seed0="" suite="" aa=0 sec=0 ir=0 gate=0 enforce=0 accepted=0
+out="" rounds=20 benchtime=100ms layouts=20 seed0="" suite="" aa=0 sec=0 ir=0 gate=0 enforce=0 accepted=0 title=""
 adhoc=()
-while getopts ":o:r:t:k:S:s:b:agiGeAh" opt; do
+while getopts ":o:r:t:k:S:s:b:T:agiGeAh" opt; do
 	case $opt in
 		o) out=$OPTARG ;;
 		r) rounds=$OPTARG ;;
@@ -87,6 +106,7 @@ while getopts ":o:r:t:k:S:s:b:agiGeAh" opt; do
 		G) gate=1 aa=1 sec=1 ir=1 ;;
 		e) enforce=1 ;;
 		A) accepted=1 ;;
+		T) title=$OPTARG ;;
 		h) usage; exit 0 ;;
 		:) die "-$OPTARG needs a value" 2 ;;
 		*) die "unknown option -$OPTARG (see -h)" 2 ;;
@@ -111,6 +131,8 @@ for ((j = 1; j <= layouts; j++)); do
 done
 nbin=$layouts # binaries per arm and package
 [ "$nbin" -gt 0 ] || nbin=1
+[ -z "$title" ] || [ $enforce -eq 0 ] || die "-T (report only) and -e are exclusive" 2
+perf_check_gomemlimit || exit 2
 
 root=$(git rev-parse --show-toplevel)
 base_ref=$1
@@ -277,26 +299,20 @@ if [ $ir -eq 1 ]; then
 fi
 
 # ----------------------------------------------------------- environment ---
-cpu_model=unknown
-if [ -r /proc/cpuinfo ]; then
-	cpu_model=$(sed -n 's/^model name[[:space:]]*:[[:space:]]*//p' /proc/cpuinfo | head -n 1)
-elif [ "$(uname -s)" = Darwin ]; then
-	cpu_model=$(sysctl -n machdep.cpu.brand_string 2>/dev/null || echo unknown)
-fi
-cpu_model=${cpu_model:-unknown}
 {
 	echo "date:        $(date -u +%Y-%m-%dT%H:%M:%SZ)"
 	echo "base:        $base_sha"
 	echo "head:        ${head_sha:-working tree of $(git -C "$root" rev-parse HEAD)}"
+	echo "cpu model:   $(perf_cpu_model)"
 	echo "go:          $(go version)"
 	echo "kernel:      $(uname -srm)"
-	echo "cpu model:   $cpu_model"
 	if [ "$layouts" -gt 0 ]; then
 		echo "layouts:     $layouts per arm, -ldflags=-randlayout seeds $((seed0 + 1))..$((seed0 + layouts)) (base, head), $((seed0 + layouts + 1))..$((seed0 + 2 * layouts)) (A/A')"
 	else
 		echo "layouts:     not randomized (-k 0)"
 	fi
 	echo "pinning:     $pin_desc"
+	echo "gcoff env:   ${gcoff_env[*]}"
 	echo "clocksource: $(cat /sys/devices/system/clocksource/clocksource0/current_clocksource 2>/dev/null || echo n/a)"
 	echo "load:        $(uptime | sed 's/.*load average[s]*: //')"
 	echo "instr count: ${ir_backend:-none}${ir_note:+ ($ir_note)}"
@@ -328,7 +344,7 @@ run_arm() { # arm config outfile round
 	[ "$seed" = 0 ] || echo "layout: $seed" >>"$file"
 	for i in "${!pkgs[@]}"; do
 		local pkg=${pkgs[$i]} re=${regexes[$i]} envs
-		if [ "$config" = gcoff ]; then envs=(GOGC=off GOMAXPROCS=1); else envs=(-u GOGC GOMAXPROCS=1); fi
+		if [ "$config" = gcoff ]; then envs=("${gcoff_env[@]}" GOMAXPROCS=1); else envs=(-u GOGC -u GOMEMLIMIT GOMAXPROCS=1); fi
 		(cd "$tree/$pkg" && env "${envs[@]}" ${pin[@]+"${pin[@]}"} "$bin/$(slug "$pkg").test" \
 			-test.run '^$' -test.bench "$re" -test.benchmem -test.count 1 \
 			-test.benchtime "$benchtime" -test.cpu 1) >"$out/run.log" 2>&1 ||
@@ -377,7 +393,7 @@ count_instructions() { # arm case n -> prints the count
 	case $arm in base) tree=$base_tree ;; head) tree=$head_tree ;; esac
 	# The environment is set outside the counter so that the counted
 	# process is perfdriver itself, not env (valgrind does not follow exec).
-	local envs=(GOGC=off GOMAXPROCS=1 GODEBUG=asyncpreemptoff=1)
+	local envs=("${gcoff_env[@]}" GOMAXPROCS=1 GODEBUG=asyncpreemptoff=1)
 	local drv=("$out/bin/$arm/perfdriver" -case "$c" -n "$n")
 	case $ir_backend in
 		perf)
@@ -457,8 +473,8 @@ judge() { # extra gate flags...
 		log "benchstat failed; the report embeds its error output"
 	local args=(-base "$out/raw/gcoff-base.txt" -head "$out/raw/gcoff-head.txt"
 		-md "$out/report.md" -status "$out/status" -env "$out/env.txt" -benchstat "$out/benchstat.txt"
-		-base-ref "$base_label" -head-ref "$head_label" -cpu-model "$cpu_model"
-		-settings "$rounds interleaved rounds, $layout_desc, benchtime $benchtime, -cpu 1, $pin_desc.")
+		-base-ref "$base_label" -head-ref "$head_label"
+		-settings "$rounds interleaved rounds, $layout_desc, benchtime $benchtime, -cpu 1, GOMEMLIMIT $memlimit, $pin_desc.")
 	[ $aa -eq 1 ] && args+=(-aa "$out/raw/gcoff-base2.txt")
 	[ $sec -eq 1 ] && args+=(-sec-base "$out/raw/gcon-base.txt" -sec-head "$out/raw/gcon-head.txt")
 	if [ $ir -eq 1 ]; then
@@ -470,6 +486,7 @@ judge() { # extra gate flags...
 	fi
 	[ $enforce -eq 1 ] && args+=(-enforce)
 	[ $accepted -eq 1 ] && args+=(-accepted)
+	[ -n "$title" ] && args+=(-report-only -title "$title")
 	(cd "$gate_src" && go run ./scripts/perf/gate "${args[@]}" "$@")
 }
 

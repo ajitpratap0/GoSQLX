@@ -44,6 +44,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     are removed.
 
 ### Performance
+- **Parser joins slice sized from a JOIN lookahead [W4-03]**: when the first JOIN of a FROM clause is appended, `parseJoinClauses` counts the JOIN tokens that follow at the same paren depth (within 256 tokens, stopping at `;`, UNION/EXCEPT/INTERSECT or the closing `)`) and allocates the slice with capacity 1 + that count (max 8) instead of a fixed 2. Join-free statements pay nothing. `ParseE2E/join` and `complex` B/op drop about 20%; no API or AST change. A full slice handed in by a parenthesized join group or a comma table is grown by the same hint. Known edge cost: shapes the lookahead cannot see (`(a JOIN b) JOIN c`, `a JOIN b, c`) incur one extra allocation per statement; the gated suite is unaffected.
 - **`ast.ReleaseAST` is O(1) for parser-built trees that hold no pooled nodes**: the parser counts the nodes it draws from the AST pools and tells
   `ReleaseAST` through an internal hook (`pkg/sql/internal/astrelease`). When
   the count is zero, which covers ordinary SELECT/INSERT/UPDATE/DELETE

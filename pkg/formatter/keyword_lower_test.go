@@ -72,6 +72,11 @@ func TestKwLiteralsAreInLowerKeywordTable(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	astFiles, err := filepath.Glob("../sql/ast/*.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	files = append(files, astFiles...)
 	fset := token.NewFileSet()
 	seen := 0
 	for _, name := range files {
@@ -84,14 +89,33 @@ func TestKwLiteralsAreInLowerKeywordTable(t *testing.T) {
 		}
 		ast.Inspect(file, func(n ast.Node) bool {
 			call, ok := n.(*ast.CallExpr)
-			if !ok || len(call.Args) != 1 {
+			if !ok {
 				return true
 			}
-			sel, ok := call.Fun.(*ast.SelectorExpr)
-			if !ok || sel.Sel.Name != "kw" {
+			callName := ""
+			switch fun := call.Fun.(type) {
+			case *ast.SelectorExpr:
+				callName = fun.Sel.Name
+			case *ast.Ident:
+				if strings.HasPrefix(name, "../sql/ast/") {
+					callName = fun.Name
+				}
+			}
+			arg := 0
+			switch callName {
+			case "kw", "kwStr":
+				if len(call.Args) != 1 {
+					return true
+				}
+			case "writeKw":
+				if len(call.Args) != 2 {
+					return true
+				}
+				arg = 1
+			default:
 				return true
 			}
-			lit, ok := call.Args[0].(*ast.BasicLit)
+			lit, ok := call.Args[arg].(*ast.BasicLit)
 			if !ok || lit.Kind != token.STRING {
 				return true
 			}
@@ -118,4 +142,74 @@ func capitalized(s string) string {
 		return s
 	}
 	return strings.ToUpper(s[:1]) + strings.ToLower(s[1:])
+}
+
+// SetLowerKeywordMissHookForTest instruments only the fallback path.
+func SetLowerKeywordMissHookForTest(hook func(string) string) func() {
+	old := lowerKeywordFallback
+	lowerKeywordFallback = hook
+	return func() { lowerKeywordFallback = old }
+}
+
+func TestBuildLowerKeywordTableRejectsDuplicates(t *testing.T) {
+	defer func() {
+		if recover() == nil {
+			t.Fatal("duplicate accepted")
+		}
+	}()
+	buildLowerKeywordTable("SELECT", "SELECT")
+}
+
+func TestLowerKeywordHelperOutputs(t *testing.T) {
+	check := func(s string) {
+		t.Helper()
+		if s != "" && s != strings.ToLower(s) {
+			if _, ok := lowerKeywordTable[s]; !ok {
+				t.Errorf("helper output %q missing", s)
+			}
+		}
+	}
+	for _, s := range []string{"ADD COLUMN", "DROP COLUMN", "ADD CONSTRAINT", "DROP CONSTRAINT", "ALTER COLUMN", "RENAME COLUMN", "RENAME TO"} {
+		check(sqlast.AlterTableActionText(s))
+	}
+	for _, s := range []string{"MATCHED", "NOT MATCHED", "NOT MATCHED BY SOURCE", "NOT MATCHED BY TARGET"} {
+		check(sqlast.MergeWhenText(s))
+	}
+	for _, s := range []string{"DELETE", "DO NOTHING"} {
+		check(sqlast.MergeActionText(s))
+	}
+	for _, s := range []string{"UPDATE", "SHARE", "NO KEY UPDATE", "KEY SHARE"} {
+		check(sqlast.LockTypeText(s))
+	}
+	one, two := 1, 2
+	for _, n := range []*int{nil, &one, &two} {
+		check(sqlast.OffsetRowsKeyword(&sqlast.SelectStatement{Offset: n}))
+	}
+	one64, two64 := int64(1), int64(2)
+	for _, n := range []*int64{nil, &one64, &two64} {
+		check(sqlast.FetchRowsKeyword(&sqlast.FetchClause{FetchValue: n}))
+	}
+	for _, op := range []string{"UNION", "EXCEPT", "INTERSECT"} {
+		for _, flags := range [][2]bool{{false, false}, {true, false}, {false, true}} {
+			s, _ := sqlast.SetOperationKeyword(&sqlast.SetOperation{Operator: op, All: flags[0], Distinct: flags[1]}, "oracle")
+			check(s)
+		}
+	}
+	for _, flags := range [][2]bool{{false, false}, {true, false}, {false, true}} {
+		s, _ := sqlast.SetOperationKeyword(&sqlast.SetOperation{Operator: "EXCEPT", Minus: true, All: flags[0], Distinct: flags[1]}, "oracle")
+		check(s)
+	}
+	for _, typ := range []string{"", "INNER", "LEFT", "RIGHT", "FULL", "CROSS", "LEFT OUTER", "RIGHT OUTER", "FULL OUTER", "NATURAL", "NATURAL INNER", "NATURAL LEFT", "NATURAL RIGHT", "NATURAL FULL", "NATURAL LEFT OUTER", "NATURAL RIGHT OUTER", "NATURAL FULL OUTER", "CROSS APPLY", "OUTER APPLY"} {
+		check(sqlast.JoinKeywordsText(&sqlast.JoinClause{Type: typ}))
+	}
+	for _, typ := range []string{"INNER", "LEFT", "RIGHT", "FULL", "CROSS", "NATURAL", "NATURAL INNER", "NATURAL LEFT", "NATURAL RIGHT", "NATURAL FULL", "NATURAL CROSS"} {
+		for _, global := range []bool{false, true} {
+			for _, strict := range []string{"", "ANY", "ALL", "ASOF", "SEMI", "ANTI"} {
+				check(sqlast.JoinKeywordsText(&sqlast.JoinClause{Type: typ, Global: global, Strictness: strict}))
+			}
+		}
+		for _, hint := range []string{"HASH", "LOOP", "MERGE", "REMOTE"} {
+			check(sqlast.JoinKeywordsText(&sqlast.JoinClause{Type: typ, Hint: hint}))
+		}
+	}
 }

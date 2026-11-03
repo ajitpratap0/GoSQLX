@@ -292,3 +292,41 @@ func versionIsNull() bool {
 func allocAndFreeCString(s string) {
 	gosqlx_free(C.CString(s))
 }
+
+// legacyToJSONForTest preserves the old Marshal/string/CString allocation path.
+func legacyToJSONForTest(v any) *C.char {
+	b, err := json.Marshal(v)
+	if err != nil {
+		errMsg, marshalErr := json.Marshal("json marshal failed: " + err.Error())
+		if marshalErr != nil {
+			return C.CString(`{"error":"json marshal failed"}`)
+		}
+		return C.CString(`{"error":` + string(errMsg) + `}`)
+	}
+	return C.CString(string(b))
+}
+
+func legacyJSONStringForTest(v any) string {
+	return takeResult(legacyToJSONForTest(v))
+}
+
+// legacyParseRawForTest rebuilds the old C input/output copies around the
+// retained reference builder, so the allocation guard compares equal work.
+func legacyParseRawForTest(sql string) string {
+	cSQL := C.CString(sql)
+	defer freeCString(cSQL)
+	return takeResult(legacyToJSONForTest(parseResultFor(C.GoString(cSQL), "")))
+}
+
+func legacyLintRawForTest(sql string) string {
+	cSQL := C.CString(sql)
+	defer freeCString(cSQL)
+	fileResult := newLinter(defaultLintMaxLineLength, "").LintString(C.GoString(cSQL), "<input>")
+	return takeResult(legacyToJSONForTest(lintResultFrom(fileResult)))
+}
+
+func legacyMetadataRawForTest(sql string) string {
+	cSQL := C.CString(sql)
+	defer freeCString(cSQL)
+	return takeResult(legacyToJSONForTest(metadataFor(C.GoString(cSQL), "")))
+}

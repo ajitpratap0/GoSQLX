@@ -60,6 +60,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     21.7 minutes on an EPYC 7763).
 
 ### Changed
+- **Release process**: add a post-tag benchmark refresh task and require claims to match the release tag.
 - **Perf measurement methodology** (W0-15; benchmark tooling only, no library
   behaviour change):
   - Every `GOGC=off` measurement now also sets `GOMEMLIMIT` (default `64MiB`;
@@ -134,6 +135,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   UTF-8 is unaffected.
 
 ### Fixed
+- Claims checks now verify that published benchmark results were measured at the latest release tag commit.
 - **AST**: `AlterTableStatement.SQL()` now separates multiple ALTER TABLE actions with commas, matching the compact formatter and preserving action boundaries when re-parsed.
 - **Playground**: the GoSQLX WebAssembly module now runs in a Web Worker, so
   loading the parser and every parse, format, lint, analyze, highlight and

@@ -18,9 +18,11 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
+	"math"
+	"strconv"
 	"syscall/js"
 
-	"github.com/ajitpratap0/GoSQLX/pkg/gosqlx"
 	"github.com/ajitpratap0/GoSQLX/wasm/internal/bridge"
 )
 
@@ -33,19 +35,43 @@ func dialectArg(args []js.Value) string {
 	return ""
 }
 
+// versionArg reads an optional integral AST JSON version. Missing, null and
+// undefined arguments preserve the legacy representation during the transition.
+func versionArg(args []js.Value) (int, error) {
+	if len(args) < 3 || args[2].IsUndefined() || args[2].IsNull() {
+		//lint:ignore SA1019 Part A retains the legacy default until the site switches to v1.
+		return bridge.ASTJSONLegacy, nil
+	}
+	switch args[2].Type() {
+	case js.TypeNumber:
+		v := args[2].Float()
+		if !math.IsNaN(v) && !math.IsInf(v, 0) && math.Trunc(v) == v && v >= float64(math.MinInt) && v < -float64(math.MinInt) {
+			return int(v), nil
+		}
+	case js.TypeString:
+		v, err := strconv.Atoi(args[2].String())
+		if err == nil {
+			return v, nil
+		}
+	}
+	return 0, fmt.Errorf("AST JSON version must be a number")
+}
+
+// parse accepts SQL, an optional dialect and an optional AST JSON version.
+// Omitted versions keep the legacy indented JSON during the v1 transition.
 func parse(_ js.Value, args []js.Value) any {
 	if len(args) == 0 {
 		return jsonError("no SQL provided")
 	}
-	astObj, err := bridge.Parse(args[0].String(), dialectArg(args))
+	version, err := versionArg(args)
 	if err != nil {
 		return jsonError(err.Error())
 	}
-	b, err := json.MarshalIndent(astObj, "", "  ")
+	out, err := bridge.ParseJSON(args[0].String(), dialectArg(args), version)
 	if err != nil {
 		return jsonError(err.Error())
 	}
-	return string(b)
+	return out
 }
 
 // format formats the SQL for the selected dialect, keeping comments and
@@ -84,14 +110,12 @@ func lint(_ js.Value, args []js.Value) any {
 	return jsonResult(bridge.Lint(args[0].String(), dialectArg(args)))
 }
 
+// validate checks SQL syntax using the optional dialect argument.
 func validate(_ js.Value, args []js.Value) any {
 	if len(args) == 0 {
 		return jsonError("no SQL provided")
 	}
-	sql := args[0].String()
-	// dialect is accepted for API consistency
-
-	err := gosqlx.Validate(sql)
+	err := bridge.Validate(args[0].String(), dialectArg(args))
 	if err != nil {
 		return jsonResult(map[string]any{"valid": false, "error": err.Error()})
 	}

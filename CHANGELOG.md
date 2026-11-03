@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+
+- `gosqlxParse(sql, dialect, version)` accepts version 1 for AST JSON v1 (`version`, `node_type`, zero-valued fields omitted); omitted versions keep legacy indented output until the site switches in the v1.18 release. [W8-04]
 - **Benchmark and perf-gate infrastructure (performance overhaul, wave 0)**:
   pull requests are now judged by interleaved A/B measurements instead of
   absolute numbers. No library behaviour changes apart from #901 (see Fixed). The pieces, by PR:
@@ -101,6 +103,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     benchmarks that publish diagnostics no longer time a growing buffer.
 
 ### Performance
+
+- Playground parse returns compact typed AST JSON v1 on request (TBD-gate); playground Lint parses once. [W8-04]
 - **gosqlx**: errors returned by `Parse`, `Validate`, `Lint` and the tree helpers now wrap the sentinel and the underlying error in an unexported `wrapErr` that builds its message lazily, instead of `fmt.Errorf("%w: %w", ...)` on every failure. Error text, `errors.Is` and `errors.As` behaviour are unchanged; only the unexported concrete error type differs. The saving applies to callers that only check `errors.Is`/`errors.As` or drop the message: when the message is built (`err.Error()`, as the LSP and CLI do) the gain is about 2 allocs/op and 3-4% B/op per error (syntax_mid 21 -> 19 allocs). Because the message is now built on demand, `Error()` reflects any later mutation of the inner `*errors.Error` reached through `errors.As`; previously the text was fixed at creation. [W1-03]
 - **Linter L010**: scans bytes in a single pass instead of rebuilding
   substrings and running a regular expression; `BenchmarkLintRule/L010` is 67.5% faster on the
@@ -127,12 +131,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Formatter**: compact formatting (`ast.CompactStyle()`, no clause newlines, no semicolon, no line width, no target dialect, preserve or upper keyword case) now renders SELECT, INSERT, UPDATE and DELETE through each statement's `SQL()` instead of the visitor renderer, and a single compact statement skips the parts slice and join. `Render/compact/*` is 27-49% faster with 1 alloc/op (was 4-42) and 60-82% fewer bytes/op; `Normalize` and `Fingerprint` are 6-13% faster with 15-39% fewer allocs. Output is byte-identical (differential test over every corpus statement in 9 dialects and all option combinations); lowercase keywords, target-dialect rewrites, set operations and ALTER TABLE keep the visitor path. [W5-02]
 
 ### Behavior changes
+
+- With a non-generic dialect, a tokenizer error is now reported as `gosqlx: tokenize error: Error E1002 ...` (what the no-dialect path and gosqlx.Lint already report) instead of `gosqlx: syntax error: Error E2004 ... tokenization error: ...`. `parse_error_span` is unchanged (it already resolved to the innermost positioned error). [W8-04]
+- SQL with no statements (blank, whitespace or comment-only) gets no `parse_error` from Lint, matching gosqlx.Lint (the linter treats it as "nothing to lint", not a syntax error). The AST and Analyze tabs still report the parse error. [W8-04]
 - **Linter L010 (redundant whitespace)**: violation columns are byte
   positions on lines with invalid UTF-8. They were shifted before because
   invalid bytes were replaced with U+FFFD (3 bytes) while scanning. Valid
   UTF-8 is unaffected.
 
 ### Fixed
+
+- `gosqlxValidate` now honours its dialect argument. [W8-04]
 - **AST**: `AlterTableStatement.SQL()` now separates multiple ALTER TABLE actions with commas, matching the compact formatter and preserving action boundaries when re-parsed.
 - **Playground**: the GoSQLX WebAssembly module now runs in a Web Worker, so
   loading the parser and every parse, format, lint, analyze, highlight and

@@ -19,6 +19,8 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+
+	"github.com/ajitpratap0/GoSQLX/internal/astjson"
 )
 
 // wasmBenchQueries are fixed so results stay comparable across commits.
@@ -36,18 +38,19 @@ var wasmBenchQueries = []struct{ name, sql string }{
 // drives them, including the JSON encoding of the response. It runs natively
 // (go test -bench WASMBridge ./wasm/internal/bridge) and, for the real engine,
 // under Node via scripts/perf/wasm-bench.sh.
+// parse measures the AST JSON v1 path the site uses from v1.18.
 func BenchmarkWASMBridge(b *testing.B) {
 	ops := []struct {
 		name string
 		call func(sql string) (int, error)
 	}{
 		{"parse", func(s string) (int, error) {
-			tree, err := Parse(s, "")
-			if err != nil {
-				return 0, err
-			}
-			out, err := json.MarshalIndent(tree, "", "  ")
+			out, err := ParseJSON(s, "", astjson.Version)
 			return len(out), err
+		}},
+		{"validate", func(s string) (int, error) {
+			// Validate returns no encoded payload.
+			return 0, Validate(s, "")
 		}},
 		{"lint", func(s string) (int, error) {
 			r := Lint(s, "")
@@ -75,7 +78,7 @@ func BenchmarkWASMBridge(b *testing.B) {
 			for _, q := range wasmBenchQueries {
 				b.Run(q.name, func(b *testing.B) {
 					n, err := op.call(q.sql)
-					if err != nil || n == 0 {
+					if err != nil || (n == 0 && op.name != "validate") {
 						b.Fatalf("%s/%s: %d bytes, err %v", op.name, q.name, n, err)
 					}
 					b.ReportAllocs()
@@ -98,6 +101,12 @@ func BenchmarkWASMBridge(b *testing.B) {
 // TestWASMBenchQueriesAreValid keeps the benchmark inputs on the success path.
 func TestWASMBenchQueriesAreValid(t *testing.T) {
 	for _, q := range wasmBenchQueries {
+		if err := Validate(q.sql, ""); err != nil {
+			t.Errorf("%s query does not validate: %v", q.name, err)
+		}
+		if _, err := ParseJSON(q.sql, "", astjson.Version); err != nil {
+			t.Errorf("%s query AST JSON v1 failed: %v", q.name, err)
+		}
 		if _, err := Parse(q.sql, ""); err != nil {
 			t.Errorf("%s query does not parse: %v", q.name, err)
 		}

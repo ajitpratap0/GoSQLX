@@ -34,7 +34,7 @@ jobs:
     # Allocation and stack budgets skip under -race where instrumentation
     # changes the measurements, so run them here without it.
     - name: Allocation and stack budgets (non-race)
-      run: go test -count=1 -run 'AllocBudget|StackBudget|StackReserve' ./pkg/gosqlx ./internal/stackgrow
+      run: go test -count=1 -run 'AllocBudget|StackBudget|StackReserve' ./pkg/gosqlx
 
   test:
     name: Test

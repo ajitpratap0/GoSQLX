@@ -618,6 +618,8 @@ func (s *Scanner) Scan(tree *ast.AST) *ScanResult {
 
 	w := acquireScanWalker(s, result)
 	_ = ast.Walk(w, tree)
+	// release is deliberately not deferred: if the walk panics, the walker
+	// (possibly holding dirty ancestor slots) is dropped instead of pooled.
 	w.release()
 
 	// Update counts

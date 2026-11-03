@@ -144,7 +144,18 @@ func TestScanConcurrentPooledWalker(t *testing.T) {
 	s := NewScanner()
 	var trees []*ast.AST
 	var names []string
+	// Under -race the instrumented walk is several times slower and CI shards
+	// have a fixed time budget, so the race run uses a 100-term chain, fewer
+	// workers/iterations and fewer corpus statements. The 5000-deep tree is
+	// still exercised concurrently in the non-race run.
+	workers, iterations, corpusN := 16, 50, 50
+	if raceEnabled {
+		workers, iterations, corpusN = 4, 8, 10
+	}
 	for _, tc := range scanWalkerTargetCases() {
+		if raceEnabled && tc.name == "deep chain" {
+			tc.sql = "SELECT * FROM t WHERE " + strings.Repeat("1=1 OR ", 99) + "1=1"
+		}
 		trees = append(trees, scanWalkerTestTree(t, tc.sql, tc.dialect))
 		names = append(names, tc.name)
 	}
@@ -159,10 +170,10 @@ func TestScanConcurrentPooledWalker(t *testing.T) {
 		t.Fatal(err)
 	}
 	statements := set.RealWorld("postgresql")
-	if len(statements) < 50 {
-		t.Fatalf("PostgreSQL corpus has %d statements, want at least 50", len(statements))
+	if len(statements) < corpusN {
+		t.Fatalf("PostgreSQL corpus has %d statements, want at least %d", len(statements), corpusN)
 	}
-	for _, st := range statements[:50] {
+	for _, st := range statements[:corpusN] {
 		tree, err := gosqlx.ParseWithDialect(st.SQL, keywords.DialectPostgreSQL)
 		if err != nil {
 			t.Logf("skip real-world parse error %s: %v", st.Key(), err)
@@ -177,11 +188,11 @@ func TestScanConcurrentPooledWalker(t *testing.T) {
 		serial[i] = s.Scan(tree)
 	}
 	var wg sync.WaitGroup
-	for worker := 0; worker < 16; worker++ {
+	for worker := 0; worker < workers; worker++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			for iteration := 0; iteration < 50; iteration++ {
+			for iteration := 0; iteration < iterations; iteration++ {
 				for i, tree := range trees {
 					if got := s.Scan(tree); !reflect.DeepEqual(got, serial[i]) {
 						t.Errorf("iteration %d, %s: concurrent Scan differs from serial\ngot: %#v\nwant: %#v", iteration, names[i], got, serial[i])

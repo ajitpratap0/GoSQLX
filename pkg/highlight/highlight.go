@@ -18,7 +18,9 @@ import (
 	goerrors "errors"
 	"strings"
 	"sync"
+	"unicode/utf8"
 
+	"github.com/ajitpratap0/GoSQLX/internal/tokscratch"
 	sqlerrors "github.com/ajitpratap0/GoSQLX/pkg/errors"
 	"github.com/ajitpratap0/GoSQLX/pkg/models"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/keywords"
@@ -84,18 +86,21 @@ func Spans(sql string, opts ...Option) []Span {
 		return nil
 	}
 
-	src := []byte(sql)
+	sc := getScratch()
+	defer putScratch(sc)
 	h := classifier{
 		src:     sql,
 		kw:      keywordsFor(cfg.dialect),
 		dialect: cfg.dialect,
+		sc:      sc,
 	}
 
 	h.indexLines()
+	src := sql
 	limit := len(src)
 	errAt := -1
 	for attempt := 0; ; attempt++ {
-		spans, err := h.run(src[:limit], limit)
+		spans, err := h.run(limit)
 		if err == nil {
 			if errAt >= 0 {
 				spans = append(spans, Span{Start: errAt, End: len(src), Category: Error})
@@ -124,7 +129,7 @@ func Spans(sql string, opts ...Option) []Span {
 type lexeme struct {
 	start, end int
 	typ        models.TokenType
-	value      string
+	up         string // Exact strings.ToUpper of the token value; cleared before pooling.
 }
 
 type classifier struct {
@@ -132,21 +137,23 @@ type classifier struct {
 	lineStarts []int
 	kw         *keywords.Keywords
 	dialect    keywords.SQLDialect
+	sc         *scratch
 }
 
-// run tokenizes input (a prefix of h.src of length limit) and classifies it.
-func (h *classifier) run(input []byte, limit int) ([]Span, error) {
+// run classifies a prefix before PutTokenizer. Scratch tokens die at
+// PutTokenizer; resolve retains no *Word or tokenizer.
+func (h *classifier) run(limit int) ([]Span, error) {
 	tkz := tokenizer.GetTokenizer()
 	defer tokenizer.PutTokenizer(tkz)
 	if h.dialect != "" {
 		tkz.SetDialect(h.dialect)
 	}
-	toks, err := tkz.Tokenize(input)
+	toks, err := tokscratch.String(tkz, h.src[:limit])
 	if err != nil {
 		return nil, err
 	}
 
-	comments := make([]Span, 0, len(tkz.Comments))
+	comments := h.sc.comments[:0]
 	for _, c := range tkz.Comments {
 		start, ok1 := h.offset(c.Start, limit)
 		end, ok2 := h.offset(c.End, limit)
@@ -161,6 +168,7 @@ func (h *classifier) run(input []byte, limit int) ([]Span, error) {
 		}
 	}
 
+	h.sc.comments = comments
 	lexemes := h.resolve(toks, comments, limit)
 	return h.classify(lexemes, comments), nil
 }
@@ -169,7 +177,15 @@ func (h *classifier) run(input []byte, limit int) ([]Span, error) {
 // previous token's end by skipping whitespace and comments, so classification
 // depends only on token end locations and the captured comments.
 func (h *classifier) resolve(toks []models.TokenWithSpan, comments []Span, limit int) []lexeme {
-	out := make([]lexeme, 0, len(toks))
+	out := h.sc.lexemes[:0]
+	if cap(out) < len(toks) {
+		out = make([]lexeme, 0, len(toks))
+		h.sc.lexHigh = 0
+	}
+	defer func() {
+		h.sc.lexemes = out
+		h.sc.lexHigh = max(h.sc.lexHigh, len(out))
+	}()
 	cursor, ci := 0, 0
 	for _, tok := range toks {
 		if tok.Token.Type == models.TokenTypeEOF {
@@ -193,9 +209,10 @@ func (h *classifier) resolve(toks []models.TokenWithSpan, comments []Span, limit
 			cursor = end
 			continue
 		}
-		out = append(out, lexeme{start: start, end: end, typ: tok.Token.Type, value: tok.Token.Value})
+		out = append(out, lexeme{start: start, end: end, typ: tok.Token.Type, up: tok.Token.Value})
 		cursor = end
 	}
+	foldUpper(out)
 	return out
 }
 
@@ -364,7 +381,8 @@ func (h *classifier) classify(ls []lexeme, comments []Span) []Span {
 		out = append(out, s)
 	}
 
-	st := state{}
+	st := state{parens: h.sc.parens[:0]}
+	defer func() { h.sc.parens = st.parens }()
 	for i := 0; i < len(ls); i++ {
 		cat, consumed := h.category(ls, i, &st)
 		span := Span{Start: ls[i].start, End: ls[i+consumed].end, Category: cat}
@@ -397,7 +415,7 @@ func (st *state) observe(ls []lexeme, i int, cat Category) {
 	case models.TokenTypeLParen:
 		opener := ""
 		if i > 0 {
-			opener = upper(ls[i-1].value)
+			opener = ls[i-1].up
 		}
 		st.parens = append(st.parens, opener)
 	case models.TokenTypeRParen:
@@ -409,7 +427,7 @@ func (st *state) observe(ls []lexeme, i int, cat Category) {
 		st.parens = st.parens[:0]
 	}
 	if cat == Keyword {
-		switch upper(l.value) {
+		switch l.up {
 		case "CREATE", "ALTER", "DECLARE":
 			st.ddl = true
 		}
@@ -433,7 +451,7 @@ func (h *classifier) category(ls []lexeme, i int, st *state) (Category, int) {
 	switch typ := l.typ; {
 	case typ == models.TokenTypeNumber:
 		// 0x1F and 0b101 tokenize as NUMBER "0" + IDENTIFIER "x1F".
-		if adjNext && l.value == "0" && isWordType(next.typ) && isRadixSuffix(next.value) {
+		if adjNext && l.up == "0" && isWordType(next.typ) && isRadixSuffix(next.up) {
 			return Number, 1
 		}
 		return Number, 0
@@ -483,7 +501,7 @@ func (h *classifier) category(ls []lexeme, i int, st *state) (Category, int) {
 		if isQualified(prev, next, l) {
 			return Identifier, 0
 		}
-		w := upper(l.value)
+		w := l.up
 		if dataTypeNames[w] && h.typeContext(prev, st) {
 			return DataType, 0
 		}
@@ -526,7 +544,7 @@ func (h *classifier) word(ls []lexeme, i int, prev, next *lexeme, adjNext bool, 
 		return Placeholder, 0
 	}
 
-	w := upper(l.value)
+	w := l.up
 	// N'..', E'..', X'..', B'..', U&'..', R'..' split into word + string.
 	if adjNext && isStringType(next.typ) && stringPrefixes[w] {
 		return String, 1
@@ -572,7 +590,7 @@ func (h *classifier) typeContext(prev *lexeme, st *state) bool {
 		// TIMESTAMP WITH TIME ZONE is left to the keyword path.
 		return true
 	}
-	pw := upper(prev.value)
+	pw := prev.up
 	switch pw {
 	case "AS":
 		switch st.top() {
@@ -649,7 +667,7 @@ func blocksFunction(prev *lexeme) bool {
 	if prev == nil {
 		return false
 	}
-	switch upper(prev.value) {
+	switch prev.up {
 	case "INTO", "TABLE", "REFERENCES", "VIEW", "EXISTS", "ON", "INDEX", "KEY",
 		"WITH", "RECURSIVE", "TRIGGER", "TYPE", "CONSTRAINT":
 		return true
@@ -685,17 +703,17 @@ func isSpace(c byte) bool {
 	return c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\f' || c == '\v'
 }
 
-// upper returns s in upper case. It is a thin wrapper over strings.ToUpper,
-// so it allocates whenever s contains a lowercase letter; only input that is
-// already upper case is returned without allocating.
-func upper(s string) string {
-	return strings.ToUpper(s)
-}
-
 // indexLines records the byte offset of each line start.
 func (h *classifier) indexLines() {
 	s := h.src
-	h.lineStarts = make([]int, 1, strings.Count(s, "\n")+1)
+	n := strings.Count(s, "\n") + 1
+	if cap(h.sc.lineStarts) >= n {
+		h.lineStarts = h.sc.lineStarts[:1]
+		h.lineStarts[0] = 0
+	} else {
+		h.lineStarts = make([]int, 1, n)
+	}
+	defer func() { h.sc.lineStarts = h.lineStarts }()
 	for i := 0; i < len(s); i++ {
 		if s[i] == '\n' {
 			h.lineStarts = append(h.lineStarts, i+1)
@@ -808,4 +826,60 @@ var dataTypeNames = map[string]bool{
 	"GEOGRAPHY": true, "GEOMETRY": true, "INET": true, "CIDR": true, "MACADDR": true,
 	"TSVECTOR": true, "TSQUERY": true, "IPV4": true, "IPV6": true,
 	"ROWID": true, "UROWID": true, "ROWVERSION": true, "SQL_VARIANT": true, "HIERARCHYID": true,
+}
+
+// foldUpper sets up to exactly strings.ToUpper of each original value. ASCII
+// folds share one immutable builder allocation, valid until scratch is cleared.
+// Uppercasing preserves the "0" test and isRadixSuffix: neither Unicode rune
+// that uppercases to ASCII produces a byte accepted by the radix test.
+func foldUpper(ls []lexeme) {
+	total := 0
+	for i := range ls {
+		switch v := ls[i].up; asciiClass(v) {
+		case nonASCII:
+			ls[i].up = strings.ToUpper(v)
+		case asciiLower:
+			total += len(v)
+		}
+	}
+	if total == 0 {
+		return
+	}
+	var b strings.Builder
+	b.Grow(total)
+	for i := range ls {
+		v := ls[i].up
+		if asciiClass(v) != asciiLower {
+			continue
+		}
+		off := b.Len()
+		for j := 0; j < len(v); j++ {
+			c := v[j]
+			if 'a' <= c && c <= 'z' {
+				c -= 'a' - 'A'
+			}
+			b.WriteByte(c)
+		}
+		ls[i].up = b.String()[off:]
+	}
+}
+
+const (
+	asciiUpper = iota
+	asciiLower
+	nonASCII
+)
+
+func asciiClass(s string) int {
+	cls := asciiUpper
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		if c >= utf8.RuneSelf {
+			return nonASCII
+		}
+		if 'a' <= c && c <= 'z' {
+			cls = asciiLower
+		}
+	}
+	return cls
 }

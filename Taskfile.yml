@@ -11,7 +11,7 @@ vars:
   GO_FILES:
     sh: find . -type f -name '*.go' -not -path './vendor/*'
   # Packages holding the behaviour golden tests (TestGolden*, testdata/goldens).
-  GOLDEN_PKGS: ./pkg/sql/tokenizer ./pkg/sql/parser ./pkg/formatter ./pkg/fingerprint ./pkg/linter ./pkg/sql/security ./pkg/transpiler ./pkg/lsp
+  GOLDEN_PKGS: ./pkg/sql/tokenizer ./pkg/sql/parser ./pkg/formatter ./pkg/fingerprint ./pkg/linter ./pkg/sql/security ./pkg/transpiler ./pkg/lsp ./pkg/highlight
 
 env:
   CGO_ENABLED: '0'

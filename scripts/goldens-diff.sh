@@ -15,7 +15,7 @@ set -euo pipefail
 base="${1:-origin/main}"
 root="$(git rev-parse --show-toplevel)"
 pkgs=(./pkg/sql/tokenizer ./pkg/sql/parser ./pkg/formatter ./pkg/fingerprint
-      ./pkg/linter ./pkg/sql/security ./pkg/transpiler ./pkg/lsp)
+      ./pkg/linter ./pkg/sql/security ./pkg/transpiler ./pkg/lsp ./pkg/highlight)
 
 tmp="$(mktemp -d "${TMPDIR:-/tmp}/goldens-diff.XXXXXX")"
 cleanup() {

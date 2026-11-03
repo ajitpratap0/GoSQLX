@@ -20,6 +20,9 @@ type bench struct {
 	noise  float64 // relative half-width of the time jitter (0.01 = +-1%)
 	bytes  float64
 	allocs float64
+	// layoutSpread overrides layoutArm's per-layout spread for this
+	// benchmark when non-zero.
+	layoutSpread float64
 }
 
 // lcg is a tiny deterministic generator so the synthetic samples are the same

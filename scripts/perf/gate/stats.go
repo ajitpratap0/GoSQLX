@@ -23,6 +23,138 @@ func median(xs []float64) float64 {
 	return (s[m-1] + s[m]) / 2
 }
 
+// groupMedians returns the median of every non-empty group.
+func groupMedians(groups [][]float64) []float64 {
+	out := make([]float64, 0, len(groups))
+	for _, g := range groups {
+		if len(g) > 0 {
+			out = append(out, median(g))
+		}
+	}
+	return out
+}
+
+// robustRelSD returns a robust standard deviation of xs relative to their
+// median, in percent: 1.4826 x the median absolute deviation, which equals
+// the standard deviation for normal data and ignores a few wild values. NaN
+// for fewer than two values or a zero median.
+func robustRelSD(xs []float64) float64 {
+	m := median(xs)
+	if len(xs) < 2 || m == 0 || math.IsNaN(m) {
+		return math.NaN()
+	}
+	dev := make([]float64, len(xs))
+	for i, x := range xs {
+		dev[i] = math.Abs(x - m)
+	}
+	return 1.4826 * median(dev) / math.Abs(m) * 100
+}
+
+// hodgesLehmannRatio is the Hodges-Lehmann estimate of how much larger y is
+// than x, as a ratio: exp of the median of log(y_j) - log(x_i) over all
+// pairs. It is the estimator that goes with the Mann-Whitney U test. NaN
+// when a value is not positive or a sample is empty.
+func hodgesLehmannRatio(x, y []float64) float64 {
+	if len(x) == 0 || len(y) == 0 {
+		return math.NaN()
+	}
+	d := make([]float64, 0, len(x)*len(y))
+	for _, a := range x {
+		for _, b := range y {
+			if !(a > 0) || !(b > 0) {
+				return math.NaN()
+			}
+			d = append(d, math.Log(b)-math.Log(a))
+		}
+	}
+	return math.Exp(median(d))
+}
+
+// minMWP is the smallest two-sided p-value an exact Mann-Whitney U test can
+// produce for samples of n1 and n2 distinct values: complete separation,
+// 2 / C(n1+n2, n1). With few layouts it can exceed alpha, so no difference
+// could ever be significant.
+func minMWP(n1, n2 int) float64 {
+	if n1 < 1 || n2 < 1 {
+		return 1
+	}
+	c := 1.0
+	for i := 1; i <= n1; i++ {
+		c = c * float64(n2+i) / float64(i)
+	}
+	return math.Min(1, 2/c)
+}
+
+// benjaminiHochberg returns which of the p-values are rejected when the false
+// discovery rate is controlled at q (Benjamini and Hochberg, 1995): sort the
+// m p-values, find the largest rank i with p_(i) <= i*q/m, and reject the i
+// smallest. When no hypothesis is false (a change that adds no work) the
+// false discovery rate equals the family-wise error rate, so the chance that
+// any benchmark is flagged stays at q instead of growing with the suite. The
+// procedure is valid for independent and positively dependent tests; the
+// benchmarks of one binary share code, which makes their layout effects
+// positively dependent if anything. NaN p-values are never rejected.
+func benjaminiHochberg(ps []float64, q float64) []bool {
+	type entry struct {
+		p float64
+		i int
+	}
+	es := make([]entry, 0, len(ps))
+	for i, p := range ps {
+		if !math.IsNaN(p) {
+			es = append(es, entry{p, i})
+		}
+	}
+	sort.SliceStable(es, func(a, b int) bool { return es[a].p < es[b].p })
+	m := float64(len(es))
+	k := -1
+	for r, e := range es {
+		if e.p <= float64(r+1)*q/m {
+			k = r
+		}
+	}
+	out := make([]bool, len(ps))
+	for r := 0; r <= k; r++ {
+		out[es[r].i] = true
+	}
+	return out
+}
+
+// layoutPower estimates the power of the two-sided exact U test over k vs k
+// per-layout values to detect a slowdown of shiftPct percent at level
+// alpha, when the per-layout values have a relative standard deviation of
+// spreadPct percent. It is Noether's normal approximation: the U test has
+// asymptotic efficiency 3/pi relative to the t test under normal data, so
+// power = Phi(d * sqrt(k/2) * sqrt(3/pi) - z(1 - alpha/2)) with
+// d = ln(1 + shift) / spread. Checked against simulation of the gate
+// (k = 20, m = 50, +5%, per-layout effects uniform, spread as the report
+// measures it): 91%, 37% and 5% at spreads of 3.0%, 4.4% and 7.4%, where
+// the simulation caught 93%, 47% and 6%, so the estimate is a little
+// conservative.
+func layoutPower(spreadPct float64, k int, alpha, shiftPct float64) float64 {
+	if !(spreadPct > 0) || k < 2 || !(alpha > 0) {
+		return math.NaN()
+	}
+	d := math.Log1p(shiftPct/100) / (spreadPct / 100)
+	x := d*math.Sqrt(float64(k)/2)*math.Sqrt(3/math.Pi) - normalQuantile(1-alpha/2)
+	return normalCDF(x)
+}
+
+// layoutMinShift inverts layoutPower: the slowdown in percent that is
+// detected with probability target.
+func layoutMinShift(spreadPct float64, k int, alpha, target float64) float64 {
+	if !(spreadPct > 0) || k < 2 || !(alpha > 0) {
+		return math.NaN()
+	}
+	d := (normalQuantile(1-alpha/2) + normalQuantile(target)) / (math.Sqrt(float64(k)/2) * math.Sqrt(3/math.Pi))
+	return math.Expm1(d*spreadPct/100) * 100
+}
+
+func normalCDF(x float64) float64 { return 0.5 * math.Erfc(-x/math.Sqrt2) }
+
+// normalQuantile is the inverse of normalCDF for 0 < p < 1.
+func normalQuantile(p float64) float64 { return math.Sqrt2 * math.Erfinv(2*p-1) }
+
 func minMax(xs []float64) (lo, hi float64) {
 	lo, hi = math.Inf(1), math.Inf(-1)
 	for _, x := range xs {

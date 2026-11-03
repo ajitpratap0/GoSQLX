@@ -5,8 +5,13 @@ name: Perf Gate
 # - Pull requests touching library code: base (the PR's merge base) and head
 #   test binaries are built in this job and run interleaved by
 #   scripts/perf/ab.sh -G: GOGC=off GOMAXPROCS=1 pinned with taskset as the
-#   primary metric, an A/A control, a default-GC secondary metric, and
+#   primary metric, an A/A' control, a default-GC secondary metric, and
 #   instructions/op from cmd/perfdriver (perf stat, else cachegrind).
+#   Each arm is LAYOUTS test binaries linked with -ldflags=-randlayout=<seed>
+#   (same seeds for base and head, a disjoint set for the A/A' arm), cycled
+#   through the rounds; the gate compares per-layout medians, so a change
+#   that only moves code (alignment, aliasing) is not a regression. Runners
+#   differ in CPU model (EPYC 7763/9V74/9V45, Xeon 8573C); the report names it.
 #   scripts/perf/gate judges the result; the report goes to the job summary,
 #   a sticky comment (same-repo PRs only) and an artifact.
 # - Nightly on main: the same gate between main now and main 24 hours ago.
@@ -58,11 +63,15 @@ on:
         required: false
         default: ''
       rounds:
-        description: 'gate/matrix mode: interleaved rounds (default 10; matrix 5)'
+        description: 'gate/matrix mode: interleaved rounds, at least layouts (default 20; matrix 5)'
+        required: false
+        default: ''
+      layouts:
+        description: 'gate/matrix mode: randomized code layouts per arm, -ldflags=-randlayout (default 20; matrix: one per round; 0 disables randomization)'
         required: false
         default: ''
       benchtime:
-        description: 'gate/matrix mode: -test.benchtime per run (default 200ms; matrix 100ms); profile mode: per profile (default 5s)'
+        description: 'gate/matrix mode: -test.benchtime per run (default 100ms); profile mode: per profile (default 5s)'
         required: false
         default: ''
       gomemlimit:
@@ -92,7 +101,13 @@ jobs:
     name: ${{ inputs.mode == 'matrix' && 'Matrix A/B (report only)' || 'A/B perf gate (shadow)' }}
     if: github.event_name != 'workflow_dispatch' || inputs.mode != 'profile'
     runs-on: ubuntu-latest
-    timeout-minutes: ${{ inputs.mode == 'matrix' && 240 || 30 }}
+    # Gate budget, measured on an EPYC 7763 with the 50-benchmark suite
+    # (runs 41664058414, 41664079844): ~13.5 min for a normal run (builds
+    # 1.5 min, primary 7 min, secondary 2.4 min, cachegrind 2.4 min) and
+    # 21.7 min for the step when the A/A' is noisy and every arm is re-linked
+    # and re-measured (+1.3 min links, +7 min primary). The step cap leaves
+    # ~60% over that worst case for slower runner CPUs and suite growth.
+    timeout-minutes: ${{ inputs.mode == 'matrix' && 240 || 45 }}
     steps:
       - name: Validate inputs
         # A GOMEMLIMIT the runtime rejects would make every benchmark binary
@@ -163,12 +178,16 @@ jobs:
       - name: Run perf gate
         id: gate
         continue-on-error: ${{ env.PERF_GATE_ENFORCE != 'true' || inputs.mode == 'matrix' }}
-        timeout-minutes: ${{ inputs.mode == 'matrix' && 230 || 24 }}
+        timeout-minutes: ${{ inputs.mode == 'matrix' && 230 || 35 }}
         env:
           BASE: ${{ steps.refs.outputs.base }}
           MODE: ${{ inputs.mode || 'gate' }}
           ROUNDS: ${{ inputs.rounds }}
+          LAYOUTS: ${{ inputs.layouts }}
           BENCHTIME: ${{ inputs.benchtime }}
+          # Fresh layouts every run and every re-run attempt; the seeds are in
+          # the report, so a run can be reproduced with ab.sh -S.
+          SEED: ${{ github.run_id }}${{ github.run_attempt }}
           ACCEPTED: ${{ contains(github.event.pull_request.labels.*.name, 'perf-regression-accepted') }}
         run: |
           set -o pipefail
@@ -179,9 +198,16 @@ jobs:
             # reports and never fails.
             scripts/perf/matrix-suite.sh > "$RUNNER_TEMP/matrix-suite.txt"
             cp "$RUNNER_TEMP/matrix-suite.txt" "$RUNNER_TEMP/perf-gate/"
-            flags=(-r "${ROUNDS:-5}" -t "${BENCHTIME:-100ms}" -s "$RUNNER_TEMP/matrix-suite.txt" -T 'Matrix A/B')
+            # One randomized layout per round (5 by default), so the matrix
+            # also averages over code placement.
+            rounds=${ROUNDS:-5}
+            flags=(-r "$rounds" -k "${LAYOUTS:-$rounds}" -S "$SEED" -t "${BENCHTIME:-100ms}" -s "$RUNNER_TEMP/matrix-suite.txt" -T 'Matrix A/B')
           else
-            flags=(-G -r "${ROUNDS:-10}" -t "${BENCHTIME:-200ms}")
+            # 20 layouts x 1 round each: layout-to-layout spread (2-12% on
+            # these runners) dwarfs the sample noise of a 100ms run, so more
+            # layouts beat more or longer samples. Measuring takes about as
+            # long as the previous 10 rounds of 200ms on one layout.
+            flags=(-G -r "${ROUNDS:-20}" -k "${LAYOUTS:-20}" -S "$SEED" -t "${BENCHTIME:-100ms}")
             [ "$PERF_GATE_ENFORCE" = true ] && flags+=(-e)
             [ "$ACCEPTED" = true ] && flags+=(-A)
           fi

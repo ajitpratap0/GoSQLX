@@ -82,31 +82,36 @@ func freshLint(t *testing.T, sql, filename string, d keywords.SQLDialect, rules 
 	return r
 }
 
-func equalPoolError(t *testing.T, name string, got, want error) {
-	t.Helper()
+func equalPoolError(t *testing.T, name string, got, want error) bool {
+	t.Helper() // Safe from worker goroutines: reports with Errorf, never Fatalf.
 	if fmt.Sprint(got) != fmt.Sprint(want) || (got == nil) != (want == nil) {
-		t.Fatalf("%s: got %v, want %v", name, got, want)
+		t.Errorf("%s: got %v, want %v", name, got, want)
+		return false
 	}
 	var ge, we *sqlerrors.Error
 	ga, wa := errors.As(got, &ge), errors.As(want, &we)
 	if ga != wa || (ga && !reflect.DeepEqual(ge, we)) {
-		t.Fatalf("%s: structured errors differ: got %#v, want %#v", name, ge, we)
+		t.Errorf("%s: structured errors differ: got %#v, want %#v", name, ge, we)
+		return false
 	}
 	for _, sentinel := range []error{gosqlx.ErrSyntax, gosqlx.ErrTokenize, gosqlx.ErrUnsupportedDialect} {
 		if errors.Is(got, sentinel) != errors.Is(want, sentinel) {
-			t.Fatalf("%s: errors.Is(%v) differs", name, sentinel)
+			t.Errorf("%s: errors.Is(%v) differs", name, sentinel)
+			return false
 		}
 	}
+	return true
 }
 
-func equalPoolResult(t *testing.T, got, want linter.FileResult) {
-	t.Helper()
+func equalPoolResult(t *testing.T, got, want linter.FileResult) bool {
+	t.Helper() // Safe from worker goroutines: reports with Errorf, never Fatalf.
 	if got.Filename != want.Filename || !reflect.DeepEqual(got.Violations, want.Violations) {
-		t.Fatalf("FileResult differs\n got %#v\nwant %#v", got, want)
+		t.Errorf("FileResult differs\n got %#v\nwant %#v", got, want)
+		return false
 	}
-	equalPoolError(t, "Error", got.Error, want.Error)
-	equalPoolError(t, "TokenizeError", got.TokenizeError, want.TokenizeError)
-	equalPoolError(t, "ParseError", got.ParseError, want.ParseError)
+	return equalPoolError(t, "Error", got.Error, want.Error) &&
+		equalPoolError(t, "TokenizeError", got.TokenizeError, want.TokenizeError) &&
+		equalPoolError(t, "ParseError", got.ParseError, want.ParseError)
 }
 
 func poolEdges() []string {
@@ -227,7 +232,9 @@ func TestLintPoolConcurrent(t *testing.T) {
 			for round := 0; round < 3; round++ {
 				for offset := range inputs {
 					in := inputs[(offset+worker)%len(inputs)]
-					equalPoolResult(t, in.l.LintString(in.sql, "<input>"), in.probe)
+					if !equalPoolResult(t, in.l.LintString(in.sql, "<input>"), in.probe) {
+						return
+					}
 					if in.d == keywords.DialectUnknown || in.d == "nosuchdialect" {
 						continue // Only the low-level API accepts these dialects.
 					}

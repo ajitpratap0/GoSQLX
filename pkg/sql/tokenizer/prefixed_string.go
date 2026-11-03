@@ -71,8 +71,8 @@ func (t *Tokenizer) readPrefixedString(letter byte) (tok models.Token, ok bool, 
 	}
 	switch letter {
 	case 'N', 'X', 'B':
-		inner, err := t.readQuotedString('\'')
-		if err != nil {
+		var inner models.Token
+		if err := t.readQuotedString(&inner, '\''); err != nil {
 			return models.Token{}, true, err
 		}
 		typ := models.TokenTypeNationalStringLiteral

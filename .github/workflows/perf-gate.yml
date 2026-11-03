@@ -101,7 +101,13 @@ jobs:
     name: ${{ inputs.mode == 'matrix' && 'Matrix A/B (report only)' || 'A/B perf gate (shadow)' }}
     if: github.event_name != 'workflow_dispatch' || inputs.mode != 'profile'
     runs-on: ubuntu-latest
-    timeout-minutes: ${{ inputs.mode == 'matrix' && 240 || 30 }}
+    # Gate budget, measured on an EPYC 7763 with the 50-benchmark suite
+    # (runs 41664058414, 41664079844): ~13.5 min for a normal run (builds
+    # 1.5 min, primary 7 min, secondary 2.4 min, cachegrind 2.4 min) and
+    # 21.7 min for the step when the A/A' is noisy and every arm is re-linked
+    # and re-measured (+1.3 min links, +7 min primary). The step cap leaves
+    # ~60% over that worst case for slower runner CPUs and suite growth.
+    timeout-minutes: ${{ inputs.mode == 'matrix' && 240 || 45 }}
     steps:
       - name: Validate inputs
         # A GOMEMLIMIT the runtime rejects would make every benchmark binary
@@ -172,7 +178,7 @@ jobs:
       - name: Run perf gate
         id: gate
         continue-on-error: ${{ env.PERF_GATE_ENFORCE != 'true' || inputs.mode == 'matrix' }}
-        timeout-minutes: ${{ inputs.mode == 'matrix' && 230 || 24 }}
+        timeout-minutes: ${{ inputs.mode == 'matrix' && 230 || 35 }}
         env:
           BASE: ${{ steps.refs.outputs.base }}
           MODE: ${{ inputs.mode || 'gate' }}

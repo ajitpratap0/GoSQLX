@@ -52,6 +52,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     seed set, which measures the layout variance. The report names the
     runner CPU and each benchmark's layout spread. Defaults are now 20 rounds
     of 100ms (`-k`/`LAYOUTS` sets the layout count, `-k 0` turns it off).
+    A noisy A/A' re-links every arm with fresh seeds before its one re-run.
+    The report lists the benchmarks with under 80% estimated power to catch
+    a lone +5% slowdown, and warns when the layout count cannot reach the
+    Benjamini-Hochberg level at all (matrix mode). Gate timeouts are now
+    35 minutes for the step and 45 for the job (worst case measured at
+    21.7 minutes on an EPYC 7763).
 
 ### Changed
 - **Perf measurement methodology** (W0-15; benchmark tooling only, no library

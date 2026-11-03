@@ -490,7 +490,7 @@ func (p *Parser) writeRawLeaf(buf *strings.Builder, tok models.Token, afterWord 
 		writeDelimitedToken(buf, val, '\'')
 		return nil
 	case isQuotedTokenType(tok):
-		p.writeTokenSource(buf, &p.currentToken)
+		p.writeTokenSource(buf, p.currentToken)
 	default:
 		buf.WriteString(val)
 	}

@@ -31,8 +31,6 @@ import (
 // PerformanceBaseline represents a single performance baseline
 type PerformanceBaseline struct {
 	NsPerOp          int64   `json:"ns_per_op,omitempty"`
-	TokensPerSec     int64   `json:"tokens_per_sec,omitempty"`
-	OpsPerSec        int64   `json:"ops_per_sec,omitempty"`
 	TolerancePercent float64 `json:"tolerance_percent"`
 	Description      string  `json:"description"`
 }
@@ -46,14 +44,12 @@ type BaselineConfig struct {
 
 // PerformanceResult represents the result of a performance test
 type PerformanceResult struct {
-	Name         string
-	NsPerOp      int64
-	TokensPerSec int64
-	OpsPerSec    int64
-	AllocsPerOp  int64
-	BytesPerOp   int64
-	Iterations   int
-	Duration     time.Duration
+	Name        string
+	NsPerOp     int64
+	AllocsPerOp int64
+	BytesPerOp  int64
+	Iterations  int
+	Duration    time.Duration
 }
 
 // loadBaselines loads performance baselines from JSON file
@@ -100,7 +96,13 @@ func calculateDegradation(actual, baseline int64) float64 {
 	return (float64(actual) - float64(baseline)) / float64(baseline) * 100
 }
 
-// TestPerformanceRegression tests for performance regressions against baselines
+// TestPerformanceRegression is a smoke test, not a performance gate. Its
+// ns/op ceilings (performance_baselines.json) carry 60-65% tolerances so that
+// only order-of-magnitude breakage fails on noisy shared CI runners. Real
+// regressions are judged by the interleaved A/B perf gate (scripts/perf/ab.sh,
+// task bench:gate) and the allocs/op and B/op baselines in benchmarks/baselines/.
+// Do not tighten the tolerances here to make this test act as a gate; see
+// docs/PERFORMANCE_METHODOLOGY.md.
 func TestPerformanceRegression(t *testing.T) {
 	// Skip on older Go versions - perf baselines are calibrated for Go 1.24+
 	// Older compilers produce slower code, causing false regression failures

@@ -18,6 +18,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ajitpratap0/GoSQLX/pkg/models"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/dialect"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/keywords"
 )
@@ -174,7 +175,7 @@ func TestMigration_IsQualifyKeyword_Snowflake(t *testing.T) {
 			t.Parallel()
 			// Wire up a minimal parser with the current token set to "qualify".
 			p := NewParser(WithDialect(tc.dialect))
-			p.currentToken.Token.Value = "QUALIFY"
+			p.currentToken = &models.TokenWithSpan{Token: models.Token{Value: "QUALIFY"}}
 			if got := p.isQualifyKeyword(); got != tc.want {
 				t.Errorf("isQualifyKeyword() with dialect=%q = %v, want %v",
 					tc.dialect, got, tc.want)
@@ -208,7 +209,7 @@ func TestMigration_IsMatchRecognizeKeyword(t *testing.T) {
 		t.Run(tc.dialect, func(t *testing.T) {
 			t.Parallel()
 			p := NewParser(WithDialect(tc.dialect))
-			p.currentToken.Token.Value = "MATCH_RECOGNIZE"
+			p.currentToken = &models.TokenWithSpan{Token: models.Token{Value: "MATCH_RECOGNIZE"}}
 			if got := p.isMatchRecognizeKeyword(); got != tc.want {
 				t.Errorf("isMatchRecognizeKeyword() with dialect=%q = %v, want %v",
 					tc.dialect, got, tc.want)

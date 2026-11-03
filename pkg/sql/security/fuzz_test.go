@@ -90,6 +90,10 @@ func FuzzScanSQL(f *testing.F) {
 		f.Add(s)
 	}
 
+	for _, sql := range scanSQLGuardSeeds {
+		f.Add(sql)
+	}
+
 	f.Fuzz(func(t *testing.T, sql string) {
 		scanner := NewScanner()
 		_ = scanner.ScanSQL(sql)

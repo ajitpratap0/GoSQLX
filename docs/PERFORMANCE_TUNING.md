@@ -1233,75 +1233,25 @@ func BenchmarkMemoryEfficiency(b *testing.B) {
 
 ## Performance Regression Testing
 
-### Overview
+> **Note:** `TestPerformanceRegression` and `performance_baselines.json` are a coarse smoke test (60-65% tolerances), not a performance gate. Pull requests are judged by the interleaved A/B gate and the allocs/op and B/op baselines described in [PERFORMANCE_METHODOLOGY.md](PERFORMANCE_METHODOLOGY.md).
 
-GoSQLX includes automated performance regression tests to prevent performance degradation over time. The suite tracks key metrics against established baselines and alerts developers to regressions.
+### Running the smoke test
 
-### Running Regression Tests
-
-#### Quick Test (Recommended for CI/CD)
 ```bash
 go test -v ./pkg/sql/parser/ -run TestPerformanceRegression
 ```
-- **Execution Time:** ~8 seconds
-- **Coverage:** 5 critical query types
-- **Exit Code 0:** All tests passed
-- **Exit Code 1:** Performance regression detected
 
-#### Baseline Benchmark
-```bash
-go test -bench=BenchmarkPerformanceBaseline -benchmem -count=5 ./pkg/sql/parser/
-```
-Use this after significant parser changes to establish new performance baselines.
+The test compares a few parser queries with `performance_baselines.json` using wide tolerances (60-65%), so it only catches order-of-magnitude regressions. Do not tune against it.
 
-### Performance Baselines
+### Judging a change
 
-Current baselines are stored in `performance_baselines.json`:
-
-| Query Type | Baseline | Current | Metrics |
-|------------|----------|---------|---------|
-| **SimpleSelect** | 280 ns/op | ~265 ns/op | 9 allocs, 536 B/op |
-| **ComplexQuery** | 1100 ns/op | ~1020 ns/op | 36 allocs, 1433 B/op |
-| **WindowFunction** | 450 ns/op | ~400 ns/op | 14 allocs, 760 B/op |
-| **CTE** | 450 ns/op | ~395 ns/op | 14 allocs, 880 B/op |
-| **INSERT** | 350 ns/op | ~310 ns/op | 14 allocs, 536 B/op |
-
-**Thresholds:**
-- **Failure:** 20% degradation from baseline
-- **Warning:** 10% degradation from baseline
-
-### Test Output Examples
-
-**Successful Run:**
-```
-✓ All performance tests passed (5 tests, 0 failures, 0 warnings)
-```
-
-**Regression Detected:**
-```
-✗ ComplexQuery: 25.5% slower (1381 ns/op vs 1100 ns/op baseline)
-⚠ SimpleSelect: 12.3% slower (approaching threshold)
-```
-
-### Updating Baselines
-
-**When to Update:**
-- Intentional optimizations improve performance
-- Parser architecture changes fundamentally
-- New SQL features are added
-
-**How to Update:**
-1. Run baseline benchmark with multiple iterations
-2. Calculate new conservative baselines (add 10-15% buffer)
-3. Update `performance_baselines.json`
-4. Update the `updated` timestamp
-5. Commit with clear explanation
+Use the interleaved A/B gate (`task bench:gate`) and the allocs/op and B/op baselines (`task bench:baseline`). Thresholds, how to update baselines and the claims policy are in [PERFORMANCE_METHODOLOGY.md](PERFORMANCE_METHODOLOGY.md). Baselines are recorded as measured, never with a safety buffer.
 
 ### CI/CD Integration
 
 ```yaml
 # GitHub Actions example
-- name: Performance Regression Tests
+- name: Performance Smoke Test
   run: |
     go test -v ./pkg/sql/parser/ -run TestPerformanceRegression
   timeout-minutes: 2
@@ -1309,11 +1259,7 @@ Current baselines are stored in `performance_baselines.json`:
 
 ### Troubleshooting Regression Tests
 
-**Test Timing Variance:** System load, CPU throttling, background processes affect results. Run tests multiple times.
-
-**False Positives:** Check system load, run test 3-5 times to confirm, consider increasing tolerance.
-
-**Baseline Drift:** If performance is consistently better, document improvements and update baselines.
+`TestPerformanceRegression` is a smoke test only. Do not raise its tolerance or rewrite `performance_baselines.json` to make it pass. For timing variance, false positives and baseline questions, follow [PERFORMANCE_METHODOLOGY.md](PERFORMANCE_METHODOLOGY.md): interleaved A/B runs, the A/B gate, and per-architecture allocation baselines.
 
 ---
 

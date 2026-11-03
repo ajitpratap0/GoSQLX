@@ -18,6 +18,7 @@ import (
 	"bytes"
 	"sync"
 
+	"github.com/ajitpratap0/GoSQLX/internal/poolstats"
 	"github.com/ajitpratap0/GoSQLX/pkg/metrics"
 	"github.com/ajitpratap0/GoSQLX/pkg/models"
 	sqldialect "github.com/ajitpratap0/GoSQLX/pkg/sql/dialect"
@@ -94,7 +95,7 @@ func GetTokenizer() *Tokenizer {
 
 	// Record pool metrics
 	metrics.RecordPoolGet(true) // Assume from pool (New() creates if empty)
-	metrics.RecordNamedPoolGet("tokenizer")
+	poolstats.Tokenizer.Get()
 
 	return t
 }
@@ -141,7 +142,7 @@ func PutTokenizer(t *Tokenizer) {
 
 		// Record pool return
 		metrics.RecordPoolPut()
-		metrics.RecordNamedPoolPut("tokenizer")
+		poolstats.Tokenizer.Put()
 	}
 }
 
@@ -221,6 +222,7 @@ func (t *Tokenizer) Reset() {
 	// Invalidate the toSQLPosition line hint: it is only valid for the
 	// input and lineStarts it was built on.
 	t.posCacheLine = 0
+	t.curLi, t.curLS, t.nextLS = 0, 0, 0
 	t.tokStart = models.Location{}
 	t.inlLine, t.inlScan, t.inlCode = 0, 0, false
 

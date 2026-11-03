@@ -83,6 +83,13 @@ tasks:
       - echo "Running tests with race detection..."
       - CGO_ENABLED=1 go test -race -timeout 120s $(go list ./... | grep -v /cbinding)
 
+  test:race:shard:
+    desc: "Run one shard of test:race (CI). Usage: task test:race:shard SHARD=0 SHARDS=4"
+    requires:
+      vars: [SHARD, SHARDS]
+    cmds:
+      - bash scripts/race-shard.sh {{.SHARD}} {{.SHARDS}}
+
   test:cbinding:
     desc: Test C binding package (requires CGO)
     env:

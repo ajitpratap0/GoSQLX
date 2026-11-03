@@ -26,3 +26,10 @@ func BenchPreprocessOwned(toks []models.TokenWithSpan) []models.TokenWithSpan {
 func BenchParseTokens(p *Parser, toks []models.TokenWithSpan) (*ast.AST, error) {
 	return p.parseTokens(toks)
 }
+
+// EOFSentinelClean reports whether p's EOF sentinel is still the zero token.
+func EOFSentinelClean(p *Parser) bool { return p.eof == (models.TokenWithSpan{}) }
+
+// CursorRepointed reports whether p holds no pointer into a token slice, i.e.
+// currentToken is its own EOF sentinel (the state after Reset or Release).
+func CursorRepointed(p *Parser) bool { return p.currentToken == &p.eof && p.tokens == nil }

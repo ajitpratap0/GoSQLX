@@ -42,6 +42,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     `TestPerformanceRegression` are now documented as a smoke test only, and
     its never-enforced `TokenizationThroughput` and `EndToEndSustained` entries
     are removed.
+  - Gate: code-layout randomization. Each arm is now 20 test binaries linked
+    with `-ldflags=-randlayout=<seed>` (base and head share seeds), one per
+    round, and time is judged by an exact Mann-Whitney U over the per-layout
+    medians with Benjamini-Hochberg false-discovery control at 0.01 across
+    the suite. Changes that only move code (padding a struct, one extra
+    linker-emitted function) no longer read as regressions on some runner
+    CPUs. The A/A control is now A/A': the base revision under a disjoint
+    seed set, which measures the layout variance. The report names the
+    runner CPU and each benchmark's layout spread. Defaults are now 20 rounds
+    of 100ms (`-k`/`LAYOUTS` sets the layout count, `-k 0` turns it off).
+    A noisy A/A' re-links every arm with fresh seeds before its one re-run.
+    The report lists the benchmarks with under 80% estimated power to catch
+    a lone +5% slowdown, and warns when the layout count cannot reach the
+    Benjamini-Hochberg level at all (matrix mode). Gate timeouts are now
+    35 minutes for the step and 45 for the job (worst case measured at
+    21.7 minutes on an EPYC 7763).
 
 ### Changed
 - **Perf measurement methodology** (W0-15; benchmark tooling only, no library

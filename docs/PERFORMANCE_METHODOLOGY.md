@@ -24,12 +24,12 @@ task bench:matrix FILTER='^BenchmarkParseRW$' BENCHTIME=200ms
 
 ```bash
 task bench:ab                          # working tree vs origin/main, gated suite
-task bench:ab BASE=v1.17.0 ROUNDS=15
+task bench:ab BASE=v1.17.0 ROUNDS=40   # two rounds per layout
 task bench:ab BENCH='./pkg/gosqlx=^BenchmarkParseE2E$'    # one benchmark
 task bench:gate                        # exactly what CI runs, locally
 ```
 
-`scripts/perf/ab.sh` builds test binaries for both revisions with the same toolchain and runs them interleaved in ABBA order for at least 10 rounds. The primary metric uses `GOGC=off GOMAXPROCS=1` (`-cpu 1`, pinned to one CPU where `taskset` exists): garbage-collection-free mutator time has low variance and ranks queries the same way the `-cpu 4` headline does. A secondary default-GC `-cpu 1` arm (`-g`, enabled by `bench:gate`) is reported for information only; `-cpu 4` is measured only by `task bench:profile` and the competitor harness. Results go through `benchstat` at alpha 0.01. The benchmarks that are gated are listed in `scripts/perf/gate-suite.txt`.
+`scripts/perf/ab.sh` builds test binaries for both revisions with the same toolchain and runs them interleaved, rotating the arm order every round (20 rounds of 100ms by default). Each arm is built as `K` binaries (default 20, `-k`/`LAYOUTS`) linked with `-ldflags=-randlayout=<seed>`, which shuffles the order of every Go function; base and head use the same seeds and round `r` runs layout `r mod K`. Where the linker places a function moves its timing by a few percent through alignment, branch-predictor and cache aliasing, and by different amounts on different CPU models. With one binary per arm, a change that adds no work but shifts the code by a few bytes could look 3-10% slower or faster (PR #931 and its control runs). With randomized layouts, every arm averages over the same layout distribution. `-k 0` builds one default-layout binary per arm, as before. The primary metric uses `GOGC=off GOMAXPROCS=1` (`-cpu 1`, pinned to one CPU where `taskset` exists): garbage-collection-free mutator time has low variance and ranks queries the same way the `-cpu 4` headline does. A secondary default-GC `-cpu 1` arm (`-g`, enabled by `bench:gate`) is reported for information only; `-cpu 4` is measured only by `task bench:profile` and the competitor harness. Results go through `benchstat` at alpha 0.01. The benchmarks that are gated are listed in `scripts/perf/gate-suite.txt`.
 
 Tips: run on an idle machine, close other benchmarks, and re-run once if the A/A control (below) reports noise. Never weaken a test or a threshold to make a result pass.
 
@@ -39,12 +39,14 @@ Tips: run on an idle machine, close other benchmarks, and re-run once if the A/A
 
 | Check | Rule |
 |---|---|
-| Time | a gated benchmark is 3% or more slower at p < 0.01 (Mann-Whitney U), or the gated geomean is 1.5% or more slower |
+| Time | a gated benchmark is 3% or more slower and significant at a false discovery rate of 0.01 over the suite (Benjamini-Hochberg on exact Mann-Whitney U p-values of the per-layout medians), or the gated geomean is 1.5% or more slower at p < 0.01 (the same test on per-layout suite geomeans) |
 | `allocs/op` | any gated benchmark allocates more |
 | `B/op` | any gated benchmark rises by more than 2% |
 | Instructions/op | any case executes more than 1.5% more instructions (`cmd/perfdriver`) |
 
-**A/A control.** Each run also compares the base binary against a second copy of itself. If more than 10% of benchmarks move by more than 3% in that A/A comparison, the machine is too noisy: the job re-runs once, and a second noisy result is **inconclusive**, which is neutral, not a failure.
+**Why per-layout medians and false-discovery control.** The layout is the experimental unit: every sample of one binary shares its layout offset, so pooling a binary's samples treats one draw of that offset as many independent ones. Each layout is summarised by the median of its samples and the two arms' `K` values are compared with an exact Mann-Whitney U test. Under "no change" the per-layout values of both arms are exchangeable, so the test is calibrated whatever shape the layout distribution has. Equal seeds do not give corresponding layouts once the symbol lists differ, so the test is unpaired. Testing 30-odd benchmarks at 0.01 each would still flag about one no-op change in ten; the Benjamini-Hochberg step-up keeps the chance of any false time regression on a no-op change at 1%. A lone single-benchmark regression then needs p <= 0.01/m. With 20 layouts, simulation puts the chance of catching a 5% slowdown at about 80% when its layout spread is 3%, and a 10% slowdown at about 95% with a 5% spread. Benchmarks that already vary more than that across layouts cannot resolve smaller changes from one run. The report's `layout sd` column shows each benchmark's spread.
+
+**A/A' control.** Each run also measures the base revision under a second, disjoint set of layout seeds, interleaved with the A/B arms, so the control sees the same layout variance as the A/B comparison. The previous identical-binary A/A could not see it. If more than 10% of benchmarks move by more than 3% in that A/A' comparison, the run is too noisy: the job re-runs once, and a second noisy result is **inconclusive**, which is neutral, not a failure. The report also counts how many benchmarks the time rule would have flagged in the A/A' comparison; that should almost always be 0.
 
 **Verdicts:** `pass`, `regression`, `noisy` (re-run), `inconclusive`. The gate starts in shadow mode (it reports but never fails); enforcement is switched on after the shadow period. A maintainer can accept a known regression with the `perf-regression-accepted` label plus a written justification in the PR body.
 

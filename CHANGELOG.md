@@ -42,6 +42,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     `TestPerformanceRegression` are now documented as a smoke test only, and
     its never-enforced `TokenizationThroughput` and `EndToEndSustained` entries
     are removed.
+  - Gate: code-layout randomization. Each arm is now 20 test binaries linked
+    with `-ldflags=-randlayout=<seed>` (base and head share seeds), one per
+    round, and time is judged by an exact Mann-Whitney U over the per-layout
+    medians with Benjamini-Hochberg false-discovery control at 0.01 across
+    the suite. Changes that only move code (padding a struct, one extra
+    linker-emitted function) no longer read as regressions on some runner
+    CPUs. The A/A control is now A/A': the base revision under a disjoint
+    seed set, which measures the layout variance. The report names the
+    runner CPU and each benchmark's layout spread. Defaults are now 20 rounds
+    of 100ms (`-k`/`LAYOUTS` sets the layout count, `-k 0` turns it off).
 
 ### Performance
 - **`ast.ReleaseAST` is O(1) for parser-built trees that hold no pooled nodes**: the parser counts the nodes it draws from the AST pools and tells

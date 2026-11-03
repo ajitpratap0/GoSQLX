@@ -23,6 +23,93 @@ func median(xs []float64) float64 {
 	return (s[m-1] + s[m]) / 2
 }
 
+// groupMedians returns the median of every non-empty group.
+func groupMedians(groups [][]float64) []float64 {
+	out := make([]float64, 0, len(groups))
+	for _, g := range groups {
+		if len(g) > 0 {
+			out = append(out, median(g))
+		}
+	}
+	return out
+}
+
+// mean returns the arithmetic mean of xs, or NaN for an empty slice.
+func mean(xs []float64) float64 {
+	if len(xs) == 0 {
+		return math.NaN()
+	}
+	var s float64
+	for _, x := range xs {
+		s += x
+	}
+	return s / float64(len(xs))
+}
+
+// relSD returns the sample standard deviation of xs relative to their mean,
+// in percent; NaN for fewer than two values or a zero mean.
+func relSD(xs []float64) float64 {
+	m := mean(xs)
+	if len(xs) < 2 || m == 0 || math.IsNaN(m) {
+		return math.NaN()
+	}
+	var ss float64
+	for _, x := range xs {
+		ss += (x - m) * (x - m)
+	}
+	return math.Sqrt(ss/float64(len(xs)-1)) / math.Abs(m) * 100
+}
+
+// minMWP is the smallest two-sided p-value an exact Mann-Whitney U test can
+// produce for samples of n1 and n2 distinct values: complete separation,
+// 2 / C(n1+n2, n1). With few layouts it can exceed alpha, so no difference
+// could ever be significant.
+func minMWP(n1, n2 int) float64 {
+	if n1 < 1 || n2 < 1 {
+		return 1
+	}
+	c := 1.0
+	for i := 1; i <= n1; i++ {
+		c = c * float64(n2+i) / float64(i)
+	}
+	return math.Min(1, 2/c)
+}
+
+// benjaminiHochberg returns which of the p-values are rejected when the false
+// discovery rate is controlled at q (Benjamini and Hochberg, 1995): sort the
+// m p-values, find the largest rank i with p_(i) <= i*q/m, and reject the i
+// smallest. When no hypothesis is false (a change that adds no work) the
+// false discovery rate equals the family-wise error rate, so the chance that
+// any benchmark is flagged stays at q instead of growing with the suite. The
+// procedure is valid for independent and positively dependent tests; the
+// benchmarks of one binary share code, which makes their layout effects
+// positively dependent if anything. NaN p-values are never rejected.
+func benjaminiHochberg(ps []float64, q float64) []bool {
+	type entry struct {
+		p float64
+		i int
+	}
+	es := make([]entry, 0, len(ps))
+	for i, p := range ps {
+		if !math.IsNaN(p) {
+			es = append(es, entry{p, i})
+		}
+	}
+	sort.SliceStable(es, func(a, b int) bool { return es[a].p < es[b].p })
+	m := float64(len(es))
+	k := -1
+	for r, e := range es {
+		if e.p <= float64(r+1)*q/m {
+			k = r
+		}
+	}
+	out := make([]bool, len(ps))
+	for r := 0; r <= k; r++ {
+		out[es[r].i] = true
+	}
+	return out
+}
+
 func minMax(xs []float64) (lo, hi float64) {
 	lo, hi = math.Inf(1), math.Inf(-1)
 	for _, x := range xs {

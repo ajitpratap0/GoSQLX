@@ -98,6 +98,9 @@ func stackReserveParseMoves(sql string, parse func(string) error) (bool, error) 
 	return got.moved, got.err
 }
 
+// Not skipped under -race on purpose: it asserts only that the reserved stack
+// is not copied again during a parse (no stack move), which holds for any
+// landing class, so the 16-32 KiB race variance does not affect it.
 func TestStackReserve_CoversPortableCorpus(t *testing.T) {
 	apis := []struct {
 		name  string

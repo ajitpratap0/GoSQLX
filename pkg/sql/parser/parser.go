@@ -439,7 +439,7 @@ func (p *Parser) preprocess(tokens []models.TokenWithSpan) []models.TokenWithSpa
 // []models.TokenWithSpan (already normalised by preprocessTokens or p.preprocess) and returns
 // the parsed AST.
 func (p *Parser) parseTokens(tokens []models.TokenWithSpan) (*ast.AST, error) {
-	stackgrow.Reserve() // backstop for low-level callers; a no-op after tokscratch reserved
+	stackgrow.Reserve() // backstop for low-level callers; a no-op after tokscratch reserved (only while the frames between tokscratch and parseTokens stay under about 3 KiB; TestStackReserve_CoversPortableCorpus guards the gosqlx paths)
 	p.tokens = tokens
 	p.currentPos = 0
 	p.implicitEnd = 0
@@ -665,7 +665,7 @@ func (p *Parser) ParseContext(ctx context.Context, tokens []token.Token) (*ast.A
 // parseContextTokens is the core context-aware parsing routine. It takes
 // a preprocessed []models.TokenWithSpan and respects ctx for cancellation.
 func (p *Parser) parseContextTokens(ctx context.Context, tokens []models.TokenWithSpan) (*ast.AST, error) {
-	stackgrow.Reserve() // backstop for low-level callers; a no-op after tokscratch reserved
+	stackgrow.Reserve() // backstop for low-level callers; a no-op after tokscratch reserved (only while the frames between tokscratch and parseTokens stay under about 3 KiB; TestStackReserve_CoversPortableCorpus guards the gosqlx paths)
 	// Check context before starting
 	if err := ctx.Err(); err != nil {
 		return nil, err

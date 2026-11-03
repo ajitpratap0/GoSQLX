@@ -72,9 +72,16 @@ jobs:
         name: codecov-${{ matrix.os }}-${{ matrix.go }}
       continue-on-error: true
 
-  race-check:
-    name: Race Detector
+  # `task test:race` split across runners (scripts/race-shard.sh): the heavy
+  # race packages starve each other on one 4-vCPU runner and cross the
+  # 120s per-package timeout. Same packages, flags and timeout as the task.
+  race-shard:
+    name: Race Detector (shard ${{ matrix.shard }}/4)
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3]
     steps:
     - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
@@ -88,10 +95,24 @@ jobs:
     - name: Install Task
       run: go install github.com/go-task/task/v3/cmd/task@v3.54.0
 
-    # Use Taskfile so CI matches local `task test:race` (pkg/cbinding excluded -
-    # it requires CGO and is exercised separately in the cbinding-race job).
+    # pkg/cbinding is excluded - it requires CGO and is exercised separately
+    # in the cbinding-race job.
     - name: Run tests with race detector
-      run: task test:race
+      run: task test:race:shard SHARD=${{ matrix.shard }} SHARDS=4
+
+  # Required status check name; passes only if every shard passed.
+  race-check:
+    name: Race Detector
+    runs-on: ubuntu-latest
+    needs: race-shard
+    if: always()
+    steps:
+    - name: Check race shards
+      env:
+        RESULT: ${{ needs.race-shard.result }}
+      run: |
+        echo "race shards: $RESULT"
+        [ "$RESULT" = success ]
 
   cbinding-race:
     name: Race Detector (CGO / cbinding)

@@ -80,7 +80,10 @@ type Context struct {
 
 	// nodesCache holds an immutable *nodeCollector snapshot for Nodes(), read and
 	// published with atomic pointer operations (no shared lock). A snapshot whose
-	// root differs from c.AST is stale.
+	// root differs from c.AST is stale. It is an unsafe.Pointer rather than
+	// atomic.Pointer[nodeCollector] because atomic.Pointer embeds noCopy, and
+	// Context is a public struct that callers copy by value (go vet copylocks
+	// would then flag every such copy).
 	nodesCache unsafe.Pointer
 }
 

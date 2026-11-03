@@ -239,7 +239,22 @@ git push origin vX.Y.Z
 
 # 5. Create GitHub release
 gh release create vX.Y.Z --title "vX.Y.Z: Title" --notes "..."
+
+# 6. Post-tag refresh (same day)
+gh run list --workflow bench-compare.yml --branch vX.Y.Z
+git checkout -b docs/vX.Y.Z-post-tag
+# Run on a quiet machine; refresh benchmark results and print parse medians.
+task release:refresh-benchmarks TAG=vX.Y.Z
+# Hand-copy printed medians into performance_baselines.json and website/src/data/metrics.ts.
+# Update the llms.txt performance line, then sync README banners and pins.
+task docs:metrics
+git push origin docs/vX.Y.Z-post-tag
+gh pr create --fill
+# After the PR merges, run:
+gh workflow run claims-drift.yml
 ```
+
+Why: the tag push runs bench-compare automatically, but publishing its results is a PR; claims-drift fails weekly until that PR lands.
 
 ## Pre-commit Hooks
 

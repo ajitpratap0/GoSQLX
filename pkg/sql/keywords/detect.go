@@ -14,7 +14,12 @@
 
 package keywords
 
-import "strings"
+import (
+	"math/bits"
+	"strings"
+	"unicode"
+	"unicode/utf8"
+)
 
 // dialectHint represents a keyword or pattern that suggests a specific SQL dialect,
 // along with a weight indicating how strongly it suggests that dialect.
@@ -101,7 +106,9 @@ var dialectHints = []dialectHint{
 //
 // The detection uses a scoring system where each dialect-specific keyword
 // contributes a weight to its dialect's score. The dialect with the highest
-// total score wins. If no dialect-specific patterns are found, DialectGeneric
+// total score wins. Each hint contributes at most once. Ties are resolved in
+// the order Oracle, Snowflake, PostgreSQL, MySQL, SQL Server, MariaDB, SQLite.
+// If no dialect-specific patterns are found, DialectGeneric
 // is returned.
 //
 // Detection heuristics include:
@@ -131,49 +138,172 @@ var dialectHints = []dialectHint{
 //
 //	dialect = keywords.DetectDialect("SELECT * FROM users")
 //	// dialect == DialectGeneric
+var dialectPriority = [7]SQLDialect{DialectOracle, DialectSnowflake, DialectPostgreSQL, DialectMySQL, DialectSQLServer, DialectMariaDB, DialectSQLite}
+
+// The automaton is built once from the hint table; each output bit identifies
+// one weighted hint, including duplicate patterns with different dialects.
+type matcherNode struct {
+	next    [128]int
+	fail    int
+	outputs uint64
+}
+type matcherHint struct {
+	length  int
+	dialect int
+	weight  int
+}
+
+var detectorNodes []matcherNode
+var detectorHints []matcherHint
+
+func init() {
+	detectorNodes = append(detectorNodes, matcherNode{})
+	add := func(pattern string, dialect, weight int) {
+		id := len(detectorHints)
+		detectorHints = append(detectorHints, matcherHint{len(pattern), dialect, weight})
+		node := 0
+		for i := 0; i < len(pattern); i++ {
+			c := pattern[i]
+			next := detectorNodes[node].next[c]
+			if next == 0 {
+				next = len(detectorNodes)
+				detectorNodes = append(detectorNodes, matcherNode{})
+				detectorNodes[node].next[c] = next
+			}
+			node = next
+		}
+		detectorNodes[node].outputs |= uint64(1) << id
+	}
+	for _, h := range dialectHints {
+		for i, d := range dialectPriority {
+			if h.dialect == d {
+				add(h.pattern, i, h.weight)
+				break
+			}
+		}
+	}
+	add("NVL", 0, 1)
+	add("NVL", 1, 1)
+	queue := make([]int, 0, len(detectorNodes))
+	for c := 0; c < 128; c++ {
+		if n := detectorNodes[0].next[c]; n != 0 {
+			queue = append(queue, n)
+		}
+	}
+	for head := 0; head < len(queue); head++ {
+		n := queue[head]
+		fail := detectorNodes[n].fail
+		detectorNodes[n].outputs |= detectorNodes[fail].outputs
+		for c := 0; c < 128; c++ {
+			child := detectorNodes[n].next[c]
+			if child != 0 {
+				detectorNodes[child].fail = detectorNodes[fail].next[c]
+				queue = append(queue, child)
+			} else {
+				detectorNodes[n].next[c] = detectorNodes[fail].next[c]
+			}
+		}
+	}
+}
+
 func DetectDialect(sql string) SQLDialect {
 	if sql == "" {
 		return DialectGeneric
 	}
-
-	upper := strings.ToUpper(sql)
-	scores := make(map[SQLDialect]int)
-
-	// Check keyword-based hints
-	for _, hint := range dialectHints {
-		if containsWord(upper, hint.pattern) {
-			scores[hint.dialect] += hint.weight
+	scores := dialectScores(sql)
+	best := 0
+	result := DialectGeneric
+	for i, score := range scores {
+		if score > best {
+			best = score
+			result = dialectPriority[i]
 		}
 	}
+	return result
+}
 
-	// Syntactic checks for identifier quoting styles
-	if strings.Contains(sql, "`") {
-		scores[DialectMySQL] += 3
-	}
-	if strings.Contains(sql, "[") && strings.Contains(sql, "]") {
-		scores[DialectSQLServer] += 3
-	}
-	if strings.Contains(sql, "::") {
-		scores[DialectPostgreSQL] += 3
-	}
-
-	// NVL is shared between Oracle and Snowflake, so only add a small weight
-	if containsWord(upper, "NVL") {
-		scores[DialectOracle] += 1
-		scores[DialectSnowflake] += 1
-	}
-
-	// Find the dialect with the highest score
-	bestDialect := DialectGeneric
-	bestScore := 0
-	for dialect, score := range scores {
-		if score > bestScore {
-			bestScore = score
-			bestDialect = dialect
+// dialectScores streams uppercase characters through the matcher. Non-ASCII
+// uppercase runes cannot occur in an ASCII hint and all their UTF-8 bytes are
+// non-word bytes, so one sentinel preserves both matching and byte boundaries.
+func dialectScores(sql string) (scores [7]int) {
+	var seen, pending, history uint64
+	node := 0
+	backtick, left, right, colon, previousColon := false, false, false, false, false
+	// A match remains pending until the following byte establishes its end
+	// boundary. History supplies the byte before each possible match.
+	feed := func(c byte) {
+		if !isWordChar(c) {
+			for pending != 0 {
+				id := bits.TrailingZeros64(pending)
+				bit := uint64(1) << id
+				if seen&bit == 0 {
+					h := detectorHints[id]
+					scores[h.dialect] += h.weight
+					seen |= bit
+				}
+				pending &^= bit
+			}
+		} else {
+			pending = 0
+		}
+		if c >= 128 {
+			c = 0
+		}
+		node = detectorNodes[node].next[c]
+		out := detectorNodes[node].outputs &^ seen
+		for out != 0 {
+			id := bits.TrailingZeros64(out)
+			bit := uint64(1) << id
+			if history&(uint64(1)<<(detectorHints[id].length-1)) == 0 {
+				pending |= bit
+			}
+			out &^= bit
+		}
+		history <<= 1
+		if isWordChar(c) {
+			history |= 1
 		}
 	}
-
-	return bestDialect
+	for i := 0; i < len(sql); {
+		c := sql[i]
+		i++
+		if c >= utf8.RuneSelf {
+			r, n := utf8.DecodeRuneInString(sql[i-1:])
+			i += n - 1
+			r = unicode.ToUpper(r)
+			if r < utf8.RuneSelf {
+				c = byte(r)
+			} else {
+				c = 128
+			}
+		} else if c >= 'a' && c <= 'z' {
+			c -= 'a' - 'A'
+		}
+		switch c {
+		case '`':
+			backtick = true
+		case '[':
+			left = true
+		case ']':
+			right = true
+		}
+		if c == ':' && previousColon {
+			colon = true
+		}
+		previousColon = c == ':'
+		feed(c)
+	}
+	feed(0)
+	if backtick {
+		scores[3] += 3
+	}
+	if left && right {
+		scores[4] += 3
+	}
+	if colon {
+		scores[2] += 3
+	}
+	return
 }
 
 // containsWord checks if the uppercase SQL string contains the given pattern
@@ -183,6 +313,8 @@ func DetectDialect(sql string) SQLDialect {
 // A word boundary is defined as either:
 //   - The start or end of the string
 //   - A non-alphanumeric, non-underscore character
+//
+//nolint:unused // Retained for the existing package helper contract.
 func containsWord(upper string, pattern string) bool {
 	idx := 0
 	patLen := len(pattern)

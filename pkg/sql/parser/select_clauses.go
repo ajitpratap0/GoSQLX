@@ -20,6 +20,7 @@ package parser
 
 import (
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -411,8 +412,11 @@ func (p *Parser) parseJoinClauses(firstRef ast.TableReference, joins []ast.JoinC
 			}
 		}
 
-		if cap(joins) == 0 {
-			joins = make([]ast.JoinClause, 0, 2)
+		if len(joins) == cap(joins) {
+			// Empty slice: size it from the JOINs ahead. Full slice handed in
+			// by a caller (parenthesized group, comma join): grow by the hint
+			// once instead of letting append double repeatedly.
+			joins = slices.Grow(joins, p.joinsCap())
 		}
 		jc.Type = joinType
 		jc.Left = leftTable
@@ -1261,4 +1265,45 @@ func (p *Parser) isOrderByAll() bool {
 		return true
 	}
 	return equalsUpper(p.peekToken().Token.Value, "NULLS")
+}
+
+// joinHintWindow bounds how far joinsCap looks ahead for JOIN tokens, so the
+// scan stays O(1) per statement on huge scripts.
+const joinHintWindow = 256
+
+// joinsCap returns the initial capacity for a statement's joins slice: 1 plus
+// the number of JOIN tokens that follow at the same parenthesis depth, capped
+// at 8. The scan stops at a depth-0 ';', UNION, EXCEPT or INTERSECT, or at the
+// ')' closing the enclosing level, so neighbouring statements, set-operation
+// branches and nested subqueries never inflate the hint. It also looks at most
+// joinHintWindow tokens ahead. It runs only when a JOIN is about to be
+// appended to an empty or full slice (a full one is handed in by a
+// parenthesized join group or a comma join), so join-free statements pay
+// nothing. The result
+// is a capacity hint only; append still grows past it. Oracle MINUS is
+// tokenized as an identifier, so it is not a boundary and a MINUS chain may
+// over-count later branches' JOINs (bounded by the cap and window).
+func (p *Parser) joinsCap() int {
+	end := min(p.currentPos+joinHintWindow, len(p.tokens))
+	n, depth := 1, 0 // n counts the join being appended; its JOIN token is already consumed
+	for i := p.currentPos; i < end && n < 8; i++ {
+		switch p.tokens[i].Token.Type {
+		case models.TokenTypeJoin:
+			if depth == 0 {
+				n++
+			}
+		case models.TokenTypeLParen:
+			depth++
+		case models.TokenTypeRParen:
+			if depth == 0 {
+				return n
+			}
+			depth--
+		case models.TokenTypeSemicolon, models.TokenTypeUnion, models.TokenTypeExcept, models.TokenTypeIntersect:
+			if depth == 0 {
+				return n
+			}
+		}
+	}
+	return n
 }

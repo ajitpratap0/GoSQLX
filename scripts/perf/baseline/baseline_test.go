@@ -264,3 +264,14 @@ func TestUpdateFromInputDoesNotStampLocalToolchain(t *testing.T) {
 		t.Fatalf("external provenance not preserved: go_version=%q comment=%q", f.GoVersion, f.Comment)
 	}
 }
+
+// TestGCOffEnvHasNoMemoryLimit: the baseline gates absolute allocs/op, which
+// stay exact only when no collection drains the pools, so it runs GOGC=off
+// with no GOMEMLIMIT and drops any inherited GOGC or GOMEMLIMIT.
+func TestGCOffEnvHasNoMemoryLimit(t *testing.T) {
+	got := gcOffEnv([]string{"PATH=/bin", "GOGC=100", "GOMEMLIMIT=64MiB", "GOMEMLIMITX=keep"})
+	want := []string{"PATH=/bin", "GOMEMLIMITX=keep", "GOGC=off"}
+	if strings.Join(got, " ") != strings.Join(want, " ") {
+		t.Fatalf("gcOffEnv = %q, want %q", got, want)
+	}
+}

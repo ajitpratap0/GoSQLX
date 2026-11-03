@@ -42,17 +42,83 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     `TestPerformanceRegression` are now documented as a smoke test only, and
     its never-enforced `TokenizationThroughput` and `EndToEndSustained` entries
     are removed.
+  - Gate: code-layout randomization. Each arm is now 20 test binaries linked
+    with `-ldflags=-randlayout=<seed>` (base and head share seeds), one per
+    round, and time is judged by an exact Mann-Whitney U over the per-layout
+    medians with Benjamini-Hochberg false-discovery control at 0.01 across
+    the suite. Changes that only move code (padding a struct, one extra
+    linker-emitted function) no longer read as regressions on some runner
+    CPUs. The A/A control is now A/A': the base revision under a disjoint
+    seed set, which measures the layout variance. The report names the
+    runner CPU and each benchmark's layout spread. Defaults are now 20 rounds
+    of 100ms (`-k`/`LAYOUTS` sets the layout count, `-k 0` turns it off).
+    A noisy A/A' re-links every arm with fresh seeds before its one re-run.
+    The report lists the benchmarks with under 80% estimated power to catch
+    a lone +5% slowdown, and warns when the layout count cannot reach the
+    Benjamini-Hochberg level at all (matrix mode). Gate timeouts are now
+    35 minutes for the step and 45 for the job (worst case measured at
+    21.7 minutes on an EPYC 7763).
+
+### Changed
+- **Release process**: add a post-tag benchmark refresh task and require claims to match the release tag.
+- **Perf measurement methodology** (W0-15; benchmark tooling only, no library
+  behaviour change):
+  - Every `GOGC=off` measurement now also sets `GOMEMLIMIT` (default `64MiB`;
+    override with `PERF_GOMEMLIMIT` or the `gomemlimit` dispatch input, `off`
+    unsets it): `scripts/perf/ab.sh` (so `task bench:ab` and `task bench:gate`),
+    `scripts/perf/profile.sh`, `task bench:matrix` and the competitor
+    harness's `cmd/publish` (`-gomemlimit`, recorded as
+    `configs[].gomemlimit` in the results JSON). An invalid value is refused
+    up front instead of making every benchmark binary panic.
+    Without a limit a GC-off heap only grows, so allocations land on fresh pages
+    whose first-touch faults were timed and profiled; the first benchmark of
+    each test binary absorbed most of them. GOGC=off timings are therefore not
+    comparable with runs made before this change; base and head of one run
+    always use the same setting. The limit lets the collector run, so timings
+    and instructions/op (`perfdriver`, cachegrind) are no longer pure mutator
+    work but include a small GC share (about 0.25% of Ir/op for `join`), and
+    the pool drains it causes make allocs/op vary for large-input and
+    low-iteration benchmarks (not in the gated suite, where it stays exact).
+  - `scripts/perf/baseline` deliberately keeps `GOGC=off` with no
+    `GOMEMLIMIT` (and drops an inherited one): it gates absolute allocs/op and
+    B/op only, which are exact only when no collection drains the pools.
+    `docs/PERFORMANCE_METHODOLOGY.md` documents the whole method.
+  - `perf-gate.yml` and `bench-compare.yml` build with one pinned Go release,
+    `PERF_GO_VERSION` 1.26.9 (the toolchain of the recorded baselines); the
+    gate used to take 1.26.1 from `go.mod`.
+  - `perf-gate.yml` profile mode adds cachegrind cache simulation (32 KiB
+    8-way L1i, the Zen 3/4/5 geometry) of the gap queries: instructions, L1i
+    and L1d misses per operation and the functions with the most L1i misses.
+  - New `matrix` dispatch mode in `perf-gate.yml`: the interleaved A/B over the
+    full benchmark matrix (`scripts/perf/matrix-suite.sh`), report only: the
+    job is named "Matrix A/B (report only)" and the report heading is
+    "Matrix A/B: VERDICT (report only, not a gate verdict)" (`ab.sh -T`,
+    `gate -report-only -title`).
+  - Every perf artifact and report names the runner CPU model, and the reports
+    compare by in-job ratio only: the gate report says so, and the competitor
+    harness summary leads with GoSQLX/peer time ratios (`cmd/publish -ratios`)
+    instead of absolute ns/op.
+  - The LSP benchmark server (`setupTestServer`) discards its output, so
+    benchmarks that publish diagnostics no longer time a growing buffer.
 
 ### Performance
 - **Parser**: function arguments, the SELECT list, GROUP BY and ORDER BY are now collected on parser-owned scratch stacks and copied once into exact-size slices (previously grown with `append` from a fixed capacity). A `FunctionCall` with up to three arguments shares one allocation with its argument array, and a `SelectStatement` shares one with its single `From` entry and, for up to four columns, its `Columns` array. Parse allocations drop 28% on `aggregate` (18 to 13) and 12% on `complex` (50 to 44), and instructions per parse drop 1-5% on every SELECT shape. Time on the amd64 CI gate (five runs on three runner CPU models): `simple_select` 4-5% faster, `subquery` 3-6% faster; the other SELECT shapes vary by runner from about 4% faster to 4% slower. INSERT, UPDATE and DELETE execute the same instructions as before but measured up to 5% slower on AMD Zen 5 runners (`insert` +5% in two of three runs, and the mixed `ParseRW/sqlite/medium` corpus up to +5%), and within 2% on the other runner CPUs. Zero-instruction-change controls (only padding `Parser` or only moving code in the binary) moved single benchmarks by +3.4% to -4.5% on the same gate, so these are most likely code and data placement effects rather than added work. User-visible: `Columns`, `GroupBy`, `OrderBy` and `FunctionCall.Arguments` now have `len == cap` (they used to carry spare capacity), so a caller that appends to them reallocates instead of writing into spare space; trees are otherwise identical (guarded by the behaviour goldens). No exported API change. [W4-04]
+- **Linter**: rule L007 (keyword case consistency) scans words without allocating (substring words, ASCII upper-casing into a stack buffer before the keyword lookup). Output is unchanged. On the canonical benchmarks (Apple M4, local), `BenchmarkLintRule/L007` allocates about 98% fewer objects (72565 to 1194 allocs/op) and about 97% fewer bytes, and `BenchmarkLintRW` allocates about 12.5% fewer objects. [W6-03]
+- **gosqlx**: errors returned by `Parse`, `Validate`, `Lint` and the tree helpers now wrap the sentinel and the underlying error in an unexported `wrapErr` that builds its message lazily, instead of `fmt.Errorf("%w: %w", ...)` on every failure. Error text, `errors.Is` and `errors.As` behaviour are unchanged; only the unexported concrete error type differs. The saving applies to callers that only check `errors.Is`/`errors.As` or drop the message: when the message is built (`err.Error()`, as the LSP and CLI do) the gain is about 2 allocs/op and 3-4% B/op per error (syntax_mid 21 -> 19 allocs). Because the message is now built on demand, `Error()` reflects any later mutation of the inner `*errors.Error` reached through `errors.As`; previously the text was fixed at creation. [W1-03]
+- **Linter L010**: scans bytes in a single pass instead of rebuilding
+  substrings and running a regular expression; `BenchmarkLintRule/L010` is 67.5% faster on the
+  amd64 CI gate and allocates nothing (was 20,758 allocs/op); LintRW
+  allocs/op drop 2.3-3.2% across all dialects.
+- **Parser joins slice sized from a JOIN lookahead [W4-03]**: when the first JOIN of a FROM clause is appended, `parseJoinClauses` counts the JOIN tokens that follow at the same paren depth (within 256 tokens, stopping at `;`, UNION/EXCEPT/INTERSECT or the closing `)`) and allocates the slice with capacity 1 + that count (max 8) instead of a fixed 2. Join-free statements pay nothing. `ParseE2E/join` and `complex` B/op drop about 20%; no API or AST change. A full slice handed in by a parenthesized join group or a comma table is grown by the same hint. Known edge cost: shapes the lookahead cannot see (`(a JOIN b) JOIN c`, `a JOIN b, c`) incur one extra allocation per statement; the gated suite is unaffected.
 - **`ast.ReleaseAST` is O(1) for parser-built trees that hold no pooled nodes**: the parser counts the nodes it draws from the AST pools and tells
   `ReleaseAST` through an internal hook (`pkg/sql/internal/astrelease`). When
   the count is zero, which covers ordinary SELECT/INSERT/UPDATE/DELETE
   without tuples or arrays, the release walk is skipped. Trees with pooled
   draws and all hand-built trees keep the full walk. No exported API or
   output changes. [W4-01]
-- **Linter**: `linter.Context` gains an additive `Nodes()` method returning every AST node in `ast.Inspect` preorder, built once per `Context` and cached (reset by `WithAST`). The 13 AST rules that each walked the tree with `ast.Inspect` now iterate that shared list; violations are unchanged (none of those walks pruned a subtree). [W6-05a]
+- **Linter**: `linter.Context` gains an additive `Nodes()` method returning every AST node in `ast.Inspect` preorder, built once per `Context` and cached (reset by `WithAST`). The 13 AST rules that each walked the tree with `ast.Inspect` now iterate that shared list; violations are unchanged (none of those walks pruned a subtree); `Nodes()` is safe for concurrent callers (lock-free atomic per-`Context` snapshot, no process-wide lock), so rules may still `Check` one shared `Context` in parallel. [W6-05a]
 - **Security**: `Scanner.ScanSQL` now skips the dollar-quote stripping lexer, the identifier-tautology regex and the ClickHouse table-function regex on inputs that provably cannot match them, using linear-time necessary-condition guards (`hasDollarOpener`, `hasEqualIdentPair`, `hasTableFnCandidate`). The regexes still confirm every finding, so results are byte-identical (guarded by a guards-on/off equivalence test over the real-world corpus and 200k random inputs); no API or behaviour change. [W6-01]
+- **Security**: `Scanner.ScanSQL` checks every pattern's required literals with a single Aho-Corasick pass over the input, folding case inline instead of searching once per literal per pattern. Alternation-, optional- and assertion-aware filters include the ClickHouse table-function names, stacked-query verbs and UNION system schemas, so fewer regexes run. The case-folded input copy and its pool are removed. Findings remain byte-identical, guarded by presence-exactness differential tests, generated-match soundness tests and the existing prefilter on/off and guards equivalence sweeps. No API or behaviour change. [W6-08]
 - **Tokenizer**: `time.Now`/`time.Since` are now read only when metrics are enabled (previously twice per tokenization even when disabled). If metrics are toggled on mid-call the call is not recorded. No API or token-output change [W1-02].
 - **Tokenizer**: keyword and compound-keyword-start lookup now uses a single fused-hash open-addressed table (one FNV-1a hash computed while upper-casing, one probe) instead of two Go map lookups per identifier. The table is filled in a fixed order (hot keywords first, then sorted) so its probe layout is deterministic across processes. No behaviour change; token output is identical [W2-01].
 - **Tokenizer**: token Start/End locations are now computed from a cached current-line window (a range check and a subtraction) instead of two calls to the non-inlinable position lookup per token; out-of-window offsets take the existing lookup. Token positions are identical, including after a UTF-8 BOM and across pooled-tokenizer reuse (guarded by an oracle test). [W2-02]
@@ -64,7 +130,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Fingerprint, formatter, transform**: `fingerprint.Normalize`/`Fingerprint`, `Formatter.Format` and `transform.ParseSQL`/`ParseSQLWithDialect` tokenize through the internal pooled token scratch instead of the public `TokenizeString`. `Normalize` allocates 42-70% fewer bytes/op and `transform.ParseSQL` 49-78% fewer, with 2-3 fewer allocs/op and no output change. [W5-01]
 - **Formatter**: compact formatting (`ast.CompactStyle()`, no clause newlines, no semicolon, no line width, no target dialect, preserve or upper keyword case) now renders SELECT, INSERT, UPDATE and DELETE through each statement's `SQL()` instead of the visitor renderer, and a single compact statement skips the parts slice and join. `Render/compact/*` is 27-49% faster with 1 alloc/op (was 4-42) and 60-82% fewer bytes/op; `Normalize` and `Fingerprint` are 6-13% faster with 15-39% fewer allocs. Output is byte-identical (differential test over every corpus statement in 9 dialects and all option combinations); lowercase keywords, target-dialect rewrites, set operations and ALTER TABLE keep the visitor path. [W5-02]
 
+### Behavior changes
+- **Linter L010 (redundant whitespace)**: violation columns are byte
+  positions on lines with invalid UTF-8. They were shifted before because
+  invalid bytes were replaced with U+FFFD (3 bytes) while scanning. Valid
+  UTF-8 is unaffected.
+
 ### Fixed
+- Claims checks now verify that published benchmark results were measured at the latest release tag commit.
 - **AST**: `AlterTableStatement.SQL()` now separates multiple ALTER TABLE actions with commas, matching the compact formatter and preserving action boundaries when re-parsed.
 - **Playground**: the GoSQLX WebAssembly module now runs in a Web Worker, so
   loading the parser and every parse, format, lint, analyze, highlight and

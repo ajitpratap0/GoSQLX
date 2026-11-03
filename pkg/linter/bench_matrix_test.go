@@ -6,6 +6,7 @@ package linter_test
 // Lint benchmark matrix (PLAN.md 2.2, W0-06).
 //
 //	BenchmarkLintRW/<dialect>              gosqlx.LintWithDialect over the dialect's real-world statements
+//	BenchmarkLintParallel/{rules,lint}     b.RunParallel over every RW dialect; guards cross-Context contention (shared locks)
 //	BenchmarkLintPhase/<phase>/<dialect>   phase in {tokenize, parse, rules}; the three approximately decompose LintRW
 //	BenchmarkLintRule/L001..L030           one rule over the contexts of every dialect
 //
@@ -172,6 +173,56 @@ func BenchmarkLintRW(b *testing.B) {
 	}
 }
 
+// BenchmarkLintParallel runs the documented concurrent pattern (many goroutines,
+// each linting its own Contexts) so a process-wide lock or shared cache line on
+// the lint path shows up; the serial benchmarks cannot see it. Run with
+// -cpu 1,8. ns/op is one pass over every RW dialect per goroutine iteration.
+func BenchmarkLintParallel(b *testing.B) {
+	b.Run("rules", func(b *testing.B) {
+		var protos []*linter.Context
+		for _, d := range rwDialects(b) {
+			for _, in := range buildInputs(b, rwSQL(b, d), d) {
+				protos = append(protos, in.proto)
+			}
+		}
+		rules := benchRules()
+		b.ReportAllocs()
+		b.ResetTimer()
+		b.RunParallel(func(pb *testing.PB) {
+			scratch := new(linter.Context)
+			for pb.Next() {
+				for _, p := range protos {
+					*scratch = *p
+					for _, r := range rules {
+						_, _ = r.Check(scratch)
+					}
+				}
+			}
+		})
+	})
+	b.Run("lint", func(b *testing.B) {
+		type item struct {
+			s string
+			d keywords.SQLDialect
+		}
+		var items []item
+		for _, d := range rwDialects(b) {
+			for _, s := range rwSQL(b, d) {
+				items = append(items, item{s, keywords.SQLDialect(d)})
+			}
+		}
+		b.ReportAllocs()
+		b.ResetTimer()
+		b.RunParallel(func(pb *testing.PB) {
+			for pb.Next() {
+				for _, it := range items {
+					_, _ = gosqlx.LintWithDialect(it.s, it.d)
+				}
+			}
+		})
+	})
+}
+
 func BenchmarkLintPhase(b *testing.B) {
 	rules := benchRules()
 	for _, d := range rwDialects(b) {
@@ -264,10 +315,10 @@ func BenchmarkLintRule(b *testing.B) {
 // has no lazily filled cache. When a field such as a cached node list is added
 // (PLAN W6-05) this fails: update lintInput.reset to clear it, then this list.
 func TestLintContextHasNoCachedState(t *testing.T) {
-	// nodes, nodesAST and nodesBuilt are the Context.Nodes() cache (W6-05a). lintInput.reset
+	// nodesCache is the Context.Nodes() cache (W6-05a). lintInput.reset
 	// clears them: it overwrites scratch by value from proto, and proto never
 	// reaches a rule, so its cache is always empty.
-	want := []string{"SQL", "Lines", "Tokens", "AST", "ParseErr", "Filename", "nodes", "nodesAST", "nodesBuilt"}
+	want := []string{"SQL", "Lines", "Tokens", "AST", "ParseErr", "Filename", "nodesCache"}
 	typ := reflect.TypeOf(linter.Context{})
 	var got []string
 	for i := 0; i < typ.NumField(); i++ {

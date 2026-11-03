@@ -153,15 +153,24 @@ func TestParseMatrix(t *testing.T) {
 }
 
 func TestEnvForGOGC(t *testing.T) {
-	base := []string{"PATH=/bin", "GOGC=50"}
-	if got := envForGOGC(base, "default"); slices.ContainsFunc(got, func(s string) bool { return strings.HasPrefix(s, "GOGC=") }) {
-		t.Errorf("default must drop an inherited GOGC, got %v", got)
+	base := []string{"PATH=/bin", "GOGC=50", "GOMEMLIMIT=9GiB"}
+	isGC := func(s string) bool { return strings.HasPrefix(s, "GOGC=") || strings.HasPrefix(s, "GOMEMLIMIT=") }
+	if got := envForGOGC(base, "default", defaultGOMEMLIMIT); slices.ContainsFunc(got, isGC) {
+		t.Errorf("default must drop an inherited GOGC and GOMEMLIMIT, got %v", got)
 	}
-	got := envForGOGC(base, "off")
+	// GOGC=off always comes with a memory limit, so the heap stops growing
+	// onto fresh pages whose first-touch faults would be timed (W0-15).
+	got := envForGOGC(base, "off", defaultGOMEMLIMIT)
 	if !slices.Contains(got, "GOGC=off") || slices.Contains(got, "GOGC=50") {
 		t.Errorf("off must replace GOGC, got %v", got)
 	}
-	if len(base) != 2 || base[1] != "GOGC=50" {
+	if !slices.Contains(got, "GOMEMLIMIT="+defaultGOMEMLIMIT) || slices.Contains(got, "GOMEMLIMIT=9GiB") {
+		t.Errorf("off must set GOMEMLIMIT=%s in place of the inherited one, got %v", defaultGOMEMLIMIT, got)
+	}
+	if got := envForGOGC(base, "off", "off"); slices.ContainsFunc(got, func(s string) bool { return strings.HasPrefix(s, "GOMEMLIMIT=") }) {
+		t.Errorf("-gomemlimit=off must leave GOMEMLIMIT unset, got %v", got)
+	}
+	if len(base) != 3 || base[1] != "GOGC=50" {
 		t.Error("envForGOGC must not modify its input")
 	}
 }
@@ -309,20 +318,20 @@ func TestMethodCommandIsCopyPasteable(t *testing.T) {
 	}
 	for _, c := range cfgs {
 		for _, re := range []string{v1BenchRegex, "^Benchmark(Parse|ParseORM|Lex)$"} {
-			cmd := shellCommand(c.GOGC, benchArgs(re, 10, c.CPU, "200ms"))
+			cmd := shellCommand(c.GOGC, defaultGOMEMLIMIT, benchArgs(re, 10, c.CPU, "200ms"))
 			if bad := unquotedMeta(cmd); bad != "" {
 				t.Errorf("%q has unquoted shell metacharacters %q", cmd, bad)
 			}
 			if strings.Contains(cmd, "GOGC=default") {
 				t.Errorf("%q uses GOGC=default, which is not a GOGC value", cmd)
 			}
-			if (c.GOGC == "off") != strings.HasPrefix(cmd, "GOGC=off ") {
-				t.Errorf("%q: GOGC=off prefix must appear exactly for the off configuration", cmd)
+			if (c.GOGC == "off") != strings.HasPrefix(cmd, "GOGC=off GOMEMLIMIT="+defaultGOMEMLIMIT+" ") {
+				t.Errorf("%q: the GOGC=off GOMEMLIMIT prefix must appear exactly for the off configuration", cmd)
 			}
 		}
 	}
 	want := "go test -run='^$' -bench='^BenchmarkParse$' -benchmem -count=10 -cpu=1 -benchtime=200ms ."
-	if got := shellCommand("default", benchArgs(v1BenchRegex, 10, 1, "200ms")); got != want {
+	if got := shellCommand("default", defaultGOMEMLIMIT, benchArgs(v1BenchRegex, 10, 1, "200ms")); got != want {
 		t.Errorf("v1 command = %q, want %q", got, want)
 	}
 }
@@ -349,5 +358,47 @@ func TestNoReleaseVariantGetsCommitVersion(t *testing.T) {
 		if p.Module == gosqlxModule && p.Version != "commit 0123456789ab" {
 			t.Errorf("%s version = %q, want the measured commit", p.ID, p.Version)
 		}
+	}
+}
+
+// TestRatioMarkdown: the job summary compares GoSQLX with each peer by the
+// ratio of their times in the same job, geomean over the groups both ran,
+// and names the runner CPU; it never prints absolute ns/op, which do not
+// carry across jobs (hosted runners differ in CPU model).
+func TestRatioMarkdown(t *testing.T) {
+	cfgs := []ConfigV{{ID: "cpu4-gogc-default"}, {ID: "cpu1-gogc-off"}}
+	cell := func(c, g, p, cfg string, ns float64) CellV {
+		return CellV{Cell: c, Group: g, Parser: p, Config: cfg, NsPerOp: ns, Samples: 10}
+	}
+	cells := []CellV{
+		cell("Parse", "join", "gosqlx", "cpu4-gogc-default", 12345),
+		cell("Parse", "join", "vitess", "cpu4-gogc-default", 10288),
+		cell("Parse", "aggregate", "gosqlx", "cpu4-gogc-default", 13000),
+		cell("Parse", "aggregate", "vitess", "cpu4-gogc-default", 10000),
+		cell("Parse", "join", "tidb", "cpu4-gogc-default", 24690),
+		cell("Parse", "join", "gosqlx", "cpu1-gogc-off", 900),
+		cell("Parse", "join", "vitess", "cpu1-gogc-off", 1000),
+		cell("Lex", "join", "gosqlx_scratch", "cpu4-gogc-default", 3700),
+		cell("Lex", "join", "vitess", "cpu4-gogc-default", 1000),
+	}
+	md := ratioMarkdown(cells, cfgs, "AMD EPYC 7763 64-Core Processor")
+	for _, want := range []string{
+		"Runner CPU: `AMD EPYC 7763 64-Core Processor`",
+		"| Parse | gosqlx | vitess | 1.25 | 0.90 | 2 | aggregate 1.30 |",
+		"| Parse | gosqlx | tidb | 0.50 |  | 1 | join 0.50 |",
+		"| Lex | gosqlx_scratch | vitess | 3.70 |  | 1 | join 3.70 |",
+		"| cell | GoSQLX | peer | cpu4-gogc-default | cpu1-gogc-off |",
+	} {
+		if !strings.Contains(md, want) {
+			t.Errorf("ratio table lacks %q:\n%s", want, md)
+		}
+	}
+	for _, abs := range []string{"12345", "10288", "24690"} {
+		if strings.Contains(md, abs) {
+			t.Errorf("ratio table prints the absolute time %s:\n%s", abs, md)
+		}
+	}
+	if i, j := strings.Index(md, "| Parse |"), strings.Index(md, "| Lex |"); i < 0 || j < 0 || i > j {
+		t.Errorf("rows must follow the family order (Parse before Lex):\n%s", md)
 	}
 }

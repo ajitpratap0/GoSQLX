@@ -4,14 +4,19 @@
 // Command gate judges an interleaved A/B benchmark run (scripts/perf/ab.sh)
 // against the perf-gate rules of the performance plan (section 2.6):
 //
-//   - time (GOGC=off, GOMAXPROCS=1): a benchmark regresses at >= +3% with
-//     p < 0.01 (Mann-Whitney U), or the geomean regresses by >= 1.5%;
+//   - time (GOGC=off, GOMAXPROCS=1): a benchmark regresses at >= +3% when
+//     its Mann-Whitney U p-value survives Benjamini-Hochberg at a false
+//     discovery rate of 0.01 over the suite, or the geomean regresses by
+//     >= 1.5% at p < 0.01. When the inputs carry "layout: <seed>" lines
+//     (ab.sh links K binaries per arm with -ldflags=-randlayout), the tests
+//     run over the per-layout medians, so a regression must hold across code
+//     layouts;
 //   - allocs/op must not increase; B/op must not rise more than 2%;
 //   - instructions/op (cmd/perfdriver) must not rise more than 1.5%;
-//   - an A/A control (a second, interleaved run of the base binary) where more
-//     than 10% of benchmarks move over 3% is noisy: the caller re-runs once
-//     (exit status "noisy"), and a second noisy run is inconclusive, which is
-//     neutral, not a failure.
+//   - an A/A' control (the base revision under a disjoint set of layout
+//     seeds, interleaved) where more than 10% of benchmarks move over 3% is
+//     noisy: the caller re-runs once (exit status "noisy"), and a second noisy
+//     run is inconclusive, which is neutral, not a failure.
 //
 // It writes a Markdown report and a one-word status file (pass, regression,
 // noisy or inconclusive). It exits 1 only with -enforce, on a regression,
@@ -58,7 +63,7 @@ func realMain(args []string, stdout io.Writer) (int, error) {
 	var (
 		basePath    = fs.String("base", "", "primary base arm (Go benchmark output)")
 		headPath    = fs.String("head", "", "primary head arm")
-		aaPath      = fs.String("aa", "", "A/A control: a second run of the base binary")
+		aaPath      = fs.String("aa", "", "A/A' control: the base revision under disjoint layout seeds")
 		secBasePath = fs.String("sec-base", "", "secondary (default GC) base arm")
 		secHeadPath = fs.String("sec-head", "", "secondary (default GC) head arm")
 		irBasePath  = fs.String("ir-base", "", "instructions/op of the base arm")
@@ -73,6 +78,8 @@ func realMain(args []string, stdout io.Writer) (int, error) {
 		envPath     = fs.String("env", "", "environment description file to embed")
 		bstatPath   = fs.String("benchstat", "", "benchstat output file to embed")
 		irNote      = fs.String("ir-note", "", "why instruction counts were not measured")
+		title       = fs.String("title", "", "report heading (default \"Perf gate\")")
+		reportOnly  = fs.Bool("report-only", false, "the run is a comparison, not a gate (heading says so); exclusive with -enforce")
 	)
 	fs.Float64Var(&cfg.Alpha, "alpha", cfg.Alpha, "significance level")
 	fs.Float64Var(&cfg.TimePct, "time-pct", cfg.TimePct, "per-benchmark time threshold, %")
@@ -87,6 +94,9 @@ func realMain(args []string, stdout io.Writer) (int, error) {
 	}
 	if fs.NArg() > 0 {
 		return 0, fmt.Errorf("unexpected arguments: %v", fs.Args())
+	}
+	if *reportOnly && *enforce {
+		return 0, errors.New("-report-only and -enforce are exclusive")
 	}
 	if *basePath == "" || *headPath == "" {
 		return 0, errors.New("-base and -head are required")
@@ -117,9 +127,12 @@ func realMain(args []string, stdout io.Writer) (int, error) {
 		return 0, errors.New("no benchmark results in -base or -head")
 	}
 
-	meta := Meta{BaseRef: *baseRef, HeadRef: *headRef, Settings: *settings, Accepted: *accepted, IrNote: *irNote, Mode: "shadow"}
-	if *enforce {
+	meta := Meta{BaseRef: *baseRef, HeadRef: *headRef, Settings: *settings, Accepted: *accepted, IrNote: *irNote, Mode: "shadow", Title: *title}
+	switch {
+	case *enforce:
 		meta.Mode = "enforce"
+	case *reportOnly:
+		meta.Mode = "report"
 	}
 	var err error
 	if meta.Env, err = readOptional(*envPath); err != nil {

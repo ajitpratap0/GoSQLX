@@ -20,6 +20,9 @@ type bench struct {
 	noise  float64 // relative half-width of the time jitter (0.01 = +-1%)
 	bytes  float64
 	allocs float64
+	// layoutSpread overrides layoutArm's per-layout spread for this
+	// benchmark when non-zero.
+	layoutSpread float64
 }
 
 // lcg is a tiny deterministic generator so the synthetic samples are the same
@@ -479,5 +482,46 @@ func TestUnequalSampleCountsSkipTheGeomeanP(t *testing.T) {
 	}
 	if res.Verdict != Pass {
 		t.Fatalf("verdict = %s (%v), want pass", res.Verdict, res.Reasons)
+	}
+}
+
+// Hosted runners hand out different CPU models from job to job (C0 saw an
+// EPYC 7763, 9V74 and 9V45 in one checkpoint), so the report names the CPU
+// it ran on and says that only the in-job ratios are comparable.
+func TestReportNamesTheRunnerCPU(t *testing.T) {
+	s := suite()
+	res := evaluate(t, s, s, s, DefaultConfig())
+	for _, tc := range []struct{ name, env, want string }{
+		{"cpu model line", "date: x\ncpu model:   AMD EPYC 7763 64-Core Processor (x86_64)\ngo: go1.26.9\n", "AMD EPYC 7763 64-Core Processor (x86_64)"},
+		{"lscpu only", "go: go1.26.9\n\nArchitecture: x86_64\nModel name:                           AMD EPYC 9V45 96-Core Processor\n", "AMD EPYC 9V45 96-Core Processor"},
+		{"no environment", "", "unknown"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			md := Markdown(res, DefaultConfig(), Meta{BaseRef: "aaaa", HeadRef: "bbbb", Env: tc.env})
+			want := "Runner CPU: `" + tc.want + "`"
+			if !strings.Contains(md, want) {
+				t.Fatalf("report does not name the runner CPU, want %q in:\n%s", want, md)
+			}
+			if !strings.Contains(md, "ratios") {
+				t.Errorf("report does not say that only in-job ratios are compared:\n%s", md)
+			}
+		})
+	}
+}
+
+// TestReportOnlyHeadingIsNotAGateVerdict: a matrix comparison must not read
+// as a gate verdict in a job summary.
+func TestReportOnlyHeadingIsNotAGateVerdict(t *testing.T) {
+	s := suite()
+	res := evaluate(t, s, s, nil, DefaultConfig())
+	md := Markdown(res, DefaultConfig(), Meta{Mode: "report", Title: "Matrix A/B"})
+	if !strings.Contains(md, "## Matrix A/B: PASS (report only, not a gate verdict)") {
+		t.Fatalf("report-only heading missing:\n%s", md)
+	}
+	if strings.Contains(md, "Perf gate:") || strings.Contains(md, "shadow mode") {
+		t.Fatalf("report-only report reads like a gate verdict:\n%s", md)
+	}
+	if md := Markdown(res, DefaultConfig(), Meta{Mode: "shadow"}); !strings.Contains(md, "## Perf gate: PASS (shadow mode") {
+		t.Fatalf("default heading changed:\n%s", md)
 	}
 }

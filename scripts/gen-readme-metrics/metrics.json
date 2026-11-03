@@ -1,7 +1,7 @@
 {
   "stage": "parse",
   "query": "SELECT id, name FROM users",
-  "parse_ns_per_op": 349,
+  "parse_ns_per_op": 363,
   "hardware": "Apple M4",
   "go_version": "1.27",
   "runs": 20,
@@ -10,5 +10,5 @@
   "sql99_estimate": "~80–85%",
   "dialects": 8,
   "race_conditions": 0,
-  "measured_at": "2026-10-22"
+  "measured_at": "2026-11-02"
 }

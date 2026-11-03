@@ -13,3 +13,8 @@
 ./pkg/gosqlx         ^BenchmarkParseFresh$/^(simple_select|join|complex)$
 ./pkg/gosqlx         ^BenchmarkPoolGetPut$/^serial$
 ./pkg/sql/tokenizer  ^BenchmarkTokenize$/^scratch$/^(join|complex|insert)$
+./pkg/fingerprint    ^BenchmarkNormalize$/^(simple_select|join|complex)$
+./pkg/transform      ^BenchmarkTransformParse$/^(simple_select|join|complex)$
+./pkg/linter         ^BenchmarkLintRW$
+./pkg/linter         ^BenchmarkLintRule$/^(L007|L010)$
+./pkg/gosqlx         ^BenchmarkParseError$/^(syntax_mid|syntax_end|tokenize|long_prefix)$/^(parse|validate)$

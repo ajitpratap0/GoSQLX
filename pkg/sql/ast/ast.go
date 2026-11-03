@@ -207,6 +207,12 @@ type AST struct {
 	// ExecuteSlashPositions holds the source positions of marked execute lines,
 	// parallel to ExecuteSlash and nil for scripts without execute commands.
 	ExecuteSlashPositions []models.Location
+
+	// noPooledDraws is set by the parser (through internal/astrelease) when it
+	// built this tree and drew no node from the ast pools. ReleaseAST then
+	// skips the release walk. It is never set on hand-built trees, which keep
+	// the full walk, and ReleaseAST clears it before the container is pooled.
+	noPooledDraws bool
 }
 
 // UnicodeIdentifierSpelling pairs a decoded name with its source spelling.

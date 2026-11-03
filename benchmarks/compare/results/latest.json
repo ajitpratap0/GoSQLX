@@ -1,11 +1,11 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-10-22T11:43:59Z",
-  "commit": "e9c5db91a8eda4f98d697a53dbd997ebd5255c87",
+  "generatedAt": "2026-11-02T22:10:14Z",
+  "commit": "3655a37900cd391b7673e3e22a27699862cd3a28",
   "dirty": false,
   "goVersion": "go1.26.9",
   "hardware": {
-    "cpu": "AMD EPYC 9V74 80-Core Processor",
+    "cpu": "AMD EPYC 7763 64-Core Processor",
     "goos": "linux",
     "goarch": "amd64",
     "numCPU": 4
@@ -23,7 +23,7 @@
       "id": "gosqlx",
       "name": "GoSQLX",
       "module": "github.com/ajitpratap0/GoSQLX",
-      "version": "commit e9c5db91a8ed",
+      "version": "commit 3655a37900cd",
       "dialect": "multi-dialect (default settings)",
       "cgo": false
     },
@@ -123,16 +123,16 @@
       "parser": "gosqlx",
       "supported": true,
       "samples": 10,
-      "nsPerOp": 2138,
-      "bytesPerOp": 2226,
-      "allocsPerOp": 7
+      "nsPerOp": 2160,
+      "bytesPerOp": 816,
+      "allocsPerOp": 5
     },
     {
       "query": "simple_select",
       "parser": "pg_query_go",
       "supported": true,
       "samples": 10,
-      "nsPerOp": 10811,
+      "nsPerOp": 14024,
       "bytesPerOp": 1816,
       "allocsPerOp": 36
     },
@@ -141,7 +141,7 @@
       "parser": "vitess",
       "supported": true,
       "samples": 10,
-      "nsPerOp": 1587,
+      "nsPerOp": 2193,
       "bytesPerOp": 840,
       "allocsPerOp": 14
     },
@@ -150,7 +150,7 @@
       "parser": "tidb",
       "supported": true,
       "samples": 10,
-      "nsPerOp": 2800.5,
+      "nsPerOp": 3781.5,
       "bytesPerOp": 2296,
       "allocsPerOp": 24
     },
@@ -159,7 +159,7 @@
       "parser": "xwb1989",
       "supported": true,
       "samples": 10,
-      "nsPerOp": 7896.5,
+      "nsPerOp": 10582.5,
       "bytesPerOp": 20008,
       "allocsPerOp": 26
     },
@@ -168,16 +168,16 @@
       "parser": "gosqlx",
       "supported": true,
       "samples": 10,
-      "nsPerOp": 4439,
-      "bytesPerOp": 3940,
-      "allocsPerOp": 21
+      "nsPerOp": 5118.5,
+      "bytesPerOp": 1562,
+      "allocsPerOp": 18
     },
     {
       "query": "select_where",
       "parser": "pg_query_go",
       "supported": true,
       "samples": 10,
-      "nsPerOp": 32989.5,
+      "nsPerOp": 42716,
       "bytesPerOp": 5024,
       "allocsPerOp": 111
     },
@@ -186,7 +186,7 @@
       "parser": "vitess",
       "supported": true,
       "samples": 10,
-      "nsPerOp": 3625.5,
+      "nsPerOp": 4941,
       "bytesPerOp": 1528,
       "allocsPerOp": 30
     },
@@ -195,7 +195,7 @@
       "parser": "tidb",
       "supported": true,
       "samples": 10,
-      "nsPerOp": 7217.5,
+      "nsPerOp": 9702,
       "bytesPerOp": 6032,
       "allocsPerOp": 50
     },
@@ -204,7 +204,7 @@
       "parser": "xwb1989",
       "supported": true,
       "samples": 10,
-      "nsPerOp": 11826,
+      "nsPerOp": 15835.5,
       "bytesPerOp": 21128,
       "allocsPerOp": 69
     },
@@ -213,16 +213,16 @@
       "parser": "gosqlx",
       "supported": true,
       "samples": 10,
-      "nsPerOp": 6918.5,
-      "bytesPerOp": 6056.5,
-      "allocsPerOp": 20
+      "nsPerOp": 7892,
+      "bytesPerOp": 2363,
+      "allocsPerOp": 17
     },
     {
       "query": "join",
       "parser": "pg_query_go",
       "supported": true,
       "samples": 10,
-      "nsPerOp": 43527.5,
+      "nsPerOp": 56958,
       "bytesPerOp": 6624,
       "allocsPerOp": 145
     },
@@ -231,7 +231,7 @@
       "parser": "vitess",
       "supported": true,
       "samples": 10,
-      "nsPerOp": 4699.5,
+      "nsPerOp": 6426.5,
       "bytesPerOp": 1776,
       "allocsPerOp": 33
     },
@@ -240,7 +240,7 @@
       "parser": "tidb",
       "supported": true,
       "samples": 10,
-      "nsPerOp": 8534.5,
+      "nsPerOp": 11719,
       "bytesPerOp": 6416,
       "allocsPerOp": 54
     },
@@ -249,7 +249,7 @@
       "parser": "xwb1989",
       "supported": true,
       "samples": 10,
-      "nsPerOp": 25930.5,
+      "nsPerOp": 35788.5,
       "bytesPerOp": 62480,
       "allocsPerOp": 97
     },
@@ -258,16 +258,16 @@
       "parser": "gosqlx",
       "supported": true,
       "samples": 10,
-      "nsPerOp": 4817.5,
-      "bytesPerOp": 4189,
-      "allocsPerOp": 21
+      "nsPerOp": 5613.5,
+      "bytesPerOp": 1858,
+      "allocsPerOp": 18
     },
     {
       "query": "aggregate",
       "parser": "pg_query_go",
       "supported": true,
       "samples": 10,
-      "nsPerOp": 25832,
+      "nsPerOp": 33956.5,
       "bytesPerOp": 4072,
       "allocsPerOp": 86
     },
@@ -276,7 +276,7 @@
       "parser": "vitess",
       "supported": true,
       "samples": 10,
-      "nsPerOp": 3090,
+      "nsPerOp": 4230,
       "bytesPerOp": 1240,
       "allocsPerOp": 25
     },
@@ -285,7 +285,7 @@
       "parser": "tidb",
       "supported": true,
       "samples": 10,
-      "nsPerOp": 6572,
+      "nsPerOp": 8875.5,
       "bytesPerOp": 5152,
       "allocsPerOp": 45
     },
@@ -294,7 +294,7 @@
       "parser": "xwb1989",
       "supported": true,
       "samples": 10,
-      "nsPerOp": 12192,
+      "nsPerOp": 16218.5,
       "bytesPerOp": 20960,
       "allocsPerOp": 61
     },
@@ -303,16 +303,16 @@
       "parser": "gosqlx",
       "supported": true,
       "samples": 10,
-      "nsPerOp": 4076,
-      "bytesPerOp": 3605,
-      "allocsPerOp": 16
+      "nsPerOp": 4833,
+      "bytesPerOp": 1874,
+      "allocsPerOp": 14
     },
     {
       "query": "subquery",
       "parser": "pg_query_go",
       "supported": true,
       "samples": 10,
-      "nsPerOp": 23526.5,
+      "nsPerOp": 30556,
       "bytesPerOp": 3816,
       "allocsPerOp": 75
     },
@@ -321,7 +321,7 @@
       "parser": "vitess",
       "supported": true,
       "samples": 10,
-      "nsPerOp": 3976.5,
+      "nsPerOp": 5584.5,
       "bytesPerOp": 4200,
       "allocsPerOp": 28
     },
@@ -330,7 +330,7 @@
       "parser": "tidb",
       "supported": true,
       "samples": 10,
-      "nsPerOp": 6279,
+      "nsPerOp": 8525,
       "bytesPerOp": 5224,
       "allocsPerOp": 44
     },
@@ -339,7 +339,7 @@
       "parser": "xwb1989",
       "supported": true,
       "samples": 10,
-      "nsPerOp": 21828,
+      "nsPerOp": 29743,
       "bytesPerOp": 61896,
       "allocsPerOp": 59
     },
@@ -348,16 +348,16 @@
       "parser": "gosqlx",
       "supported": true,
       "samples": 10,
-      "nsPerOp": 5828.5,
-      "bytesPerOp": 4934,
-      "allocsPerOp": 24
+      "nsPerOp": 6738,
+      "bytesPerOp": 2395,
+      "allocsPerOp": 21
     },
     {
       "query": "cte",
       "parser": "pg_query_go",
       "supported": true,
       "samples": 10,
-      "nsPerOp": 33529.5,
+      "nsPerOp": 43664.5,
       "bytesPerOp": 5472,
       "allocsPerOp": 112
     },
@@ -366,7 +366,7 @@
       "parser": "vitess",
       "supported": true,
       "samples": 10,
-      "nsPerOp": 4415,
+      "nsPerOp": 6074,
       "bytesPerOp": 1896,
       "allocsPerOp": 37
     },
@@ -375,7 +375,7 @@
       "parser": "tidb",
       "supported": true,
       "samples": 10,
-      "nsPerOp": 9157.5,
+      "nsPerOp": 12576,
       "bytesPerOp": 6936,
       "allocsPerOp": 64
     },
@@ -393,16 +393,16 @@
       "parser": "gosqlx",
       "supported": true,
       "samples": 10,
-      "nsPerOp": 4062,
-      "bytesPerOp": 3243.5,
-      "allocsPerOp": 14
+      "nsPerOp": 4456.5,
+      "bytesPerOp": 1313,
+      "allocsPerOp": 11
     },
     {
       "query": "window",
       "parser": "pg_query_go",
       "supported": true,
       "samples": 10,
-      "nsPerOp": 21010,
+      "nsPerOp": 27459.5,
       "bytesPerOp": 3440,
       "allocsPerOp": 70
     },
@@ -411,7 +411,7 @@
       "parser": "vitess",
       "supported": true,
       "samples": 10,
-      "nsPerOp": 3903,
+      "nsPerOp": 5347.5,
       "bytesPerOp": 3976,
       "allocsPerOp": 25
     },
@@ -420,7 +420,7 @@
       "parser": "tidb",
       "supported": true,
       "samples": 10,
-      "nsPerOp": 6021.5,
+      "nsPerOp": 8321.5,
       "bytesPerOp": 4688,
       "allocsPerOp": 44
     },
@@ -438,16 +438,16 @@
       "parser": "gosqlx",
       "supported": true,
       "samples": 10,
-      "nsPerOp": 18293,
-      "bytesPerOp": 17667,
-      "allocsPerOp": 56
+      "nsPerOp": 21006,
+      "bytesPerOp": 6573,
+      "allocsPerOp": 50
     },
     {
       "query": "complex",
       "parser": "pg_query_go",
       "supported": true,
       "samples": 10,
-      "nsPerOp": 116212.5,
+      "nsPerOp": 152897.5,
       "bytesPerOp": 17512,
       "allocsPerOp": 398
     },
@@ -456,7 +456,7 @@
       "parser": "vitess",
       "supported": true,
       "samples": 10,
-      "nsPerOp": 12304.5,
+      "nsPerOp": 16633.5,
       "bytesPerOp": 6401,
       "allocsPerOp": 73
     },
@@ -465,7 +465,7 @@
       "parser": "tidb",
       "supported": true,
       "samples": 10,
-      "nsPerOp": 21303,
+      "nsPerOp": 30113,
       "bytesPerOp": 16048,
       "allocsPerOp": 124
     },
@@ -474,7 +474,7 @@
       "parser": "xwb1989",
       "supported": true,
       "samples": 10,
-      "nsPerOp": 42654,
+      "nsPerOp": 57680,
       "bytesPerOp": 66120,
       "allocsPerOp": 253
     },
@@ -483,16 +483,16 @@
       "parser": "gosqlx",
       "supported": true,
       "samples": 10,
-      "nsPerOp": 3185,
-      "bytesPerOp": 2554,
-      "allocsPerOp": 19
+      "nsPerOp": 3549,
+      "bytesPerOp": 824,
+      "allocsPerOp": 17
     },
     {
       "query": "insert",
       "parser": "pg_query_go",
       "supported": true,
       "samples": 10,
-      "nsPerOp": 13373,
+      "nsPerOp": 17490.5,
       "bytesPerOp": 2432,
       "allocsPerOp": 51
     },
@@ -501,7 +501,7 @@
       "parser": "vitess",
       "supported": true,
       "samples": 10,
-      "nsPerOp": 2202,
+      "nsPerOp": 2876,
       "bytesPerOp": 952,
       "allocsPerOp": 17
     },
@@ -510,7 +510,7 @@
       "parser": "tidb",
       "supported": true,
       "samples": 10,
-      "nsPerOp": 3913.5,
+      "nsPerOp": 5349.5,
       "bytesPerOp": 2832,
       "allocsPerOp": 34
     },
@@ -519,7 +519,7 @@
       "parser": "xwb1989",
       "supported": true,
       "samples": 10,
-      "nsPerOp": 9105,
+      "nsPerOp": 12478.5,
       "bytesPerOp": 20176,
       "allocsPerOp": 37
     },
@@ -528,16 +528,16 @@
       "parser": "gosqlx",
       "supported": true,
       "samples": 10,
-      "nsPerOp": 2641,
-      "bytesPerOp": 2162,
-      "allocsPerOp": 15
+      "nsPerOp": 3190,
+      "bytesPerOp": 736,
+      "allocsPerOp": 13
     },
     {
       "query": "update",
       "parser": "pg_query_go",
       "supported": true,
       "samples": 10,
-      "nsPerOp": 14107.5,
+      "nsPerOp": 18253.5,
       "bytesPerOp": 2208,
       "allocsPerOp": 50
     },
@@ -546,7 +546,7 @@
       "parser": "vitess",
       "supported": true,
       "samples": 10,
-      "nsPerOp": 2044,
+      "nsPerOp": 2739,
       "bytesPerOp": 920,
       "allocsPerOp": 19
     },
@@ -555,7 +555,7 @@
       "parser": "tidb",
       "supported": true,
       "samples": 10,
-      "nsPerOp": 3922,
+      "nsPerOp": 5381,
       "bytesPerOp": 3032,
       "allocsPerOp": 26
     },
@@ -564,7 +564,7 @@
       "parser": "xwb1989",
       "supported": true,
       "samples": 10,
-      "nsPerOp": 9032.5,
+      "nsPerOp": 12334,
       "bytesPerOp": 20208,
       "allocsPerOp": 40
     },
@@ -573,16 +573,16 @@
       "parser": "gosqlx",
       "supported": true,
       "samples": 10,
-      "nsPerOp": 1771.5,
-      "bytesPerOp": 1761,
-      "allocsPerOp": 7
+      "nsPerOp": 2045,
+      "bytesPerOp": 400,
+      "allocsPerOp": 5
     },
     {
       "query": "delete",
       "parser": "pg_query_go",
       "supported": true,
       "samples": 10,
-      "nsPerOp": 8875.5,
+      "nsPerOp": 11436.5,
       "bytesPerOp": 1416,
       "allocsPerOp": 30
     },
@@ -591,7 +591,7 @@
       "parser": "vitess",
       "supported": true,
       "samples": 10,
-      "nsPerOp": 1343,
+      "nsPerOp": 1763.5,
       "bytesPerOp": 704,
       "allocsPerOp": 11
     },
@@ -600,7 +600,7 @@
       "parser": "tidb",
       "supported": true,
       "samples": 10,
-      "nsPerOp": 2311.5,
+      "nsPerOp": 3147,
       "bytesPerOp": 1840,
       "allocsPerOp": 16
     },
@@ -609,7 +609,7 @@
       "parser": "xwb1989",
       "supported": true,
       "samples": 10,
-      "nsPerOp": 6735.5,
+      "nsPerOp": 9346.5,
       "bytesPerOp": 19928,
       "allocsPerOp": 26
     }

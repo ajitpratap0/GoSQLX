@@ -120,6 +120,9 @@ func TestScratchResetClearsAndBounds(t *testing.T) {
 // block into the next class, a silent allocation regression; this test makes
 // it a failure, so the block shapes are revisited instead.
 func TestCoallocBlockSizes(t *testing.T) {
+	if unsafe.Sizeof(uintptr(0)) != 8 {
+		t.Skip("block sizes are pinned for 64-bit word size")
+	}
 	cases := []struct {
 		name        string
 		size, want  uintptr
@@ -184,7 +187,7 @@ func TestCoallocatedListsAreExactAndIndependent(t *testing.T) {
 	}
 
 	// Growing each list must not disturb anything else.
-	before := tree.Statements[0].(*ast.SelectStatement).From[0].Name
+	before := sel.From[0].Name
 	sel.Columns = append(sel.Columns, &ast.Identifier{Name: "extra"})
 	f.Arguments = append(f.Arguments, &ast.Identifier{Name: "extra"})
 	sel.From = append(sel.From, ast.TableReference{Name: "extra"})

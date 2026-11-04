@@ -189,6 +189,16 @@ func TestDetectorHintBitsetCapacity(t *testing.T) {
 	if got, want := len(detectorHints), len(dialectHints)+2; got != want {
 		t.Fatalf("detector hints: got %d, want %d", got, want)
 	}
+	for _, h := range dialectHints {
+		if len(h.pattern) > 64 {
+			t.Errorf("dialect hint %q length %d exceeds 64-bit history capacity", h.pattern, len(h.pattern))
+		}
+	}
+	for _, h := range detectorHints {
+		if h.length > 64 {
+			t.Errorf("detector hint length %d exceeds 64-bit history capacity", h.length)
+		}
+	}
 }
 
 func TestSinglePassDifferential(t *testing.T) {

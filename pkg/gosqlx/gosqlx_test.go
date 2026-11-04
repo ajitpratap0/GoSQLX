@@ -198,6 +198,17 @@ func TestValidateBlankInputErrorContract(t *testing.T) {
 	}
 }
 
+func TestValidateCommentOnlyInputIsIncomplete(t *testing.T) {
+	for _, sql := range []string{"-- c", "/* x */"} {
+		t.Run(sql, func(t *testing.T) {
+			err := Validate(sql)
+			if !errors.Is(err, ErrSyntax) || !hasStructuredCode(err, goerrors.ErrCodeIncompleteStatement) {
+				t.Errorf("Validate(%q) = %v, want ErrSyntax wrapping E2005", sql, err)
+			}
+		})
+	}
+}
+
 func TestParserValidateStringAndBytesBlankInputParity(t *testing.T) {
 	inputs := []struct {
 		sql      string

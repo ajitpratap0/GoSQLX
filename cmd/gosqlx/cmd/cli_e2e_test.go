@@ -199,6 +199,13 @@ func TestCLI_DialectAliases(t *testing.T) {
 	}
 }
 
+func TestCLI_ValidateDialectBlankInputStructuredError(t *testing.T) {
+	res := runCLI(t, nil, "validate", "--dialect", "postgresql", "")
+	if res.err == nil || !strings.Contains(res.err.Error(), "E2005") {
+		t.Fatalf("validate --dialect postgresql %q error = %v, want E2005", "", res.err)
+	}
+}
+
 func TestCLI_FormatNoUppercase(t *testing.T) {
 	res := runCLI(t, str("SELECT a FROM t"), "format", "--no-uppercase")
 	if res.err != nil {

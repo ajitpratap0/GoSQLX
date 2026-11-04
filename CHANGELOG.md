@@ -61,6 +61,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - **Release process**: add a post-tag benchmark refresh task and require claims to match the release tag.
+- **Validation blank-input handling**: `parser.Validate`,
+  `parser.ValidateBytes`, `parser.ValidateWithDialect` and
+  `parser.ValidateBytesWithDialect` now return structured E2005 errors for
+  empty or ASCII-whitespace-only input and for comment-only input (`-- c` or
+  `/* x */`), which previously returned nil. The CLI's inline
+  `gosqlx validate --dialect X ""` path now reports E2005 instead of treating
+  the empty argument as a filename. C/Python validation error strings reflect
+  the structured parser error. Non-ASCII whitespace such as vertical tab,
+  form feed, U+00A0, U+2003 and U+0085 remains invalid with E2004 wrapping
+  tokenizer E1001.
 - **Perf measurement methodology** (W0-15; benchmark tooling only, no library
   behaviour change):
   - Every `GOGC=off` measurement now also sets `GOMEMLIMIT` (default `64MiB`;
@@ -129,14 +139,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Formatter**: compact formatting (`ast.CompactStyle()`, no clause newlines, no semicolon, no line width, no target dialect, preserve or upper keyword case) now renders SELECT, INSERT, UPDATE and DELETE through each statement's `SQL()` instead of the visitor renderer, and a single compact statement skips the parts slice and join. `Render/compact/*` is 27-49% faster with 1 alloc/op (was 4-42) and 60-82% fewer bytes/op; `Normalize` and `Fingerprint` are 6-13% faster with 15-39% fewer allocs. Output is byte-identical (differential test over every corpus statement in 9 dialects and all option combinations); lowercase keywords, target-dialect rewrites, set operations and ALTER TABLE keep the visitor path. [W5-02]
 
 ### Behavior changes
-- **Validate blank input errors**: `gosqlx.Validate` and dialect-aware C/Python
-  validation now return structured parser errors wrapped by `ErrSyntax` for
-  empty and whitespace-only input (E2005 for empty input, ASCII space/tab/CR/LF
-  and U+FEFF; E2004 wrapping tokenizer E1001 for vertical tab, form feed,
-  U+00A0, U+2003 and U+0085). The error text changes; callers should match
-  `errors.Is(err, gosqlx.ErrSyntax)` or inspect the structured error code.
-  Validate documentation now describes parsing and releasing the AST; it makes
-  no speed claim.
+- **Breaking change / migration — Validate blank input**: callers that relied
+  on blank or comment-only validation inputs being accepted must handle the
+  new error. Check `errors.Is(err, gosqlx.ErrSyntax)` for `gosqlx.Validate` or
+  inspect the structured parser error code; the CLI reports validation failure
+  with E2005.
 - **Linter L010 (redundant whitespace)**: violation columns are byte
   positions on lines with invalid UTF-8. They were shifted before because
   invalid bytes were replaced with U+FFFD (3 bytes) while scanning. Valid
@@ -2078,8 +2085,9 @@ This release represents the largest update since v1.0.0 with **74 commits** acro
   - SingleJoin: 1425 → 621 ns/op (**56% faster**)
   - SimpleWhere: 736 → 373 ns/op (**49% faster**)
 
-#### Validate() Fast Path (PR #308, closes #274)
-- Skip full AST construction for validation-only calls
+#### Validate() Syntax Check (PR #308, closes #274)
+- Return a syntax result without exposing an AST; parsing builds and releases
+  the AST internally.
 
 #### ParseBytes Zero-Copy (PR #308, closes #277)
 - Avoid `string([]byte)` allocation in `ParseBytes`

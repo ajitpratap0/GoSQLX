@@ -86,9 +86,6 @@ func legacyDialectError(sql string, dialect keywords.SQLDialect) error {
 }
 
 func legacyValidateError(sql string) error {
-	if strings.TrimSpace(sql) == "" {
-		return fmt.Errorf("%w: empty input", ErrSyntax)
-	}
 	if err := parser.Validate(sql); err != nil {
 		return fmt.Errorf("%w: %w", ErrSyntax, err)
 	}

@@ -385,9 +385,11 @@ func TestWPPPrefilterEquivalence(t *testing.T) {
 		})
 	}
 	for _, pattern := range allCompiledPatterns(t) {
-		for _, literal := range requiredLiterals(pattern.re.String()) {
-			if strings.ContainsAny(string(literal), " \t\n\r\f\v") {
-				t.Errorf("requiredLiterals(%q) includes whitespace: %q", pattern.re.String(), literal)
+		for _, clause := range requiredLiterals(pattern.re.String()) {
+			for _, literal := range clause {
+				if strings.ContainsAny(string(literal), " \t\n\r\f\v") {
+					t.Errorf("requiredLiterals(%q) includes whitespace: %q", pattern.re.String(), literal)
+				}
 			}
 		}
 	}
@@ -439,7 +441,7 @@ func TestWPPStreamingTautologyCaptureEquivalence(t *testing.T) {
 				}
 			}
 			got := &ScanResult{}
-			scanner.detectTautologyInSQL([]string{sql}, nil, got)
+			scanner.detectTautologyInSQL([]string{sql}, scanPrefilter{}, got)
 			if !reflect.DeepEqual(got.Findings, want) {
 				t.Errorf("stream differs from capture oracle: got %+v, want %+v", got.Findings, want)
 			}
@@ -451,7 +453,7 @@ func TestWPPStreamingTautologyFullInput(t *testing.T) {
 	falsePairs := strings.Repeat("1=2 ", (1<<20)/4)
 	for _, sql := range []string{falsePairs + " 3=3", "3=3 " + falsePairs} {
 		result := &ScanResult{}
-		NewScanner().detectTautologyInSQL([]string{sql}, nil, result)
+		NewScanner().detectTautologyInSQL([]string{sql}, scanPrefilter{}, result)
 		if len(result.Findings) != 1 || result.Findings[0].Description != "Always-true condition detected (tautology): 3=3" {
 			t.Errorf("lost first true numeric pair in full input: %+v", result.Findings)
 		}

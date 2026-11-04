@@ -81,12 +81,12 @@ func scanSQLStatements(files []string) []string {
 func scanSQLRegexOnly(s *Scanner, sql string) *ScanResult {
 	result := &ScanResult{Findings: make([]Finding, 0)}
 	sql = stripDollarQuotedStringsReference(sql)
-	s.detectCommentPatterns(sql, nil, result)
+	s.detectCommentPatterns(sql, scanPrefilter{}, result)
 	views := append([]string{sql}, commentViews(sql)...)
-	s.detectRegexPatterns(views, nil, PatternTautology, result)
-	s.detectTautologyInSQL(views, nil, result)
+	s.detectRegexPatterns(views, scanPrefilter{}, PatternTautology, result)
+	s.detectTautologyInSQL(views, scanPrefilter{}, result)
 	for _, pattern := range []PatternType{PatternTimeBased, PatternOutOfBand, PatternDangerousFunc, PatternUnionInjection, PatternUnionGeneric, PatternStackedQuery} {
-		s.detectRegexPatterns(views, nil, pattern, result)
+		s.detectRegexPatterns(views, scanPrefilter{}, pattern, result)
 	}
 	s.updateCounts(result)
 	return result

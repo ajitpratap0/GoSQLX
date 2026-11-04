@@ -73,7 +73,6 @@ jobs:
   trigger-glama-build:
     name: Trigger Glama Docker build
     runs-on: ubuntu-latest
-    continue-on-error: true
     steps:
       - name: Trigger build
         env:
@@ -104,7 +103,7 @@ jobs:
           fi
 
           python3 - <<'PYEOF'
-          import os, sys, urllib.request, urllib.parse, json
+          import json, os, sys, urllib.error, urllib.parse, urllib.request, uuid
 
           cookie = os.environ["GLAMA_SESSION_COOKIE"]
           sha    = os.environ["COMMIT_SHA"]
@@ -123,6 +122,7 @@ jobs:
 
           payload = urllib.parse.urlencode({
               "intent":               "build",
+              "baseImage":            "debian:bookworm-slim",
               "nodeVersion":          "25",
               "pythonVersion":        "3.14",
               "pinnedCommitSha":      sha,
@@ -146,16 +146,43 @@ jobs:
               def http_response(self, request, response): return response
               https_response = http_response
 
-          opener   = urllib.request.build_opener(NoRedirect)
-          resp     = opener.open(req)
-          status   = resp.status
+          opener = urllib.request.build_opener(NoRedirect)
+          try:
+              resp = opener.open(req, timeout=20)
+          except urllib.error.HTTPError as exc:
+              print(f"::error::Glama build request failed with HTTP {exc.code}.")
+              sys.exit(1)
+          except (urllib.error.URLError, TimeoutError):
+              print("::error::Glama build request failed due to a network error or timeout.")
+              sys.exit(1)
+
+          status = resp.status
           location = resp.headers.get("Location", "")
+          if status not in (302, 303):
+              print(f"::error::Glama did not confirm a build (HTTP {status}).")
+              sys.exit(1)
 
-          print(f"HTTP {status}  Location: {location}")
-
-          if any(x in location for x in ("sign-up", "sign_up", "login", "auth")):
+          try:
+              target = urllib.parse.urlsplit(location)
+          except ValueError:
+              print("::error::Glama returned a malformed build redirect.")
+              sys.exit(1)
+          if any(x in target.path.lower() for x in ("sign-up", "sign_up", "login", "auth")):
               print("::error::Glama auth failed — GLAMA_SESSION_COOKIE is expired or invalid.")
               print("Refresh: DevTools → Network → copy Cookie header → update GLAMA_SESSION_COOKIE secret.")
+              sys.exit(1)
+
+          prefix = "/mcp/servers/ajitpratap0/GoSQLX/admin/dockerfile/tests/"
+          valid_path = target.path.startswith(prefix) and target.path != prefix
+          test_id = target.path[len(prefix):] if valid_path else ""
+          try:
+              canonical_id = str(uuid.UUID(test_id)) == test_id
+          except ValueError:
+              canonical_id = False
+          build_path = prefix + test_id
+          if not (valid_path and canonical_id and
+                  location in (build_path, "https://glama.ai" + build_path)):
+              print("::error::Glama returned an unexpected redirect instead of a build test.")
               sys.exit(1)
 
           print(f"Glama build triggered for {tag} (pinned to {sha[:8]})")

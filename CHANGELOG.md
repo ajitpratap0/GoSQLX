@@ -60,6 +60,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     21.7 minutes on an EPYC 7763).
 
 ### Changed
+- **Release process**: add a post-tag benchmark refresh task and require claims to match the release tag.
 - **Perf measurement methodology** (W0-15; benchmark tooling only, no library
   behaviour change):
   - Every `GOGC=off` measurement now also sets `GOMEMLIMIT` (default `64MiB`;
@@ -101,6 +102,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     benchmarks that publish diagnostics no longer time a growing buffer.
 
 ### Performance
+- **Linter**: aliasing consistency and four visitor-based rules now reuse the cached preorder AST node list. Violations are unchanged; there is no API or behavior change. [W6-05b]
+- **Linter**: rule L007 (keyword case consistency) scans words without allocating (substring words, ASCII upper-casing into a stack buffer before the keyword lookup). Output is unchanged. On the canonical benchmarks (Apple M4, local), `BenchmarkLintRule/L007` allocates about 98% fewer objects (72565 to 1194 allocs/op) and about 97% fewer bytes, and `BenchmarkLintRW` allocates about 12.5% fewer objects. [W6-03]
 - **gosqlx**: errors returned by `Parse`, `Validate`, `Lint` and the tree helpers now wrap the sentinel and the underlying error in an unexported `wrapErr` that builds its message lazily, instead of `fmt.Errorf("%w: %w", ...)` on every failure. Error text, `errors.Is` and `errors.As` behaviour are unchanged; only the unexported concrete error type differs. The saving applies to callers that only check `errors.Is`/`errors.As` or drop the message: when the message is built (`err.Error()`, as the LSP and CLI do) the gain is about 2 allocs/op and 3-4% B/op per error (syntax_mid 21 -> 19 allocs). Because the message is now built on demand, `Error()` reflects any later mutation of the inner `*errors.Error` reached through `errors.As`; previously the text was fixed at creation. [W1-03]
 - **Linter L010**: scans bytes in a single pass instead of rebuilding
   substrings and running a regular expression; `BenchmarkLintRule/L010` is 67.5% faster on the
@@ -115,6 +118,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   output changes. [W4-01]
 - **Linter**: `linter.Context` gains an additive `Nodes()` method returning every AST node in `ast.Inspect` preorder, built once per `Context` and cached (reset by `WithAST`). The 13 AST rules that each walked the tree with `ast.Inspect` now iterate that shared list; violations are unchanged (none of those walks pruned a subtree); `Nodes()` is safe for concurrent callers (lock-free atomic per-`Context` snapshot, no process-wide lock), so rules may still `Check` one shared `Context` in parallel. [W6-05a]
 - **Security**: `Scanner.ScanSQL` now skips the dollar-quote stripping lexer, the identifier-tautology regex and the ClickHouse table-function regex on inputs that provably cannot match them, using linear-time necessary-condition guards (`hasDollarOpener`, `hasEqualIdentPair`, `hasTableFnCandidate`). The regexes still confirm every finding, so results are byte-identical (guarded by a guards-on/off equivalence test over the real-world corpus and 200k random inputs); no API or behaviour change. [W6-01]
+- **Security**: `Scanner.ScanSQL` checks every pattern's required literals with a single Aho-Corasick pass over the input, folding case inline instead of searching once per literal per pattern. Alternation-, optional- and assertion-aware filters include the ClickHouse table-function names, stacked-query verbs and UNION system schemas, so fewer regexes run. The case-folded input copy and its pool are removed. Findings remain byte-identical, guarded by presence-exactness differential tests, generated-match soundness tests and the existing prefilter on/off and guards equivalence sweeps. No API or behaviour change. [W6-08]
 - **Tokenizer**: `time.Now`/`time.Since` are now read only when metrics are enabled (previously twice per tokenization even when disabled). If metrics are toggled on mid-call the call is not recorded. No API or token-output change [W1-02].
 - **Tokenizer**: keyword and compound-keyword-start lookup now uses a single fused-hash open-addressed table (one FNV-1a hash computed while upper-casing, one probe) instead of two Go map lookups per identifier. The table is filled in a fixed order (hot keywords first, then sorted) so its probe layout is deterministic across processes. No behaviour change; token output is identical [W2-01].
 - **Tokenizer**: token Start/End locations are now computed from a cached current-line window (a range check and a subtraction) instead of two calls to the non-inlinable position lookup per token; out-of-window offsets take the existing lookup. Token positions are identical, including after a UTF-8 BOM and across pooled-tokenizer reuse (guarded by an oracle test). [W2-02]
@@ -133,6 +137,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   UTF-8 is unaffected.
 
 ### Fixed
+- Claims checks now verify that published benchmark results were measured at the latest release tag commit.
 - **AST**: `AlterTableStatement.SQL()` now separates multiple ALTER TABLE actions with commas, matching the compact formatter and preserving action boundaries when re-parsed.
 - **Playground**: the GoSQLX WebAssembly module now runs in a Web Worker, so
   loading the parser and every parse, format, lint, analyze, highlight and

@@ -84,7 +84,7 @@ func referenceScores(sql string) (scores [7]int) {
 		}
 	}
 	for _, h := range frozenHints {
-		if referenceWord(upper, h.pattern) {
+		if containsWord(upper, h.pattern) {
 			add(h.dialect, h.weight)
 		}
 	}
@@ -97,22 +97,47 @@ func referenceScores(sql string) (scores [7]int) {
 	if strings.Contains(sql, "::") {
 		add(DialectPostgreSQL, 3)
 	}
-	if referenceWord(upper, "NVL") {
+	if containsWord(upper, "NVL") {
 		add(DialectOracle, 1)
 		add(DialectSnowflake, 1)
 	}
 	return
 }
-func referenceWord(s, p string) bool {
-	for i := 0; i+len(p) <= len(s); i++ {
-		if s[i:i+len(p)] == p && (i == 0 || !referenceChar(s[i-1])) && (i+len(p) == len(s) || !referenceChar(s[i+len(p)])) {
+
+// containsWord checks if the uppercase SQL string contains the given pattern
+// as a whole word (not as a substring of another word). The pattern is expected
+// to already be uppercase.
+//
+// A word boundary is defined as either:
+//   - The start or end of the string
+//   - A non-alphanumeric, non-underscore character
+func containsWord(upper string, pattern string) bool {
+	idx := 0
+	patLen := len(pattern)
+	for {
+		pos := strings.Index(upper[idx:], pattern)
+		if pos == -1 {
+			return false
+		}
+		absPos := idx + pos
+
+		// Check word boundary before the pattern
+		beforeOK := absPos == 0 || !isWordChar(upper[absPos-1])
+
+		// Check word boundary after the pattern
+		endPos := absPos + patLen
+		afterOK := endPos >= len(upper) || !isWordChar(upper[endPos])
+
+		if beforeOK && afterOK {
 			return true
 		}
+
+		// Move past this occurrence and continue searching
+		idx = absPos + 1
+		if idx >= len(upper) {
+			return false
+		}
 	}
-	return false
-}
-func referenceChar(b byte) bool {
-	return b >= 'A' && b <= 'Z' || b >= 'a' && b <= 'z' || b >= '0' && b <= '9' || b == '_'
 }
 
 var dialectCorpus = []string{"", "SELECT 1", "NVL", "TOP `", "TOP ` NVL", "CONNECT BY", "SYSTEM VERSIONING", "FOR SYSTEM_TIME", "NEXT VALUE FOR", "NEXT\tVALUE FOR", "connect\nby", "ılike", "ſysdate", "xılike", "ß ILIKE K", "\xffILIKE\xff", "[ ]", "] [", "-- ILIKE", "'SYSDATE'", "ILIKE_ ILIKE0 xILIKE", "ILIKE ILIKE"}
@@ -124,6 +149,15 @@ func checkScores(t *testing.T, s string) {
 		t.Errorf("scores %q: got %v want %v", s, got, want)
 	}
 }
+func TestDetectorHintBitsetCapacity(t *testing.T) {
+	if got := len(dialectHints) + 2; got > 64 {
+		t.Fatalf("dialect hints including NVL: %d exceed 64-bit capacity", got)
+	}
+	if got, want := len(detectorHints), len(dialectHints)+2; got != want {
+		t.Fatalf("detector hints: got %d, want %d", got, want)
+	}
+}
+
 func TestSinglePassDifferential(t *testing.T) {
 	for _, h := range frozenHints {
 		checkScores(t, h.pattern)

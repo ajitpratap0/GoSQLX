@@ -16,7 +16,6 @@ package keywords
 
 import (
 	"math/bits"
-	"strings"
 	"unicode"
 	"unicode/utf8"
 )
@@ -100,6 +99,100 @@ var dialectHints = []dialectHint{
 	{pattern: "VACUUM", dialect: DialectSQLite, weight: 4},
 }
 
+const (
+	dialectOracleIndex = iota
+	dialectSnowflakeIndex
+	dialectPostgreSQLIndex
+	dialectMySQLIndex
+	dialectSQLServerIndex
+	dialectMariaDBIndex
+	dialectSQLiteIndex
+	dialectCount
+)
+
+// dialectPriority defines score indices and tie-breaking order.
+var dialectPriority = [dialectCount]SQLDialect{
+	dialectOracleIndex:     DialectOracle,
+	dialectSnowflakeIndex:  DialectSnowflake,
+	dialectPostgreSQLIndex: DialectPostgreSQL,
+	dialectMySQLIndex:      DialectMySQL,
+	dialectSQLServerIndex:  DialectSQLServer,
+	dialectMariaDBIndex:    DialectMariaDB,
+	dialectSQLiteIndex:     DialectSQLite,
+}
+
+// The automaton is built once from the hint table; each output bit identifies
+// one weighted hint, including duplicate patterns with different dialects.
+type matcherNode struct {
+	next    [128]int
+	fail    int
+	outputs uint64
+}
+type matcherHint struct {
+	length  int
+	dialect int
+	weight  int
+}
+
+var detectorNodes []matcherNode
+var detectorHints []matcherHint
+
+func init() {
+	if len(dialectHints)+2 > 64 {
+		panic("dialect detector hints exceed 64-bit bitset capacity")
+	}
+	detectorNodes = append(detectorNodes, matcherNode{})
+	add := func(pattern string, dialect, weight int) {
+		id := len(detectorHints)
+		if id >= 64 {
+			panic("dialect detector hints exceed 64-bit bitset capacity")
+		}
+		detectorHints = append(detectorHints, matcherHint{len(pattern), dialect, weight})
+		node := 0
+		for i := 0; i < len(pattern); i++ {
+			c := pattern[i]
+			next := detectorNodes[node].next[c]
+			if next == 0 {
+				next = len(detectorNodes)
+				detectorNodes = append(detectorNodes, matcherNode{})
+				detectorNodes[node].next[c] = next
+			}
+			node = next
+		}
+		detectorNodes[node].outputs |= uint64(1) << id
+	}
+	for _, h := range dialectHints {
+		for i, d := range dialectPriority {
+			if h.dialect == d {
+				add(h.pattern, i, h.weight)
+				break
+			}
+		}
+	}
+	add("NVL", dialectOracleIndex, 1)
+	add("NVL", dialectSnowflakeIndex, 1)
+	queue := make([]int, 0, len(detectorNodes))
+	for c := 0; c < 128; c++ {
+		if n := detectorNodes[0].next[c]; n != 0 {
+			queue = append(queue, n)
+		}
+	}
+	for head := 0; head < len(queue); head++ {
+		n := queue[head]
+		fail := detectorNodes[n].fail
+		detectorNodes[n].outputs |= detectorNodes[fail].outputs
+		for c := 0; c < 128; c++ {
+			child := detectorNodes[n].next[c]
+			if child != 0 {
+				detectorNodes[child].fail = detectorNodes[fail].next[c]
+				queue = append(queue, child)
+			} else {
+				detectorNodes[n].next[c] = detectorNodes[fail].next[c]
+			}
+		}
+	}
+}
+
 // DetectDialect attempts to identify the SQL dialect from SQL text.
 // It analyzes the SQL string for dialect-specific keywords and patterns,
 // returning the most likely dialect based on weighted keyword analysis.
@@ -138,74 +231,6 @@ var dialectHints = []dialectHint{
 //
 //	dialect = keywords.DetectDialect("SELECT * FROM users")
 //	// dialect == DialectGeneric
-var dialectPriority = [7]SQLDialect{DialectOracle, DialectSnowflake, DialectPostgreSQL, DialectMySQL, DialectSQLServer, DialectMariaDB, DialectSQLite}
-
-// The automaton is built once from the hint table; each output bit identifies
-// one weighted hint, including duplicate patterns with different dialects.
-type matcherNode struct {
-	next    [128]int
-	fail    int
-	outputs uint64
-}
-type matcherHint struct {
-	length  int
-	dialect int
-	weight  int
-}
-
-var detectorNodes []matcherNode
-var detectorHints []matcherHint
-
-func init() {
-	detectorNodes = append(detectorNodes, matcherNode{})
-	add := func(pattern string, dialect, weight int) {
-		id := len(detectorHints)
-		detectorHints = append(detectorHints, matcherHint{len(pattern), dialect, weight})
-		node := 0
-		for i := 0; i < len(pattern); i++ {
-			c := pattern[i]
-			next := detectorNodes[node].next[c]
-			if next == 0 {
-				next = len(detectorNodes)
-				detectorNodes = append(detectorNodes, matcherNode{})
-				detectorNodes[node].next[c] = next
-			}
-			node = next
-		}
-		detectorNodes[node].outputs |= uint64(1) << id
-	}
-	for _, h := range dialectHints {
-		for i, d := range dialectPriority {
-			if h.dialect == d {
-				add(h.pattern, i, h.weight)
-				break
-			}
-		}
-	}
-	add("NVL", 0, 1)
-	add("NVL", 1, 1)
-	queue := make([]int, 0, len(detectorNodes))
-	for c := 0; c < 128; c++ {
-		if n := detectorNodes[0].next[c]; n != 0 {
-			queue = append(queue, n)
-		}
-	}
-	for head := 0; head < len(queue); head++ {
-		n := queue[head]
-		fail := detectorNodes[n].fail
-		detectorNodes[n].outputs |= detectorNodes[fail].outputs
-		for c := 0; c < 128; c++ {
-			child := detectorNodes[n].next[c]
-			if child != 0 {
-				detectorNodes[child].fail = detectorNodes[fail].next[c]
-				queue = append(queue, child)
-			} else {
-				detectorNodes[n].next[c] = detectorNodes[fail].next[c]
-			}
-		}
-	}
-}
-
 func DetectDialect(sql string) SQLDialect {
 	if sql == "" {
 		return DialectGeneric
@@ -225,7 +250,7 @@ func DetectDialect(sql string) SQLDialect {
 // dialectScores streams uppercase characters through the matcher. Non-ASCII
 // uppercase runes cannot occur in an ASCII hint and all their UTF-8 bytes are
 // non-word bytes, so one sentinel preserves both matching and byte boundaries.
-func dialectScores(sql string) (scores [7]int) {
+func dialectScores(sql string) (scores [dialectCount]int) {
 	var seen, pending, history uint64
 	node := 0
 	backtick, left, right, colon, previousColon := false, false, false, false, false
@@ -295,53 +320,15 @@ func dialectScores(sql string) (scores [7]int) {
 	}
 	feed(0)
 	if backtick {
-		scores[3] += 3
+		scores[dialectMySQLIndex] += 3
 	}
 	if left && right {
-		scores[4] += 3
+		scores[dialectSQLServerIndex] += 3
 	}
 	if colon {
-		scores[2] += 3
+		scores[dialectPostgreSQLIndex] += 3
 	}
 	return
-}
-
-// containsWord checks if the uppercase SQL string contains the given pattern
-// as a whole word (not as a substring of another word). The pattern is expected
-// to already be uppercase.
-//
-// A word boundary is defined as either:
-//   - The start or end of the string
-//   - A non-alphanumeric, non-underscore character
-//
-//nolint:unused // Retained for the existing package helper contract.
-func containsWord(upper string, pattern string) bool {
-	idx := 0
-	patLen := len(pattern)
-	for {
-		pos := strings.Index(upper[idx:], pattern)
-		if pos == -1 {
-			return false
-		}
-		absPos := idx + pos
-
-		// Check word boundary before the pattern
-		beforeOK := absPos == 0 || !isWordChar(upper[absPos-1])
-
-		// Check word boundary after the pattern
-		endPos := absPos + patLen
-		afterOK := endPos >= len(upper) || !isWordChar(upper[endPos])
-
-		if beforeOK && afterOK {
-			return true
-		}
-
-		// Move past this occurrence and continue searching
-		idx = absPos + 1
-		if idx >= len(upper) {
-			return false
-		}
-	}
 }
 
 // isWordChar returns true if the byte is an alphanumeric character or underscore.

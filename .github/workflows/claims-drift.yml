@@ -1,8 +1,8 @@
 name: Claims Drift and Signals
 
-# Weekly check that public claims (GitHub About text, llms.txt, README block)
-# still match scripts/gen-readme-metrics/metrics.json, and that the benchmark
-# data is not older than the latest release tag. Also logs weekly GitHub
+# Weekly and pull-request checks that public claims (GitHub About text, llms.txt,
+# README block) match scripts/gen-readme-metrics/metrics.json and benchmark
+# data is anchored to the latest release tag. Also logs weekly GitHub
 # signals (stars, traffic, referrers) to a tracking issue.
 #
 # About text decision (Q10): the default GITHUB_TOKEN cannot edit repository
@@ -16,6 +16,13 @@ name: Claims Drift and Signals
 # API and stays a manual note in the tracking issue.
 
 on:
+  pull_request:
+    paths:
+      - 'scripts/gen-readme-metrics/**'
+      - 'benchmarks/compare/results/**'
+      - 'llms.txt'
+      - '.github/workflows/claims-drift.yml'
+      - 'website/src/data/competitor-benchmarks.json'
   schedule:
     - cron: '17 6 * * 1'
   workflow_dispatch:
@@ -59,6 +66,7 @@ jobs:
 
   signals:
     name: Weekly GitHub signals
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:

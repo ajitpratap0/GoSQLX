@@ -105,7 +105,7 @@ func validateRun(cmd *cobra.Command, args []string) error {
 
 	// If single argument that looks like inline SQL (not a file), validate it directly
 	if len(args) == 1 {
-		if _, err := os.Stat(args[0]); err != nil && (args[0] == "" || looksLikeSQL(args[0])) {
+		if _, err := os.Stat(args[0]); err != nil && looksLikeSQL(args[0]) {
 			return validateInlineSQL(cmd, args[0])
 		}
 	}
@@ -342,13 +342,6 @@ func validateInlineSQL(cmd *cobra.Command, sql string) error {
 			fmt.Fprintf(cmd.ErrOrStderr(), "❌ Invalid SQL: %v\n", err)
 		}
 		return validationFailed(fmt.Errorf("validation failed: %w", err))
-	}
-
-	if sql == "" {
-		if !validateQuiet {
-			fmt.Fprintln(cmd.OutOrStdout(), "✅ Empty input (no statements)")
-		}
-		return nil
 	}
 
 	if !validateQuiet {

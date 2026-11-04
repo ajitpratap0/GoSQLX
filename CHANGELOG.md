@@ -140,11 +140,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   instead of nil. `gosqlx.Validate` now wraps E2005 or E2004 in `ErrSyntax` for
   empty or whitespace-only input, replacing the unstructured “empty input”
   error; `errors.As` now finds the structured error. C binding
-  `gosqlx_validate_dialect` has the same error change. The CLI `--dialect`
-  inline path now treats `""` as blank input instead of a filename.
+  `gosqlx_validate_dialect` has the same error change.
   **Migration:** only `parser.ValidateWithDialect`,
-  `parser.ValidateBytesWithDialect` and the CLI `--dialect` inline path
-  previously accepted blank input; comment-only input was never accepted.
+  `parser.ValidateBytesWithDialect` previously accepted blank input;
+  comment-only input was never accepted.
   `gosqlx.Validate` and C/Python callers should match with
   `errors.Is(err, gosqlx.ErrSyntax)` or the error code, rather than the
   “empty input” text.

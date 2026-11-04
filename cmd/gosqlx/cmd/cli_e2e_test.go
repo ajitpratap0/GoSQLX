@@ -199,10 +199,23 @@ func TestCLI_DialectAliases(t *testing.T) {
 	}
 }
 
-func TestCLI_ValidateDialectBlankInputStructuredError(t *testing.T) {
-	res := runCLI(t, nil, "validate", "--dialect", "postgresql", "")
-	if res.err == nil || !strings.Contains(res.err.Error(), "E2005") {
-		t.Fatalf("validate --dialect postgresql %q error = %v, want E2005", "", res.err)
+func TestCLI_ValidateBlankInputParity(t *testing.T) {
+	tests := []struct {
+		name string
+		args []string
+	}{
+		{name: "default", args: []string{"validate", ""}},
+		{name: "postgresql dialect", args: []string{"validate", "--dialect", "postgresql", ""}},
+		{name: "json", args: []string{"validate", "-f", "json", ""}},
+		{name: "mysql dialect json", args: []string{"validate", "--dialect", "mysql", "-f", "json", ""}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			res := runCLI(t, nil, tt.args...)
+			if res.err == nil {
+				t.Fatalf("%v succeeded for blank input; want non-zero exit", tt.args)
+			}
+		})
 	}
 }
 

@@ -83,6 +83,28 @@ func TestAssertLinearGrowthSlowQuadraticFailsWithinBudget(t *testing.T) {
 	}
 }
 
+// A stall that hits only the small run must not let super-linear growth pass,
+// even when the time budget is already spent after the first sample pair.
+func TestAssertLinearGrowthStallOnSmallDoesNotHideQuadratic(t *testing.T) {
+	old := budget
+	budget = time.Nanosecond // over budget from the first pair on
+	defer func() { budget = old }()
+	quad := work(40000, true)
+	calls := 0
+	small := func() {
+		calls++
+		if calls == 2 { // first timed run, right after calibration's warm-up call
+			time.Sleep(500 * time.Millisecond)
+		}
+		quad()
+	}
+	r := &recorder{TB: t}
+	AssertLinearGrowth(r, "stalled quadratic", 10, small, work(160000, true))
+	if !r.failed {
+		t.Error("a stall on the small run hid quadratic growth")
+	}
+}
+
 func TestTrippingContext(t *testing.T) {
 	ctx := NewTrippingContext(2)
 	if ctx.Done() == nil {

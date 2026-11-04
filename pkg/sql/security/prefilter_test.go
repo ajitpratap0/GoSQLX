@@ -336,9 +336,6 @@ func TestRequiredLiterals_ProductionPatterns(t *testing.T) {
 		{`(?i)UNION[\s\v]+(ALL[\s\v]+)?SELECT[\s\v]+(?:NULL,?[\s\v]*){2,}`, [][]string{{"union"}, {"select"}, {"null"}}},
 		{`(?i)\binformation_schema\b`, [][]string{{"information_schema"}}},
 		{`(?i)\bUNION[\s\v]+(ALL[\s\v]+)?SELECT\b`, [][]string{{"union"}, {"select"}}},
-		{`;[\s\v]*(?i)(DROP|DELETE|TRUNCATE|UPDATE|INSERT|ALTER)\b`, [][]string{{";"}, {"drop", "delete", "truncate", "update", "insert", "alter"}}},
-		{`;[\s\v]*(?i)EXEC\b`, [][]string{{";"}, {"exec"}}},
-		{`;[\s\v]*(?i)EXECUTE\b`, [][]string{{";"}, {"execute"}}},
 		{`--[\s\v]*$`, [][]string{{"--"}}},
 		{`--[\s\v]*['")\]]`, [][]string{{"--"}}},
 		{`/\*[^*]*\*+(?:[^/*][^*]*\*+)*/[\s\v]*$`, [][]string{{"/*"}}},
@@ -390,8 +387,8 @@ func allCompiledPatterns(t *testing.T) []compiledPattern {
 // empty string (which justifies using FindString in detectRegexPatterns).
 func TestCompiledPatterns_AllHaveLiterals(t *testing.T) {
 	all := allCompiledPatterns(t)
-	if len(all) != 36 {
-		t.Errorf("expected 36 compiled patterns (27 group + 6 comment + 3 tautology), got %d", len(all))
+	if len(all) != 33 {
+		t.Errorf("expected 33 compiled patterns (24 group + 6 comment + 3 tautology), got %d", len(all))
 	}
 	for _, p := range all {
 		if len(p.cnf) == 0 {

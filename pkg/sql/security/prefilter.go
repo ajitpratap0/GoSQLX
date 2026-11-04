@@ -15,195 +15,286 @@
 package security
 
 import (
-	"bytes"
 	"regexp"
 	"regexp/syntax"
-	"sync"
+	"strings"
 	"unicode"
 	"unicode/utf8"
 )
 
-// compiledPattern pairs a compiled regex with the literal prefilter derived from it.
-//
-// lits holds lowercase ASCII substrings that every match of re must contain. They
-// are derived at init from the regex syntax tree by requiredLiterals, never written
-// by hand. When the case-folded input (see foldASCII) does not contain all of them,
-// the regex cannot match and is skipped. A nil or empty lits means the regex always
-// runs.
+// compiledPattern pairs a regex with its necessary-condition CNF literal filter.
+// Each clause requires at least one lowercase ASCII substring. The matcher fills
+// filter once at initialization; cnf is retained for diagnostics and tests.
 type compiledPattern struct {
-	re    *regexp.Regexp
-	lits  [][]byte
-	guard func(string) bool // optional exact necessary condition (ASCII input only)
+	re     *regexp.Regexp
+	cnf    [][]string
+	filter litFilter
+	guard  func(string) bool // optional exact necessary condition (ASCII input only)
 }
 
-// compilePattern compiles expr and derives its literal prefilter.
 func compilePattern(expr string) compiledPattern {
-	return compiledPattern{re: regexp.MustCompile(expr), lits: requiredLiterals(expr)}
+	return compiledPattern{re: regexp.MustCompile(expr), cnf: requiredLiterals(expr)}
 }
 
-// requiredLiterals returns the lowercase ASCII literal runs that every match of expr
-// must contain, in first-seen order and without duplicates.
-//
-// The walk over the simplified syntax tree is deliberately conservative: only
-// literals that are mandatory in every match contribute. Concatenation and capture
-// groups extend the current run; one-or-more repetitions (and counted repetitions
-// with Min >= 1) contribute their body as separate runs; every other operator
-// (character classes, any-char, star, optional, alternation and all zero-width
-// assertions) ends the current run without contributing. Runs containing a
-// non-ASCII rune are discarded entirely, because the soundness argument of
-// foldASCII only covers ASCII literals.
-//
-// It returns nil (no prefilter, the regex always runs) if expr does not parse; this
-// cannot happen for expressions that already passed regexp.MustCompile.
-func requiredLiterals(expr string) [][]byte {
+const maxExact = 16
+
+type literalInfo struct {
+	exact []string // nil = unknown
+	cnf   [][]string
+}
+
+// requiredLiterals derives an AND of any-of clauses that every regex match must
+// contain. Exact alternatives are crossed through concatenations up to maxExact;
+// unknown text breaks a run, while assertions preserve it. Non-ASCII literal runs
+// are discarded conservatively. Invalid expressions have no filter.
+func requiredLiterals(expr string) [][]string {
 	re, err := syntax.Parse(expr, syntax.Perl)
 	if err != nil {
 		return nil
 	}
 	re = re.Simplify()
-
-	var (
-		out         [][]byte
-		cur         []byte
-		hasNonASCII bool
-	)
-	flush := func() {
-		if len(cur) > 0 && !hasNonASCII {
-			dup := false
-			for _, l := range out {
-				if bytes.Equal(l, cur) {
-					dup = true
-					break
-				}
-			}
-			if !dup {
-				out = append(out, cur)
-			}
-		}
-		cur = nil
-		hasNonASCII = false
+	in := deriveLiteralInfo(re)
+	if in.exact != nil {
+		in.cnf = appendLiteralClause(in.cnf, in.exact)
 	}
+	return normalizeLiteralCNF(in.cnf)
+}
 
-	var walk func(re *syntax.Regexp)
-	walk = func(re *syntax.Regexp) {
-		switch re.Op {
-		case syntax.OpLiteral:
-			for _, r := range re.Rune {
-				if r >= utf8.RuneSelf {
-					hasNonASCII = true
-					continue
-				}
-				cur = append(cur, byte(unicode.ToLower(r)))
-			}
-		case syntax.OpConcat:
-			for _, sub := range re.Sub {
-				walk(sub)
-			}
-		case syntax.OpCapture:
-			walk(re.Sub[0])
-		case syntax.OpPlus:
-			flush()
-			walk(re.Sub[0])
-			flush()
-		case syntax.OpRepeat:
-			flush()
-			if re.Min >= 1 {
-				walk(re.Sub[0])
-			}
-			flush()
-		default:
-			// CharClass, AnyChar, AnyCharNotNL, Star, Quest, Alternate, the
-			// zero-width assertions and EmptyMatch: run breakers that contribute
-			// no required literal.
-			flush()
+func crossLiterals(a, b []string) []string {
+	var out []string
+	for _, x := range a {
+		for _, y := range b {
+			out = appendUniqueLiteral(out, x+y)
 		}
 	}
-	walk(re)
-	flush()
 	return out
 }
 
-// foldASCII appends a case-folded copy of s to dst and returns the result.
-//
-// ASCII letters are lowercased. The two non-ASCII runes whose Unicode simple-fold
-// orbit contains an ASCII letter are mapped to that letter: U+017F LATIN SMALL
-// LETTER LONG S to 's' and U+212A KELVIN SIGN to 'k'. Every other byte sequence,
-// including invalid UTF-8, is copied unchanged.
-//
-// Invariant: for any ASCII literal L, if `(?i)L` (or a case-sensitive L) matches
-// somewhere in s, then bytes.Contains(foldASCII(nil, s), lower(L)) is true. This
-// holds because {U+017F, U+212A} are the only non-ASCII runes that Go's (?i)
-// treats as equal to an ASCII letter (enforced by TestFoldASCII_Completeness).
-func foldASCII(dst []byte, s string) []byte {
-	for i := 0; i < len(s); {
-		c := s[i]
-		if c < utf8.RuneSelf {
-			if 'A' <= c && c <= 'Z' {
-				c += 'a' - 'A'
-			}
-			dst = append(dst, c)
-			i++
-			continue
+func appendUniqueLiteral(s []string, v string) []string {
+	for _, x := range s {
+		if x == v {
+			return s
 		}
-		r, size := utf8.DecodeRuneInString(s[i:])
-		switch r {
-		case 0x017F: // LATIN SMALL LETTER LONG S
-			dst = append(dst, 's')
-		case 0x212A: // KELVIN SIGN
-			dst = append(dst, 'k')
-		default:
-			dst = append(dst, s[i:i+size]...)
-		}
-		i += size
 	}
-	return dst
+	return append(s, v)
 }
 
-// containsAll reports whether folded contains every literal in lits. An empty
-// lits always passes.
-func containsAll(folded []byte, lits [][]byte) bool {
-	for _, l := range lits {
-		if !bytes.Contains(folded, l) {
+func normalizeLiteralClause(set []string) []string {
+	var out []string
+	for i, s := range set {
+		if s == "" {
+			return nil
+		}
+		redundant := false
+		for j, t := range set {
+			if i != j && strings.Contains(s, t) && (len(t) < len(s) || j < i) {
+				redundant = true
+				break
+			}
+		}
+		if !redundant {
+			out = appendUniqueLiteral(out, s)
+		}
+	}
+	return out
+}
+
+func appendLiteralClause(cnf [][]string, set []string) [][]string {
+	c := normalizeLiteralClause(set)
+	if len(c) == 0 {
+		return cnf
+	}
+	return append(cnf, c)
+}
+
+// literalClauseImplies reports whether every member of d contains a member of c.
+func literalClauseImplies(d, c []string) bool {
+	for _, x := range d {
+		ok := false
+		for _, y := range c {
+			if strings.Contains(x, y) {
+				ok = true
+				break
+			}
+		}
+		if !ok {
 			return false
 		}
 	}
 	return true
 }
 
-// maxPooledFoldBuf bounds the capacity of fold buffers returned to the pool so a
-// single huge input does not pin memory indefinitely.
-const maxPooledFoldBuf = 64 << 10
-
-// foldBufPool recycles the case-folded copy of the input used by the prefilters.
-//
-// Ownership: a buffer is owned by the ScanSQL call that got it, is only ever
-// passed to bytes.Contains, is never stored in a Finding or ScanResult (finding
-// descriptions are substrings of the original SQL), and is returned with defer.
-// A pooled buffer therefore carries no observable state across uses: its length is
-// reset on Put, and stale bytes beyond the length are overwritten by the next
-// foldASCII before they can be read.
-var foldBufPool = sync.Pool{
-	New: func() any {
-		b := make([]byte, 0, 256)
-		return &b
-	},
+func normalizeLiteralCNF(cnf [][]string) [][]string {
+	var out [][]string
+	for i, c := range cnf {
+		drop := false
+		for j, d := range cnf {
+			if i == j {
+				continue
+			}
+			if literalClauseImplies(d, c) && (!literalClauseImplies(c, d) || j < i) {
+				drop = true
+				break
+			}
+		}
+		if !drop {
+			out = append(out, c)
+		}
+	}
+	return out
 }
 
-// getFoldBuf returns an empty fold buffer from the pool.
-func getFoldBuf() *[]byte {
-	bp, ok := foldBufPool.Get().(*[]byte)
-	if !ok || bp == nil {
-		b := make([]byte, 0, 256)
-		return &b
+func bestLiteralClause(cnf [][]string) []string {
+	var best []string
+	for _, c := range cnf {
+		if best == nil || len(c) < len(best) {
+			best = c
+		}
 	}
-	return bp
+	return best
 }
 
-// putFoldBuf returns a fold buffer to the pool unless it grew too large.
-func putFoldBuf(bp *[]byte) {
-	if bp == nil || cap(*bp) > maxPooledFoldBuf {
-		return
+func deriveLiteralInfo(re *syntax.Regexp) literalInfo {
+	switch re.Op {
+	case syntax.OpLiteral:
+		var b []byte
+		for _, r := range re.Rune {
+			if r >= utf8.RuneSelf {
+				return literalInfo{}
+			}
+			b = append(b, byte(unicode.ToLower(r)))
+		}
+		return literalInfo{exact: []string{string(b)}}
+	case syntax.OpEmptyMatch, syntax.OpBeginLine, syntax.OpEndLine, syntax.OpBeginText, syntax.OpEndText, syntax.OpWordBoundary, syntax.OpNoWordBoundary:
+		return literalInfo{exact: []string{""}}
+	case syntax.OpCapture:
+		return deriveLiteralInfo(re.Sub[0])
+	case syntax.OpConcat:
+		cur := []string{""}
+		var cnf [][]string
+		allExact := true
+		var flat []*syntax.Regexp
+		var flatten func(subs []*syntax.Regexp)
+		flatten = func(subs []*syntax.Regexp) {
+			for _, sub := range subs {
+				for sub.Op == syntax.OpCapture {
+					sub = sub.Sub[0]
+				}
+				if sub.Op == syntax.OpConcat {
+					flatten(sub.Sub)
+					continue
+				}
+				flat = append(flat, sub)
+			}
+		}
+		flatten(re.Sub)
+		for _, sub := range flat {
+			x := deriveLiteralInfo(sub)
+			if x.exact != nil {
+				if len(cur)*len(x.exact) <= maxExact {
+					cur = crossLiterals(cur, x.exact)
+				} else {
+					allExact = false
+					cnf = appendLiteralClause(cnf, cur)
+					cur = x.exact
+				}
+				continue
+			}
+			allExact = false
+			cnf = appendLiteralClause(cnf, cur)
+			cnf = append(cnf, x.cnf...)
+			cur = []string{""}
+		}
+		if allExact {
+			return literalInfo{exact: cur}
+		}
+		return literalInfo{cnf: appendLiteralClause(cnf, cur)}
+	case syntax.OpAlternate:
+		var union []string
+		exactOK := true
+		var clause []string
+		clauseOK := true
+		for _, sub := range re.Sub {
+			x := deriveLiteralInfo(sub)
+			if x.exact != nil {
+				for _, s := range x.exact {
+					union = appendUniqueLiteral(union, s)
+				}
+				clause = append(clause, x.exact...)
+				continue
+			}
+			exactOK = false
+			b := bestLiteralClause(x.cnf)
+			if b == nil {
+				clauseOK = false
+			}
+			clause = append(clause, b...)
+		}
+		if exactOK && len(union) <= maxExact {
+			return literalInfo{exact: union}
+		}
+		if !clauseOK {
+			return literalInfo{}
+		}
+		return literalInfo{cnf: appendLiteralClause(nil, clause)}
+	case syntax.OpQuest:
+		x := deriveLiteralInfo(re.Sub[0])
+		if x.exact != nil && len(x.exact)+1 <= maxExact {
+			return literalInfo{exact: appendUniqueLiteral(append([]string(nil), x.exact...), "")}
+		}
+		return literalInfo{}
+	case syntax.OpPlus:
+		x := deriveLiteralInfo(re.Sub[0])
+		if x.exact != nil {
+			return literalInfo{cnf: appendLiteralClause(nil, x.exact)}
+		}
+		return literalInfo{cnf: x.cnf}
+	case syntax.OpRepeat:
+		if re.Min < 1 {
+			return literalInfo{}
+		}
+		x := deriveLiteralInfo(re.Sub[0])
+		if x.exact != nil {
+			return literalInfo{cnf: appendLiteralClause(nil, x.exact)}
+		}
+		return literalInfo{cnf: x.cnf}
 	}
-	*bp = (*bp)[:0]
-	foldBufPool.Put(bp)
+	return literalInfo{}
+}
+
+// litSet records the presence of up to 128 interned ASCII literals.
+type litSet [2]uint64
+
+func (s *litSet) add(id int) { s[id/64] |= 1 << (id % 64) }
+
+func (s litSet) hasAll(required litSet) bool {
+	return s[0]&required[0] == required[0] && s[1]&required[1] == required[1]
+}
+
+func (s litSet) intersects(other litSet) bool {
+	return s[0]&other[0] != 0 || s[1]&other[1] != 0
+}
+
+// litFilter combines singleton clauses into all and keeps disjunctions in anyOf.
+type litFilter struct {
+	all   litSet
+	anyOf []litSet
+}
+
+func (f *litFilter) pass(present litSet) bool {
+	if !present.hasAll(f.all) {
+		return false
+	}
+	for _, clause := range f.anyOf {
+		if !present.intersects(clause) {
+			return false
+		}
+	}
+	return true
+}
+
+// scanPrefilter is passed by value; its zero value disables filters and guards.
+type scanPrefilter struct {
+	on      bool
+	present litSet
 }

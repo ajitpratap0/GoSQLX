@@ -586,6 +586,13 @@ tasks:
           exit 1
         fi
 
+  release:refresh-benchmarks:
+    desc: Refresh release-tag benchmark claims and published results
+    requires:
+      vars: [TAG]
+    cmds:
+      - scripts/release/refresh-benchmarks.sh all {{.TAG}} {{.CLI_ARGS}}
+
   release:check:
     desc: Check goreleaser configuration
     cmds:

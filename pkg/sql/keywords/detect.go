@@ -16,6 +16,7 @@ package keywords
 
 import (
 	"math/bits"
+	"sync"
 	"unicode"
 	"unicode/utf8"
 )
@@ -121,27 +122,55 @@ var dialectPriority = [dialectCount]SQLDialect{
 	dialectSQLiteIndex:     DialectSQLite,
 }
 
-// The automaton is built once from the hint table; each output bit identifies
+// The automaton is built lazily from the hint table. Each output bit identifies
 // one weighted hint, including duplicate patterns with different dialects.
-type matcherNode struct {
-	next    [128]int
-	fail    int
-	outputs uint64
-}
+const matcherClasses = 30
+
+const (
+	classOther      = 0
+	classDigit      = 27
+	classUnderscore = 28
+	classSpace      = 29
+)
+
 type matcherHint struct {
 	length  int
 	dialect int
 	weight  int
 }
 
-var detectorNodes []matcherNode
+var detectorOnce sync.Once
+var detectorClasses [256]uint8
+var detectorTransitions []uint16
+var detectorOutputs []uint64
 var detectorHints []matcherHint
 
-func init() {
+func buildDetector() {
 	if len(dialectHints)+2 > 64 {
 		panic("dialect detector hints exceed 64-bit bitset capacity")
 	}
-	detectorNodes = append(detectorNodes, matcherNode{})
+	for c := byte('A'); c <= 'Z'; c++ {
+		detectorClasses[c] = c - 'A' + 1
+	}
+	for c := byte('0'); c <= '9'; c++ {
+		detectorClasses[c] = classDigit
+	}
+	detectorClasses['_'] = classUnderscore
+	detectorClasses[' '] = classSpace
+
+	// An upper bound on trie nodes allows building without growing the scratch table.
+	maxNodes := 1 + 2*len("NVL")
+	for _, h := range dialectHints {
+		maxNodes += len(h.pattern)
+	}
+	if maxNodes > 1<<16 {
+		panic("dialect detector exceeds uint16 node capacity")
+	}
+	transitions := make([]uint16, maxNodes*matcherClasses)
+	outputs := make([]uint64, maxNodes)
+	fail := make([]uint16, maxNodes)
+	detectorHints = make([]matcherHint, 0, len(dialectHints)+2)
+	nodes := 1
 	add := func(pattern string, dialect, weight int) {
 		id := len(detectorHints)
 		if id >= 64 {
@@ -150,16 +179,20 @@ func init() {
 		detectorHints = append(detectorHints, matcherHint{len(pattern), dialect, weight})
 		node := 0
 		for i := 0; i < len(pattern); i++ {
-			c := pattern[i]
-			next := detectorNodes[node].next[c]
-			if next == 0 {
-				next = len(detectorNodes)
-				detectorNodes = append(detectorNodes, matcherNode{})
-				detectorNodes[node].next[c] = next
+			class := detectorClasses[pattern[i]]
+			if class == classOther || class == classDigit {
+				panic("unsupported dialect hint byte")
 			}
-			node = next
+			index := node*matcherClasses + int(class)
+			next := transitions[index]
+			if next == 0 {
+				next = uint16(nodes)
+				nodes++
+				transitions[index] = next
+			}
+			node = int(next)
 		}
-		detectorNodes[node].outputs |= uint64(1) << id
+		outputs[node] |= uint64(1) << id
 	}
 	for _, h := range dialectHints {
 		for i, d := range dialectPriority {
@@ -171,26 +204,31 @@ func init() {
 	}
 	add("NVL", dialectOracleIndex, 1)
 	add("NVL", dialectSnowflakeIndex, 1)
-	queue := make([]int, 0, len(detectorNodes))
-	for c := 0; c < 128; c++ {
-		if n := detectorNodes[0].next[c]; n != 0 {
+	queue := make([]uint16, 0, nodes)
+	for c := 0; c < matcherClasses; c++ {
+		if n := transitions[c]; n != 0 {
 			queue = append(queue, n)
 		}
 	}
 	for head := 0; head < len(queue); head++ {
-		n := queue[head]
-		fail := detectorNodes[n].fail
-		detectorNodes[n].outputs |= detectorNodes[fail].outputs
-		for c := 0; c < 128; c++ {
-			child := detectorNodes[n].next[c]
+		n := int(queue[head])
+		f := int(fail[n])
+		outputs[n] |= outputs[f]
+		for c := 0; c < matcherClasses; c++ {
+			index := n*matcherClasses + c
+			child := transitions[index]
 			if child != 0 {
-				detectorNodes[child].fail = detectorNodes[fail].next[c]
+				fail[child] = transitions[f*matcherClasses+c]
 				queue = append(queue, child)
 			} else {
-				detectorNodes[n].next[c] = detectorNodes[fail].next[c]
+				transitions[index] = transitions[f*matcherClasses+c]
 			}
 		}
 	}
+	detectorTransitions = make([]uint16, nodes*matcherClasses)
+	copy(detectorTransitions, transitions)
+	detectorOutputs = make([]uint64, nodes)
+	copy(detectorOutputs, outputs)
 }
 
 // DetectDialect attempts to identify the SQL dialect from SQL text.
@@ -251,13 +289,45 @@ func DetectDialect(sql string) SQLDialect {
 // uppercase runes cannot occur in an ASCII hint and all their UTF-8 bytes are
 // non-word bytes, so one sentinel preserves both matching and byte boundaries.
 func dialectScores(sql string) (scores [dialectCount]int) {
+	detectorOnce.Do(buildDetector)
 	var seen, pending, history uint64
 	node := 0
 	backtick, left, right, colon, previousColon := false, false, false, false, false
-	// A match remains pending until the following byte establishes its end
-	// boundary. History supplies the byte before each possible match.
-	feed := func(c byte) {
-		if !isWordChar(c) {
+	// A match remains pending until the following byte establishes its end boundary.
+	for i := 0; i <= len(sql); {
+		var c byte
+		if i < len(sql) {
+			c = sql[i]
+			i++
+			if c >= utf8.RuneSelf {
+				r, n := utf8.DecodeRuneInString(sql[i-1:])
+				i += n - 1
+				r = unicode.ToUpper(r)
+				if r < utf8.RuneSelf {
+					c = byte(r)
+				} else {
+					c = 128
+				}
+			} else if c >= 'a' && c <= 'z' {
+				c -= 'a' - 'A'
+			}
+			switch c {
+			case '`':
+				backtick = true
+			case '[':
+				left = true
+			case ']':
+				right = true
+			}
+			if c == ':' && previousColon {
+				colon = true
+			}
+			previousColon = c == ':'
+		} else {
+			i++ // Feed a non-word sentinel to flush the final pending match.
+		}
+		word := isWordChar(c)
+		if !word {
 			for pending != 0 {
 				id := bits.TrailingZeros64(pending)
 				bit := uint64(1) << id
@@ -271,11 +341,8 @@ func dialectScores(sql string) (scores [dialectCount]int) {
 		} else {
 			pending = 0
 		}
-		if c >= 128 {
-			c = 0
-		}
-		node = detectorNodes[node].next[c]
-		out := detectorNodes[node].outputs &^ seen
+		node = int(detectorTransitions[node*matcherClasses+int(detectorClasses[c])])
+		out := detectorOutputs[node] &^ seen
 		for out != 0 {
 			id := bits.TrailingZeros64(out)
 			bit := uint64(1) << id
@@ -285,40 +352,10 @@ func dialectScores(sql string) (scores [dialectCount]int) {
 			out &^= bit
 		}
 		history <<= 1
-		if isWordChar(c) {
+		if word {
 			history |= 1
 		}
 	}
-	for i := 0; i < len(sql); {
-		c := sql[i]
-		i++
-		if c >= utf8.RuneSelf {
-			r, n := utf8.DecodeRuneInString(sql[i-1:])
-			i += n - 1
-			r = unicode.ToUpper(r)
-			if r < utf8.RuneSelf {
-				c = byte(r)
-			} else {
-				c = 128
-			}
-		} else if c >= 'a' && c <= 'z' {
-			c -= 'a' - 'A'
-		}
-		switch c {
-		case '`':
-			backtick = true
-		case '[':
-			left = true
-		case ']':
-			right = true
-		}
-		if c == ':' && previousColon {
-			colon = true
-		}
-		previousColon = c == ':'
-		feed(c)
-	}
-	feed(0)
 	if backtick {
 		scores[dialectMySQLIndex] += 3
 	}

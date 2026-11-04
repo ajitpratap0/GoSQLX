@@ -78,8 +78,14 @@ func TestValidateDialectBlankInputContract(t *testing.T) {
 }
 
 func TestValidateCommentOnlyInputIsIncomplete(t *testing.T) {
-	for _, sql := range []string{"-- c", "/* x */"} {
+	for _, sql := range []string{"-- c", "/* x */", ";", "-- c\n;"} {
 		t.Run(fmt.Sprintf("%q", sql), func(t *testing.T) {
+			t.Run("default/string", func(t *testing.T) {
+				assertValidateCode(t, Validate(sql), goerrors.ErrCodeIncompleteStatement)
+			})
+			t.Run("default/bytes", func(t *testing.T) {
+				assertValidateCode(t, ValidateBytes([]byte(sql)), goerrors.ErrCodeIncompleteStatement)
+			})
 			for _, dialect := range []keywords.SQLDialect{keywords.DialectPostgreSQL, keywords.DialectMySQL} {
 				t.Run(string(dialect)+"/string", func(t *testing.T) {
 					assertValidateCode(t, ValidateWithDialect(sql, dialect), goerrors.ErrCodeIncompleteStatement)
@@ -90,6 +96,15 @@ func TestValidateCommentOnlyInputIsIncomplete(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestValidateBOMOnlyIsIncomplete(t *testing.T) {
+	// A byte order mark is not blank according to sqlText.blank. The
+	// tokenizer always appends an EOF token, so the len(tokens)==0 guards in
+	// the validate paths are defensive and unreachable from public input; the
+	// parser reports the incomplete statement instead.
+	assertValidateCode(t, Validate("\uFEFF"), goerrors.ErrCodeIncompleteStatement)
+	assertValidateCode(t, ValidateWithDialect("\uFEFF", keywords.DialectPostgreSQL), goerrors.ErrCodeIncompleteStatement)
 }
 
 // TestStringAndBytesEntryPointsAgree checks that the string entry points,

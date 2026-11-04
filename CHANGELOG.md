@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Width-scaling regression tests cover exact output, rendering time, and allocated bytes across five formatter modes.
 - **Benchmark and perf-gate infrastructure (performance overhaul, wave 0)**:
   pull requests are now judged by interleaved A/B measurements instead of
   absolute numbers. No library behaviour changes apart from #901 (see Fixed). The pieces, by PR:

@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Validate() implements a fast path for SQL validation without full AST construction.
+// Validate() checks SQL syntax by tokenizing and parsing, then releasing the AST.
 // See issue #274.
 package parser
 
@@ -29,10 +29,8 @@ import (
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/tokenizer"
 )
 
-// Validate checks whether the given SQL string is syntactically valid without
-// building a full AST. It tokenizes the input and runs the parser, but the
-// returned AST is immediately released. This is significantly faster than
-// Parse() when you only need to know if the SQL is valid.
+// Validate checks whether the given SQL string is syntactically valid. It
+// tokenizes and parses the input, then releases the resulting AST.
 func Validate(sql string) error {
 	return validateSQL(sqlText{s: sql, isString: true})
 }
@@ -57,7 +55,7 @@ func validateSQL(in sqlText) error {
 	}
 
 	if len(tokens) == 0 {
-		return nil
+		return goerrors.IncompleteStatementError(models.Location{}, "")
 	}
 
 	p := GetParser()
@@ -210,7 +208,7 @@ func ValidateBytesWithDialect(input []byte, dialect keywords.SQLDialect) error {
 
 func validateWithDialect(in sqlText, dialect keywords.SQLDialect) error {
 	if in.blank() {
-		return nil
+		return goerrors.IncompleteStatementError(models.Location{}, "")
 	}
 
 	if !keywords.IsValidDialect(string(dialect)) {
@@ -233,7 +231,7 @@ func validateWithDialect(in sqlText, dialect keywords.SQLDialect) error {
 	}
 
 	if len(tokens) == 0 {
-		return nil
+		return goerrors.IncompleteStatementError(models.Location{}, "")
 	}
 
 	// Pooled parser: PutParser -> Reset clears dialect, typed dialect,

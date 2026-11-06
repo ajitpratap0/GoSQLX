@@ -103,6 +103,8 @@ func TestNoUnreservedTokenizeThenParse(t *testing.T) {
 		"ParseFromModelTokens": true, "ParseContextFromModelTokens": true,
 		"ParseWithRecoveryFromModelTokens": true, "parseTokens": true,
 	}
+	// cmd/gosqlx is deliberately not scanned: the CLI parses on long-lived
+	// goroutines, so the parseTokens/parseContextTokens backstop covers it.
 	matches := 0
 	for _, root := range []string{"../../pkg", "../../wasm"} {
 		err := filepath.WalkDir(root, func(path string, entry fs.DirEntry, walkErr error) error {

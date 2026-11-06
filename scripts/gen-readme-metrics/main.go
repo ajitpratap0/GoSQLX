@@ -9,6 +9,8 @@
 //	go run ./scripts/gen-readme-metrics --claims [--about "text"]
 //	                                              # exit 1 if llms.txt, the About text
 //	                                              # or benchmark dates disagree with metrics.json
+//	go run ./scripts/gen-readme-metrics --record raw.txt --tag vX.Y.Z --hardware CPU --go-version 1.27
+//	                                              # record tag-anchored parser benchmark output
 //
 // Metric blocks live between <!-- metrics:start --> / <!-- metrics:end -->
 // (table + footnote) and <!-- metrics-inline:start --> / <!-- metrics-inline:end -->
@@ -20,11 +22,15 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"math"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"sort"
+	"strconv"
 	"strings"
+	"time"
 )
 
 type metrics struct {
@@ -40,6 +46,7 @@ type metrics struct {
 	Dialects         int    `json:"dialects"`
 	RaceConditions   int    `json:"race_conditions"`
 	MeasuredAt       string `json:"measured_at"`
+	MeasuredTag      string `json:"measured_tag"`
 }
 
 func (m metrics) parsesPerSec() string {
@@ -92,6 +99,40 @@ func syncBanners(src, version string) string {
 	return src
 }
 
+var baselineLine = regexp.MustCompile(`^BenchmarkPerformanceBaseline/([^\s/]+)-\d+(?:[ \t]|$).*?([0-9]+(?:\.[0-9]+)?) ns/op(?:[ \t]|$)`)
+
+func parseBaseline(raw []byte, sub string) ([]float64, error) {
+	var values []float64
+	for _, line := range strings.Split(string(raw), "\n") {
+		match := baselineLine.FindStringSubmatch(line)
+		if len(match) != 3 || match[1] != sub {
+			continue
+		}
+		value, err := strconv.ParseFloat(match[2], 64)
+		if err != nil {
+			return nil, fmt.Errorf("parsing %s ns/op from benchmark line %q: %w", sub, line, err)
+		}
+		values = append(values, value)
+	}
+	if len(values) == 0 {
+		return nil, fmt.Errorf("no BenchmarkPerformanceBaseline/%s samples found", sub)
+	}
+	return values, nil
+}
+
+func median(values []float64) float64 {
+	if len(values) == 0 {
+		return 0
+	}
+	sorted := append([]float64(nil), values...)
+	sort.Float64s(sorted)
+	middle := len(sorted) / 2
+	if len(sorted)%2 == 1 {
+		return sorted[middle]
+	}
+	return (sorted[middle-1] + sorted[middle]) / 2
+}
+
 // snapshotDocs are point-in-time analyses whose version banner records the
 // release they were written against, so they are not kept in sync.
 var snapshotDocs = map[string]bool{"sql99-compliance-analysis.md": true}
@@ -111,12 +152,23 @@ func latestTag() (string, error) {
 	return "", fmt.Errorf("no release tag found (CI needs fetch-depth: 0 / fetch-tags)")
 }
 
-func run() error {
-	check := flag.Bool("check", false, "fail if generated content differs from the files on disk")
-	versionFlag := flag.String("version", "", "release version without leading v (default: latest git tag)")
-	claims := flag.Bool("claims", false, "check llms.txt, the About text and benchmark freshness against metrics.json instead of the README blocks")
-	about := flag.String("about", "", "with --claims: the GitHub About (repository description) text to verify")
-	flag.Parse()
+func run() error { return runWithArgs(os.Args[1:]) }
+
+func runWithArgs(args []string) error {
+	flags := flag.NewFlagSet("gen-readme-metrics", flag.ContinueOnError)
+	flags.SetOutput(os.Stderr)
+	check := flags.Bool("check", false, "fail if generated content differs from the files on disk")
+	versionFlag := flags.String("version", "", "release version without leading v (default: latest git tag)")
+	claims := flags.Bool("claims", false, "check llms.txt, the About text and benchmark freshness against metrics.json instead of the README blocks")
+	about := flags.String("about", "", "with --claims: the GitHub About (repository description) text to verify")
+	record := flags.String("record", "", "record parse benchmark output from a raw go test output file")
+	tag := flags.String("tag", "", "with --record: release tag to measure (vX.Y.Z)")
+	hardware := flags.String("hardware", "", "with --record: CPU model")
+	goVersion := flags.String("go-version", "", "with --record: Go major.minor version")
+	date := flags.String("date", "", "with --record: measurement date (YYYY-MM-DD, default UTC today)")
+	if err := flags.Parse(args); err != nil {
+		return err
+	}
 
 	version := strings.TrimPrefix(*versionFlag, "v")
 	if version == "" {
@@ -139,9 +191,63 @@ func run() error {
 		return fmt.Errorf("metrics.json: parse_ns_per_op must be positive")
 	}
 
+	if *record != "" {
+		if *claims || *check {
+			return fmt.Errorf("--record cannot be combined with --claims or --check")
+		}
+		if !regexp.MustCompile(`^v\d+\.\d+\.\d+$`).MatchString(*tag) {
+			return fmt.Errorf("--tag must match vX.Y.Z")
+		}
+		if version != strings.TrimPrefix(*tag, "v") {
+			return fmt.Errorf("--tag %s does not match --version %s", *tag, version)
+		}
+		if strings.TrimSpace(*hardware) == "" {
+			return fmt.Errorf("--hardware is required with --record")
+		}
+		if !regexp.MustCompile(`^\d+\.\d+$`).MatchString(*goVersion) {
+			return fmt.Errorf("--go-version must be major.minor")
+		}
+		measuredAt := *date
+		if measuredAt == "" {
+			measuredAt = time.Now().UTC().Format(dateLayout)
+		}
+		if _, err := time.Parse(dateLayout, measuredAt); err != nil {
+			return fmt.Errorf("invalid --date %q (expected YYYY-MM-DD): %w", measuredAt, err)
+		}
+		benchOutput, err := os.ReadFile(*record)
+		if err != nil {
+			return fmt.Errorf("reading benchmark output %s: %w", *record, err)
+		}
+		samples, err := parseBaseline(benchOutput, "SimpleSelect")
+		if err != nil {
+			return err
+		}
+		m.ParseNsPerOp = int(math.Round(median(samples)))
+		m.Runs = len(samples)
+		m.MeasuredAt = measuredAt
+		m.MeasuredTag = *tag
+		m.Hardware = strings.TrimSpace(*hardware)
+		m.GoVersion = *goVersion
+		encoded, err := json.MarshalIndent(m, "", "  ")
+		if err != nil {
+			return fmt.Errorf("encoding metrics.json: %w", err)
+		}
+		encoded = append(encoded, '\n')
+		if err := os.WriteFile("scripts/gen-readme-metrics/metrics.json", encoded, 0o644); err != nil {
+			return fmt.Errorf("writing metrics.json: %w", err)
+		}
+		fmt.Println("Sub-benchmark\tMedian (ns/op)\tRuns")
+		for _, sub := range []string{"SimpleSelect", "ComplexQuery", "WindowFunction", "CTE", "INSERT"} {
+			values, err := parseBaseline(benchOutput, sub)
+			if err == nil {
+				fmt.Printf("%s\t%.0f\t%d\n", sub, median(values), len(values))
+			}
+		}
+	}
+
 	if *claims {
 		aboutSet := false
-		flag.Visit(func(f *flag.Flag) { aboutSet = aboutSet || f.Name == "about" })
+		flags.Visit(func(f *flag.Flag) { aboutSet = aboutSet || f.Name == "about" })
 		problems, err := runClaims(m, version, *about, aboutSet)
 		if err != nil {
 			return err

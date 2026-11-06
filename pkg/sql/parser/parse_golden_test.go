@@ -28,7 +28,7 @@ const defaultColumn = "default"
 // The extra "default" column pins the same for the dialect-free entry points,
 // which run separate code: gosqlx.Parse (tokscratch.String and
 // ParseFromModelTokens, with its own ErrTokenize/ErrSyntax wrapping), the
-// parser.Validate fast path and gosqlx.Validate.
+// parser.Validate and gosqlx.Validate.
 //
 // Regenerate with task goldens:update; inspect a mismatch with task goldens:diff.
 func TestGoldenParse(t *testing.T) {

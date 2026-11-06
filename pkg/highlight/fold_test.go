@@ -60,7 +60,7 @@ func TestPutScratchDropsReferences(t *testing.T) {
 	sc := &scratch{lexemes: make([]lexeme, 2, 4), parens: make([]string, 1, 4)}
 	sc.lexemes[0].up, sc.lexemes[1].up = "document", "other"
 	sc.parens[:cap(sc.parens)][3] = "document"
-	putScratch(sc)
+	resetScratch(sc)
 	if len(sc.lexemes) != 0 || len(sc.parens) != 0 {
 		t.Fatal("buffers not reset")
 	}
@@ -75,8 +75,37 @@ func TestPutScratchDropsReferences(t *testing.T) {
 		}
 	}
 	large := &scratch{lexemes: make([]lexeme, 0, maxRetainedLexemes+1), lineStarts: make([]int, 0, maxRetainedLineStarts+1), comments: make([]Span, 0, maxRetainedComments+1), parens: make([]string, 0, maxRetainedParens+1)}
-	putScratch(large)
+	resetScratch(large)
 	if large.lexemes != nil || large.lineStarts != nil || large.comments != nil || large.parens != nil {
 		t.Fatal("oversized buffers retained")
+	}
+}
+
+// TestScratchClearedAfterRealRun drives the real classifier path and checks no
+// lexeme (and so no `up` string pointing into the document) survives reset.
+func TestScratchClearedAfterRealRun(t *testing.T) {
+	src := "select a, b from t where a = 1 and b in (2, 3) order by a"
+	sc := getScratch()
+	h := classifier{src: src, kw: keywordsFor(""), sc: sc}
+	h.indexLines()
+	if _, err := h.run(len(src)); err != nil {
+		t.Fatal(err)
+	}
+	if len(sc.lexemes) == 0 {
+		t.Fatal("run produced no lexemes")
+	}
+	populated := len(sc.lexemes)
+	resetScratch(sc)
+	if len(sc.lexemes) != 0 {
+		t.Fatal("lexemes not truncated")
+	}
+	full := sc.lexemes[:cap(sc.lexemes)]
+	if len(full) < populated {
+		t.Fatalf("capacity %d below populated %d", len(full), populated)
+	}
+	for i, l := range full {
+		if l != (lexeme{}) {
+			t.Fatalf("lexeme %d retained: %+v", i, l)
+		}
 	}
 }

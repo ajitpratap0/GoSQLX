@@ -38,8 +38,10 @@ func getScratch() *scratch { return scratchPool.Get().(*scratch) }
 
 // putScratch clears document references before pooling and drops oversized
 // buffers independently. No tokenizer or *Word is retained by the scratch.
-func putScratch(sc *scratch) {
-	clear(sc.lexemes)
+// resetScratch drops every retained reference and truncates the buffers. It is
+// separate from putScratch so tests never touch an object the pool owns.
+func resetScratch(sc *scratch) {
+	clear(sc.lexemes[:cap(sc.lexemes)])
 	clear(sc.parens[:cap(sc.parens)])
 	if cap(sc.lexemes) > maxRetainedLexemes {
 		sc.lexemes = nil
@@ -54,5 +56,9 @@ func putScratch(sc *scratch) {
 		sc.parens = nil
 	}
 	sc.lexemes, sc.comments, sc.parens, sc.lineStarts = sc.lexemes[:0], sc.comments[:0], sc.parens[:0], sc.lineStarts[:0]
+}
+
+func putScratch(sc *scratch) {
+	resetScratch(sc)
 	scratchPool.Put(sc)
 }

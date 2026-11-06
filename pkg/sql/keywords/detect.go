@@ -146,9 +146,6 @@ var detectorOutputs []uint64
 var detectorHints []matcherHint
 
 func buildDetector() {
-	if len(dialectHints)+2 > 64 {
-		panic("dialect detector hints exceed 64-bit bitset capacity")
-	}
 	for c := byte('A'); c <= 'Z'; c++ {
 		detectorClasses[c] = c - 'A' + 1
 	}
@@ -175,9 +172,6 @@ func buildDetector() {
 		id := len(detectorHints)
 		if id >= 64 {
 			panic("dialect detector hints exceed 64-bit bitset capacity")
-		}
-		if len(pattern) > 64 {
-			panic("dialect detector hint exceeds 64-bit history capacity")
 		}
 		detectorHints = append(detectorHints, matcherHint{len(pattern), dialect, weight})
 		node := 0

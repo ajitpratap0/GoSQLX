@@ -26,7 +26,7 @@ if err := gosqlx.Validate("SELECT * FROM users"); err != nil {
 - **Simple API**: Parse SQL with a single function call
 - **Automatic Resource Management**: Object pools handled internally
 - **Batch Processing**: Efficient parsing of multiple queries
-- **Validation**: Quick syntax validation without full AST construction
+- **Validation**: Syntax checking that parses SQL and releases the AST
 - **Format Support**: Basic SQL formatting (with plans for advanced formatting)
 - **Production Ready**: Built on top of GoSQLX's production-tested parser
 
@@ -77,7 +77,8 @@ ast, err := gosqlx.ParseBytes(sqlBytes)
 
 #### Validate
 
-Validate SQL syntax without building the full AST:
+Validate SQL syntax without returning an AST. Validation tokenizes and parses
+the SQL, then releases the resulting AST:
 
 ```go
 func Validate(sql string) error
@@ -336,18 +337,13 @@ func parseSQL(sql string) (*ast.AST, error) {
 
 ## Best Practices
 
-### 1. Use Validate for Quick Checks
+### 1. Use Validate When You Only Need a Syntax Check
 
-If you only need to check syntax validity, use `Validate` instead of `Parse`:
+If your caller only needs to know whether SQL is syntactically valid, use
+`Validate`. It does not return the parsed AST:
 
 ```go
-// Good - faster for validation only
 if err := gosqlx.Validate(sql); err != nil {
-    return err
-}
-
-// Less efficient - builds full AST
-if _, err := gosqlx.Parse(sql); err != nil {
     return err
 }
 ```
@@ -438,7 +434,6 @@ The high-level API has minimal overhead compared to the low-level API:
 ```
 BenchmarkParse-8              50000    ~30-50 μs/op    ~15 KB/op
 BenchmarkParseMultiple-8      10000   ~150-200 μs/op   ~75 KB/op (5 queries)
-BenchmarkValidate-8           50000    ~30-50 μs/op    ~15 KB/op
 BenchmarkFormat-8             45000    ~35-55 μs/op    ~16 KB/op
 ```
 

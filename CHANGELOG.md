@@ -132,6 +132,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Formatter**: compact formatting (`ast.CompactStyle()`, no clause newlines, no semicolon, no line width, no target dialect, preserve or upper keyword case) now renders SELECT, INSERT, UPDATE and DELETE through each statement's `SQL()` instead of the visitor renderer, and a single compact statement skips the parts slice and join. `Render/compact/*` is 27-49% faster with 1 alloc/op (was 4-42) and 60-82% fewer bytes/op; `Normalize` and `Fingerprint` are 6-13% faster with 15-39% fewer allocs. Output is byte-identical (differential test over every corpus statement in 9 dialects and all option combinations); lowercase keywords, target-dialect rewrites, set operations and ALTER TABLE keep the visitor path. [W5-02]
 
 ### Behavior changes
+- **Validate blank input**: `parser.Validate` and `parser.ValidateBytes` have
+  always returned E2005 for empty or ASCII-whitespace-only input. Comment-only
+  input (`-- c`, `/* x */`, `;`, `-- c\n;`) has always returned E2005 through
+  all parser entry points and `gosqlx.Validate`/`Parse`. The parser behavior
+  change is limited to `parser.ValidateWithDialect` and
+  `parser.ValidateBytesWithDialect`, which now return E2005 for blank input
+  instead of nil. `gosqlx.Validate` now wraps E2005 or E2004 in `ErrSyntax` for
+  empty or whitespace-only input, replacing the unstructured “empty input”
+  error; `errors.As` now finds the structured error. C binding
+  `gosqlx_validate_dialect` has the same error change.
+  **Migration:** only `parser.ValidateWithDialect`,
+  `parser.ValidateBytesWithDialect` previously accepted blank input;
+  comment-only input was never accepted.
+  `gosqlx.Validate` and C/Python callers should match with
+  `errors.Is(err, gosqlx.ErrSyntax)` or the error code, rather than the
+  “empty input” text.
 - **Linter L010 (redundant whitespace)**: violation columns are byte
   positions on lines with invalid UTF-8. They were shifted before because
   invalid bytes were replaced with U+FFFD (3 bytes) while scanning. Valid

@@ -10,5 +10,6 @@
   "sql99_estimate": "~80–85%",
   "dialects": 8,
   "race_conditions": 0,
-  "measured_at": "2026-11-02"
+  "measured_at": "2026-11-02",
+  "measured_tag": "v1.17.0"
 }

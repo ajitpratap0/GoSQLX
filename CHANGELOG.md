@@ -102,6 +102,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     benchmarks that publish diagnostics no longer time a growing buffer.
 
 ### Performance
+- **Security**: `Scanner.Scan` walks the AST with a pooled struct visitor instead of a per-call closure and ancestor slice. On the amd64 layout-randomized perf gate (20 layouts per arm), `BenchmarkScanASTRW` B/op is -53.27% to -58.31% on all eight dialects (target -45% met), allocs/op about -29% to -33%, and time -12.3% to -17.9% (all p<0.001, none worse). Findings are byte-identical (differential test against the previous implementation over the corpus); no API or behaviour change. [W6-02]
 - **Linter**: the lint pipeline uses the pooled parser and pooled dialect tokenizer; behavior is unchanged. [W6-06ab]
 - **Linter**: aliasing consistency and four visitor-based rules now reuse the cached preorder AST node list. Violations are unchanged; there is no API or behavior change. [W6-05b]
 - **Linter**: rule L007 (keyword case consistency) scans words without allocating (substring words, ASCII upper-casing into a stack buffer before the keyword lookup). Output is unchanged. On the canonical benchmarks (Apple M4, local), `BenchmarkLintRule/L007` allocates about 98% fewer objects (72565 to 1194 allocs/op) and about 97% fewer bytes, and `BenchmarkLintRW` allocates about 12.5% fewer objects. [W6-03]

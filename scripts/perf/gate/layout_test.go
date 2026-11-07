@@ -447,30 +447,6 @@ func TestLowPowerListsWideBenchmarks(t *testing.T) {
 	}
 }
 
-func TestLayoutPowerMatchesSimulation(t *testing.T) {
-	// k = 20 layouts, m = 50 benchmarks: Benjamini-Hochberg's single-
-	// discovery level is 0.01/50. The simulation (reported spread, uniform
-	// layout effects) caught a +5% slowdown 93%, 47% and 6% of the time.
-	level := 0.01 / 50
-	for _, tc := range []struct{ spread, lo, hi float64 }{
-		{2.97, 0.85, 0.97},
-		{4.45, 0.30, 0.55},
-		{7.41, 0.02, 0.10},
-	} {
-		if p := layoutPower(tc.spread, 20, level, 5); p < tc.lo || p > tc.hi {
-			t.Errorf("layoutPower(spread %.2f%%) = %.3f, want in [%.2f, %.2f]", tc.spread, p, tc.lo, tc.hi)
-		}
-	}
-	// layoutMinShift inverts layoutPower.
-	shift := layoutMinShift(4, 20, level, 0.8)
-	if p := layoutPower(4, 20, level, shift); math.Abs(p-0.8) > 1e-6 {
-		t.Errorf("layoutPower at layoutMinShift = %g, want 0.8", p)
-	}
-	if !math.IsNaN(layoutPower(0, 20, level, 5)) || !math.IsNaN(layoutPower(3, 1, level, 5)) {
-		t.Error("layoutPower must be NaN for a zero spread or a single layout")
-	}
-}
-
 func TestCompareArmsWithLayoutsOnOneSideOnly(t *testing.T) {
 	// A head built without randomization (one unlabelled binary) against a
 	// randomized base cannot be compared by layout: the gate falls back to

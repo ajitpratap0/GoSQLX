@@ -18,6 +18,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"sync"
 	"testing"
@@ -461,6 +462,45 @@ func FuzzSpans(f *testing.F) {
 	})
 }
 
+// TestSpansUnicodeCaseFolding pins Unicode-aware folding alongside mixed-case ASCII twins.
+func TestSpansUnicodeCaseFolding(t *testing.T) {
+	tests := []struct {
+		sql      string
+		want     []Span
+		complete bool
+	}{
+		{"ſelect 1", []Span{{Start: 0, End: 7, Category: Keyword}, {Start: 8, End: 9, Category: Number}}, true},
+		{"Select 1", []Span{{Start: 0, End: 6, Category: Keyword}, {Start: 7, End: 8, Category: Number}}, true},
+		{"CREATE TABLE t (c ınt)", []Span{{Start: 18, End: 22, Category: DataType}}, false},
+		{"create table t (c Int)", []Span{{Start: 18, End: 21, Category: DataType}}, false},
+		{"SELECT cast(x aſ int)", []Span{{Start: 14, End: 17, Category: Keyword}, {Start: 18, End: 21, Category: DataType}}, false},
+		{"select CAST(x As int)", []Span{{Start: 14, End: 16, Category: Keyword}, {Start: 17, End: 20, Category: DataType}}, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.sql, func(t *testing.T) {
+			got := Spans(tt.sql)
+			if tt.complete {
+				if !reflect.DeepEqual(got, tt.want) {
+					t.Fatalf("Spans(%q) = %v, want %v", tt.sql, got, tt.want)
+				}
+				return
+			}
+			for _, want := range tt.want {
+				found := false
+				for _, span := range got {
+					if span == want {
+						found = true
+						break
+					}
+				}
+				if !found {
+					t.Errorf("Spans(%q) = %v, missing %v", tt.sql, got, want)
+				}
+			}
+		})
+	}
+}
+
 func BenchmarkSpans(b *testing.B) {
 	sql := strings.Repeat("SELECT u.id, u.name, COUNT(o.id) AS orders FROM users u "+
 		"LEFT JOIN orders o ON o.user_id = u.id WHERE u.created_at > $1 -- recent\n"+
@@ -469,6 +509,21 @@ func BenchmarkSpans(b *testing.B) {
 	b.SetBytes(int64(len(sql)))
 	for i := 0; i < b.N; i++ {
 		_ = Spans(sql)
+	}
+}
+
+func TestSpansAllocs(t *testing.T) {
+	if raceEnabled {
+		t.Skip("race runtime may discard pooled values")
+	}
+	query := strings.Repeat("SELECT u.id, u.name, COUNT(o.id) AS orders FROM users u "+
+		"LEFT JOIN orders o ON o.user_id = u.id WHERE u.created_at > $1 -- recent\n"+
+		"GROUP BY u.id, u.name HAVING COUNT(o.id) > 5 ORDER BY orders DESC LIMIT 10;\n", 10)
+	for _, sql := range []string{query, "select a from t"} {
+		Spans(sql)
+		if got := testing.AllocsPerRun(200, func() { Spans(sql) }); got > 4 {
+			t.Errorf("length %d: got %g allocs, want at most 4", len(sql), got)
+		}
 	}
 }
 

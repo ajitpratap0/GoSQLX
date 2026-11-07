@@ -25,11 +25,24 @@ import (
 // These tests read process-global pool counters, so they use before/after
 // deltas, never call metrics.ResetPoolStats and never run in parallel.
 
+func enablePoolStats(t testing.TB) {
+	was := metrics.IsEnabled()
+	metrics.Enable()
+	t.Cleanup(func() {
+		if was {
+			metrics.Enable()
+		} else {
+			metrics.Disable()
+		}
+	})
+}
+
 func poolDelta(before, after map[string]metrics.PoolStat, name string) (gets, puts int64) {
 	return after[name].Gets - before[name].Gets, after[name].Puts - before[name].Puts
 }
 
 func TestPoolHygiene_Balanced(t *testing.T) {
+	enablePoolStats(t)
 	const n = 50
 	tests := []struct {
 		name    string
@@ -78,6 +91,7 @@ func TestPoolHygiene_Balanced(t *testing.T) {
 }
 
 func TestParseMultiple_SuccessCallerOwns(t *testing.T) {
+	enablePoolStats(t)
 	before := metrics.GetPoolStats()
 	results, err := ParseMultiple([]string{"SELECT 1", "SELECT 2", "SELECT 3"})
 	if err != nil {
@@ -193,5 +207,45 @@ func TestAnalyze_ResultIndependentOfPool(t *testing.T) {
 	}
 	if res.Score != 90 {
 		t.Errorf("Score = %d, want 90", res.Score)
+	}
+}
+
+func TestPoolStats_RealPoolsGatedEndToEnd(t *testing.T) {
+	enablePoolStats(t)
+	const n = 20
+	run := func() {
+		t.Helper()
+		for i := 0; i < n; i++ {
+			tree, err := Parse("SELECT a FROM t WHERE b = 1")
+			if err != nil {
+				t.Fatalf("Parse: %v", err)
+			}
+			ast.ReleaseAST(tree)
+		}
+	}
+
+	metrics.Disable()
+	run()
+	metrics.Enable()
+	s0 := metrics.GetPoolStats()
+	metrics.Disable()
+	run()
+	metrics.Enable()
+	s1 := metrics.GetPoolStats()
+	for _, pool := range []string{"tokenizer", "parser", "ast"} {
+		if s1[pool] != s0[pool] {
+			t.Errorf("%s counted while disabled: before=%+v after=%+v", pool, s0[pool], s1[pool])
+		}
+	}
+
+	run()
+	s2 := metrics.GetPoolStats()
+	// On main, each Parse plus ReleaseAST makes exactly one Get and one Put
+	// for each of these three pools.
+	for _, pool := range []string{"tokenizer", "parser", "ast"} {
+		gets, puts := poolDelta(s1, s2, pool)
+		if gets != n || puts != n {
+			t.Errorf("%s enabled delta: gets=%d puts=%d, want %d each", pool, gets, puts, n)
+		}
 	}
 }

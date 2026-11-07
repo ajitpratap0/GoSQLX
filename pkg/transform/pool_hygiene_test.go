@@ -27,11 +27,24 @@ import (
 
 // Pool counters are process-global: use deltas, never reset, never t.Parallel.
 
+func enablePoolStats(t testing.TB) {
+	was := metrics.IsEnabled()
+	metrics.Enable()
+	t.Cleanup(func() {
+		if was {
+			metrics.Enable()
+		} else {
+			metrics.Disable()
+		}
+	})
+}
+
 func poolDelta(before, after map[string]metrics.PoolStat, name string) (gets, puts int64) {
 	return after[name].Gets - before[name].Gets, after[name].Puts - before[name].Puts
 }
 
 func TestParseHelpers_ParserPoolBalanced(t *testing.T) {
+	enablePoolStats(t)
 	const n = 50
 	selStmt := mustParse(t, "SELECT id FROM t")
 	updStmt := mustParse(t, "UPDATE t SET a = 1")

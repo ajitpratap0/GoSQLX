@@ -17,6 +17,7 @@ package metrics_test
 import (
 	"testing"
 
+	"github.com/ajitpratap0/GoSQLX/internal/metricsgate"
 	"github.com/ajitpratap0/GoSQLX/internal/poolstats"
 	"github.com/ajitpratap0/GoSQLX/pkg/metrics"
 )
@@ -50,6 +51,7 @@ func TestPoolStats_HasASTPool(t *testing.T) {
 }
 
 func TestPoolStats_RecordGet(t *testing.T) {
+	enablePoolStats(t)
 	metrics.ResetPoolStats()
 
 	_ = metrics.RecordNamedPoolGet("tokenizer")
@@ -69,6 +71,7 @@ func TestPoolStats_RecordGet(t *testing.T) {
 }
 
 func TestPoolStats_ActiveCalculation(t *testing.T) {
+	enablePoolStats(t)
 	metrics.ResetPoolStats()
 
 	metrics.RecordNamedPoolGet("parser")
@@ -89,6 +92,8 @@ func TestPoolStats_ActiveCalculation(t *testing.T) {
 }
 
 func TestPoolStats_ResetClearsCounters(t *testing.T) {
+	enablePoolStats(t)
+	metrics.ResetPoolStats()
 	metrics.RecordNamedPoolGet("ast")
 	metrics.ResetPoolStats()
 
@@ -101,6 +106,7 @@ func TestPoolStats_ResetClearsCounters(t *testing.T) {
 }
 
 func TestPoolStats_ConcurrentSafe(t *testing.T) {
+	enablePoolStats(t)
 	metrics.ResetPoolStats()
 
 	done := make(chan struct{})
@@ -129,6 +135,7 @@ func TestPoolStats_ConcurrentSafe(t *testing.T) {
 // the typed internal counters feed the same standard-pool statistics, that a
 // custom pool keeps the map path, and that ResetPoolStats zeroes both.
 func TestPoolStats_TypedCountersEquivalent(t *testing.T) {
+	enablePoolStats(t)
 	metrics.ResetPoolStats()
 	t.Cleanup(metrics.ResetPoolStats)
 
@@ -166,4 +173,115 @@ func TestPoolStats_TypedCountersEquivalent(t *testing.T) {
 			t.Errorf("%s not zeroed: %+v", name, s)
 		}
 	}
+}
+
+func enablePoolStats(t testing.TB) {
+	was := metrics.IsEnabled()
+	metrics.Enable()
+	t.Cleanup(func() {
+		if was {
+			metrics.Enable()
+		} else {
+			metrics.Disable()
+		}
+	})
+}
+
+func TestPoolStats_DisabledReturnsZeros(t *testing.T) {
+	enablePoolStats(t)
+	metrics.ResetPoolStats()
+	t.Cleanup(metrics.ResetPoolStats)
+	metrics.RecordNamedPoolGet("tokenizer")
+	metrics.RecordNamedPoolGet("tokenizer")
+	metrics.RecordNamedPoolGet("custom")
+	poolstats.AST.Get()
+	metrics.Disable()
+	stats := metrics.GetPoolStats()
+	if len(stats) != 3 {
+		t.Fatalf("disabled stats = %v, want exactly three standard pools", stats)
+	}
+	for _, name := range []string{"tokenizer", "parser", "ast"} {
+		if got, ok := stats[name]; !ok || got != (metrics.PoolStat{}) {
+			t.Errorf("disabled %s = %+v (present %v), want zero", name, got, ok)
+		}
+	}
+	if _, ok := stats["custom"]; ok {
+		t.Error("custom pool visible while disabled")
+	}
+	// Each disabled read returns a fresh map, with no shared caller mutations.
+	stats["tokenizer"] = metrics.PoolStat{Gets: 99}
+	delete(stats, "parser")
+	if fresh := metrics.GetPoolStats(); len(fresh) != 3 || fresh["tokenizer"] != (metrics.PoolStat{}) {
+		t.Fatalf("disabled read reused a mutated map: %v", fresh)
+	}
+	metrics.Enable()
+	stats = metrics.GetPoolStats()
+	want := map[string]metrics.PoolStat{"tokenizer": {Gets: 2}, "parser": {}, "ast": {Gets: 1}, "custom": {Gets: 1}}
+	if len(stats) != len(want) {
+		t.Fatalf("restored stats = %v, want %v", stats, want)
+	}
+	for name, expected := range want {
+		if got, ok := stats[name]; !ok || got != expected {
+			t.Errorf("restored %s = %+v (present %v), want %+v", name, got, ok, expected)
+		}
+	}
+}
+
+func TestPoolStats_DisabledDoesNotCount(t *testing.T) {
+	enablePoolStats(t)
+	metrics.ResetPoolStats()
+	t.Cleanup(metrics.ResetPoolStats)
+	metrics.Disable()
+	if got := metrics.RecordNamedPoolGet("tokenizer"); got != 0 {
+		t.Errorf("disabled tokenizer Get = %d", got)
+	}
+	if got := metrics.RecordNamedPoolPut("parser"); got != 0 {
+		t.Errorf("disabled parser Put = %d", got)
+	}
+	if got := metrics.RecordNamedPoolGet("custom-x"); got != 0 {
+		t.Errorf("disabled custom Get = %d", got)
+	}
+	if got := metrics.RecordNamedPoolPut("custom-put-x"); got != 0 {
+		t.Errorf("disabled custom Put = %d", got)
+	}
+	poolstats.Parser.Get()
+	metrics.Enable()
+	stats := metrics.GetPoolStats()
+	if len(stats) != 3 {
+		t.Fatalf("got pools %v, want exactly three standard pools", stats)
+	}
+	for _, name := range []string{"tokenizer", "parser", "ast"} {
+		if got, ok := stats[name]; !ok || got != (metrics.PoolStat{}) {
+			t.Errorf("%s = %+v (present %v), want zero", name, got, ok)
+		}
+	}
+	if _, ok := stats["custom-x"]; ok {
+		t.Error("disabled Get created a custom pool")
+	}
+	if _, ok := stats["custom-put-x"]; ok {
+		t.Error("disabled Put created a custom pool")
+	}
+}
+
+func TestPoolStats_FollowsEnableDisable(t *testing.T) {
+	enablePoolStats(t)
+	metrics.ResetPoolStats()
+	t.Cleanup(metrics.ResetPoolStats)
+	if !metricsgate.Enabled() {
+		t.Fatal("Enable did not enable the shared gate")
+	}
+	if got := poolstats.Tokenizer.Get(); got != 1 {
+		t.Fatalf("enabled Get = %d, want 1", got)
+	}
+	metrics.Disable()
+	if metricsgate.Enabled() {
+		t.Fatal("Disable did not disable the shared gate")
+	}
+	if got := poolstats.Tokenizer.Get(); got != 0 {
+		t.Fatalf("disabled Get = %d, want 0", got)
+	}
+	if g, p := poolstats.Tokenizer.Load(); g != 1 || p != 0 {
+		t.Fatalf("retained counts = %d/%d, want 1/0", g, p)
+	}
+	metrics.Enable()
 }

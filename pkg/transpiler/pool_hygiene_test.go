@@ -28,7 +28,20 @@ import (
 
 // Pool counters are process-global: use deltas, never reset, never t.Parallel.
 
+func enablePoolStats(t testing.TB) {
+	was := metrics.IsEnabled()
+	metrics.Enable()
+	t.Cleanup(func() {
+		if was {
+			metrics.Enable()
+		} else {
+			metrics.Disable()
+		}
+	})
+}
+
 func TestTranspile_ASTPoolBalanced(t *testing.T) {
+	enablePoolStats(t)
 	const n = 50
 	tests := []struct {
 		name     string

@@ -94,7 +94,7 @@ type lookupFoldInstance struct {
 func lookupFoldAddedKeywords(tb testing.TB) *Keywords {
 	tb.Helper()
 	k := New(DialectPostgreSQL, true)
-	for _, word := range []string{"ÉCOLE", strings.Repeat("A", 64), strings.Repeat("B", 65), "CUSTOM KEY"} {
+	for _, word := range []string{"ÉCOLE", strings.Repeat("A", 64), strings.Repeat("B", 65), "CUSTOM KEY", "A@B", "A[B"} {
 		if err := k.AddKeyword(Keyword{Word: word, Type: models.TokenTypeKeyword, Reserved: true}); err != nil {
 			tb.Fatalf("AddKeyword(%q): %v", word, err)
 		}
@@ -129,7 +129,7 @@ func lookupFoldInputs(k *Keywords) []string {
 	inputs := []string{
 		"users", "customer_id", "x", "", "ſelect", "dıstınct", "Sſelect",
 		"\xff", "sel\xff" + "ect", "\x80x", "SELECT\x00",
-		"sel`ect", "sel{ect", "sel@ect", "sel[ect",
+		"sel`ect", "sel{ect", "sel@ect", "sel[ect", "a`b", "a{b",
 		strings.Repeat("a", 64), strings.Repeat("b", 65),
 	}
 	for _, n := range []int{63, 64, 65, 200} {

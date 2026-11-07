@@ -151,7 +151,8 @@ func (k *Keywords) IsKeyword(s string) bool {
 	return ok
 }
 
-// GetKeywordType returns the token type for a keyword
+// GetKeywordType returns the token type for a keyword.
+//
 // Pure-ASCII words up to 64 bytes are looked up without allocating.
 func (k *Keywords) GetKeywordType(s string) models.TokenType {
 	if k.ignoreCase {

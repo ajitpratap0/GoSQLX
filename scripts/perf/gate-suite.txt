@@ -19,3 +19,7 @@
 ./pkg/linter         ^BenchmarkLintRW$
 ./pkg/linter         ^BenchmarkLintRule$/^(L007|L010)$
 ./pkg/gosqlx         ^BenchmarkParseError$/^(syntax_mid|syntax_end|tokenize|long_prefix)$/^(parse|validate)$
+./pkg/sql/security ^BenchmarkScanSQLLarge$
+./pkg/sql/security ^BenchmarkScanSQLStackedScript$
+./pkg/sql/security ^BenchmarkScanSQLParams$
+./pkg/sql/security ^BenchmarkScanSQLRW$

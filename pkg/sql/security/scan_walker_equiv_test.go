@@ -217,10 +217,10 @@ func TestScanWalkerEquivalence(t *testing.T) {
 				}
 			}
 		}
+		if total == 0 || referenceTotal == 0 {
+			t.Fatalf("realworld suffix matrix is vacuous: Scan findings=%d reference findings=%d", total, referenceTotal)
+		}
 	})
-	if total == 0 || referenceTotal == 0 {
-		t.Fatalf("realworld suffix matrix is vacuous: Scan findings=%d reference findings=%d", total, referenceTotal)
-	}
 	t.Run("targeted", func(t *testing.T) {
 		for _, tc := range scanWalkerTargetCases() {
 			t.Run(tc.name, func(t *testing.T) { parseCompare(t, tc.sql, tc.dialect, true) })

@@ -14,7 +14,12 @@
 
 package keywords
 
-import "strings"
+import (
+	"math/bits"
+	"sync"
+	"unicode"
+	"unicode/utf8"
+)
 
 // dialectHint represents a keyword or pattern that suggests a specific SQL dialect,
 // along with a weight indicating how strongly it suggests that dialect.
@@ -95,13 +100,143 @@ var dialectHints = []dialectHint{
 	{pattern: "VACUUM", dialect: DialectSQLite, weight: 4},
 }
 
+const (
+	dialectOracleIndex = iota
+	dialectSnowflakeIndex
+	dialectPostgreSQLIndex
+	dialectMySQLIndex
+	dialectSQLServerIndex
+	dialectMariaDBIndex
+	dialectSQLiteIndex
+	dialectCount
+)
+
+// dialectPriority defines score indices and tie-breaking order.
+var dialectPriority = [dialectCount]SQLDialect{
+	dialectOracleIndex:     DialectOracle,
+	dialectSnowflakeIndex:  DialectSnowflake,
+	dialectPostgreSQLIndex: DialectPostgreSQL,
+	dialectMySQLIndex:      DialectMySQL,
+	dialectSQLServerIndex:  DialectSQLServer,
+	dialectMariaDBIndex:    DialectMariaDB,
+	dialectSQLiteIndex:     DialectSQLite,
+}
+
+// The automaton is built lazily from the hint table. Each output bit identifies
+// one weighted hint, including duplicate patterns with different dialects.
+const matcherClasses = 30
+
+const (
+	classOther      = 0
+	classDigit      = 27
+	classUnderscore = 28
+	classSpace      = 29
+)
+
+type matcherHint struct {
+	length  int
+	dialect int
+	weight  int
+}
+
+var detectorOnce sync.Once
+var detectorClasses [256]uint8
+var detectorTransitions []uint16
+var detectorOutputs []uint64
+var detectorHints []matcherHint
+
+func buildDetector() {
+	for c := byte('A'); c <= 'Z'; c++ {
+		detectorClasses[c] = c - 'A' + 1
+	}
+	for c := byte('0'); c <= '9'; c++ {
+		detectorClasses[c] = classDigit
+	}
+	detectorClasses['_'] = classUnderscore
+	detectorClasses[' '] = classSpace
+
+	// An upper bound on trie nodes allows building without growing the scratch table.
+	maxNodes := 1 + 2*len("NVL")
+	for _, h := range dialectHints {
+		maxNodes += len(h.pattern)
+	}
+	if maxNodes > 1<<16 {
+		panic("dialect detector exceeds uint16 node capacity")
+	}
+	transitions := make([]uint16, maxNodes*matcherClasses)
+	outputs := make([]uint64, maxNodes)
+	fail := make([]uint16, maxNodes)
+	detectorHints = make([]matcherHint, 0, len(dialectHints)+2)
+	nodes := 1
+	add := func(pattern string, dialect, weight int) {
+		id := len(detectorHints)
+		if id >= 64 {
+			panic("dialect detector hints exceed 64-bit bitset capacity")
+		}
+		detectorHints = append(detectorHints, matcherHint{len(pattern), dialect, weight})
+		node := 0
+		for i := 0; i < len(pattern); i++ {
+			class := detectorClasses[pattern[i]]
+			if class == classOther || class == classDigit {
+				panic("unsupported dialect hint byte")
+			}
+			index := node*matcherClasses + int(class)
+			next := transitions[index]
+			if next == 0 {
+				next = uint16(nodes)
+				nodes++
+				transitions[index] = next
+			}
+			node = int(next)
+		}
+		outputs[node] |= uint64(1) << id
+	}
+	for _, h := range dialectHints {
+		for i, d := range dialectPriority {
+			if h.dialect == d {
+				add(h.pattern, i, h.weight)
+				break
+			}
+		}
+	}
+	add("NVL", dialectOracleIndex, 1)
+	add("NVL", dialectSnowflakeIndex, 1)
+	queue := make([]uint16, 0, nodes)
+	for c := 0; c < matcherClasses; c++ {
+		if n := transitions[c]; n != 0 {
+			queue = append(queue, n)
+		}
+	}
+	for head := 0; head < len(queue); head++ {
+		n := int(queue[head])
+		f := int(fail[n])
+		outputs[n] |= outputs[f]
+		for c := 0; c < matcherClasses; c++ {
+			index := n*matcherClasses + c
+			child := transitions[index]
+			if child != 0 {
+				fail[child] = transitions[f*matcherClasses+c]
+				queue = append(queue, child)
+			} else {
+				transitions[index] = transitions[f*matcherClasses+c]
+			}
+		}
+	}
+	detectorTransitions = make([]uint16, nodes*matcherClasses)
+	copy(detectorTransitions, transitions)
+	detectorOutputs = make([]uint64, nodes)
+	copy(detectorOutputs, outputs)
+}
+
 // DetectDialect attempts to identify the SQL dialect from SQL text.
 // It analyzes the SQL string for dialect-specific keywords and patterns,
 // returning the most likely dialect based on weighted keyword analysis.
 //
 // The detection uses a scoring system where each dialect-specific keyword
 // contributes a weight to its dialect's score. The dialect with the highest
-// total score wins. If no dialect-specific patterns are found, DialectGeneric
+// total score wins. Each hint contributes at most once. Ties are resolved in
+// the order Oracle, Snowflake, PostgreSQL, MySQL, SQL Server, MariaDB, SQLite.
+// If no dialect-specific patterns are found, DialectGeneric
 // is returned.
 //
 // Detection heuristics include:
@@ -135,81 +270,99 @@ func DetectDialect(sql string) SQLDialect {
 	if sql == "" {
 		return DialectGeneric
 	}
-
-	upper := strings.ToUpper(sql)
-	scores := make(map[SQLDialect]int)
-
-	// Check keyword-based hints
-	for _, hint := range dialectHints {
-		if containsWord(upper, hint.pattern) {
-			scores[hint.dialect] += hint.weight
+	scores := dialectScores(sql)
+	best := 0
+	result := DialectGeneric
+	for i, score := range scores {
+		if score > best {
+			best = score
+			result = dialectPriority[i]
 		}
 	}
-
-	// Syntactic checks for identifier quoting styles
-	if strings.Contains(sql, "`") {
-		scores[DialectMySQL] += 3
-	}
-	if strings.Contains(sql, "[") && strings.Contains(sql, "]") {
-		scores[DialectSQLServer] += 3
-	}
-	if strings.Contains(sql, "::") {
-		scores[DialectPostgreSQL] += 3
-	}
-
-	// NVL is shared between Oracle and Snowflake, so only add a small weight
-	if containsWord(upper, "NVL") {
-		scores[DialectOracle] += 1
-		scores[DialectSnowflake] += 1
-	}
-
-	// Find the dialect with the highest score
-	bestDialect := DialectGeneric
-	bestScore := 0
-	for dialect, score := range scores {
-		if score > bestScore {
-			bestScore = score
-			bestDialect = dialect
-		}
-	}
-
-	return bestDialect
+	return result
 }
 
-// containsWord checks if the uppercase SQL string contains the given pattern
-// as a whole word (not as a substring of another word). The pattern is expected
-// to already be uppercase.
-//
-// A word boundary is defined as either:
-//   - The start or end of the string
-//   - A non-alphanumeric, non-underscore character
-func containsWord(upper string, pattern string) bool {
-	idx := 0
-	patLen := len(pattern)
-	for {
-		pos := strings.Index(upper[idx:], pattern)
-		if pos == -1 {
-			return false
+// dialectScores streams uppercase characters through the matcher. Non-ASCII
+// uppercase runes cannot occur in an ASCII hint and all their UTF-8 bytes are
+// non-word bytes, so one sentinel preserves both matching and byte boundaries.
+func dialectScores(sql string) (scores [dialectCount]int) {
+	detectorOnce.Do(buildDetector)
+	var seen, pending, history uint64
+	node := 0
+	backtick, left, right, colon, previousColon := false, false, false, false, false
+	// A match remains pending until the following byte establishes its end boundary.
+	for i := 0; i <= len(sql); {
+		var c byte
+		if i < len(sql) {
+			c = sql[i]
+			i++
+			if c >= utf8.RuneSelf {
+				r, n := utf8.DecodeRuneInString(sql[i-1:])
+				i += n - 1
+				r = unicode.ToUpper(r)
+				if r < utf8.RuneSelf {
+					c = byte(r)
+				} else {
+					c = 128
+				}
+			} else if c >= 'a' && c <= 'z' {
+				c -= 'a' - 'A'
+			}
+			switch c {
+			case '`':
+				backtick = true
+			case '[':
+				left = true
+			case ']':
+				right = true
+			}
+			if c == ':' && previousColon {
+				colon = true
+			}
+			previousColon = c == ':'
+		} else {
+			i++ // Feed a non-word sentinel to flush the final pending match.
 		}
-		absPos := idx + pos
-
-		// Check word boundary before the pattern
-		beforeOK := absPos == 0 || !isWordChar(upper[absPos-1])
-
-		// Check word boundary after the pattern
-		endPos := absPos + patLen
-		afterOK := endPos >= len(upper) || !isWordChar(upper[endPos])
-
-		if beforeOK && afterOK {
-			return true
+		word := isWordChar(c)
+		if !word {
+			for pending != 0 {
+				id := bits.TrailingZeros64(pending)
+				bit := uint64(1) << id
+				if seen&bit == 0 {
+					h := detectorHints[id]
+					scores[h.dialect] += h.weight
+					seen |= bit
+				}
+				pending &^= bit
+			}
+		} else {
+			pending = 0
 		}
-
-		// Move past this occurrence and continue searching
-		idx = absPos + 1
-		if idx >= len(upper) {
-			return false
+		node = int(detectorTransitions[node*matcherClasses+int(detectorClasses[c])])
+		out := detectorOutputs[node] &^ seen
+		for out != 0 {
+			id := bits.TrailingZeros64(out)
+			bit := uint64(1) << id
+			if history&(uint64(1)<<(detectorHints[id].length-1)) == 0 {
+				pending |= bit
+			}
+			out &^= bit
+		}
+		history <<= 1
+		if word {
+			history |= 1
 		}
 	}
+	if backtick {
+		scores[dialectMySQLIndex] += 3
+	}
+	if left && right {
+		scores[dialectSQLServerIndex] += 3
+	}
+	if colon {
+		scores[dialectPostgreSQLIndex] += 3
+	}
+	return
 }
 
 // isWordChar returns true if the byte is an alphanumeric character or underscore.

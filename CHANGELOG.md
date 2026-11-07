@@ -102,6 +102,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     benchmarks that publish diagnostics no longer time a growing buffer.
 
 ### Performance
+- **Dialect detection [W7-09]**: `DetectDialect` uses a lazily built, compact single-pass matcher with no per-call allocations (1 to 0 allocs/op, 48-80 B/op to 0; 72 KiB to 0 on a 64 KiB input). On the amd64 perf gate (20 layouts per arm) every non-empty case is significantly faster (p<0.001), about 3.1x to 4.1x: PostgreSQL 4.1x, MariaDB 3.8x, SQL Server 3.7x, Snowflake 3.6x, MySQL 3.5x, generic and Oracle 3.4x, mixed 3.1x, 64 KiB 3.1x. The 2 ns `empty` case is layout-noise dominated and its result differs between gate runs (0 allocs before and after). The 4x PLAN target is met only for PostgreSQL (4.1x); the other non-empty cases are 3.1x-3.8x. All rows are reported in the PR body from the CI gate.
 - **Linter**: the lint pipeline uses the pooled parser and pooled dialect tokenizer; behavior is unchanged. [W6-06ab]
 - **Linter**: aliasing consistency and four visitor-based rules now reuse the cached preorder AST node list. Violations are unchanged; there is no API or behavior change. [W6-05b]
 - **Linter**: rule L007 (keyword case consistency) scans words without allocating (substring words, ASCII upper-casing into a stack buffer before the keyword lookup). Output is unchanged. On the canonical benchmarks (Apple M4, local), `BenchmarkLintRule/L007` allocates about 98% fewer objects (72565 to 1194 allocs/op) and about 97% fewer bytes, and `BenchmarkLintRW` allocates about 12.5% fewer objects. [W6-03]
@@ -132,6 +133,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Formatter**: compact formatting (`ast.CompactStyle()`, no clause newlines, no semicolon, no line width, no target dialect, preserve or upper keyword case) now renders SELECT, INSERT, UPDATE and DELETE through each statement's `SQL()` instead of the visitor renderer, and a single compact statement skips the parts slice and join. `Render/compact/*` is 27-49% faster with 1 alloc/op (was 4-42) and 60-82% fewer bytes/op; `Normalize` and `Fingerprint` are 6-13% faster with 15-39% fewer allocs. Output is byte-identical (differential test over every corpus statement in 9 dialects and all option combinations); lowercase keywords, target-dialect rewrites, set operations and ALTER TABLE keep the visitor path. [W5-02]
 
 ### Behavior changes
+- **Dialect detection [W7-09]**: Tied positive scores now resolve in a fixed order: Oracle, Snowflake, PostgreSQL, MySQL, SQL Server, MariaDB, SQLite; previously the result depended on map iteration order. Input with only `NVL` now always returns Oracle (previously about 86% Oracle), and `TOP` with a backtick now always returns MySQL.
 - **Validate blank input**: `parser.Validate` and `parser.ValidateBytes` have
   always returned E2005 for empty or ASCII-whitespace-only input. Comment-only
   input (`-- c`, `/* x */`, `;`, `-- c\n;`) has always returned E2005 through

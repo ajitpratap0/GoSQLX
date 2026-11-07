@@ -161,27 +161,6 @@ func (l *Linter) SetDialect(dialect keywords.SQLDialect) {
 	l.dialect = dialect
 }
 
-// acquireTokenizerAndParser returns a tokenizer, a release function for it, and
-// a parser configured for the linter's dialect.
-//
-// For the default dialect a pooled tokenizer is used (and returned to the pool
-// via the release function). For an explicit dialect a fresh, non-pooled
-// tokenizer is created so dialect-specific keyword state can't leak into pooled
-// tokenizers used by other callers. The caller owns releasing the parser via
-// (*parser.Parser).Release.
-func (l *Linter) acquireTokenizerAndParser() (*tokenizer.Tokenizer, func(), *parser.Parser) {
-	if l.dialect == "" || l.dialect == keywords.DialectUnknown {
-		tkz := tokenizer.GetTokenizer()
-		return tkz, func() { tokenizer.PutTokenizer(tkz) }, parser.NewParser()
-	}
-	if tkz, err := tokenizer.NewWithDialect(l.dialect); err == nil {
-		return tkz, func() {}, parser.NewParser(parser.WithDialect(string(l.dialect)))
-	}
-	// Fall back to the pooled default if the dialect tokenizer can't be built.
-	tkz := tokenizer.GetTokenizer()
-	return tkz, func() { tokenizer.PutTokenizer(tkz) }, parser.NewParser()
-}
-
 // LintFile lints a single SQL file.
 //
 // The file is read from disk and processed through all configured rules.
@@ -240,6 +219,17 @@ func (l *Linter) LintFile(filename string) FileResult {
 //	fmt.Printf("Found %d violations\n", len(result.Violations))
 func (l *Linter) LintString(sql string, filename string) FileResult {
 	stackgrow.Reserve()
+	// Both pools reset dialect state when objects are returned. Keep them until
+	// every rule has finished using the tokens and AST.
+	tkz := tokenizer.GetTokenizer()
+	defer tokenizer.PutTokenizer(tkz)
+	p := parser.GetParser()
+	defer parser.PutParser(p)
+	if l.dialect != "" && l.dialect != keywords.DialectUnknown {
+		tkz.SetDialect(l.dialect)
+		p.ApplyOptions(parser.WithDialect(string(l.dialect)))
+	}
+
 	result := FileResult{
 		Filename:   filename,
 		Violations: []Violation{},
@@ -249,31 +239,20 @@ func (l *Linter) LintString(sql string, filename string) FileResult {
 	ctx := NewContext(sql, filename)
 
 	// Attempt tokenization (best effort - some rules don't need it).
-	//
-	// For a non-default dialect use a fresh tokenizer/parser: the tokenizer
-	// pool's Reset does not clear dialect/keyword state, so a pooled tokenizer
-	// configured for a dialect would leak that state to later callers.
-	tkz, releaseTkz, p := l.acquireTokenizerAndParser()
-	defer releaseTkz()
-
 	tokens, tokenErr := tkz.TokenizeString(sql)
 	if tokenErr == nil {
 		ctx.WithTokens(tokens)
 
+		// Empty, whitespace-only and comment-only content has no statements:
+		// nothing to parse, and not a syntax error.
 		if hasStatementTokens(tokens) {
 			// Attempt parsing with position tracking (best effort - some rules are token-only)
-			defer p.Release()
 			astObj, parseErr := p.ParseFromModelTokens(tokens)
 			ctx.WithAST(astObj, parseErr)
 			result.ParseError = parseErr
-		} else {
-			// Empty, whitespace-only and comment-only content has no
-			// statements: nothing to parse, and not a syntax error.
-			p.Release()
 		}
 	} else {
 		result.TokenizeError = tokenErr
-		p.Release()
 	}
 
 	// Run all rules

@@ -58,7 +58,7 @@ func TestEncodeSemanticTokensMatchesReference(t *testing.T) {
 
 	const randomCases = 200_000
 	rng := rand.New(rand.NewSource(1))
-	alphabet := []string{"a", "b", " ", "\t", "\n", "\r", "\r\n", "é", "名", "😀", "\xff", "\xe2\x82"}
+	alphabet := []string{"a", "b", " ", "\t", "\n", "\r", "\r\n", "é", "名", "😀", "\xff", "\xe2\x82", "\x00", "\x01", "\x1f", "\x7f", "Z", "~"}
 	categories := append(highlight.Categories(), highlight.Plain, highlight.Category(200))
 	for i := 0; i < randomCases; i++ {
 		var b strings.Builder

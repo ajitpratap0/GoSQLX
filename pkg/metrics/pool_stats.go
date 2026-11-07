@@ -77,6 +77,8 @@ func RecordNamedPoolGet(name string) int64 {
 	if !metricsgate.Enabled() {
 		return 0
 	}
+	// poolstats.Counter checks the gate again; a toggle between the two reads
+	// only records or skips one count, which the documented semantics allow.
 	if c := poolstats.ByName(name); c != nil {
 		return c.Get()
 	}
@@ -92,6 +94,8 @@ func RecordNamedPoolPut(name string) int64 {
 	if !metricsgate.Enabled() {
 		return 0
 	}
+	// poolstats.Counter checks the gate again; a toggle between the two reads
+	// only records or skips one count, which the documented semantics allow.
 	if c := poolstats.ByName(name); c != nil {
 		return c.Put()
 	}

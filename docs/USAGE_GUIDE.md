@@ -69,7 +69,7 @@ func main() {
 ### More Simple API Examples
 
 ```go
-// Validate SQL without full parsing
+// Validate SQL syntax; the parser builds and releases an AST
 if err := gosqlx.Validate("SELECT * FROM users"); err != nil {
     fmt.Println("Invalid SQL:", err)
 }

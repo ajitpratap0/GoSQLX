@@ -103,6 +103,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Performance
 - **Identifier quoting**: checks names byte by byte with a class table, falling back to the rune loop for non-ASCII names; reserved-name lookup uses a first-letter/length index derived from the word list instead of a map lookup. `AST.SQL()` and formatter output are unchanged. Measured on the amd64 CI runner (layout-randomized matrix run 41706707217, GOGC=off, 16 layouts per arm, base-vs-head Mann-Whitney per row; the run hit the 230-minute job limit before its A/A' stage, so there is no A/A' control for these rows): `BenchmarkRender/sql` -11.0% to -19.9% (all 11 statements, p<0.001) and `BenchmarkRender/readable` -5.7% to -11.0% (p<0.001), allocs/op and B/op unchanged, so the PLAN targets (`render/sql` <= -7%, `render/readable` <= -3%) are met. The gated `BenchmarkNormalize`, which renders through the same helpers, is faster too (PR gate: simple_select -2.85%, join -2.35%, complex -4.94%, p<0.001; A/A' 0 of 52 benchmarks moved more than 3%), and no gated benchmark regressed. [W5-04]
+- **Linter**: the lint pipeline uses the pooled parser and pooled dialect tokenizer; behavior is unchanged. [W6-06ab]
 - **Linter**: aliasing consistency and four visitor-based rules now reuse the cached preorder AST node list. Violations are unchanged; there is no API or behavior change. [W6-05b]
 - **Linter**: rule L007 (keyword case consistency) scans words without allocating (substring words, ASCII upper-casing into a stack buffer before the keyword lookup). Output is unchanged. On the canonical benchmarks (Apple M4, local), `BenchmarkLintRule/L007` allocates about 98% fewer objects (72565 to 1194 allocs/op) and about 97% fewer bytes, and `BenchmarkLintRW` allocates about 12.5% fewer objects. [W6-03]
 - **gosqlx**: errors returned by `Parse`, `Validate`, `Lint` and the tree helpers now wrap the sentinel and the underlying error in an unexported `wrapErr` that builds its message lazily, instead of `fmt.Errorf("%w: %w", ...)` on every failure. Error text, `errors.Is` and `errors.As` behaviour are unchanged; only the unexported concrete error type differs. The saving applies to callers that only check `errors.Is`/`errors.As` or drop the message: when the message is built (`err.Error()`, as the LSP and CLI do) the gain is about 2 allocs/op and 3-4% B/op per error (syntax_mid 21 -> 19 allocs). Because the message is now built on demand, `Error()` reflects any later mutation of the inner `*errors.Error` reached through `errors.As`; previously the text was fixed at creation. [W1-03]
@@ -132,6 +133,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Formatter**: compact formatting (`ast.CompactStyle()`, no clause newlines, no semicolon, no line width, no target dialect, preserve or upper keyword case) now renders SELECT, INSERT, UPDATE and DELETE through each statement's `SQL()` instead of the visitor renderer, and a single compact statement skips the parts slice and join. `Render/compact/*` is 27-49% faster with 1 alloc/op (was 4-42) and 60-82% fewer bytes/op; `Normalize` and `Fingerprint` are 6-13% faster with 15-39% fewer allocs. Output is byte-identical (differential test over every corpus statement in 9 dialects and all option combinations); lowercase keywords, target-dialect rewrites, set operations and ALTER TABLE keep the visitor path. [W5-02]
 
 ### Behavior changes
+- **Validate blank input**: `parser.Validate` and `parser.ValidateBytes` have
+  always returned E2005 for empty or ASCII-whitespace-only input. Comment-only
+  input (`-- c`, `/* x */`, `;`, `-- c\n;`) has always returned E2005 through
+  all parser entry points and `gosqlx.Validate`/`Parse`. The parser behavior
+  change is limited to `parser.ValidateWithDialect` and
+  `parser.ValidateBytesWithDialect`, which now return E2005 for blank input
+  instead of nil. `gosqlx.Validate` now wraps E2005 or E2004 in `ErrSyntax` for
+  empty or whitespace-only input, replacing the unstructured “empty input”
+  error; `errors.As` now finds the structured error. C binding
+  `gosqlx_validate_dialect` has the same error change.
+  **Migration:** only `parser.ValidateWithDialect`,
+  `parser.ValidateBytesWithDialect` previously accepted blank input;
+  comment-only input was never accepted.
+  `gosqlx.Validate` and C/Python callers should match with
+  `errors.Is(err, gosqlx.ErrSyntax)` or the error code, rather than the
+  “empty input” text.
 - **Linter L010 (redundant whitespace)**: violation columns are byte
   positions on lines with invalid UTF-8. They were shifted before because
   invalid bytes were replaced with U+FFFD (3 bytes) while scanning. Valid

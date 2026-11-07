@@ -78,7 +78,17 @@ func stackedMatches(views []string) (matches [3]string) {
 	return matches
 }
 
-func detectStackedQueries(s *Scanner, views []string, result *ScanResult) {
+// stackedPrefilter holds the CNF the removed stacked-query regexes derived: a
+// ';' and at least one statement keyword somewhere in the raw SQL.
+var stackedPrefilter = compiledPattern{cnf: [][]string{
+	{";"},
+	{"drop", "delete", "truncate", "update", "insert", "alter", "exec", "execute"},
+}}
+
+func detectStackedQueries(s *Scanner, views []string, pf scanPrefilter, result *ScanResult) {
+	if pf.on && !stackedPrefilter.filter.pass(pf.present) {
+		return
+	}
 	// A single view without ';' cannot match; skip the common single-statement
 	// case before touching pattern state.
 	if len(views) == 1 && strings.IndexByte(views[0], ';') < 0 {

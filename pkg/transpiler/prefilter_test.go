@@ -53,6 +53,15 @@ func TestPrefilterEquivalence(t *testing.T) {
 		// #897 and #898: expected outputs are pinned in lambda_unicode_test.go.
 		"SELECT arrayMap(x -> x * 2, [1, 2, 3])", "SELECT arrayFilter(x -> x > 1 AND x || 'a' = y, arr) FROM t",
 		`SELECT U&'d\0061t'`, `SELECT U&"d\0061t" FROM t`,
+		// W7-01: one fixture per construct the ops prefilter keys on.
+		"SELECT a ^ b FROM t", "SELECT a | b FROM t", "SELECT a & b FROM t", "SELECT a # b FROM t",
+		"SELECT a << 1 FROM t", "SELECT a >> 1 FROM t", "SELECT ~a FROM t", "SELECT @ a FROM t",
+		"SELECT |/ a FROM t", "SELECT ||/ a FROM t", "SELECT !! 5 FROM t", "SELECT a ? 'k' FROM t",
+		"SELECT a ?| b FROM t", "SELECT a @> b FROM t", "SELECT a <-> b FROM t", "SELECT a ~* b FROM t",
+		"SELECT a !~ b FROM t", "SELECT j -> 'k' FROM t", "SELECT j ->> 'k' FROM t",
+		"SELECT arrayMap(x -> x * 2, [1, 2]) FROM t",
+		"SELECT $5.00 FROM t", "SELECT $5 FROM t", "SELECT {'k': 1} FROM t",
+		`SELECT U&'d\0061t' FROM t`, `SELECT u&'d\0061t' FROM t`,
 	}
 	for _, from := range dialects {
 		for _, to := range dialects {
@@ -120,8 +129,8 @@ func TestScanSourceStringOpeners(t *testing.T) {
 	}{
 		{"'abc'", keywords.DialectPostgreSQL, sourceFeatures{quote: true}},
 		{`"abc"`, keywords.DialectMySQL, sourceFeatures{quote: true, typeDelim: true}},
-		{"$$abc$$", keywords.DialectPostgreSQL, sourceFeatures{quote: true}},
-		{"$tag$abc$tag$", keywords.DialectPostgreSQL, sourceFeatures{quote: true}},
+		{"$$abc$$", keywords.DialectPostgreSQL, sourceFeatures{quote: true, ops: true}},
+		{"$tag$abc$tag$", keywords.DialectPostgreSQL, sourceFeatures{quote: true, ops: true}},
 		{"‘abc’", keywords.DialectPostgreSQL, sourceFeatures{nonASCII: true}},
 		{"«abc»", keywords.DialectPostgreSQL, sourceFeatures{nonASCII: true}},
 		{"E'abc'", keywords.DialectPostgreSQL, sourceFeatures{quote: true}},

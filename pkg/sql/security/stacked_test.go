@@ -35,7 +35,9 @@ var stackedOracle = [3]*regexp.Regexp{
 func BenchmarkScanSQLStackedScript(b *testing.B) {
 	for _, size := range []int{4 << 10, 30 << 10, 1 << 20} {
 		b.Run(fmt.Sprintf("%dKB", size>>10), func(b *testing.B) {
-			sql := strings.Repeat("SELECT 1234567;\n", size/16)
+			// The trailing identifier keeps the keyword prefilter open, so the
+			// stacked-query scan really walks every ";" in the script.
+			sql := strings.Repeat("SELECT 1234567;\n", size/16) + "SELECT update_count FROM t"
 			s := NewScanner()
 			b.ReportAllocs()
 			for i := 0; i < b.N; i++ {
@@ -90,7 +92,7 @@ func TestStackedOracleBaseline(t *testing.T) {
 		}
 		views := []string{b.String(), "; EXEC x; DELETE y"}
 		got, want := &ScanResult{}, &ScanResult{}
-		detectStackedQueries(s, views, got)
+		detectStackedQueries(s, views, scanPrefilter{}, got)
 		stackedReference(s, views, want)
 		if !reflect.DeepEqual(got, want) {
 			t.Fatalf("views %q: got %+v, want %+v", views, got, want)
@@ -114,7 +116,7 @@ func TestStackedMatcherCases(t *testing.T) {
 	s := NewScanner()
 	for _, views := range cases {
 		got, want := &ScanResult{}, &ScanResult{}
-		detectStackedQueries(s, views, got)
+		detectStackedQueries(s, views, scanPrefilter{}, got)
 		stackedReference(s, views, want)
 		if !reflect.DeepEqual(got, want) {
 			t.Fatalf("views %q: got %+v, want %+v", views, got, want)
@@ -147,7 +149,7 @@ func TestStackedSeverityFilter(t *testing.T) {
 	s := NewScanner()
 	s.MinSeverity = SeverityCritical
 	got := &ScanResult{}
-	detectStackedQueries(s, []string{"; DROP"}, got)
+	detectStackedQueries(s, []string{"; DROP"}, scanPrefilter{}, got)
 	if len(got.Findings) != 0 {
 		t.Fatalf("filtered finding: %+v", got.Findings)
 	}

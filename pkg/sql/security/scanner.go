@@ -269,6 +269,7 @@ func initPatterns() {
 			patterns = append(patterns, &group.patterns[i])
 		}
 	}
+	patterns = append(patterns, &stackedPrefilter)
 	for i := range commentPatterns {
 		patterns = append(patterns, &commentPatterns[i].compiledPattern)
 	}
@@ -807,7 +808,7 @@ func (s *Scanner) scanSQL(sql string, prefilter bool) *ScanResult {
 	s.detectRegexPatterns(views, pf, PatternUnionGeneric, result)
 
 	// Check for stacked query patterns
-	detectStackedQueries(s, views, result)
+	detectStackedQueries(s, views, pf, result)
 
 	// Update counts
 	s.updateCounts(result)

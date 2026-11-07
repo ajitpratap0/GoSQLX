@@ -63,7 +63,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     the MAD normal model. `-B` sets the extension budget, `-E` the deadline,
     and `-K` the per-arm cap; `-G` spends up to 600 seconds more by default.
     Raw files carry `suite-line:` labels; reports add K/power columns and
-    list remaining Low power benchmarks with reasons. Only primary time
+    list remaining Low power benchmarks with reasons, separate planned
+    extensions from line warm-ups, show configured power targets and unknown
+    estimates, and say when adaptive layouts were skipped because timings
+    were not judged. Only primary time
     uses extra layouts; all other rules use stage-1 data. Normal jobs take
     about 13.5 + 10 minutes, worst-case retry 21.7 + 10 = 31.7 minutes;
     new work stops at 35 minutes inside a 40-minute step and 45-minute job.
@@ -164,9 +167,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   UTF-8 is unaffected.
 
 ### Fixed
-- **Perf gate**: reports separate planned extensions from line warm-ups, show
-  configured power targets and unknown estimates, and explain when adaptive
-  layouts were skipped because timings were not judged. [W0-16]
 - Claims checks now verify that published benchmark results were measured at the latest release tag commit.
 - **AST**: `AlterTableStatement.SQL()` now separates multiple ALTER TABLE actions with commas, matching the compact formatter and preserving action boundaries when re-parsed.
 - **Playground**: the GoSQLX WebAssembly module now runs in a Web Worker, so

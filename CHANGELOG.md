@@ -104,7 +104,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     benchmarks that publish diagnostics no longer time a growing buffer.
 
 ### Performance
-- **Playground**: parse returns compact typed AST JSON v1 on request. Local, indicative deterministic parse measurements for small/medium/large inputs: payload bytes -75.7/-73.2/-91.6%; B/op -72/-80/-96%; allocs/op 14->10, 54->43, 714->527. The amd64 layout-randomized gate numbers are in the PR body. Playground lint removes a second parse (no timing claim). [W8-04]
+- **Playground**: parse returns compact typed AST JSON v1 on request. Local, indicative deterministic parse measurements for small/medium/large inputs: payload bytes -75.7/-73.2/-91.6%; B/op -72/-80/-96%; allocs/op 14->10, 54->43, 714->527. Playground lint removes a second parse (no timing claim). [W8-04]
 - **Linter**: the lint pipeline uses the pooled parser and pooled dialect tokenizer; behavior is unchanged. [W6-06ab]
 - **Linter**: aliasing consistency and four visitor-based rules now reuse the cached preorder AST node list. Violations are unchanged; there is no API or behavior change. [W6-05b]
 - **Linter**: rule L007 (keyword case consistency) scans words without allocating (substring words, ASCII upper-casing into a stack buffer before the keyword lookup). Output is unchanged. On the canonical benchmarks (Apple M4, local), `BenchmarkLintRule/L007` allocates about 98% fewer objects (72565 to 1194 allocs/op) and about 97% fewer bytes, and `BenchmarkLintRW` allocates about 12.5% fewer objects. [W6-03]

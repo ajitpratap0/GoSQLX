@@ -102,6 +102,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     benchmarks that publish diagnostics no longer time a growing buffer.
 
 ### Performance
+- **C binding [W8-01]**: pooled JSON and result scratch, AST release, typed extraction results, and a bounded linter cache reduce parse allocations by 6/op (about 620–670 B/op), lint by 14/op (about 1.2–1.6 KB/op), metadata extraction by 3/op (about 620–1,420 B/op), and table extraction by 8/op (about 630–690 B/op) in the small/medium/large benchmarks. The C ABI and JSON bytes are unchanged.
 - **Linter**: the lint pipeline uses the pooled parser and pooled dialect tokenizer; behavior is unchanged. [W6-06ab]
 - **Linter**: aliasing consistency and four visitor-based rules now reuse the cached preorder AST node list. Violations are unchanged; there is no API or behavior change. [W6-05b]
 - **Linter**: rule L007 (keyword case consistency) scans words without allocating (substring words, ASCII upper-casing into a stack buffer before the keyword lookup). Output is unchanged. On the canonical benchmarks (Apple M4, local), `BenchmarkLintRule/L007` allocates about 98% fewer objects (72565 to 1194 allocs/op) and about 97% fewer bytes, and `BenchmarkLintRW` allocates about 12.5% fewer objects. [W6-03]

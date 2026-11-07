@@ -46,7 +46,7 @@ func (f *nodeFormatter) kw(keyword string) string {
 	case ast.KeywordUpper:
 		return strings.ToUpper(keyword)
 	case ast.KeywordLower:
-		return strings.ToLower(keyword)
+		return lowerKeyword(keyword)
 	default:
 		return keyword
 	}

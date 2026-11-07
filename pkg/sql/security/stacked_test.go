@@ -159,7 +159,13 @@ func TestStackedMatcherLinear(t *testing.T) {
 	for name, unit := range map[string]string{"semicolons": ";", "whitespace": ";   \t\n"} {
 		t.Run(name, func(t *testing.T) {
 			makeInput := func(n int) string { return strings.Repeat(unit, n/len(unit)) }
-			small, large := makeInput(1<<20), makeInput(2<<20)
+			// The race detector and coverage instrumentation make each byte
+			// ~100x dearer; the linear/quadratic split is still visible at 64 KiB.
+			base := 1 << 20
+			if raceEnabled {
+				base = 64 << 10
+			}
+			small, large := makeInput(base), makeInput(2*base)
 			sample := func(s string) time.Duration {
 				start := time.Now()
 				for i := 0; i < 3; i++ {
@@ -179,7 +185,7 @@ func TestStackedMatcherLinear(t *testing.T) {
 					b = y
 				}
 			}
-			t.Logf("1 MiB %v, 2 MiB %v, ratio %.2f", a, b, float64(b)/float64(a))
+			t.Logf("%d B %v, %d B %v, ratio %.2f", base, a, 2*base, b, float64(b)/float64(a))
 			if b > 3*a {
 				t.Fatalf("scaling exceeds linear allowance: %v vs %v", a, b)
 			}

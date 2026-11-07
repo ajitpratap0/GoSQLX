@@ -6,6 +6,8 @@ import (
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
 )
 
+// maxPooledScanDepth is the number of ancestor slots kept when a walker is
+// returned to the pool (1024 interface slots, 16 KiB); deeper stacks are dropped.
 const maxPooledScanDepth = 1024
 
 // scanWalker is exclusively owned between acquire and release. Between scans,

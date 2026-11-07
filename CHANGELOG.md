@@ -7,7 +7,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Breaking Changes
+- **Version-2 query normalisation [W5-08]**: `fingerprint.Normalize`,
+  `fingerprint.Fingerprint`, `gosqlx.Normalize` and `gosqlx.Fingerprint` now
+  use the token-stream normal form. Fingerprints are `"v2:"` plus 64 lowercase
+  hex characters (67 bytes); storage limited to `CHAR(64)` must be widened.
+  Normalized text upper-cases keywords, drops alias
+  `AS`, join `INNER`/`OUTER` and default `ASC`, redacts LIMIT/OFFSET, FETCH/TOP,
+  typed literals and utility-statement literals, and collapses repeated normalized
+  IN-list elements and VALUES rows, including question-mark placeholders.
+  Keyword name parts next to a dot retain their source case, including `ASC`;
+  other `ASC` tokens are dropped.
+  Tokenizable SQL with invalid syntax is accepted; call `gosqlx.Validate` first
+  when syntax validation is required. Normalized text is a grouping key, not
+  guaranteed to be parseable SQL: eight corpus cases track parser limitations
+  for aliases without `AS` in RETURNING, qualified projections, XMLATTRIBUTES,
+  subqueries and view queries, plus the redacted `SRID ?` value. Grouping also
+  differs for cast spelling,
+  `IS TRUE` versus `IS FALSE`, quoted keyword names, clause order, redundant
+  parentheses and content omitted by the legacy formatter. Version 2 also
+  preserves the source case of bare identifier tokens in contextual grammar
+  positions that the legacy formatter upper-cases: `SHOW server_version` and
+  `SHOW SERVER_VERSION`, for example, produce different version-2 fingerprints
+  but the same legacy fingerprint. Reproduce stored
+  v1.17 fingerprints exactly with `fingerprint.FingerprintWithOptions(sql,
+  fingerprint.Options{Mode: fingerprint.ModeLegacy})`; use
+  `fingerprint.VersionOf` to distinguish versions. Recompute stored values or
+  key on both versions during migration.
+
 ### Added
+- **Fingerprint modes and dialect options [W5-08]**: `fingerprint.Options`,
+  `Mode`, `NormalizeWithOptions` and `FingerprintWithOptions` support
+  token-stream and legacy normalisation with dialect selection in both modes;
+  `VersionOf`, `Version`, `VersionPrefix` and `ErrEmpty` expose the version and
+  empty-input contract. `gosqlx.NormalizeWithOptions` and
+  `gosqlx.FingerprintWithOptions` accept the same `fingerprint.Options`, including
+  `ModeLegacy` for the v1.17 output and syntax-error contract.
 - **Benchmark and perf-gate infrastructure (performance overhaul, wave 0)**:
   pull requests are now judged by interleaved A/B measurements instead of
   absolute numbers. No library behaviour changes apart from #901 (see Fixed). The pieces, by PR:
@@ -102,6 +137,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     benchmarks that publish diagnostics no longer time a growing buffer.
 
 ### Performance
+- **Token-stream Normalize and Fingerprint [W5-08]**: defaults tokenize once,
+  normalize into a pooled byte buffer and hash its bytes directly for
+  fingerprints. Performance: TBD (amd64 gate).
 - **Linter**: the lint pipeline uses the pooled parser and pooled dialect tokenizer; behavior is unchanged. [W6-06ab]
 - **Linter**: aliasing consistency and four visitor-based rules now reuse the cached preorder AST node list. Violations are unchanged; there is no API or behavior change. [W6-05b]
 - **Linter**: rule L007 (keyword case consistency) scans words without allocating (substring words, ASCII upper-casing into a stack buffer before the keyword lookup). Output is unchanged. On the canonical benchmarks (Apple M4, local), `BenchmarkLintRule/L007` allocates about 98% fewer objects (72565 to 1194 allocs/op) and about 97% fewer bytes, and `BenchmarkLintRW` allocates about 12.5% fewer objects. [W6-03]

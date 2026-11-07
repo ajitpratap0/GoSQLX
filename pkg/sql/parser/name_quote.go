@@ -18,11 +18,11 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/ajitpratap0/GoSQLX/internal/namequote"
 	goerrors "github.com/ajitpratap0/GoSQLX/pkg/errors"
 	"github.com/ajitpratap0/GoSQLX/pkg/models"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/keywords"
-	"github.com/ajitpratap0/GoSQLX/pkg/sql/tokenizer"
 )
 
 // This file records how names were delimited in the source (ast.NameQuote),
@@ -30,68 +30,12 @@ import (
 // case, "table" quoted because it is a keyword, a MySQL `exists` alias with
 // its backticks, and an Oracle bare emp# without any.
 
-// identifierCaseFolding returns how the dialect matches the case of unquoted
-// identifiers (see ast.IdentifierCaseFolding). Generic SQL folds to lower
-// case like PostgreSQL.
-func (p *Parser) identifierCaseFolding() ast.IdentifierCaseFolding {
-	switch keywords.SQLDialect(p.dialect) {
-	case keywords.DialectOracle, keywords.DialectSnowflake:
-		return ast.FoldUpper
-	case keywords.DialectMySQL, keywords.DialectMariaDB, keywords.DialectSQLServer,
-		keywords.DialectSQLite, keywords.DialectClickHouse, keywords.DialectBigQuery:
-		return ast.FoldNone
-	}
-	return ast.FoldLower
-}
-
 // delimitedNameMustStayQuoted reports whether name, written delimited with
 // quote in the source, must keep delimiters to mean the same name: see
 // ast.DelimitedNameMustStayQuoted, plus any word the tokenizer reads as a
 // keyword when bare.
 func (p *Parser) delimitedNameMustStayQuoted(name string, quote rune) bool {
-	if quote == 0 {
-		return false
-	}
-	// TOP is a dialect keyword, absent from the tokenizer's global keyword map.
-	return (p.IsSQLServer() && equalsUpper(name, "TOP")) ||
-		ast.DelimitedNameMustStayQuoted(name, p.identifierCaseFolding()) || tokenizer.IsKeyword(name) ||
-		isContextualKeywordName(name)
-}
-
-// contextualKeywordNames lists, in upper case, words the tokenizer reads as
-// plain identifiers but that the databases (or the parser, in context) treat
-// as niladic functions, pseudo-columns or operators when written bare:
-// "user" is a column, user is the current user; "PRIOR" is a column, PRIOR
-// in CONNECT BY is the operator. A delimited name equal to one of them keeps
-// its delimiters.
-var contextualKeywordNames = map[string]bool{
-	"PRIOR": true, "CONNECT_BY_ROOT": true,
-	"USER": true, "CURRENT_USER": true, "SESSION_USER": true, "SYSTEM_USER": true,
-	"CURRENT_ROLE": true, "CURRENT_CATALOG": true, "CURRENT_SCHEMA": true,
-	"CURRENT_DATE": true, "CURRENT_TIME": true, "CURRENT_TIMESTAMP": true,
-	"LOCALTIME": true, "LOCALTIMESTAMP": true,
-	"SYSDATE": true, "SYSTIMESTAMP": true, "ROWNUM": true, "ROWID": true, "LEVEL": true,
-}
-
-// maxContextualKeywordLen is the length of the longest
-// contextualKeywordNames word.
-const maxContextualKeywordLen = len("CURRENT_TIMESTAMP")
-
-// isContextualKeywordName reports whether name is in contextualKeywordNames,
-// ignoring ASCII case, without allocating.
-func isContextualKeywordName(name string) bool {
-	if len(name) < 4 || len(name) > maxContextualKeywordLen {
-		return false
-	}
-	var up [maxContextualKeywordLen]byte
-	for i := 0; i < len(name); i++ {
-		c := name[i]
-		if c >= 'a' && c <= 'z' {
-			c -= 'a' - 'A'
-		}
-		up[i] = c
-	}
-	return contextualKeywordNames[string(up[:len(name)])]
+	return quote != 0 && namequote.MustStayQuoted(name, keywords.SQLDialect(p.dialect))
 }
 
 // isOracleBareHashName reports whether the current token is a bare Oracle

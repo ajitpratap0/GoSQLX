@@ -102,6 +102,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - The LSP benchmark server (`setupTestServer`) discards its output, so
     benchmarks that publish diagnostics no longer time a growing buffer.
 
+- **Token classification moved to `internal/tokclass`** (W3-03a1; internal
+  refactor, no behaviour change): the compound-keyword split tables, the
+  identifier/keyword → specific-type remaps, the COUNT..MAX → identifier rule
+  and the backtick-width rule applied by the parser's preprocess pass now live
+  in one internal package that the tokenizer's planned parser-ready mode
+  (W3-03b) will share. Tokens, spans, ASTs, errors and every behaviour golden
+  are unchanged. A differential test checks the new pass, field for field,
+  against a frozen copy of the old one over the benchmark corpus, the SQL
+  fixtures and a generated compound-keyword, Unicode-fold, odd-identifier and
+  tokenizer-error matrix in all 11 dialects.
+
 ### Performance
 - **Semantic tokens**: pooled highlighting scratch and shared case folding cut 30 KB semantic-token allocs/op by 98.9–99.0% (2,039 to 20, 1,863 to 21, 1,953 to 21), B/op by 26.0–26.8% and sec/op by 13.3–14.3% (amd64 layout-randomized gate); the new highlight golden pins output. No behaviour change. [W6-11]
 - **Linter**: the lint pipeline uses the pooled parser and pooled dialect tokenizer; behavior is unchanged. [W6-06ab]

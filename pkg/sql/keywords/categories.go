@@ -15,8 +15,6 @@
 package keywords
 
 import (
-	"strings"
-
 	"github.com/ajitpratap0/GoSQLX/pkg/models"
 )
 
@@ -132,6 +130,7 @@ func (k *Keywords) initialize() {
 }
 
 // IsKeyword checks if a string is a recognized SQL keyword.
+// Pure-ASCII words up to 64 bytes are looked up without allocating.
 // Returns true if the word is found in the keyword map, false otherwise.
 //
 // The check is case-insensitive when the Keywords instance was created
@@ -145,16 +144,22 @@ func (k *Keywords) initialize() {
 //	kw.IsKeyword("unknown")  // false
 func (k *Keywords) IsKeyword(s string) bool {
 	if k.ignoreCase {
-		s = strings.ToUpper(s)
+		_, ok := lookupFold(k.keywordMap, s)
+		return ok
 	}
 	_, ok := k.keywordMap[s]
 	return ok
 }
 
-// GetKeywordType returns the token type for a keyword
+// GetKeywordType returns the token type for a keyword.
+//
+// Pure-ASCII words up to 64 bytes are looked up without allocating.
 func (k *Keywords) GetKeywordType(s string) models.TokenType {
 	if k.ignoreCase {
-		s = strings.ToUpper(s)
+		if kw, ok := lookupFold(k.keywordMap, s); ok {
+			return kw.Type
+		}
+		return models.TokenTypeWord
 	}
 	if kw, ok := k.keywordMap[s]; ok {
 		return kw.Type
@@ -163,6 +168,7 @@ func (k *Keywords) GetKeywordType(s string) models.TokenType {
 }
 
 // IsReserved checks if a keyword is reserved and cannot be used as an identifier.
+// Pure-ASCII words up to 64 bytes are looked up without allocating.
 // Reserved keywords include SQL statements (SELECT, INSERT), clauses (WHERE, FROM),
 // and other keywords that have special meaning in SQL syntax.
 //
@@ -173,7 +179,8 @@ func (k *Keywords) GetKeywordType(s string) models.TokenType {
 //	kw.IsReserved("ROW_NUMBER")  // false - window function (non-reserved)
 func (k *Keywords) IsReserved(s string) bool {
 	if k.ignoreCase {
-		s = strings.ToUpper(s)
+		v, _ := lookupFold(k.reservedKeywords, s)
+		return v
 	}
 	return k.reservedKeywords[s]
 }

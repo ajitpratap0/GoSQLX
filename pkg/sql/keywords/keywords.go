@@ -447,7 +447,7 @@ func keywordsEquivalent(a, b Keyword) bool {
 // containsKeyword checks if a keyword already exists in the collection
 func (k *Keywords) containsKeyword(word string) bool {
 	if k.ignoreCase {
-		_, exists := k.keywordMap[strings.ToUpper(word)]
+		_, exists := lookupFold(k.keywordMap, word)
 		return exists
 	}
 	_, exists := k.keywordMap[word]
@@ -456,6 +456,7 @@ func (k *Keywords) containsKeyword(word string) bool {
 
 // GetTokenType returns the token type for a given keyword.
 // If the word is not a recognized keyword, it returns models.TokenTypeWord.
+// Pure-ASCII words up to 64 bytes are looked up without allocating.
 //
 // The lookup is case-insensitive when the Keywords instance was created
 // with case-insensitive matching (default behavior).
@@ -467,14 +468,13 @@ func (k *Keywords) containsKeyword(word string) bool {
 //	tokenType = kw.GetTokenType("select")   // models.TokenTypeSelect (case-insensitive)
 //	tokenType = kw.GetTokenType("unknown")  // models.TokenTypeWord
 func (k *Keywords) GetTokenType(word string) models.TokenType {
-	var key string
 	if k.ignoreCase {
-		key = strings.ToUpper(word)
-	} else {
-		key = word
+		if kw, ok := lookupFold(k.keywordMap, word); ok {
+			return kw.Type
+		}
+		return models.TokenTypeWord
 	}
-
-	if kw, ok := k.keywordMap[key]; ok {
+	if kw, ok := k.keywordMap[word]; ok {
 		return kw.Type
 	}
 	return models.TokenTypeWord

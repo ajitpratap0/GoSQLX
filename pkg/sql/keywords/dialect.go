@@ -14,11 +14,7 @@
 
 package keywords
 
-import (
-	"strings"
-
-	"github.com/ajitpratap0/GoSQLX/pkg/models"
-)
+import "github.com/ajitpratap0/GoSQLX/pkg/models"
 
 // SQLDialect represents different SQL database dialects.
 // Each dialect may have specific keywords that are not part of standard SQL.
@@ -195,6 +191,7 @@ func (k *Keywords) GetCompoundKeywords() KeywordCategory {
 }
 
 // IsCompoundKeywordStart checks if a word can start a compound keyword.
+// Pure-ASCII words up to 64 bytes are looked up without allocating.
 // This is useful during tokenization to determine if lookahead is needed
 // to recognize multi-word keywords.
 //
@@ -205,7 +202,8 @@ func (k *Keywords) GetCompoundKeywords() KeywordCategory {
 //	kw.IsCompoundKeywordStart("SELECT") // false - not a compound keyword start
 func (k *Keywords) IsCompoundKeywordStart(word string) bool {
 	if k.ignoreCase {
-		word = strings.ToUpper(word)
+		v, _ := lookupFold(k.compoundKeywordStarts, word)
+		return v
 	}
 	return k.compoundKeywordStarts[word]
 }

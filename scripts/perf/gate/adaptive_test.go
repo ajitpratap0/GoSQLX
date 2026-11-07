@@ -207,7 +207,7 @@ func TestPlanListsUnderpoweredWithLineAndWarmup(t *testing.T) {
 		t.Fatalf("need %+v", n)
 	}
 	var out strings.Builder
-	if err := WritePlan(&out, p, map[int]string{1: "BenchmarkParseE2E/q00", 2: "BenchmarkOther"}, cfg.Alpha/float64(res.TimeTests), res.TimeTests); err != nil {
+	if err := WritePlan(&out, p, map[int]string{1: "BenchmarkParseE2E/q00", 2: "BenchmarkOther"}, cfg.Alpha/float64(res.TimeTests), res.TimeTests, cfg); err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(out.String(), "warmup\t1\t^BenchmarkParseE2E$/^q00$\n") || strings.Count(out.String(), "warmup\t") != 1 {
@@ -311,11 +311,6 @@ func TestAdaptiveLayoutsCatchAFivePercentSlowdown(t *testing.T) {
 				t.Logf("caught trial %d: K=%d final power=%.6f need=%d", trial, b.Rows[4].K, b.Rows[4].Power, b.Rows[4].NeedK)
 			}
 		}
-		for _, p := range Plan(b, DefaultConfig()) {
-			if p.More != p.Target-p.Have {
-				t.Fatalf("planner did not use current K: %+v", p)
-			}
-		}
 	}
 	if fixed > 30 || adaptive < 42 {
 		t.Errorf("fixed catches %d/60 adaptive %d/60; want <=30 and >=42", fixed, adaptive)
@@ -380,37 +375,140 @@ func TestNoExtensionIsEquivalent(t *testing.T) {
 	}
 }
 func TestLowPowerReasons(t *testing.T) {
-	cfg := DefaultConfig()
-	res := Evaluate(planFixture(t), cfg)
-	for _, tc := range []struct{ status, reason string }{{"off", "adaptive layouts off"}, {"budget", "time budget ran out"}, {"stages", "still short after the last extension stage"}, {"done", "estimate rose after the last extension"}} {
-		cfg.ExtStatus = tc.status
-		lp := LowPower(res, cfg)
-		if len(lp) != 1 || lp[0].Reason != tc.reason {
-			t.Errorf("%s: %+v", tc.status, lp)
-		}
-		md := Markdown(res, cfg, Meta{})
-		if !strings.Contains(md, "Adaptive layouts:") || !strings.Contains(md, "| reason |") || !strings.Contains(md, tc.reason) {
-			t.Errorf("%s missing adaptive report/reason", tc.status)
-		}
-	}
-	cfg.ExtMax = 2
-	cfg.ExtStatus = "budget"
-	res = Evaluate(planFixture(t), cfg)
-	lp := LowPower(res, cfg)
-	if len(lp) != 1 || lp[0].Reason != "needs more than 2 layouts per arm (cap)" {
-		t.Fatalf("cap precedence: %+v", lp)
+	for _, tc := range []struct {
+		status, reason string
+		extended       bool
+	}{
+		{"off", "adaptive layouts off", false},
+		{"budget", "not planned (time budget ran out)", false},
+		{"stages", "not planned (still short after the last extension stage)", false},
+		{"done", "not planned (no extension samples)", false},
+		{"skipped", "not planned (timings not judged)", false},
+		{"budget", "time budget ran out", true},
+		{"stages", "still short after the last extension stage", true},
+		{"done", "estimate rose after the last extension", true},
+	} {
+		t.Run(tc.status+fmt.Sprint(tc.extended), func(t *testing.T) {
+			cfg := DefaultConfig()
+			cfg.ExtStatus = tc.status
+			in := planFixture(t)
+			if tc.extended {
+				// A real extra layout, rather than altered Row metadata.
+				s := quiet()[2:3]
+				s[0].name = "BenchmarkWide/a+b/(x).#01"
+				in.BaseExt = mustParse(t, "adaptive-planned: "+s[0].name+"\n"+distArm(91, 91, 21, 1, tailDraw, s, 1))
+				in.HeadExt = mustParse(t, "adaptive-planned: "+s[0].name+"\n"+distArm(92, 92, 21, 1, tailDraw, s, 1))
+			}
+			res := Evaluate(in, cfg)
+			lp := LowPower(res, cfg)
+			if len(lp) != 1 || lp[0].Reason != tc.reason {
+				t.Fatalf("low power: %+v, want %q", lp, tc.reason)
+			}
+			md := Markdown(res, cfg, Meta{})
+			if !strings.Contains(md, "Adaptive layouts:") || !strings.Contains(md, "| reason |") || !strings.Contains(md, tc.reason) {
+				t.Errorf("missing adaptive report/reason")
+			}
+			cfg.ExtMax = 2
+			res = Evaluate(in, cfg)
+			lp = LowPower(res, cfg)
+			if len(lp) != 1 || lp[0].Reason != "needs more than 2 layouts per arm (cap)" {
+				t.Fatalf("cap precedence: %+v", lp)
+			}
+		})
 	}
 }
+
+// A partial first extension leaves this benchmark underpowered, so the next
+// plan must subtract the measured merged count rather than the initial 20.
+func TestPlanUsesMergedLayoutsAfterExtension(t *testing.T) {
+	cfg := DefaultConfig()
+	in := planFixture(t)
+	first := Plan(Evaluate(in, cfg), cfg)
+	if len(first) != 1 || first[0].Have != 20 || first[0].More < 2 {
+		t.Fatalf("first plan: %+v", first)
+	}
+	s := quiet()[2:3]
+	s[0].name = first[0].Name
+	in.BaseExt = mustParse(t, distArm(91, 91, 21, 1, tailDraw, s, 1))
+	in.HeadExt = mustParse(t, distArm(92, 92, 21, 1, tailDraw, s, 1))
+	merged := Evaluate(in, cfg)
+	second := Plan(merged, cfg)
+	if len(second) != 1 {
+		t.Fatalf("second plan: %+v", second)
+	}
+	mergedK := 0
+	for _, row := range merged.Rows {
+		if row.Name == first[0].Name {
+			mergedK = row.K
+		}
+	}
+	if mergedK != 21 || second[0].Have != mergedK || second[0].More != second[0].Target-mergedK {
+		t.Fatalf("merged K=%d, second plan %+v", mergedK, second[0])
+	}
+}
+
+func TestAdaptiveReportUsesConfigAndUnknownPower(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.LowPowerShiftPct, cfg.LowPowerTarget, cfg.ExtMax = 7, .7, 123
+	res := Evaluate(planFixture(t), cfg)
+	var plan strings.Builder
+	if err := WritePlan(&plan, Plan(res, cfg), nil, cfg.Alpha/float64(res.TimeTests), res.TimeTests, cfg); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(plan.String(), "shift 7 target 0.7 sizing-target 0.85 kmax 123") {
+		t.Fatalf("plan header does not use config: %s", plan.String())
+	}
+	md := Markdown(res, cfg, Meta{})
+	for _, want := range []string{"under 70% estimated power", "lone +7% slowdown", "power at +7%", "slowdown caught 70% of the time", "under a +7% shift", "85%"} {
+		if !strings.Contains(md, want) {
+			t.Errorf("custom report missing %q", want)
+		}
+	}
+	if !strings.Contains(Markdown(Evaluate(planFixture(t), DefaultConfig()), DefaultConfig(), Meta{}), "90%") {
+		t.Error("default report omits 90% plan sizing target")
+	}
+	res.Rows[0].Power = math.NaN()
+	md = Markdown(res, cfg, Meta{})
+	if strings.Contains(md, "NaN%") || !strings.Contains(md, "| n/a |") {
+		t.Fatalf("unknown power must render n/a:\n%s", md)
+	}
+}
+
+func TestAdaptiveReportSeparatesPlannedBenchmarksFromWarmups(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.ExtStatus = "done"
+	in := planFixture(t)
+	s := quiet()[:3]
+	s[2].name = "BenchmarkWide/a+b/(x).#01"
+	for _, arm := range []struct {
+		seed uint64
+		dst  **Run
+	}{{91, &in.BaseExt}, {92, &in.HeadExt}} {
+		text := "adaptive-planned: " + s[2].name + "\n"
+		text += distArm(arm.seed, arm.seed, 21, 1, tailDraw, []bench{s[0], s[2]}, 1)
+		*arm.dst = mustParse(t, text)
+	}
+	md := Markdown(Evaluate(in, cfg), cfg, Meta{})
+	for _, want := range []string{"Adaptive layouts: 1 benchmark(s) extended", "1 warm-up benchmark(s)"} {
+		if !strings.Contains(md, want) {
+			t.Errorf("report missing %q:\n%s", want, md)
+		}
+	}
+}
+
 func TestExactRegexRunsOnlyTheNamedBenchmarks(t *testing.T) {
 	if testing.Short() {
 		t.Skip("compiles temporary benchmark module")
 	}
 	dir := t.TempDir()
 	files := map[string]string{"go.mod": "module regexfixture\n\ngo 1.26\n", "bench_test.go": `package regexfixture
-import "testing"
-func BenchmarkWarm(b *testing.B) { for i:=0;i<b.N;i++ {} }
-func BenchmarkNested(b *testing.B) { for _,name:=range []string{"a+b", "a.b", "(x)", "dup", "dup", "other"} { b.Run(name,func(b *testing.B){ for _,leaf:=range []string{"p", "q"} { b.Run(leaf,func(b *testing.B){ for i:=0;i<b.N;i++ {} }) } }) } }
-func BenchmarkOther(b *testing.B) { for i:=0;i<b.N;i++ {} }
+import ("testing"; "time")
+
+// Sleep so a 1x run never measures 0 ns, which go test prints without an ns/op field.
+func spin() { time.Sleep(time.Microsecond) }
+func BenchmarkWarm(b *testing.B) { for i:=0;i<b.N;i++ { spin() } }
+func BenchmarkNested(b *testing.B) { for _,name:=range []string{"a+b", "a.b", "(x)", "dup", "dup", "other"} { b.Run(name,func(b *testing.B){ for _,leaf:=range []string{"p", "q"} { b.Run(leaf,func(b *testing.B){ for i:=0;i<b.N;i++ { spin() } }) } }) } }
+func BenchmarkOther(b *testing.B) { for i:=0;i<b.N;i++ { spin() } }
 `}
 	for name, src := range files {
 		if err := os.WriteFile(filepath.Join(dir, name), []byte(src), 0600); err != nil {
@@ -423,7 +521,7 @@ func BenchmarkOther(b *testing.B) { for i:=0;i<b.N;i++ {} }
 		needs = append(needs, PlanNeed{Line: 1, Name: n, Regex: exactBenchRegex(n), More: 1, Have: 20, Target: 21})
 	}
 	var plan strings.Builder
-	if err := WritePlan(&plan, needs, map[int]string{1: want[0]}, .001, 4); err != nil {
+	if err := WritePlan(&plan, needs, map[int]string{1: want[0]}, .001, 4, DefaultConfig()); err != nil {
 		t.Fatal(err)
 	}
 	path := filepath.Join(dir, "plan.tsv")
@@ -433,7 +531,7 @@ func BenchmarkOther(b *testing.B) { for i:=0;i<b.N;i++ {} }
 	regex := strings.TrimSpace(bashLib(t, []string{"PLAN=" + path}, `perf_plan_regex "$PLAN" 1 0`))
 	cmd := exec.Command("go", "test", "-run", "^$", "-bench", regex, "-benchtime", "1x", "-cpu", "1")
 	cmd.Dir = dir
-	cmd.Env = append(os.Environ(), "GOCACHE=/private/tmp/gosqlx-w016-cache", "GOTOOLCHAIN=local", "GOPROXY=off")
+	cmd.Env = append(os.Environ(), "GOTOOLCHAIN=local", "GOPROXY=off")
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("go test: %v\n%s", err, out)

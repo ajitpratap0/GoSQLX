@@ -25,10 +25,13 @@ type Run struct {
 	Layouts   map[string]map[string][]string
 	Line      map[string]int
 	LineFirst map[int]string
+	// Planned marks benchmarks explicitly requested by an extension plan,
+	// distinguishing them from the suite-line warm-ups in the same process.
+	Planned map[string]bool
 }
 
 func newRun() *Run {
-	return &Run{Values: make(map[string]map[string][]float64), Layouts: make(map[string]map[string][]string), Line: make(map[string]int), LineFirst: make(map[int]string)}
+	return &Run{Values: make(map[string]map[string][]float64), Layouts: make(map[string]map[string][]string), Line: make(map[string]int), LineFirst: make(map[int]string), Planned: make(map[string]bool)}
 }
 
 // Get returns the samples of name in unit (nil if absent).
@@ -90,6 +93,9 @@ const layoutKey = "layout:"
 // lineKey identifies the suite line whose binary produced subsequent results.
 const lineKey = "suite-line:"
 
+// plannedKey records an extension's intended benchmark, excluding warm-ups.
+const plannedKey = "adaptive-planned:"
+
 // parseBench reads Go benchmark output (the format of `go test -bench`):
 // lines of "BenchmarkName[-procs] <iterations> <value> <unit> ...", labelled
 // with the most recent "layout: <seed>" line. Every other line (goos:, pkg:,
@@ -104,6 +110,13 @@ func parseBench(r io.Reader) (*Run, error) {
 		f := strings.Fields(sc.Text())
 		if len(f) >= 1 && f[0] == layoutKey {
 			layout = strings.Join(f[1:], " ")
+			continue
+		}
+		if len(f) >= 1 && f[0] == plannedKey {
+			if len(f) != 2 || !strings.HasPrefix(f[1], "Benchmark") {
+				return nil, fmt.Errorf("line %d: bad adaptive-planned label: %q", line, sc.Text())
+			}
+			run.Planned[f[1]] = true
 			continue
 		}
 		if len(f) >= 1 && f[0] == lineKey {
@@ -178,6 +191,9 @@ func mergeRuns(a, b *Run) *Run {
 			if _, ok := out.LineFirst[line]; !ok {
 				out.LineFirst[line] = name
 			}
+		}
+		for name, planned := range run.Planned {
+			out.Planned[name] = out.Planned[name] || planned
 		}
 	}
 	return out

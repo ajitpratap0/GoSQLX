@@ -203,6 +203,8 @@ type Row struct {
 	line      int
 	hasLine   bool
 	stageK    int
+	planned   bool
+	warmup    bool
 	Time      Cmp
 	TimeSig   bool // the time change survives the suite-wide false-discovery control (timeSignificance)
 	AA        Cmp  // base vs the A/A' arm, time
@@ -274,6 +276,7 @@ func Evaluate(in Inputs, cfg Config) Result {
 		HasIr:      in.IrBase != nil && in.IrHead != nil,
 	}
 	baseTime, headTime := mergeRuns(in.Base, in.BaseExt), mergeRuns(in.Head, in.HeadExt)
+	hasPlanLabels := (in.BaseExt != nil && len(in.BaseExt.Planned) > 0) || (in.HeadExt != nil && len(in.HeadExt.Planned) > 0)
 	var stageRows []Row
 	var ratios, aaRatios, secRatios []float64
 	headSeen := make(map[string]bool)
@@ -292,6 +295,8 @@ func Evaluate(in Inputs, cfg Config) Result {
 			stageTime := compareArms(in.Base, in.Head, name, unitTime)
 			stageRows = append(stageRows, Row{Name: name, Time: stageTime})
 			row.stageK = min(stageTime.NBase, stageTime.NHead)
+			row.planned = baseTime.Planned[name] || headTime.Planned[name]
+			row.warmup = hasPlanLabels && !row.planned
 			row.Time = compareArms(baseTime, headTime, name, unitTime)
 			row.line, row.hasLine = baseTime.Line[name]
 			if row.Time.ByLayout {
@@ -535,6 +540,14 @@ func LowPower(res Result, cfg Config) []LowPowerRow {
 			reason = "still short after the last extension stage"
 		case cfg.ExtStatus == "done":
 			reason = "estimate rose after the last extension"
+		case cfg.ExtStatus == "skipped":
+			reason = "timings not judged"
+		}
+		if r.NeedK <= cfg.ExtMax && cfg.ExtStatus != "off" && r.K <= r.stageK {
+			if cfg.ExtStatus == "done" {
+				reason = "no extension samples"
+			}
+			reason = "not planned (" + reason + ")"
 		}
 		out = append(out, LowPowerRow{Name: r.Name, SpreadPct: r.Time.SpreadPct, Power: r.Power, MinShift: aucMinShift(r.residuals, r.K, r.K, level, cfg.LowPowerTarget), K: r.K, NeedK: r.NeedK, Reason: reason})
 	}
@@ -554,6 +567,10 @@ type PlanNeed struct {
 	More, Have, Target int
 }
 
+func powerSizingTarget(cfg Config) float64 {
+	return cfg.LowPowerTarget + (1-cfg.LowPowerTarget)/2
+}
+
 // Plan returns additional layouts needed to reach the power target, up to the cap.
 // Sizing halfway from the reporting target to full power leaves a safety margin
 // for dispersion estimates that rise after new layouts, within the same budget.
@@ -563,7 +580,7 @@ func Plan(res Result, cfg Config) []PlanNeed {
 		if !r.Time.ByLayout || !(r.Power < cfg.LowPowerTarget) || !r.hasLine || res.TimeTests == 0 {
 			continue
 		}
-		sizingTarget := cfg.LowPowerTarget + (1-cfg.LowPowerTarget)/2
+		sizingTarget := powerSizingTarget(cfg)
 		target := min(requiredLayouts(r.residuals, cfg.Alpha/float64(res.TimeTests), cfg.LowPowerShiftPct, sizingTarget, cfg.ExtMax), cfg.ExtMax)
 		if r.K < target {
 			needs = append(needs, PlanNeed{Line: r.line, Name: r.Name, Regex: exactBenchRegex(r.Name), More: target - r.K, Have: r.K, Target: target})
@@ -582,14 +599,10 @@ func exactBenchRegex(name string) string {
 }
 
 // WritePlan writes the awk-readable adaptive layout plan and one warm-up per line.
-// The optional cap records a non-default CLI cap without changing the TSV contract.
-func WritePlan(w io.Writer, needs []PlanNeed, lineFirst map[int]string, level float64, m int, kmax ...int) error {
-	cap := 200
-	if len(kmax) > 0 {
-		cap = kmax[0]
-	}
+// Its header describes the reporting and sizing targets used by the planner.
+func WritePlan(w io.Writer, needs []PlanNeed, lineFirst map[int]string, level float64, m int, cfg Config) error {
 	var b strings.Builder
-	fmt.Fprintf(&b, "# perf gate adaptive-layout plan (W0-16): level %.8g m %d shift 5 target 0.8 kmax %d\n", level, m, cap)
+	fmt.Fprintf(&b, "# perf gate adaptive-layout plan (W0-16): level %.8g m %d shift %.8g target %.8g sizing-target %.8g kmax %d\n", level, m, cfg.LowPowerShiftPct, cfg.LowPowerTarget, powerSizingTarget(cfg), cfg.ExtMax)
 	seen := make(map[int]bool)
 	for _, n := range needs {
 		if !seen[n.Line] {
@@ -763,6 +776,38 @@ type Meta struct {
 // ReportMarker identifies the sticky PR comment.
 const ReportMarker = "<!-- perf-gate-report -->"
 
+type layoutExtensions struct {
+	planned, warmups, unknown, maxK int
+}
+
+// summarizeExtensions counts actual extra measurements by their recorded role.
+// Older extension files without plan labels remain explicitly unclassified.
+func summarizeExtensions(res Result) layoutExtensions {
+	s := layoutExtensions{maxK: res.StageLayouts}
+	for _, r := range res.Rows {
+		if r.K <= r.stageK {
+			continue
+		}
+		s.maxK = max(s.maxK, r.K)
+		switch {
+		case r.planned:
+			s.planned++
+		case r.warmup:
+			s.warmups++
+		default:
+			s.unknown++
+		}
+	}
+	return s
+}
+
+func powerText(power float64) string {
+	if math.IsNaN(power) {
+		return "n/a"
+	}
+	return fmt.Sprintf("%.0f%%", power*100)
+}
+
 // Markdown renders the result for the job summary and the PR comment. Only
 // relative deltas are shown; absolute timings live in the raw artifacts.
 func Markdown(res Result, cfg Config, meta Meta) string {
@@ -807,17 +852,11 @@ func Markdown(res Result, cfg Config, meta Meta) string {
 			"or a suite geomean >= +%.3g%% (per-layout suite geomeans, same test); "+
 			"allocs/op must not increase; B/op must not rise more than %.3g%%; instructions/op must not rise more than %.3g%%. "+
 			"The A/A' control runs the base revision under a disjoint set of layout seeds; when more than %.3g%% of benchmarks move over %.3g%% in it, "+
-			"the run is noisy: re-run once, then inconclusive (neutral). Benchmarks under 80%% estimated power for a lone +5%% slowdown at alpha/m get extra layouts (adaptive, budget-limited); time is judged over all of each benchmark's layouts.\n\n",
-			res.Layouts, cfg.TimePct, cfg.Alpha, cfg.GeomeanPct, cfg.BytesPct, cfg.IrPct, cfg.AANoisyFraction, cfg.AADeltaPct)
-		extended, maxK := 0, res.Layouts
-		for _, r := range res.Rows {
-			if r.K > r.stageK {
-				extended++
-				maxK = max(maxK, r.K)
-			}
-		}
-		if extended > 0 {
-			fmt.Fprintf(&b, "Stage 1 used %d layouts per arm; %d benchmark(s) received adaptive extensions to up to %d layouts per arm. Only primary time uses those extra layouts; every other rule uses stage-1 data.\n\n", res.Layouts, extended, maxK)
+			"the run is noisy: re-run once, then inconclusive (neutral). Benchmarks under %.0f%% estimated power for a lone +%.3g%% slowdown at alpha/m get extra layouts (adaptive, budget-limited); plans size to %.0f%% estimated power, and time is judged over all of each benchmark's layouts.\n\n",
+			res.Layouts, cfg.TimePct, cfg.Alpha, cfg.GeomeanPct, cfg.BytesPct, cfg.IrPct, cfg.AANoisyFraction, cfg.AADeltaPct, cfg.LowPowerTarget*100, cfg.LowPowerShiftPct, powerSizingTarget(cfg)*100)
+		ext := summarizeExtensions(res)
+		if ext.planned+ext.warmups+ext.unknown > 0 {
+			fmt.Fprintf(&b, "Stage 1 used %d layouts per arm; %d benchmark(s) received planned adaptive extensions, with %d warm-up benchmark(s) and %d unclassified benchmark(s), to up to %d layouts per arm. Only primary time uses those extra layouts; every other rule uses stage-1 data.\n\n", res.Layouts, ext.planned, ext.warmups, ext.unknown, ext.maxK)
 		}
 	} else {
 		fmt.Fprintf(&b, "Rules: time regresses at >= +%.3g%% when significant at a false discovery rate of %.3g over the suite (Benjamini-Hochberg on Mann-Whitney U p-values), "+
@@ -852,7 +891,7 @@ func Markdown(res Result, cfg Config, meta Meta) string {
 			if !math.IsNaN(r.Time.SpreadPct) {
 				spread = fmt.Sprintf("%.2f%%", r.Time.SpreadPct)
 			}
-			aa += fmt.Sprintf(" | %s | %d | %.0f%%", spread, r.K, r.Power*100)
+			aa += fmt.Sprintf(" | %s | %d | %s", spread, r.K, powerText(r.Power))
 		}
 		bytes := ""
 		if r.Bytes.OK {
@@ -879,9 +918,9 @@ func Markdown(res Result, cfg Config, meta Meta) string {
 	}
 	fmt.Fprintf(&b, "| **geomean** | %s | %s | %s |%s | | |\n\n", pct((res.Geomean-1)*100), geoP, pct((res.AAGeomean-1)*100), extra)
 	if res.ByLayout {
-		b.WriteString("`time` and `A/A'` are Hodges-Lehmann shifts over the per-layout medians. `spread`: the base arm's robust standard deviation " +
-			"across its layouts (1.4826 x MAD, relative), i.e. how much this benchmark moves between builds that differ only in function placement, plus run-to-run noise; " +
-			"`K` is layouts per arm. Power uses Noether's normal approximation with the effect size taken from the data: AUC = P(head layout slower than base layout) under a +5% shift over pooled within-arm residuals, a conservative estimate.\n\n")
+		fmt.Fprintf(&b, "`time` and `A/A'` are Hodges-Lehmann shifts over the per-layout medians. `spread`: the base arm's robust standard deviation "+
+			"across its layouts (1.4826 x MAD, relative), i.e. how much this benchmark moves between builds that differ only in function placement, plus run-to-run noise; "+
+			"`K` is layouts per arm. Power uses Noether's normal approximation with the effect size taken from the data: AUC = P(head layout slower than base layout) under a +%.3g%% shift over pooled within-arm residuals, a conservative estimate. Plans size to %.0f%% estimated power while the stopping target remains %.0f%%.\n\n", cfg.LowPowerShiftPct, powerSizingTarget(cfg)*100, cfg.LowPowerTarget*100)
 	}
 	switch {
 	case res.HasAA && res.ByLayout:
@@ -998,14 +1037,12 @@ func writeLowPower(b *strings.Builder, res Result, cfg Config) {
 	}
 	level := cfg.Alpha / float64(res.TimeTests)
 	b.WriteString("### Low power\n\n")
-	extended, maxK := 0, res.StageLayouts
-	for _, r := range res.Rows {
-		if r.K > r.stageK {
-			extended++
-			maxK = max(maxK, r.K)
-		}
+	ext := summarizeExtensions(res)
+	if cfg.ExtStatus == "skipped" {
+		b.WriteString("Adaptive layouts: skipped (timings not judged).\n\n")
+	} else {
+		fmt.Fprintf(b, "Adaptive layouts: %d benchmark(s) extended from %d to up to %d layouts per arm (%s); %d warm-up benchmark(s), %d unclassified benchmark(s) received extra measurements.\n\n", ext.planned, res.StageLayouts, ext.maxK, cfg.ExtStatus, ext.warmups, ext.unknown)
 	}
-	fmt.Fprintf(b, "Adaptive layouts: %d benchmark(s) extended from %d to up to %d layouts per arm (%s).\n\n", extended, res.StageLayouts, maxK, cfg.ExtStatus)
 	noneReach := true
 	for _, r := range res.Rows {
 		if r.Time.OK && minMWP(r.Time.NBase, r.Time.NHead) <= level {
@@ -1023,9 +1060,13 @@ func writeLowPower(b *strings.Builder, res Result, cfg Config) {
 		return
 	}
 	fmt.Fprintf(b, "%d benchmark(s) have under %.0f%% estimated power to be flagged on their own for a +%.3g%% slowdown at the Benjamini-Hochberg level alpha/m = %.3g. Instructions/op, allocs/op and the stage-1 suite geomean still guard them.\n\n", len(rows), cfg.LowPowerTarget*100, cfg.LowPowerShiftPct, level)
-	b.WriteString("| benchmark | K | power at +5% | slowdown caught 80% of the time | reason |\n|---|---:|---:|---:|---|\n")
+	fmt.Fprintf(b, "| benchmark | K | power at +%.3g%% | slowdown caught %.0f%% of the time | reason |\n|---|---:|---:|---:|---|\n", cfg.LowPowerShiftPct, cfg.LowPowerTarget*100)
 	for _, r := range rows {
-		fmt.Fprintf(b, "| `%s` | %d | %.0f%% | +%.1f%% | %s |\n", strings.TrimPrefix(r.Name, "Benchmark"), r.K, r.Power*100, r.MinShift, r.Reason)
+		shift := fmt.Sprintf("+%.1f%%", r.MinShift)
+		if math.IsNaN(r.MinShift) {
+			shift = "n/a"
+		}
+		fmt.Fprintf(b, "| `%s` | %d | %s | %s | %s |\n", strings.TrimPrefix(r.Name, "Benchmark"), r.K, powerText(r.Power), shift, r.Reason)
 	}
 	b.WriteString("\nPower is estimated by Noether's normal approximation using the empirical AUC of pooled within-arm log residuals, excluding self-pairs and giving half credit for ties.\n\n")
 }

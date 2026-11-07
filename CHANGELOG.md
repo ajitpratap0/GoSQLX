@@ -164,6 +164,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   UTF-8 is unaffected.
 
 ### Fixed
+- **Perf gate**: reports separate planned extensions from line warm-ups, show
+  configured power targets and unknown estimates, and explain when adaptive
+  layouts were skipped because timings were not judged. [W0-16]
 - Claims checks now verify that published benchmark results were measured at the latest release tag commit.
 - **AST**: `AlterTableStatement.SQL()` now separates multiple ALTER TABLE actions with commas, matching the compact formatter and preserving action boundaries when re-parsed.
 - **Playground**: the GoSQLX WebAssembly module now runs in a Web Worker, so

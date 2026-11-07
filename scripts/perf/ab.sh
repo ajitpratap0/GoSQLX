@@ -96,7 +96,7 @@ log() { echo "ab.sh: $*" >&2; }
 
 out="" rounds=20 benchtime=100ms layouts=20 seed0="" suite="" aa=0 sec=0 ir=0 gate=0 enforce=0 accepted=0 title=""
 budget=0 budget_given=0 ext_deadline=0 kmax=200
-ext_status=off ext_stages=0 ext_seconds=0 ext_j=0 ext_count=0 ext_k=0
+ext_status=off ext_stages=0 ext_seconds=0 ext_j=0 ext_count=0 ext_k=0 ext_warmups=0
 ext_clause="" final_flags=() ext_dirs=()
 adhoc=()
 while getopts ":o:r:t:k:B:E:K:S:s:b:T:agiGeAh" opt; do
@@ -634,6 +634,7 @@ extend() {
 				for arm in $order; do
 					echo "layout: $(perf_ext_seed "$seed0" "$layouts" "$J")" >>"$out/raw/gcoff-$arm-ext.txt"
 					while IFS= read -r line; do
+						awk -F '\t' -v line="$line" -v r="$r" '$1 == "need" && $2 == line && $3 > r { print "adaptive-planned: " $7 }' "$plan" >>"$out/raw/gcoff-$arm-ext.txt"
 						run_line "$arm" gcoff "$out/raw/gcoff-$arm-ext.txt" "$out/bin/$arm/L$J" "$line" "$(perf_plan_regex "$plan" "$line" "$r")"
 					 done < <(perf_plan_lines "$plan" "$r")
 				 done
@@ -652,7 +653,8 @@ extend() {
 		[ "$need_more" -eq 0 ] || ext_status=stages
 	fi
 	ext_seconds=$(($(date +%s) - t0))
-	ext_count=$(awk '/^Benchmark/ { name=$1; sub(/-[0-9]+$/, "", name); names[name]=1 } END { for (name in names) n++; print n+0 }' "$out/raw/gcoff-base-ext.txt")
+	ext_count=$(awk '/^adaptive-planned: / { sub(/^adaptive-planned: /, ""); names[$0]=1 } END { for (name in names) n++; print n+0 }' "$out/raw/gcoff-base-ext.txt")
+	ext_warmups=$(awk '/^adaptive-planned: / { sub(/^adaptive-planned: /, ""); planned[$0]=1 } /^Benchmark/ { name=$1; sub(/-[0-9]+$/, "", name); names[name]=1 } END { for (name in names) if (!(name in planned)) n++; print n+0 }' "$out/raw/gcoff-base-ext.txt")
 	ext_k=$(awk -v k="$layouts" '/^layout:/ { seed=$2 } /^Benchmark/ { name=$1; sub(/-[0-9]+$/, "", name); if (!seen[name,seed]++) n[name]++ } END { for (name in n) if (n[name]>max) max=n[name]; print k+max }' "$out/raw/gcoff-base-ext.txt")
 	{
 		echo "extension:   $ext_stages stage(s), layouts $((layouts + 1))..$ext_j, seeds $(perf_ext_seed "$seed0" "$layouts" "$((layouts + 1))")..$(perf_ext_seed "$seed0" "$layouts" "$ext_j"), ${ext_seconds}s, $ext_status"
@@ -665,7 +667,10 @@ extend() {
 gate_src=$head_tree
 [ -d "$gate_src/scripts/perf/gate" ] || gate_src=$root
 
-ext_clause="adaptive layouts: budget ${budget}s, cap $kmax; 0 benchmarks extended to up to $layouts layouts in 0 stage(s), 0s, off."
+ext_clause="adaptive layouts: off (budget ${budget}s, cap $kmax)."
+if [ "$budget" -gt 0 ] && [ "$layouts" -gt 0 ]; then
+	ext_clause="adaptive layouts: budget ${budget}s, cap $kmax; awaiting the stage-1 verdict."
+fi
 gate_rc=0
 judge || gate_rc=$?
 log "gate exited $gate_rc"
@@ -692,10 +697,18 @@ if [ $gate_rc -le 1 ] && [ $gate -eq 1 ] && [ "$(cat "$out/status")" = noisy ]; 
 	log "gate exited $gate_rc"
 fi
 if [ "$gate_rc" -le 1 ] && [ "$budget" -gt 0 ] && [ "$layouts" -gt 0 ]; then
-	case $(cat "$out/status") in pass | regression) extend ;; esac
+	case $(cat "$out/status") in
+		pass | regression) extend ;;
+		noisy | inconclusive) ext_status=skipped ;;
+	esac
 fi
 if [ "$ext_status" != off ]; then
-	ext_clause="adaptive layouts: budget ${budget}s, cap $kmax; $ext_count benchmarks extended to up to $ext_k layouts in $ext_stages stage(s), ${ext_seconds}s, $ext_status."
+	if [ "$ext_status" = skipped ]; then
+		ext_clause="adaptive layouts: skipped (timings not judged; budget ${budget}s, cap $kmax)."
+		echo "extension:   skipped (timings not judged; budget ${budget}s, cap $kmax)" >>"$out/env.txt"
+	else
+		ext_clause="adaptive layouts: budget ${budget}s, cap $kmax; $ext_count planned benchmarks extended to up to $ext_k layouts, $ext_warmups line warm-ups, in $ext_stages stage(s), ${ext_seconds}s, $ext_status."
+	fi
 	gate_rc=0
 	judge ${final_flags[@]+"${final_flags[@]}"} || gate_rc=$?
 else

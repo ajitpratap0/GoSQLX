@@ -99,7 +99,7 @@ func realMain(args []string, stdout io.Writer) (int, error) {
 	fs.Float64Var(&cfg.AANoisyFraction, "aa-noisy-pct", cfg.AANoisyFraction, "A/A noisy when more than this % of benchmarks are noisy")
 	fs.BoolVar(&cfg.FinalAttempt, "final", false, "this is the re-run: a noisy A/A is inconclusive")
 	fs.IntVar(&cfg.ExtMax, "ext-max", cfg.ExtMax, "maximum adaptive layouts per arm (at least 2)")
-	fs.StringVar(&cfg.ExtStatus, "ext-status", cfg.ExtStatus, "adaptive layout status: off, done, budget or stages")
+	fs.StringVar(&cfg.ExtStatus, "ext-status", cfg.ExtStatus, "adaptive layout status: off, done, budget, stages or skipped")
 	if err := fs.Parse(args); err != nil {
 		return 0, err
 	}
@@ -125,9 +125,9 @@ func realMain(args []string, stdout io.Writer) (int, error) {
 		return 0, errors.New("-ext-max must be at least 2")
 	}
 	switch cfg.ExtStatus {
-	case "off", "done", "budget", "stages":
+	case "off", "done", "budget", "stages", "skipped":
 	default:
-		return 0, errors.New("-ext-status must be off, done, budget or stages")
+		return 0, errors.New("-ext-status must be off, done, budget, stages or skipped")
 	}
 
 	var in Inputs
@@ -156,7 +156,7 @@ func realMain(args []string, stdout io.Writer) (int, error) {
 		if res.TimeTests > 0 {
 			level /= float64(res.TimeTests)
 		}
-		if err := WritePlan(&plan, Plan(res, cfg), mergeRuns(in.Base, in.BaseExt).LineFirst, level, res.TimeTests, cfg.ExtMax); err != nil {
+		if err := WritePlan(&plan, Plan(res, cfg), mergeRuns(in.Base, in.BaseExt).LineFirst, level, res.TimeTests, cfg); err != nil {
 			return 0, err
 		}
 		if err := os.WriteFile(*planPath, plan.Bytes(), 0o644); err != nil {

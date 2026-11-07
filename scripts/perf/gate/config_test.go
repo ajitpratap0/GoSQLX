@@ -488,7 +488,7 @@ done
 func TestPlanHelpersInLib(t *testing.T) {
 	needs := []PlanNeed{{Line: 0, Name: "BenchmarkWarm", Regex: exactBenchRegex("BenchmarkWarm"), More: 1, Have: 20, Target: 21}, {Line: 0, Name: "BenchmarkA/a+b", Regex: exactBenchRegex("BenchmarkA/a+b"), More: 3, Have: 20, Target: 23}, {Line: 2, Name: "BenchmarkB/x", Regex: exactBenchRegex("BenchmarkB/x"), More: 2, Have: 20, Target: 22}}
 	var plan strings.Builder
-	if err := WritePlan(&plan, needs, map[int]string{0: "BenchmarkWarm", 2: "BenchmarkOther"}, .001, 3); err != nil {
+	if err := WritePlan(&plan, needs, map[int]string{0: "BenchmarkWarm", 2: "BenchmarkOther"}, .001, 3, DefaultConfig()); err != nil {
 		t.Fatal(err)
 	}
 	path := filepath.Join(t.TempDir(), "plan.tsv")

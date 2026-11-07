@@ -18,6 +18,7 @@ import (
 	"context"
 	"fmt"
 	"runtime"
+	"runtime/debug"
 	"testing"
 	"unsafe"
 
@@ -102,6 +103,11 @@ func stackReserveParseMoves(sql string, parse func(string) error) (bool, error) 
 // is not copied again during a parse (no stack move), which holds for any
 // landing class, so the 16-32 KiB race variance does not affect it.
 func TestStackReserve_CoversPortableCorpus(t *testing.T) {
+	// A GC cycle shrinks under-used goroutine stacks, which moves the stack and
+	// would be mistaken for a growth copy. Finish any running cycle and keep GC
+	// off while measuring.
+	runtime.GC()
+	defer debug.SetGCPercent(debug.SetGCPercent(-1))
 	apis := []struct {
 		name  string
 		parse func(string) error

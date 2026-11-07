@@ -79,6 +79,11 @@ func stackedMatches(views []string) (matches [3]string) {
 }
 
 func detectStackedQueries(s *Scanner, views []string, result *ScanResult) {
+	// A single view without ';' cannot match; skip the common single-statement
+	// case before touching pattern state.
+	if len(views) == 1 && strings.IndexByte(views[0], ';') < 0 {
+		return
+	}
 	patternsOnce.Do(initPatterns)
 	group := regexGroups[PatternStackedQuery]
 	if !s.shouldInclude(group.severity) {

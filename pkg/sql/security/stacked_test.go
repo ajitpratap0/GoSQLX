@@ -81,7 +81,7 @@ func stackedReference(s *Scanner, views []string, result *ScanResult) {
 
 func TestStackedOracleBaseline(t *testing.T) {
 	rng := rand.New(rand.NewSource(609))
-	alphabet := []string{";", " ", "\t", "\v", "\f", "\r", "\n", "\u0085", "\u00a0", "DROP", "delete", "TRUNCATE", "update", "INſERT", "alter", "EXEC", "EXECUTE", "ı", "İ", "é", "_", "9", "\xff", "\xc5", "--", "/*", "*/", "'", "$$"}
+	alphabet := []string{";", " ", "\t", "\v", "\f", "\r", "\n", "\u0085", "\u00a0", "DROP", "delete", "TRUNCATE", "update", "INſERT", "alter", "EXEC", "EXECUTE", "ı", "İ", "é", "_", "9", "\xff", "\xc5", "\xa0", "--", "/*", "*/", "'", "$$"}
 	s := NewScanner()
 	for i := 0; i < 10000; i++ {
 		var b strings.Builder
@@ -178,7 +178,7 @@ func TestStackedMatcherLinear(t *testing.T) {
 				}
 			}
 			t.Logf("1 MiB %v, 2 MiB %v, ratio %.2f", a, b, float64(b)/float64(a))
-			if b > 4*a {
+			if b > 3*a {
 				t.Fatalf("scaling exceeds linear allowance: %v vs %v", a, b)
 			}
 		})

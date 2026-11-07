@@ -505,6 +505,8 @@ func TestScanSQL_Concurrent_Prefilter(t *testing.T) {
 		strings.Repeat("SELECT a FROM t WHERE b = 2; ", 2500) + " SLEEP(1)", // > 64 KiB
 		"",
 		"$$ SLEEP(1) $$",
+		"SELECT 1;\n\tDROP TABLE t; /* x */ ; exec sp; EXECUTE p",
+		strings.Repeat("SELECT 1;\n", 8000) + "; UPDATE t SET a=1",
 	}
 	s := NewScanner()
 	want := make([]*ScanResult, len(inputs))

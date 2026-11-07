@@ -18,9 +18,9 @@ import (
 
 type scratchResult struct{ normalized, fingerprint, err string }
 
-func scratchRun(sql string) scratchResult {
-	n, e := fingerprint.Normalize(sql)
-	f, fe := fingerprint.Fingerprint(sql)
+func scratchRun(sql string, mode fingerprint.Mode) scratchResult {
+	n, e := fingerprint.NormalizeWithOptions(sql, fingerprint.Options{Mode: mode})
+	f, fe := fingerprint.FingerprintWithOptions(sql, fingerprint.Options{Mode: mode})
 	if fmt.Sprint(e) != fmt.Sprint(fe) {
 		return scratchResult{n, f, "inconsistent errors"}
 	}
@@ -57,7 +57,7 @@ func scratchCorpus(t *testing.T) []string {
 func TestScratchDifferential(t *testing.T) {
 	for i, sql := range scratchCorpus(t) {
 		want, err := fingerprint.LegacyNormalizeForScratchTest(sql)
-		got := scratchRun(sql)
+		got := scratchRun(sql, fingerprint.ModeLegacy)
 		hash := ""
 		if err == nil {
 			hash = fmt.Sprintf("%x", sha256.Sum256([]byte(want)))
@@ -68,36 +68,40 @@ func TestScratchDifferential(t *testing.T) {
 	}
 }
 func TestScratchConcurrentAndRetainedResults(t *testing.T) {
-	queries := scratchCorpus(t)
-	want := make([]scratchResult, len(queries))
-	for i, q := range queries {
-		result := scratchRun(q)
-		want[i] = scratchResult{strings.Clone(result.normalized), strings.Clone(result.fingerprint), strings.Clone(result.err)}
-	}
-	var wg sync.WaitGroup
-	for worker := 0; worker < 8; worker++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			retained := make([]scratchResult, len(queries))
+	for _, mode := range []fingerprint.Mode{fingerprint.ModeTokens, fingerprint.ModeLegacy} {
+		t.Run(fmt.Sprint(mode), func(t *testing.T) {
+			queries := scratchCorpus(t)
+			want := make([]scratchResult, len(queries))
 			for i, q := range queries {
-				retained[i] = scratchRun(q)
-				if retained[i] != want[i] {
-					t.Errorf("concurrent query %d mismatch", i)
-					return
-				}
+				result := scratchRun(q, mode)
+				want[i] = scratchResult{strings.Clone(result.normalized), strings.Clone(result.fingerprint), strings.Clone(result.err)}
 			}
-			// Further calls recycle pooled token/Word storage while earlier strings stay live.
-			for _, q := range queries {
-				scratchRun(q)
+			var wg sync.WaitGroup
+			for worker := 0; worker < 8; worker++ {
+				wg.Add(1)
+				go func() {
+					defer wg.Done()
+					retained := make([]scratchResult, len(queries))
+					for i, q := range queries {
+						retained[i] = scratchRun(q, mode)
+						if retained[i] != want[i] {
+							t.Errorf("concurrent query %d mismatch", i)
+							return
+						}
+					}
+					// Further calls recycle pooled token/Word storage while earlier strings stay live.
+					for _, q := range queries {
+						scratchRun(q, mode)
+					}
+					for i, got := range retained {
+						if got != want[i] {
+							t.Errorf("retained query %d changed", i)
+							return
+						}
+					}
+				}()
 			}
-			for i, got := range retained {
-				if got != want[i] {
-					t.Errorf("retained query %d changed", i)
-					return
-				}
-			}
-		}()
+			wg.Wait()
+		})
 	}
-	wg.Wait()
 }

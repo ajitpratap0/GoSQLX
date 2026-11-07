@@ -15,8 +15,12 @@
 package gosqlx
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"strings"
 	"testing"
+
+	"github.com/ajitpratap0/GoSQLX/pkg/fingerprint"
 )
 
 func TestParse(t *testing.T) {
@@ -615,7 +619,7 @@ func TestGosqlx_Normalize_PreservesPlaceholder(t *testing.T) {
 }
 
 func TestGosqlx_Fingerprint_CrossVersion(t *testing.T) {
-	fp, err := Fingerprint("SELECT 1")
+	fp, err := FingerprintWithOptions("SELECT 1", fingerprint.Options{Mode: fingerprint.ModeLegacy})
 	if err != nil {
 		t.Fatalf("Fingerprint() error: %v", err)
 	}
@@ -639,8 +643,71 @@ func TestGosqlx_Fingerprint_SameStructureDifferentLiterals(t *testing.T) {
 }
 
 func TestGosqlx_Fingerprint_InvalidSQL_ReturnsError(t *testing.T) {
-	_, err := Fingerprint("NOT VALID SQL @@##")
+	_, err := FingerprintWithOptions("NOT VALID SQL @@##", fingerprint.Options{Mode: fingerprint.ModeLegacy})
 	if err == nil {
 		t.Error("Fingerprint() should return error for invalid SQL")
+	}
+}
+
+func TestGosqlx_Fingerprint_V2(t *testing.T) {
+	fp, err := Fingerprint("SELECT 1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(fp) != 67 || !strings.HasPrefix(fp, "v2:") {
+		t.Fatalf("expected 67-char v2 fingerprint, got %q", fp)
+	}
+}
+func TestGosqlx_Normalize_V2SyntaxAndTokenErrors(t *testing.T) {
+	for _, tc := range []struct {
+		sql       string
+		wantError bool
+	}{{"SELECT FROM WHERE", false}, {"SELECT 'unterminated", true}, {"", true}} {
+		t.Run(tc.sql, func(t *testing.T) {
+			_, err := Normalize(tc.sql)
+			if (err != nil) != tc.wantError {
+				t.Fatalf("Normalize() error = %v, want error %v", err, tc.wantError)
+			}
+		})
+	}
+}
+
+func TestGosqlx_NormalizeAndFingerprintWithOptions(t *testing.T) {
+	for _, tc := range []struct {
+		name, sql, normalized, prefix, errorPrefix string
+		opts                                       fingerprint.Options
+	}{
+		{name: "default", sql: "SELECT 1 AS x", normalized: "SELECT ? x", prefix: "v2:"},
+		{name: "legacy", sql: "SELECT 1 AS x", normalized: "SELECT ? AS x", opts: fingerprint.Options{Mode: fingerprint.ModeLegacy}},
+		{name: "mysql", sql: "SELECT 1 # comment\n", normalized: "SELECT ?", prefix: "v2:", opts: fingerprint.Options{Dialect: "mysql"}},
+		{name: "legacy_mysql", sql: "SELECT 1 # comment\n", normalized: "SELECT ?", opts: fingerprint.Options{Mode: fingerprint.ModeLegacy, Dialect: "mysql"}},
+		{name: "default_syntax", sql: "SELECT FROM WHERE", normalized: "SELECT FROM WHERE", prefix: "v2:"},
+		{name: "legacy_syntax", sql: "SELECT FROM WHERE", errorPrefix: "fingerprint: parsing failed:", opts: fingerprint.Options{Mode: fingerprint.ModeLegacy}},
+		{name: "unknown_mode", sql: "SELECT 1", errorPrefix: "fingerprint: unknown mode 255", opts: fingerprint.Options{Mode: fingerprint.Mode(255)}},
+		{name: "unknown_dialect", sql: "SELECT 1", errorPrefix: "fingerprint: unsupported dialect", opts: fingerprint.Options{Dialect: "unknown"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			normalized, normalizeErr := NormalizeWithOptions(tc.sql, tc.opts)
+			fp, fingerprintErr := FingerprintWithOptions(tc.sql, tc.opts)
+			if tc.errorPrefix != "" {
+				for _, result := range []struct {
+					name, output string
+					err          error
+				}{{"NormalizeWithOptions", normalized, normalizeErr}, {"FingerprintWithOptions", fp, fingerprintErr}} {
+					if result.output != "" || result.err == nil || !strings.HasPrefix(result.err.Error(), tc.errorPrefix) {
+						t.Errorf("%s=(%q, %v), want empty output and error prefix %q", result.name, result.output, result.err, tc.errorPrefix)
+					}
+				}
+				return
+			}
+			if normalizeErr != nil || normalized != tc.normalized {
+				t.Errorf("NormalizeWithOptions=(%q, %v), want %q", normalized, normalizeErr, tc.normalized)
+			}
+			digest := sha256.Sum256([]byte(tc.normalized))
+			want := tc.prefix + hex.EncodeToString(digest[:])
+			if fingerprintErr != nil || fp != want {
+				t.Errorf("FingerprintWithOptions=(%q, %v), want %q", fp, fingerprintErr, want)
+			}
+		})
 	}
 }

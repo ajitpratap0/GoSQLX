@@ -792,13 +792,17 @@ func ParseWithDialect(sql string, dialect keywords.SQLDialect) (*ast.AST, error)
 	return astNode, nil
 }
 
-// Normalize parses sql, replaces all literal values (strings, numbers, booleans,
-// NULLs) with "?" placeholders, and returns the re-formatted SQL.
+// Normalize returns the version-2 token-stream normal form of sql. It redacts
+// data literals to "?", canonicalizes keywords and aliases, and collapses
+// repeated normalized IN-list elements and VALUES rows. Type modifiers,
+// string aliases and predicate constants such as IS TRUE are preserved.
+// Keyword name parts adjacent to a dot retain their case, including ASC.
+// Existing parameter placeholders ($1, ?, :name) are preserved.
 //
-// Two queries that differ only in literal values (e.g., WHERE id = 1 vs WHERE id = 42)
-// produce identical output. Existing parameter placeholders ($1, ?, :name) are preserved.
-//
-// Returns an error if the SQL cannot be parsed.
+// Normalize reports tokenization errors and empty input, but does not validate
+// SQL syntax. Call Validate first when syntax validation is required. For the
+// v1.17 parse-and-format output or dialect selection, use NormalizeWithOptions
+// with fingerprint.Options.
 //
 // Example:
 //
@@ -808,9 +812,24 @@ func Normalize(sql string) (string, error) {
 	return fingerprint.Normalize(sql)
 }
 
-// Fingerprint returns a stable 64-character SHA-256 hex digest for the given SQL.
-// Structurally identical queries with different literal values produce the same fingerprint,
-// making this suitable for query deduplication, caching, and slow-query grouping.
+// NormalizeWithOptions normalizes sql using the fingerprint mode and dialect.
+// ModeTokens (the zero value) does not validate SQL syntax. ModeLegacy with an
+// empty dialect reproduces v1.17 output and errors; explicit dialects have no
+// v1.17 compatibility guarantee. Errors are returned unchanged from fingerprint.
+func NormalizeWithOptions(sql string, opts fingerprint.Options) (string, error) {
+	return fingerprint.NormalizeWithOptions(sql, opts)
+}
+
+// Fingerprint returns "v2:" followed by the 64-character lowercase SHA-256 hex
+// digest of the version-2 normal form (67 bytes total). Queries that differ
+// only in redacted data literals produce the same fingerprint, making this
+// suitable for query deduplication, caching, and slow-query grouping.
+//
+// Fingerprint does not validate SQL syntax; call Validate first if needed.
+// To reproduce unprefixed v1.17 fingerprints, use
+// FingerprintWithOptions with fingerprint.Options{Mode:
+// fingerprint.ModeLegacy}. Use fingerprint.VersionOf to distinguish versions;
+// recompute stored fingerprints or key on both versions during migration.
 //
 // Example:
 //
@@ -819,6 +838,15 @@ func Normalize(sql string) (string, error) {
 //	// fp1 == fp2
 func Fingerprint(sql string) (string, error) {
 	return fingerprint.Fingerprint(sql)
+}
+
+// FingerprintWithOptions fingerprints sql using the fingerprint mode and dialect.
+// ModeTokens (the zero value) produces a 67-byte v2-prefixed digest without
+// syntax validation. ModeLegacy produces an unprefixed 64-character digest;
+// an empty dialect reproduces v1.17 output and errors. Errors are returned
+// unchanged from fingerprint.
+func FingerprintWithOptions(sql string, opts fingerprint.Options) (string, error) {
+	return fingerprint.FingerprintWithOptions(sql, opts)
 }
 
 // Transpile converts SQL from one dialect to another.

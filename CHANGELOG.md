@@ -7,7 +7,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Breaking Changes
+- **Version-2 query normalisation [W5-08]**: `fingerprint.Normalize`,
+  `fingerprint.Fingerprint`, `gosqlx.Normalize` and `gosqlx.Fingerprint` now
+  use the token-stream normal form. Fingerprints are `"v2:"` plus 64 lowercase
+  hex characters (67 bytes); storage limited to `CHAR(64)` must be widened.
+  Normalized text upper-cases keywords, drops alias
+  `AS`, join `INNER`/`OUTER` and default `ASC`, redacts LIMIT/OFFSET, FETCH/TOP,
+  typed literals and utility-statement literals, and collapses repeated normalized
+  IN-list elements and VALUES rows, including question-mark placeholders.
+  Keyword name parts next to a dot retain their source case, including `ASC`;
+  other `ASC` tokens are dropped.
+  Tokenizable SQL with invalid syntax is accepted; call `gosqlx.Validate` first
+  when syntax validation is required. Normalized text is a grouping key, not
+  guaranteed to be parseable SQL: eight corpus cases track parser limitations
+  for aliases without `AS` in RETURNING, qualified projections, XMLATTRIBUTES,
+  subqueries and view queries, plus the redacted `SRID ?` value. Grouping also
+  differs for cast spelling,
+  `IS TRUE` versus `IS FALSE`, quoted keyword names, clause order, redundant
+  parentheses and content omitted by the legacy formatter. Version 2 also
+  preserves the source case of bare identifier tokens in contextual grammar
+  positions that the legacy formatter upper-cases: `SHOW server_version` and
+  `SHOW SERVER_VERSION`, for example, produce different version-2 fingerprints
+  but the same legacy fingerprint. Reproduce stored
+  v1.17 fingerprints exactly with `fingerprint.FingerprintWithOptions(sql,
+  fingerprint.Options{Mode: fingerprint.ModeLegacy})`; use
+  `fingerprint.VersionOf` to distinguish versions. Recompute stored values or
+  key on both versions during migration.
+
 ### Added
+- **Fingerprint modes and dialect options [W5-08]**: `fingerprint.Options`,
+  `Mode`, `NormalizeWithOptions` and `FingerprintWithOptions` support
+  token-stream and legacy normalisation with dialect selection in both modes;
+  `VersionOf`, `Version`, `VersionPrefix` and `ErrEmpty` expose the version and
+  empty-input contract. `gosqlx.NormalizeWithOptions` and
+  `gosqlx.FingerprintWithOptions` accept the same `fingerprint.Options`, including
+  `ModeLegacy` for the v1.17 output and syntax-error contract.
 - **Benchmark and perf-gate infrastructure (performance overhaul, wave 0)**:
   pull requests are now judged by interleaved A/B measurements instead of
   absolute numbers. No library behaviour changes apart from #901 (see Fixed). The pieces, by PR:
@@ -101,6 +136,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     benchmarks that publish diagnostics no longer time a growing buffer.
 
 ### Performance
+- **Token-stream Normalize and Fingerprint [W5-08]**: defaults tokenize once,
+  normalize into a pooled byte buffer and hash its bytes directly for
+  fingerprints. Performance: TBD (amd64 gate).
 - **gosqlx**: errors returned by `Parse`, `Validate`, `Lint` and the tree helpers now wrap the sentinel and the underlying error in an unexported `wrapErr` that builds its message lazily, instead of `fmt.Errorf("%w: %w", ...)` on every failure. Error text, `errors.Is` and `errors.As` behaviour are unchanged; only the unexported concrete error type differs. The saving applies to callers that only check `errors.Is`/`errors.As` or drop the message: when the message is built (`err.Error()`, as the LSP and CLI do) the gain is about 2 allocs/op and 3-4% B/op per error (syntax_mid 21 -> 19 allocs). Because the message is now built on demand, `Error()` reflects any later mutation of the inner `*errors.Error` reached through `errors.As`; previously the text was fixed at creation. [W1-03]
 - **Linter L010**: scans bytes in a single pass instead of rebuilding
   substrings and running a regular expression; `BenchmarkLintRule/L010` is 67.5% faster on the

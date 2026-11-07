@@ -11,13 +11,15 @@ name: Competitor Benchmarks
 #   artifact. Shared runners are noisy and differ in CPU model from job to
 #   job; the JSON and env.txt record the CPU so a run is never presented
 #   without its hardware, and the job summary compares GoSQLX with each peer
-#   by in-job time ratios rather than absolute ns/op. Commit the artifact to
-#   benchmarks/compare/results/ (and website/src/data/) in a PR to publish it.
+#   by in-job time ratios rather than absolute ns/op. Publish release-tag results
+#   with `task release:refresh-benchmarks TAG=vX.Y.Z`.
 #
 # Both jobs build with PERF_GO_VERSION, the release perf-gate.yml also pins
 # (scripts/perf/gate/config_test.go keeps them equal); GOGC=off runs set
 # GOMEMLIMIT (cmd/publish -gomemlimit, default as in scripts/perf/lib.sh).
 
+# Path filters are not evaluated for tag pushes, so every v* tag runs publish;
+# tags must use a user token because GITHUB_TOKEN-created tags trigger nothing.
 on:
   pull_request:
     paths:

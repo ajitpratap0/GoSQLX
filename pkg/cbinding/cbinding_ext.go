@@ -157,17 +157,13 @@ func formatJSON(sql, dialect string) *C.char {
 }
 
 // validateFor validates sql with the given dialect. An empty dialect goes
-// through gosqlx.Validate; otherwise the dialect-aware validation fast path is
-// used with the same empty-input rule and error wrapping as gosqlx.Validate.
+// through gosqlx.Validate; otherwise dialect-aware parser validation is used.
 func validateFor(sql, dialect string) error {
 	if err := dialectError(dialect); err != nil {
 		return err
 	}
 	if dialect == "" {
 		return gosqlx.Validate(sql)
-	}
-	if strings.TrimSpace(sql) == "" {
-		return fmt.Errorf("%w: empty input", gosqlx.ErrSyntax)
 	}
 	if err := parser.ValidateWithDialect(sql, keywords.SQLDialect(dialect)); err != nil {
 		return fmt.Errorf("%w: %w", gosqlx.ErrSyntax, err)

@@ -15,6 +15,8 @@
 package astjson
 
 import (
+	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -106,5 +108,42 @@ func BenchmarkAppend(b *testing.B) {
 				}
 			}
 		})
+	}
+}
+
+// Empty indentation keeps the legacy MarshalIndent depth check without
+// allocating quadratic whitespace for these deliberately deep trees.
+func TestAppend_LegacyChainDepth(t *testing.T) {
+	for _, chain := range []struct{ name, prefix, term, separator string }{
+		{"select", "SELECT ", "a", " + "},
+		{"where", "SELECT a FROM t WHERE ", "a = a", " AND "},
+	} {
+		for _, terms := range []int{1000, 3500, 5000, 20000} {
+			t.Run(fmt.Sprintf("%s/%d", chain.name, terms), func(t *testing.T) {
+				sql := chain.prefix + strings.Repeat(chain.term+chain.separator, terms-1) + chain.term
+				tree, err := parseTest(sql, "")
+				if err != nil {
+					t.Fatal(err)
+				}
+				defer ast.ReleaseAST(tree)
+				_, legacyErr := json.MarshalIndent(tree, "", "")
+				out, err := Marshal(tree)
+				if (err == nil) != (legacyErr == nil) {
+					t.Fatalf("v1 error = %v; legacy error = %v", err, legacyErr)
+				}
+				if terms == 20000 {
+					if legacyErr == nil || !strings.Contains(legacyErr.Error(), "exceeded max depth") {
+						t.Fatalf("expected legacy max depth rejection, got %v", legacyErr)
+					}
+					if len(err.Error()) >= 1024 {
+						t.Fatalf("depth error has %d bytes, want < 1024", len(err.Error()))
+					}
+				} else if err != nil {
+					t.Fatal(err)
+				} else if !json.Valid(out) {
+					t.Fatal("v1 returned invalid JSON")
+				}
+			})
+		}
 	}
 }

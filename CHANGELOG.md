@@ -104,7 +104,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     benchmarks that publish diagnostics no longer time a growing buffer.
 
 ### Performance
-- Playground parse returns compact typed AST JSON v1 on request (TBD-gate); playground Lint parses once. [W8-04]
+- **Playground**: parse returns compact typed AST JSON v1 on request. Local, indicative deterministic parse measurements for small/medium/large inputs: payload bytes -75.7/-73.2/-91.6%; B/op -72/-80/-96%; allocs/op 14->10, 54->43, 714->527. The amd64 layout-randomized gate numbers are in the PR body. Playground lint removes a second parse (no timing claim). [W8-04]
 - **Linter**: the lint pipeline uses the pooled parser and pooled dialect tokenizer; behavior is unchanged. [W6-06ab]
 - **Linter**: aliasing consistency and four visitor-based rules now reuse the cached preorder AST node list. Violations are unchanged; there is no API or behavior change. [W6-05b]
 - **Linter**: rule L007 (keyword case consistency) scans words without allocating (substring words, ASCII upper-casing into a stack buffer before the keyword lookup). Output is unchanged. On the canonical benchmarks (Apple M4, local), `BenchmarkLintRule/L007` allocates about 98% fewer objects (72565 to 1194 allocs/op) and about 97% fewer bytes, and `BenchmarkLintRW` allocates about 12.5% fewer objects. [W6-03]
@@ -136,8 +136,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Behavior changes
 
-- With a non-generic dialect, a tokenizer error is now reported as `gosqlx: tokenize error: Error E1002 ...` (what the no-dialect path and gosqlx.Lint already report) instead of `gosqlx: syntax error: Error E2004 ... tokenization error: ...`. `parse_error_span` is unchanged (it already resolved to the innermost positioned error). [W8-04]
-- SQL with no statements (blank, whitespace or comment-only) gets no `parse_error` from Lint, matching gosqlx.Lint (the linter treats it as "nothing to lint", not a syntax error). The AST and Analyze tabs still report the parse error. [W8-04]
+- **Playground (`gosqlxLint`)**: with a non-generic dialect, a tokenizer error is now reported as `gosqlx: tokenize error: Error E1002 ...` (what the no-dialect path and gosqlx.Lint already report) instead of `gosqlx: syntax error: Error E2004 ... tokenization error: ...`. `parse_error_span` is unchanged (it already resolved to the innermost positioned error). Library `gosqlx.Lint`/`LintWithDialect` are unchanged. [W8-04]
+- **Playground (`gosqlxLint`)**: SQL with no statements (blank, whitespace or comment-only) gets no `parse_error`, matching `gosqlx.Lint` (the linter treats it as "nothing to lint", not a syntax error). No `parse_error` on comment-only input is a maintainer-confirmed behaviour change. Library `gosqlx.Lint`/`LintWithDialect` are unchanged. The AST and Analyze tabs still report the parse error. [W8-04]
 - **Validate blank input**: `parser.Validate` and `parser.ValidateBytes` have
   always returned E2005 for empty or ASCII-whitespace-only input. Comment-only
   input (`-- c`, `/* x */`, `;`, `-- c\n;`) has always returned E2005 through

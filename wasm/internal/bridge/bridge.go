@@ -15,8 +15,6 @@
 // Package bridge holds the platform-independent logic behind the playground's
 // WebAssembly entry points (wasm/main.go). Keeping it free of syscall/js lets it
 // be unit-tested with the normal Go toolchain.
-// ParseJSON supports legacy JSON and the versioned AST JSON v1 contract
-// specified by internal/astjson.
 //
 // Every response type here is part of the contract with the website's
 // playground components, so fields carry explicit snake_case JSON tags. The
@@ -26,6 +24,9 @@
 // which bridgeContract.check.ts type-checks against those TS types during the
 // website's typecheck. Changing a tag is a breaking change for the website and
 // must be mirrored there.
+//
+// ParseJSON supports legacy JSON and the versioned AST JSON v1 contract
+// specified by internal/astjson.
 package bridge
 
 import (

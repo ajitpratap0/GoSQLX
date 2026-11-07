@@ -211,6 +211,11 @@ func TestTypeGuidedReference_PresencePrecisionAndOrder(t *testing.T) {
 	}{Pointer: &models.Location{}, False: false, Zero: 0, Empty: "", TypedNil: (*ast.Identifier)(nil), Big: 1<<63 + 17}
 	want := []byte(`{"Pointer":{},"False":false,"Zero":0,"Empty":"","Big":9223372036854775825}`)
 	compareTypeGuided(t, value, want, "oracle presence and numeric precision")
+	out, err := appendValue(nil, reflect.ValueOf(value))
+	if err != nil {
+		t.Fatal(err)
+	}
+	compareTypeGuided(t, value, out, "encoded presence and numeric precision")
 	expected, err := decodeReferenceJSON(want)
 	if err != nil {
 		t.Fatal(err)

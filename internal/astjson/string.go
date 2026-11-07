@@ -73,10 +73,7 @@ func appendString(dst []byte, src string) []byte {
 				dst = append(dst, '\\', 't')
 			default:
 				// This encodes bytes < 0x20 except for \b, \f, \n, \r and \t.
-				// If escapeHTML is set, it also escapes <, >, and &
-				// because they can lead to security holes when
-				// user-controlled strings are rendered into JSON
-				// and served to some browsers.
+				// HTML characters (<, >, &) stay literal in AST JSON v1.
 				dst = append(dst, '\\', 'u', '0', '0', hex[b>>4], hex[b&0xF])
 			}
 			i++

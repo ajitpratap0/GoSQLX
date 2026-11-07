@@ -35,10 +35,12 @@ func dialectArg(args []js.Value) string {
 	return ""
 }
 
-// versionArg reads an optional integral AST JSON version. Missing, null and
-// undefined arguments preserve the legacy representation during the transition.
+// versionArg reads an optional integral AST JSON version as a number or numeric
+// string. Missing, null and undefined arguments preserve the legacy
+// representation during the transition.
 func versionArg(args []js.Value) (int, error) {
 	if len(args) < 3 || args[2].IsUndefined() || args[2].IsNull() {
+		// Remove with the website PR B / v1.18 release docs.
 		//lint:ignore SA1019 Part A retains the legacy default until the site switches to v1.
 		return bridge.ASTJSONLegacy, nil
 	}
@@ -54,7 +56,7 @@ func versionArg(args []js.Value) (int, error) {
 			return v, nil
 		}
 	}
-	return 0, fmt.Errorf("AST JSON version must be a number")
+	return 0, fmt.Errorf("AST JSON version must be a number or numeric string")
 }
 
 // parse accepts SQL, an optional dialect and an optional AST JSON version.

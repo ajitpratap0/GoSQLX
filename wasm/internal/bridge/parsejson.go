@@ -67,5 +67,7 @@ func ParseJSON(sql, dialect string, version int) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("bridge: encode AST JSON v1: %w", err)
 	}
+	// string(*buf) copies before the deferred pool put; this order matters
+	// because the returned string must survive subsequent buffer reuse.
 	return string(*buf), nil
 }

@@ -76,14 +76,14 @@ func (p *plan) append(dst []byte, v reflect.Value, depth int) ([]byte, error) {
 	if p.err != nil {
 		return dst, p.err
 	}
-	if depth > 10000 {
-		return dst, fmt.Errorf("astjson: nesting exceeds 10000")
-	}
 	if (p.kind == reflect.Pointer || p.kind == reflect.Interface) && v.IsNil() {
 		return append(dst, "null"...), nil
 	}
 	if p.literal {
-		return p.appendLiteral(dst, v, depth)
+		if depth >= 10000 {
+			return dst, fmt.Errorf("astjson: nesting exceeds 10000 at LiteralValue")
+		}
+		return p.appendLiteral(dst, v, depth+1)
 	}
 	if p.addrMarshaler && v.CanAddr() {
 		return appendMarshaler(dst, v.Addr())
@@ -94,12 +94,20 @@ func (p *plan) append(dst []byte, v reflect.Value, depth int) ([]byte, error) {
 	if (p.kind == reflect.Map || p.kind == reflect.Slice) && v.IsNil() {
 		return append(dst, "null"...), nil
 	}
+	// Count emitted JSON containers only. Pointer/interface traversal and
+	// struct field access do not add nesting; byte slices encode as strings.
+	if p.kind == reflect.Struct || p.kind == reflect.Map || p.kind == reflect.Array || (p.kind == reflect.Slice && !p.bytes) {
+		depth++
+		if depth > 10000 {
+			return dst, fmt.Errorf("astjson: nesting exceeds 10000 at %s", p.kind)
+		}
+	}
 	switch p.kind {
 	case reflect.Pointer:
-		return p.elem.append(dst, v.Elem(), depth+1)
+		return p.elem.append(dst, v.Elem(), depth)
 	case reflect.Interface:
 		x := v.Elem()
-		return planFor(x.Type()).append(dst, x, depth+1)
+		return planFor(x.Type()).append(dst, x, depth)
 	case reflect.Bool:
 		return strconv.AppendBool(dst, v.Bool()), nil
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
@@ -161,9 +169,9 @@ func (p *plan) append(dst []byte, v reflect.Value, depth int) ([]byte, error) {
 			wrote = true
 			dst = append(dst, f.key...)
 			var err error
-			dst, err = f.child.append(dst, fv, depth+1)
+			dst, err = f.child.append(dst, fv, depth)
 			if err != nil {
-				return dst, fmt.Errorf("astjson: field %s: %w", f.name, err)
+				return dst, err
 			}
 		}
 		return append(dst, '}'), nil
@@ -179,7 +187,7 @@ func (p *plan) append(dst []byte, v reflect.Value, depth int) ([]byte, error) {
 				dst = append(dst, ',')
 			}
 			var err error
-			dst, err = p.elem.append(dst, v.Index(i), depth+1)
+			dst, err = p.elem.append(dst, v.Index(i), depth)
 			if err != nil {
 				return dst, err
 			}
@@ -222,7 +230,7 @@ func (p *plan) append(dst []byte, v reflect.Value, depth int) ([]byte, error) {
 			dst = appendString(dst, e.name)
 			dst = append(dst, ':')
 			var err error
-			dst, err = p.elem.append(dst, v.MapIndex(e.key), depth+1)
+			dst, err = p.elem.append(dst, v.MapIndex(e.key), depth)
 			if err != nil {
 				return dst, err
 			}
@@ -255,7 +263,7 @@ func (p *plan) appendLiteral(dst []byte, v reflect.Value, depth int) ([]byte, er
 	if !omitted(value) {
 		dst = append(dst, `,"Value":`...)
 		var err error
-		dst, err = p.elem.append(dst, value, depth+1)
+		dst, err = p.elem.append(dst, value, depth)
 		if err != nil {
 			return dst, err
 		}

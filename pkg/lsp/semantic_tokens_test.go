@@ -15,8 +15,10 @@
 package lsp
 
 import (
+	"encoding/binary"
 	"encoding/json"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 
@@ -391,7 +393,11 @@ func FuzzEncodeSemanticTokens(f *testing.F) {
 		f.Add(s)
 	}
 	f.Fuzz(func(t *testing.T, content string) {
-		data := encodeSemanticTokens(content, highlight.Spans(content))
+		spans := highlight.Spans(content)
+		data := encodeSemanticTokens(content, spans)
+		if want := encodeSemanticTokensReference(content, spans); !slices.Equal(data, want) {
+			t.Fatalf("content %q spans %+v: got %v, want %v", content, spans, data, want)
+		}
 		toks := decodeSemanticTokens(t, data)
 		lineLens := utf16LineLengths(content)
 		prevLine, prevEnd := -1, 0
@@ -409,6 +415,32 @@ func FuzzEncodeSemanticTokens(f *testing.F) {
 				t.Fatalf("token %+v goes backwards from line %d", tok, prevLine)
 			}
 			prevLine, prevEnd = tok.Line, tok.Char+tok.Len
+		}
+	})
+}
+
+// FuzzEncodeSemanticTokensSpans compares arbitrary span lists, including invalid
+// ranges and boundaries within UTF-8 runes or CRLF line endings, to the oracle.
+func FuzzEncodeSemanticTokensSpans(f *testing.F) {
+	f.Add("SELECT 1", []byte{0, 0, 6, 0, byte(highlight.Keyword), 7, 0, 8, 0, byte(highlight.Number)})
+	f.Add("a\r\nb", []byte{0, 0, 2, 0, byte(highlight.Comment), 2, 0, 4, 0, byte(highlight.Keyword)})
+	f.Add("é😀\xff\xe2\x82", []byte{0, 0, 1, 0, byte(highlight.String), 1, 0, 3, 0, byte(highlight.Comment)})
+	f.Add("", []byte{255, 255, 0, 0, 200})
+	f.Fuzz(func(t *testing.T, content string, raw []byte) {
+		n := min(len(raw)/5, 16)
+		spans := make([]highlight.Span, n)
+		for i := range spans {
+			entry := raw[i*5:][:5]
+			spans[i] = highlight.Span{
+				Start:    int(int16(binary.LittleEndian.Uint16(entry[:2]))),
+				End:      int(int16(binary.LittleEndian.Uint16(entry[2:4]))),
+				Category: highlight.Category(entry[4]),
+			}
+		}
+		got := encodeSemanticTokens(content, spans)
+		want := encodeSemanticTokensReference(content, spans)
+		if !slices.Equal(got, want) {
+			t.Fatalf("content %q spans %+v: got %v, want %v", content, spans, got, want)
 		}
 	})
 }

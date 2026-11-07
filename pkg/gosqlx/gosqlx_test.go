@@ -17,10 +17,14 @@ package gosqlx
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"strings"
 	"testing"
 
+	goerrors "github.com/ajitpratap0/GoSQLX/pkg/errors"
 	"github.com/ajitpratap0/GoSQLX/pkg/fingerprint"
+	"github.com/ajitpratap0/GoSQLX/pkg/sql/keywords"
+	"github.com/ajitpratap0/GoSQLX/pkg/sql/parser"
 )
 
 func TestParse(t *testing.T) {
@@ -160,6 +164,121 @@ func TestValidate(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestValidateBlankInputErrorContract(t *testing.T) {
+	tests := []struct {
+		name      string
+		sql       string
+		wantCode  goerrors.ErrorCode
+		wantCause string
+	}{
+		{name: "empty", sql: "", wantCode: goerrors.ErrCodeIncompleteStatement},
+		{name: "ASCII spaces", sql: " \t\r\n", wantCode: goerrors.ErrCodeIncompleteStatement},
+		{name: "byte order mark", sql: "\uFEFF", wantCode: goerrors.ErrCodeIncompleteStatement},
+		{name: "vertical tab", sql: "\v", wantCode: goerrors.ErrCodeInvalidSyntax, wantCause: "E1001"},
+		{name: "form feed", sql: "\f", wantCode: goerrors.ErrCodeInvalidSyntax, wantCause: "E1001"},
+		{name: "no-break space", sql: "\u00a0", wantCode: goerrors.ErrCodeInvalidSyntax, wantCause: "E1001"},
+		{name: "em space", sql: "\u2003", wantCode: goerrors.ErrCodeInvalidSyntax, wantCause: "E1001"},
+		{name: "next line", sql: "\u0085", wantCode: goerrors.ErrCodeInvalidSyntax, wantCause: "E1001"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := Validate(tt.sql)
+			if err == nil {
+				t.Fatal("Validate() unexpectedly accepted blank input")
+			}
+			if !errors.Is(err, ErrSyntax) {
+				t.Errorf("Validate() error = %v, want ErrSyntax", err)
+			}
+			if !hasStructuredCode(err, tt.wantCode) {
+				t.Errorf("Validate() error = %v, want structured code %s", err, tt.wantCode)
+			}
+			if tt.wantCause != "" && !strings.Contains(err.Error(), tt.wantCause) {
+				t.Errorf("Validate() error = %v, want nested cause %s", err, tt.wantCause)
+			}
+		})
+	}
+}
+
+func TestValidateCommentOnlyInputIsIncomplete(t *testing.T) {
+	for _, sql := range []string{"-- c", "/* x */"} {
+		t.Run(sql, func(t *testing.T) {
+			err := Validate(sql)
+			if !errors.Is(err, ErrSyntax) || !hasStructuredCode(err, goerrors.ErrCodeIncompleteStatement) {
+				t.Errorf("Validate(%q) = %v, want ErrSyntax wrapping E2005", sql, err)
+			}
+		})
+	}
+}
+
+func TestParserValidateStringAndBytesBlankInputParity(t *testing.T) {
+	inputs := []struct {
+		sql      string
+		wantCode goerrors.ErrorCode
+	}{
+		{sql: "", wantCode: goerrors.ErrCodeIncompleteStatement},
+		{sql: " \t\r\n", wantCode: goerrors.ErrCodeIncompleteStatement},
+		{sql: "\uFEFF", wantCode: goerrors.ErrCodeIncompleteStatement},
+		{sql: "\v", wantCode: goerrors.ErrCodeInvalidSyntax},
+		{sql: "\f", wantCode: goerrors.ErrCodeInvalidSyntax},
+		{sql: "\u00a0", wantCode: goerrors.ErrCodeInvalidSyntax},
+		{sql: "\u2003", wantCode: goerrors.ErrCodeInvalidSyntax},
+		{sql: "\u0085", wantCode: goerrors.ErrCodeInvalidSyntax},
+	}
+	for _, tt := range inputs {
+		t.Run(tt.sql, func(t *testing.T) {
+			stringErr, bytesErr := parser.Validate(tt.sql), parser.ValidateBytes([]byte(tt.sql))
+			if stringErr == nil || bytesErr == nil {
+				t.Fatalf("blank input must be rejected: string=%v bytes=%v", stringErr, bytesErr)
+			}
+			if stringErr.Error() != bytesErr.Error() {
+				t.Errorf("Validate string/bytes differ: string=%v bytes=%v", stringErr, bytesErr)
+			}
+			if !hasStructuredCode(stringErr, tt.wantCode) {
+				t.Errorf("Validate error = %v, want code %s", stringErr, tt.wantCode)
+			}
+			if tt.wantCode == goerrors.ErrCodeInvalidSyntax && !hasStructuredCode(stringErr, goerrors.ErrCodeUnexpectedChar) {
+				t.Errorf("Validate error = %v, want nested tokenizer code %s", stringErr, goerrors.ErrCodeUnexpectedChar)
+			}
+
+			dialectStringErr := parser.ValidateWithDialect(tt.sql, keywords.DialectPostgreSQL)
+			dialectBytesErr := parser.ValidateBytesWithDialect([]byte(tt.sql), keywords.DialectPostgreSQL)
+			if dialectStringErr == nil || dialectBytesErr == nil {
+				t.Fatalf("dialect blank input must be rejected: string=%v bytes=%v", dialectStringErr, dialectBytesErr)
+			}
+			if dialectStringErr.Error() != dialectBytesErr.Error() {
+				t.Errorf("ValidateWithDialect string/bytes differ: string=%v bytes=%v", dialectStringErr, dialectBytesErr)
+			}
+			if !hasStructuredCode(dialectStringErr, tt.wantCode) {
+				t.Errorf("ValidateWithDialect error = %v, want code %s", dialectStringErr, tt.wantCode)
+			}
+			if tt.wantCode == goerrors.ErrCodeInvalidSyntax && !hasStructuredCode(dialectStringErr, goerrors.ErrCodeUnexpectedChar) {
+				t.Errorf("ValidateWithDialect error = %v, want nested tokenizer code %s", dialectStringErr, goerrors.ErrCodeUnexpectedChar)
+			}
+		})
+	}
+}
+
+func hasStructuredCode(err error, want goerrors.ErrorCode) bool {
+	if err == nil {
+		return false
+	}
+	if structured, ok := err.(*goerrors.Error); ok {
+		return structured.Code == want || hasStructuredCode(structured.Cause, want)
+	}
+	if multi, ok := err.(interface{ Unwrap() []error }); ok {
+		for _, cause := range multi.Unwrap() {
+			if hasStructuredCode(cause, want) {
+				return true
+			}
+		}
+		return false
+	}
+	if wrapped, ok := err.(interface{ Unwrap() error }); ok {
+		return hasStructuredCode(wrapped.Unwrap(), want)
+	}
+	return false
 }
 
 func TestParseBytes(t *testing.T) {

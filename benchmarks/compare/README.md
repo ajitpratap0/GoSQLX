@@ -179,3 +179,7 @@ release pinned in `PERF_GO_VERSION` (the perf gate pins the same one). The job
 summary leads with GoSQLX/peer time ratios (`-ratios`) and names the runner CPU,
 which is also in the artifact's `env.txt`: hosted runners differ in CPU model from
 job to job, so compare ratios across runs, never absolute ns/op.
+
+### Publishing a release
+
+Pushing a release tag runs the full benchmark job and uploads `bench-compare-<tag commit>` as an artifact retained for 90 days. Run `task release:refresh-benchmarks TAG=vX.Y.Z` to select the successful tag run and refresh the checked-in results; if no suitable run remains or the artifact expired, dispatch `bench-compare.yml` on the tag and retry the task.

@@ -40,8 +40,10 @@ GoSQLX is a **production-ready**, **race-free**, high-performance SQL parsing SD
 - **When the work has to be done in Claude**, use Sonnet 5.5 for implementation and
   review and Haiku 5.5 for extraction, docs and simple checks.
 - **Opus 5.5 plans and orchestrates.** It writes each change's plan and the
-  Codex brief, coordinates the work through dynamic workflows, reviews risky
-  changes and makes decisions. It does not do bulk implementation. Use it
+  Codex brief, coordinates the work through dynamic workflows and makes
+  decisions. **Opus reviews every plan before Codex implements it and every
+  PR before it merges**, with no exceptions for earlier approvals. It does
+  not do bulk implementation. Use it
   only when it is needed, to save usage limits.
 - **Cleanup is part of every task.** When a task finishes (merged, closed or
   skipped), remove its worktree and its local and remote branches, its Codex
@@ -278,7 +280,22 @@ git push origin vX.Y.Z
 
 # 5. Create GitHub release
 gh release create vX.Y.Z --title "vX.Y.Z: Title" --notes "..."
+
+# 6. Post-tag refresh (same day)
+gh run list --workflow bench-compare.yml --branch vX.Y.Z
+git checkout -b docs/vX.Y.Z-post-tag
+# Run on a quiet machine; refresh benchmark results and print parse medians.
+task release:refresh-benchmarks TAG=vX.Y.Z
+# Hand-copy printed medians into performance_baselines.json and website/src/data/metrics.ts.
+# Update the llms.txt performance line, then sync README banners and pins.
+task docs:metrics
+git push origin docs/vX.Y.Z-post-tag
+gh pr create --fill
+# After the PR merges, run:
+gh workflow run claims-drift.yml
 ```
+
+Why: the tag push runs bench-compare automatically, but publishing its results is a PR; claims-drift fails weekly until that PR lands.
 
 ## Pre-commit Hooks
 

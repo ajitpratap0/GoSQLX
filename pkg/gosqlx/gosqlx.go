@@ -17,7 +17,6 @@ package gosqlx
 import (
 	"context"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/ajitpratap0/GoSQLX/internal/tokscratch"
@@ -262,8 +261,8 @@ func ParseWithTimeout(sql string, timeout time.Duration) (*ast.AST, error) {
 
 // Validate checks if the given SQL is syntactically valid.
 //
-// This is a convenience function that only validates syntax without
-// building the full AST, making it slightly faster than Parse().
+// This is a convenience function that validates syntax without returning an
+// AST. It tokenizes and parses the SQL, then releases the AST.
 //
 // Example:
 //
@@ -273,12 +272,6 @@ func ParseWithTimeout(sql string, timeout time.Duration) (*ast.AST, error) {
 //
 // Returns nil if SQL is valid, or an error describing the problem.
 func Validate(sql string) error {
-	// Reject empty/whitespace-only input
-	if len(strings.TrimSpace(sql)) == 0 {
-		return fmt.Errorf("%w: empty input", ErrSyntax)
-	}
-
-	// Use the dedicated validation fast-path that avoids building a full AST
 	err := parser.Validate(sql)
 	if err != nil {
 		return newWrap(ErrSyntax, err)

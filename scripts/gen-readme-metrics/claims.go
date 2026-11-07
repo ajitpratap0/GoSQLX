@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -18,10 +19,11 @@ import (
 const dateLayout = "2006-01-02"
 
 var (
-	opsClaim    = regexp.MustCompile(`(?i)(\d+(?:\.\d+)?)\s?M\+?\s*(?:ops|parses)/sec`)
-	nsClaim     = regexp.MustCompile(`(?i)(\d[\d,]*)\s?ns\b`)
-	generatedAt = regexp.MustCompile(`"generatedAt":\s*"([^"]+)"`)
+	opsClaim = regexp.MustCompile(`(?i)(\d+(?:\.\d+)?)\s?M\+?\s*(?:ops|parses)/sec`)
+	nsClaim  = regexp.MustCompile(`(?i)(\d[\d,]*)\s?ns\b`)
 )
+
+const refreshHint = "run task release:refresh-benchmarks TAG=v%s"
 
 // ops returns the throughput figure with the given number of decimals.
 func (m metrics) ops(decimals int) string {
@@ -82,6 +84,71 @@ func checkFresh(label, measured, tagDate string) []string {
 	return nil
 }
 
+func checkMeasuredTag(measuredTag, version string) []string {
+	want := "v" + strings.TrimPrefix(version, "v")
+	if measuredTag != want {
+		return []string{fmt.Sprintf("scripts/gen-readme-metrics/metrics.json: measured at %s, not the latest release %s; "+refreshHint, measuredTag, want, strings.TrimPrefix(version, "v"))}
+	}
+	return nil
+}
+
+func tagCommit(version string) (string, error) {
+	tag := "v" + strings.TrimPrefix(version, "v")
+	out, err := exec.Command("git", "rev-parse", tag+"^{commit}").Output()
+	if err != nil {
+		return "", fmt.Errorf("resolving commit for tag %s: %w", tag, err)
+	}
+	sha := strings.TrimSpace(string(out))
+	if sha == "" {
+		return "", fmt.Errorf("resolving commit for tag %s: git returned an empty commit", tag)
+	}
+	return sha, nil
+}
+
+type compareResult struct {
+	Commit      string `json:"commit"`
+	Dirty       *bool  `json:"dirty"`
+	GeneratedAt string `json:"generatedAt"`
+}
+
+func checkCompareResults(raw []byte, tagSHA, tagDate string) []string {
+	const label = "benchmarks/compare/results/latest.json"
+	var result compareResult
+	if err := json.Unmarshal(raw, &result); err != nil {
+		return []string{fmt.Sprintf("%s: invalid JSON: %v", label, err)}
+	}
+	var problems []string
+	if result.Commit != tagSHA {
+		problems = append(problems, fmt.Sprintf("%s: commit %s does not match latest release tag commit %s", label, shortSHA(result.Commit), shortSHA(tagSHA)))
+	}
+	if result.Dirty == nil || *result.Dirty {
+		problems = append(problems, fmt.Sprintf("%s: dirty must be false", label))
+	}
+	if result.GeneratedAt == "" {
+		problems = append(problems, fmt.Sprintf("%s: generatedAt is missing", label))
+	} else {
+		problems = append(problems, checkFresh(label, result.GeneratedAt, tagDate)...)
+	}
+	return problems
+}
+
+func shortSHA(sha string) string {
+	if len(sha) > 8 {
+		return sha[:8]
+	}
+	return sha
+}
+
+func addRefreshHint(problems []string, version string) []string {
+	hint := fmt.Sprintf(refreshHint, strings.TrimPrefix(version, "v"))
+	for i := range problems {
+		if !strings.Contains(problems[i], hint) {
+			problems[i] += "; " + hint
+		}
+	}
+	return problems
+}
+
 func parseDate(s string) (time.Time, error) {
 	if len(s) >= len(dateLayout) {
 		s = s[:len(dateLayout)]
@@ -115,14 +182,22 @@ func runClaims(m metrics, version, aboutText string, aboutSet bool) ([]string, e
 	if err != nil {
 		return nil, err
 	}
-	problems = append(problems, checkFresh("scripts/gen-readme-metrics/metrics.json", m.MeasuredAt, tagDate)...)
+	problems = append(problems, addRefreshHint(checkFresh("scripts/gen-readme-metrics/metrics.json", m.MeasuredAt, tagDate), version)...)
+	problems = append(problems, addRefreshHint(checkMeasuredTag(m.MeasuredTag, version), version)...)
 
-	if cmp, err := os.ReadFile("benchmarks/compare/results/latest.json"); err == nil {
-		if mm := generatedAt.FindSubmatch(cmp); mm != nil {
-			problems = append(problems, checkFresh("benchmarks/compare/results/latest.json", string(mm[1]), tagDate)...)
+	tagSHA, err := tagCommit(version)
+	if err != nil {
+		return nil, err
+	}
+	cmp, err := os.ReadFile("benchmarks/compare/results/latest.json")
+	if err != nil {
+		if os.IsNotExist(err) {
+			problems = append(problems, fmt.Sprintf("benchmarks/compare/results/latest.json: required results file is missing; "+refreshHint, strings.TrimPrefix(version, "v")))
 		} else {
-			problems = append(problems, "benchmarks/compare/results/latest.json: generatedAt not found")
+			return nil, fmt.Errorf("reading benchmarks/compare/results/latest.json: %w", err)
 		}
+	} else {
+		problems = append(problems, addRefreshHint(checkCompareResults(cmp, tagSHA, tagDate), version)...)
 	}
 	return problems, nil
 }

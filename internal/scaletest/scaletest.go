@@ -31,6 +31,11 @@ const (
 	// samples is the number of interleaved small/large runs per attempt; the
 	// fastest run of each size is kept, which discards scheduler stalls.
 	samples = 7
+	// minPairs is the least number of interleaved sample pairs behind any
+	// verdict, even when the time budget is already spent. One pair has no
+	// stall protection: a stall that slows only the small run shrinks the
+	// ratio and lets super-linear growth pass, which hides real regressions.
+	minPairs = 3
 	// attempts is how many times a ratio may be re-measured. A genuine
 	// super-linear regression exceeds the bound in every attempt; a load
 	// spike has to hit all of them to cause a false failure.
@@ -47,7 +52,8 @@ const (
 // real regression makes the large case take seconds, retrying and sampling
 // would run for minutes and hit the package timeout, losing the ratio
 // diagnosis. Once the budget is spent the measurement stops after the current
-// sample pair, and an out-of-bound ratio fails at once instead of retrying.
+// sample pair (but never before minPairs pairs), and an out-of-bound ratio
+// fails at once instead of retrying.
 // It is a variable so the helper's own tests can shrink it.
 var budget = 15 * time.Second
 
@@ -82,7 +88,7 @@ func AssertLinearGrowth(t testing.TB, name string, maxRatio float64, small, larg
 			if d := timeReps(large, largeReps); d < bestLarge {
 				bestLarge = d
 			}
-			if overBudget() {
+			if i+1 >= minPairs && overBudget() {
 				break
 			}
 		}

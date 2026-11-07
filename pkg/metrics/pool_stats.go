@@ -107,11 +107,11 @@ func RecordNamedPoolPut(name string) int64 {
 // This function is safe for concurrent use.
 func GetPoolStats() map[string]PoolStat {
 	if !metricsgate.Enabled() {
-		return map[string]PoolStat{
-			"tokenizer": {},
-			"parser":    {},
-			"ast":       {},
+		zero := make(map[string]PoolStat, len(standardPoolNames))
+		for _, name := range standardPoolNames {
+			zero[name] = PoolStat{}
 		}
+		return zero
 	}
 	poolStatsMu.RLock()
 	defer poolStatsMu.RUnlock()

@@ -15,6 +15,7 @@
 package linter_test
 
 import (
+	"reflect"
 	"sync"
 	"testing"
 
@@ -40,16 +41,33 @@ func TestContextConcurrentRuleCheck(t *testing.T) {
 		safety.NewDeleteWithoutWhereRule(),
 		performance.NewImplicitCrossJoinRule(),
 	}
+	for _, pair := range visitorRulePairs() {
+		rules = append(rules, pair[0])
+	}
+	expected := make([][]linter.Violation, len(rules))
+	for i, rule := range rules {
+		expected[i], err = rule.Check(linter.NewContext(sql, "concurrent.sql").WithAST(tree, nil))
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
 	for iter := 0; iter < 50; iter++ {
 		ctx := linter.NewContext(sql, "concurrent.sql").WithAST(tree, nil)
 		var wg sync.WaitGroup
-		for g := 0; g < 8; g++ {
-			rule := rules[g%len(rules)]
+		for g := 0; g < len(rules)*2; g++ {
+			index := g % len(rules)
+			rule := rules[index]
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
-				if _, err := rule.Check(ctx); err != nil {
-					t.Errorf("%s: %v", rule.ID(), err)
+				got, err := rule.Check(ctx)
+				if err != nil || !reflect.DeepEqual(got, expected[index]) {
+					t.Errorf("%s: got %v, error %v", rule.ID(), got, err)
+				}
+				independent := linter.NewContext(sql, "concurrent.sql").WithAST(tree, nil)
+				got, err = rule.Check(independent)
+				if err != nil || !reflect.DeepEqual(got, expected[index]) {
+					t.Errorf("independent %s: got %v, error %v", rule.ID(), got, err)
 				}
 				if len(ctx.Nodes()) == 0 {
 					t.Errorf("Nodes() empty")

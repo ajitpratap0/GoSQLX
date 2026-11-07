@@ -230,7 +230,8 @@ BenchmarkParser_MultiRowInsert_100Rows  50000      23456 ns/op   10240 B/op  150
 
 ## Validation
 
-Use the `Validate` function to check syntax without full parsing:
+Use `Validate` when the caller only needs a syntax result. It parses the SQL
+and releases the AST instead of returning it:
 
 ```go
 sql := `INSERT INTO users (name, email)

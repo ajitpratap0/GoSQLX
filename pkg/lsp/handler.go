@@ -1289,106 +1289,53 @@ func (h *Handler) handleDocumentSymbol(params json.RawMessage) ([]DocumentSymbol
 
 	symbols := []DocumentSymbol{}
 
-	// Extract symbols from each statement. Compute actual source ranges from
-	// AST position info and the raw content, so outline ranges no longer point
-	// at the whole file.
-	starts := computeStatementStarts(parsed.Statements, lines)
+	validSpans := len(parsed.StatementStarts) == len(parsed.Statements) && len(parsed.StatementEnds) == len(parsed.Statements)
 	for i, stmt := range parsed.Statements {
 		if _, ok := stmt.(*ast.BatchSeparator); ok {
-			// A GO line is a client directive, not an outline entry; its
-			// position still bounds the statement before it (see starts).
 			continue
 		}
-		symbol := h.extractStatementSymbol(stmt, i, lines, content, starts)
-		if symbol != nil {
-			symbols = append(symbols, *symbol)
+		var span Range
+		if validSpans {
+			span = statementRange(parsed.StatementStarts[i:i+1], parsed.StatementEnds[i:i+1], lines)
+		} else {
+			start := locationToPosition(statementStartLocation(stmt), lines)
+			span = Range{Start: start, End: start}
 		}
+		symbols = append(symbols, *h.extractStatementSymbol(stmt, i, lines, span))
 	}
 
 	return symbols, nil
 }
 
-// extractStatementSymbol extracts a document symbol from a SQL statement.
-//
-// Name, Detail, and Kind are derived from the concrete Statement type using a
-// proper two-value type switch (no reflection-via-strings). The Range is
-// computed from AST position info (Pos fields on statements and children),
-// falling back to semicolon boundaries in the source content for statement
-// kinds that do not carry positions.
-func (h *Handler) extractStatementSymbol(stmt ast.Statement, index int, lines []string, content string, starts []models.Location) *DocumentSymbol {
+// locationToPosition converts a parser byte location to a clamped LSP position.
+func locationToPosition(loc models.Location, lines []string) Position {
+	line, char := loc.Line-1, loc.Column-1
+	if line < 0 {
+		line = 0
+	}
+	if char < 0 {
+		char = 0
+	}
+	if line < len(lines) && char > len(lines[line]) {
+		char = len(lines[line])
+	}
+	return Position{Line: line, Character: char}
+}
+
+// statementRange converts one pair of parser spans without scanning source text.
+func statementRange(starts, ends []models.Location, lines []string) Range {
+	return Range{Start: locationToPosition(starts[0], lines), End: locationToPosition(ends[0], lines)}
+}
+
+func (h *Handler) extractStatementSymbol(stmt ast.Statement, index int, lines []string, span Range) *DocumentSymbol {
 	name, detail, kind := statementSymbolInfo(stmt, index)
-
-	// Compute the start location. Prefer an explicit Pos on the statement;
-	// otherwise walk the children to find the earliest position; finally fall
-	// back to the statement's tracked start location (set by the parser) or
-	// line 1, column 1.
-	start := statementStartLocation(stmt)
-	if start.IsZero() && index < len(starts) {
-		start = starts[index]
+	selectionEnd := span.Start
+	selectionEnd.Character += len(name)
+	if selectionEnd.Line < len(lines) && selectionEnd.Character > len(lines[selectionEnd.Line]) {
+		selectionEnd.Character = len(lines[selectionEnd.Line])
 	}
-	if start.IsZero() {
-		start = models.Location{Line: 1, Column: 1}
-	}
-
-	// Derive the end location by walking all descendants and taking the latest
-	// position. For kinds with no child Pos info (e.g., DropStatement with no
-	// positioned children), fall back to the next statement's start - 1 or the
-	// final semicolon after the start position.
-	end := statementEndLocation(stmt, start, content, lines)
-	// If this statement does not fully account for its extent, bound the end
-	// at the next statement's start (exclusive) to avoid overlap.
-	if index+1 < len(starts) {
-		next := starts[index+1]
-		if !next.IsZero() && locBefore(next, end) {
-			end = stepBack(next, lines)
-		}
-	}
-	if locBefore(end, start) {
-		end = start
-	}
-
-	startLine := start.Line - 1
-	if startLine < 0 {
-		startLine = 0
-	}
-	startChar := start.Column - 1
-	if startChar < 0 {
-		startChar = 0
-	}
-	endLine := end.Line - 1
-	if endLine < 0 {
-		endLine = 0
-	}
-	endChar := end.Column - 1
-	if endChar < 0 {
-		endChar = 0
-	}
-	// Clamp to actual line lengths so IDEs don't render past the buffer.
-	if startLine < len(lines) && startChar > len(lines[startLine]) {
-		startChar = len(lines[startLine])
-	}
-	if endLine < len(lines) && endChar > len(lines[endLine]) {
-		endChar = len(lines[endLine])
-	}
-
-	selEndChar := startChar + len(name)
-	if startLine < len(lines) && selEndChar > len(lines[startLine]) {
-		selEndChar = len(lines[startLine])
-	}
-
-	return &DocumentSymbol{
-		Name:   name,
-		Detail: detail,
-		Kind:   kind,
-		Range: Range{
-			Start: Position{Line: startLine, Character: startChar},
-			End:   Position{Line: endLine, Character: endChar},
-		},
-		SelectionRange: Range{
-			Start: Position{Line: startLine, Character: startChar},
-			End:   Position{Line: startLine, Character: selEndChar},
-		},
-	}
+	return &DocumentSymbol{Name: name, Detail: detail, Kind: kind, Range: span,
+		SelectionRange: Range{Start: span.Start, End: selectionEnd}}
 }
 
 // statementSymbolInfo maps a concrete Statement to its LSP symbol metadata
@@ -1601,72 +1548,6 @@ func earliestChildLocation(n ast.Node) models.Location {
 	return best
 }
 
-// statementEndLocation derives an end Location for the statement by walking
-// descendants for the latest Pos. If no child has Pos, falls back to the
-// next semicolon in the source after the start location, or end-of-file.
-func statementEndLocation(stmt ast.Statement, start models.Location, content string, lines []string) models.Location {
-	var latest models.Location
-	if n, ok := stmt.(ast.Node); ok {
-		walkNode(n, func(child ast.Node) {
-			loc := nodeLocation(child)
-			if loc.IsZero() {
-				return
-			}
-			if locBefore(latest, loc) {
-				latest = loc
-			}
-		})
-	}
-	// If statement has no descendants with Pos info, or the latest found is
-	// before the start (shouldn't happen but guard anyway), use the next
-	// semicolon as the end. Otherwise extend to the end of the final token's
-	// line (we only know token start positions, not lengths).
-	if latest.IsZero() || locBefore(latest, start) {
-		return semicolonOrEOF(start, content, lines)
-	}
-	// Extend the end to cover the rest of the statement on its final line —
-	// typically there's trailing punctuation (semicolon, closing paren, etc.)
-	// after the last positioned token. Use the line length as an upper bound;
-	// callers will clamp at the next statement's start.
-	if latest.Line-1 < len(lines) {
-		return models.Location{Line: latest.Line, Column: len(lines[latest.Line-1]) + 1}
-	}
-	return latest
-}
-
-// semicolonOrEOF returns the location of the next ';' after start in content,
-// or the end-of-file location if no semicolon exists. This is a fallback for
-// statements without position-bearing children.
-func semicolonOrEOF(start models.Location, content string, lines []string) models.Location {
-	// Convert 1-based (line, column) to a byte offset in content.
-	offset := lineColToOffset(content, start.Line, start.Column)
-	if offset < 0 {
-		offset = 0
-	}
-	idx := strings.IndexByte(content[offset:], ';')
-	if idx < 0 {
-		// No semicolon; end at EOF.
-		if len(lines) == 0 {
-			return models.Location{Line: 1, Column: 1}
-		}
-		return models.Location{Line: len(lines), Column: len(lines[len(lines)-1]) + 1}
-	}
-	return offsetToLineCol(content, offset+idx+1)
-}
-
-// computeStatementStarts returns a best-effort start Location for every
-// statement in the slice, used to bound end positions at the next statement's
-// start. Where a statement has no declared Pos and no positioned children,
-// returns a zero Location.
-func computeStatementStarts(stmts []ast.Statement, lines []string) []models.Location {
-	out := make([]models.Location, len(stmts))
-	for i, s := range stmts {
-		out[i] = statementStartLocation(s)
-	}
-	_ = lines
-	return out
-}
-
 // walkNode performs a depth-first traversal of the node and its descendants
 // via Children(), invoking fn on each visited node (including the root).
 // It guards against nil children and cycles via a bounded visit counter.
@@ -1747,69 +1628,6 @@ func locBefore(a, b models.Location) bool {
 		return a.Line < b.Line
 	}
 	return a.Column < b.Column
-}
-
-// stepBack returns the location one character before loc, clamped to the
-// start of the document. Used to trim an end bound so it doesn't overlap
-// with the following statement.
-func stepBack(loc models.Location, lines []string) models.Location {
-	if loc.Column > 1 {
-		return models.Location{Line: loc.Line, Column: loc.Column - 1}
-	}
-	if loc.Line > 1 {
-		prev := loc.Line - 1
-		col := 1
-		if prev-1 >= 0 && prev-1 < len(lines) {
-			col = len(lines[prev-1]) + 1
-		}
-		return models.Location{Line: prev, Column: col}
-	}
-	return loc
-}
-
-// lineColToOffset converts a 1-based (line, column) Location to a 0-based
-// byte offset into content. Returns -1 if the location is out of range.
-func lineColToOffset(content string, line, col int) int {
-	if line < 1 || col < 1 {
-		return -1
-	}
-	off := 0
-	curLine := 1
-	for off < len(content) && curLine < line {
-		if content[off] == '\n' {
-			curLine++
-		}
-		off++
-	}
-	if curLine != line {
-		return -1
-	}
-	off += col - 1
-	if off > len(content) {
-		off = len(content)
-	}
-	return off
-}
-
-// offsetToLineCol converts a 0-based byte offset into a 1-based (line,
-// column) Location. Bounds are clamped to the content length.
-func offsetToLineCol(content string, offset int) models.Location {
-	if offset < 0 {
-		offset = 0
-	}
-	if offset > len(content) {
-		offset = len(content)
-	}
-	line, col := 1, 1
-	for i := 0; i < offset; i++ {
-		if content[i] == '\n' {
-			line++
-			col = 1
-		} else {
-			col++
-		}
-	}
-	return models.Location{Line: line, Column: col}
 }
 
 // handleSignatureHelp provides signature help for SQL functions.

@@ -622,3 +622,41 @@ func TestSetupTestServerDiscardsOutput(t *testing.T) {
 		t.Fatalf("setupTestServer writes to %T, want io.Discard", w)
 	}
 }
+
+func BenchmarkDocumentSymbolScaling(b *testing.B) {
+	for _, kind := range []string{"gosep", "longfirst"} {
+		for _, n := range []int{1000, 2000, 4000} {
+			b.Run(fmt.Sprintf("%s/%d", kind, n), func(b *testing.B) {
+				var doc strings.Builder
+				dialect := ""
+				if kind == "gosep" {
+					dialect = "sqlserver"
+				} else {
+					doc.WriteString("SELECT '")
+					doc.WriteString(strings.Repeat("x", 64*n))
+					doc.WriteString("';\n")
+				}
+				for i := 0; i < n; i++ {
+					fmt.Fprintf(&doc, "DROP TABLE t%d", i)
+					if kind == "gosep" {
+						doc.WriteString("\nGO\n")
+					} else {
+						doc.WriteString(";\n")
+					}
+				}
+				if kind == "gosep" {
+					doc.WriteString(";")
+				}
+				h, _, _ := lspBenchHandler(b, dialect, doc.String())
+				params := mustMarshal(b, DocumentSymbolParams{TextDocument: TextDocumentIdentifier{URI: benchURI}})
+				b.ReportAllocs()
+				b.ResetTimer()
+				for i := 0; i < b.N; i++ {
+					if _, err := h.handleDocumentSymbol(params); err != nil {
+						b.Fatal(err)
+					}
+				}
+			})
+		}
+	}
+}

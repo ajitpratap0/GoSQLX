@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- `pkg/formatter`: width-scaling regression guard for `BenchmarkRenderScale/wide` (exact output, time ratio and bytes per output byte over compact/lower/readable/semicolon/postgresql modes); test-only, no behaviour change (#958, W5-13).
 - **Benchmark and perf-gate infrastructure (performance overhaul, wave 0)**:
   pull requests are now judged by interleaved A/B measurements instead of
   absolute numbers. No library behaviour changes apart from #901 (see Fixed). The pieces, by PR:
@@ -101,8 +102,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - The LSP benchmark server (`setupTestServer`) discards its output, so
     benchmarks that publish diagnostics no longer time a growing buffer.
 
+- **Token classification moved to `internal/tokclass`** (W3-03a1; internal
+  refactor, no behaviour change): the compound-keyword split tables, the
+  identifier/keyword → specific-type remaps, the COUNT..MAX → identifier rule
+  and the backtick-width rule applied by the parser's preprocess pass now live
+  in one internal package that the tokenizer's planned parser-ready mode
+  (W3-03b) will share. Tokens, spans, ASTs, errors and every behaviour golden
+  are unchanged. A differential test checks the new pass, field for field,
+  against a frozen copy of the old one over the benchmark corpus, the SQL
+  fixtures and a generated compound-keyword, Unicode-fold, odd-identifier and
+  tokenizer-error matrix in all 11 dialects.
+
 ### Performance
-- **Parse stack reservation**: every tokenize-then-parse path reserves goroutine stack once, before tokenizing, through the internal `internal/stackgrow` package (no public API). It covers the gosqlx, parser, formatter, fingerprint, transform, linter and LSP pipelines, plus a backstop in the parser core for low-level callers. A parse on a fresh goroutine now copies its stack once, while its frames are shallow, instead of 2-3 times during the parse; `BenchmarkParseFresh` on the amd64 layout-randomized perf gate: simple_select -60%, join -43% (borderline: -39.7% to -43.9% across five runs, -43.27% in the latest, meets the -40% target in four of five), complex -23% (target missed, -22.7% to -26.1%), insert -57%, update -60%, delete -67%; suite geomean -7.79% in the latest run. Results, allocs/op and B/op are unchanged. Memory: a goroutine that parses keeps a stack of at least 16 KiB until it exits or a GC shrinks it (before: 4-16 KiB depending on the statement; Windows lands at 32 KiB); long-lived worker goroutines see no change after their first parse. [W1-04]
+- **Parse stack reservation**: every tokenize-then-parse path reserves goroutine stack once, before tokenizing, through the internal `internal/stackgrow` package (no public API). It covers the gosqlx, parser, formatter, fingerprint, transform, linter and LSP pipelines, plus a backstop in the parser core for low-level callers. A parse on a fresh goroutine now copies its stack once, while its frames are shallow, instead of 2-3 times during the parse; `BenchmarkParseFresh` on the amd64 layout-randomized perf gate: simple_select -58%, join -44% (borderline: -39.7% to -43.9% across six runs, -43.86% in the latest, meets the -40% target in five of six), complex -25% (target missed, -22.7% to -26.1% across six runs, -24.60% in the latest), insert -57%, update -59%, delete -66%; suite geomean -7.95% in the latest run. Results, allocs/op and B/op are unchanged. Memory: a goroutine that parses keeps a stack of at least 16 KiB until it exits or a GC shrinks it (before: 4-16 KiB depending on the statement; Windows lands at 32 KiB); long-lived worker goroutines see no change after their first parse. [W1-04]
+- **Semantic tokens**: pooled highlighting scratch and shared case folding cut 30 KB semantic-token allocs/op by 98.9–99.0% (2,039 to 20, 1,863 to 21, 1,953 to 21), B/op by 26.0–26.8% and sec/op by 13.3–14.3% (amd64 layout-randomized gate); the new highlight golden pins output. No behaviour change. [W6-11]
 - **Linter**: the lint pipeline uses the pooled parser and pooled dialect tokenizer; behavior is unchanged. [W6-06ab]
 - **Linter**: aliasing consistency and four visitor-based rules now reuse the cached preorder AST node list. Violations are unchanged; there is no API or behavior change. [W6-05b]
 - **Linter**: rule L007 (keyword case consistency) scans words without allocating (substring words, ASCII upper-casing into a stack buffer before the keyword lookup). Output is unchanged. On the canonical benchmarks (Apple M4, local), `BenchmarkLintRule/L007` allocates about 98% fewer objects (72565 to 1194 allocs/op) and about 97% fewer bytes, and `BenchmarkLintRW` allocates about 12.5% fewer objects. [W6-03]
@@ -133,7 +146,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Formatter**: compact formatting (`ast.CompactStyle()`, no clause newlines, no semicolon, no line width, no target dialect, preserve or upper keyword case) now renders SELECT, INSERT, UPDATE and DELETE through each statement's `SQL()` instead of the visitor renderer, and a single compact statement skips the parts slice and join. `Render/compact/*` is 27-49% faster with 1 alloc/op (was 4-42) and 60-82% fewer bytes/op; `Normalize` and `Fingerprint` are 6-13% faster with 15-39% fewer allocs. Output is byte-identical (differential test over every corpus statement in 9 dialects and all option combinations); lowercase keywords, target-dialect rewrites, set operations and ALTER TABLE keep the visitor path. [W5-02]
 
 ### Behavior changes
-- **Goroutine stack after a parse**: a goroutine that has parsed keeps a stack of at least 16 KiB (32 KiB on Windows, 16-32 KiB under `-race`) until it exits or the GC shrinks it; before it was 4-16 KiB depending on the statement. Results are unchanged.
+- **Goroutine stack after a parse**: a goroutine that has parsed keeps a stack of at least 16 KiB (32 KiB on Windows, 16-32 KiB under `-race`) until it exits or the GC shrinks it; before it was 4-16 KiB depending on the statement. A Reserve call made deep inside an already-large stack (for example an LSP or JSON-RPC handler) can land the goroutine at 32 KiB, since the frame is added on top of the stack in use. Results are unchanged. [W1-04]
 - **Validate blank input**: `parser.Validate` and `parser.ValidateBytes` have
   always returned E2005 for empty or ASCII-whitespace-only input. Comment-only
   input (`-- c`, `/* x */`, `;`, `-- c\n;`) has always returned E2005 through

@@ -142,7 +142,7 @@ func readFragments(dir string, diagnostics io.Writer) ([]fragment, error) {
 	invalid := false
 	for _, entry := range entries {
 		name := entry.Name()
-		if name == "README.md" || name == ".gitkeep" {
+		if name == "README.md" || strings.HasPrefix(name, ".") {
 			continue
 		}
 		path := filepath.Join(dir, name)
@@ -208,8 +208,16 @@ func readFragments(dir string, diagnostics io.Writer) ([]fragment, error) {
 func unreleased(raw string) (int, int, error) {
 	start := -1
 	offset := 0
+	inFence := false
 	for _, line := range strings.SplitAfter(raw, "\n") {
-		text := strings.TrimSuffix(strings.TrimSuffix(line, "\n"), "\r")
+		text := lineText(line)
+		if isFence(text) {
+			inFence = !inFence
+		}
+		if inFence || isFence(text) {
+			offset += len(line)
+			continue
+		}
 		if start < 0 && text == "## [Unreleased]" {
 			start = offset
 		} else if start >= 0 && strings.HasPrefix(text, "## ") {
@@ -227,9 +235,13 @@ func appendSection(raw string, index int, body, newline string) string {
 	start, end := -1, len(raw)
 	insert := len(raw)
 	offset := 0
+	inFence := false
 	for _, line := range strings.SplitAfter(raw, "\n") {
-		text := strings.TrimSuffix(strings.TrimSuffix(line, "\n"), "\r")
-		if strings.HasPrefix(text, "### ") {
+		text := lineText(line)
+		if isFence(text) {
+			inFence = !inFence
+		}
+		if !inFence && !isFence(text) && strings.HasPrefix(text, "### ") {
 			if start >= 0 {
 				end = offset
 				break
@@ -272,4 +284,15 @@ func appendSection(raw string, index int, body, newline string) string {
 		}
 	}
 	return prefix + separator + "### " + sections[index].heading + newline + body + newline + newline + raw[insert:]
+}
+
+// lineText strips the line ending and trailing spaces or tabs, so "### Added " still matches.
+func lineText(line string) string {
+	return strings.TrimRight(strings.TrimSuffix(strings.TrimSuffix(line, "\n"), "\r"), " \t")
+}
+
+// isFence reports whether a line opens or closes a fenced code block.
+func isFence(text string) bool {
+	t := strings.TrimLeft(text, " ")
+	return strings.HasPrefix(t, "```") || strings.HasPrefix(t, "~~~")
 }

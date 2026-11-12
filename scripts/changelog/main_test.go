@@ -27,6 +27,8 @@ func TestCollect(t *testing.T) {
 		{"retain Markdown spaces", "## [Unreleased]\n\n### Fixed\n- old  \n\n## [1.0]\n", "## [Unreleased]\n\n### Fixed\n- old  \n- new  \n\n## [1.0]\n", map[string]string{"x.fixed.md": "- new  \n"}},
 		{"CRLF bytes", "prefix\r\n## [Unreleased]\r\n\r\n### Fixed\r\n- old\r\n\r\n## [1.0]\r\nrelease", "prefix\r\n## [Unreleased]\r\n\r\n### Fixed\r\n- old\r\n- new\r\n\r\n## [1.0]\r\nrelease", map[string]string{"x.fixed.md": "- new\n"}},
 		{"canonical missing headings", "## [Unreleased]\n\n### Added\n- old\n\n### Fixed\n- fix\n\n## [1.0]\nunchanged", "## [Unreleased]\n\n### Breaking Changes\n- break\n\n### Added\n- old\n\n### Fixed\n- fix\n\n### Security\n- secure\n\n## [1.0]\nunchanged", map[string]string{"x.breaking-changes.md": "- break\n", "x.security.md": "- secure\n"}},
+		{"heading inside code fence", "## [Unreleased]\n\n### Added\n- a\n\n```sql\n### not a heading\n## not a release\n```\n\n### Fixed\n- fix\n\n## [1.0]\n", "## [Unreleased]\n\n### Added\n- a\n\n```sql\n### not a heading\n## not a release\n```\n- new\n\n### Fixed\n- fix\n\n## [1.0]\n", map[string]string{"x.added.md": "- new\n"}},
+		{"heading with trailing spaces", "## [Unreleased]\n\n### Added  \n- a\n\n## [1.0]\n", "## [Unreleased]\n\n### Added  \n- a\n- new\n\n## [1.0]\n", map[string]string{"x.added.md": "- new\n", ".DS_Store": "binary"}},
 		{"empty existing heading", "## [Unreleased]\n\n### Performance\n\n### Fixed\n- fix\n\n## [1.0]\n", "## [Unreleased]\n\n### Performance\n- fast\n\n### Fixed\n- fix\n\n## [1.0]\n", map[string]string{"x.performance.md": "- fast\n"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -57,6 +59,13 @@ func TestCollect(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
+			var kept []os.DirEntry
+			for _, e := range entries {
+				if !strings.HasPrefix(e.Name(), ".") { // dotfiles such as .DS_Store are ignored, not collected
+					kept = append(kept, e)
+				}
+			}
+			entries = kept
 			if len(entries) != 1 || entries[0].Name() != "README.md" {
 				t.Fatalf("remaining: %v", entries)
 			}

@@ -21,8 +21,8 @@ GoSQLX is a **production-ready**, **race-free**, high-performance SQL parsing SD
   behaviour. Never relax a test, threshold or timeout to hide a problem.
 - **Breaking changes are allowed when they are the right fix.** Ship them in
   the current release (no separate major version or `/v2` module path) with
-  an explicit "Breaking Changes" / migration entry in CHANGELOG.md and the PR
-  body. Do not substitute an opt-in flag or compatibility shim for the right
+  an explicit migration entry in a `changelog.d/<slug>.breaking-changes.md`
+  fragment and the PR body. Do not substitute an opt-in flag or compatibility shim for the right
   design unless the maintainer asks for one.
 - **Nothing is deferred to a future major ("2.0", "v-next").** Work planned for
   a later major ships in the current release. An idea with weak evidence is

@@ -175,6 +175,23 @@ func TestScanSourceStringOpeners(t *testing.T) {
 	}
 }
 
+func TestScanSourceByteBoundaries(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		sql  string
+		want sourceFeatures
+	}{
+		{"0x80 is non-ASCII", "SELECT \x80", sourceFeatures{nonASCII: true}},
+		{"0x7f is ASCII", "SELECT \x7f", sourceFeatures{}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := scanSource(tc.sql); got != tc.want {
+				t.Fatalf("scanSource(%q)=%+v, want %+v", tc.sql, got, tc.want)
+			}
+		})
+	}
+}
+
 func TestScanSourceTypeDelimiters(t *testing.T) {
 	for _, tc := range []struct {
 		typ     string

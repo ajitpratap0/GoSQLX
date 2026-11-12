@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"reflect"
 	"strings"
+	"unsafe"
 
 	"github.com/ajitpratap0/GoSQLX/pkg/models"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
@@ -149,8 +150,9 @@ func nilRenderNode(n ast.Node) bool {
 	if n == nil {
 		return true
 	}
-	v := reflect.ValueOf(n)
-	return v.Kind() == reflect.Pointer && v.IsNil()
+	// The ast.Node value-type guard ensures that no value implementation is
+	// pointer-shaped; consequently a nil data word denotes a typed nil pointer.
+	return (*[2]unsafe.Pointer)(unsafe.Pointer(&n))[1] == nil
 }
 
 // copyRenderValue copies exported AST storage before dialect rewrites. Private

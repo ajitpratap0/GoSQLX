@@ -709,7 +709,7 @@ func (p *Parser) parseSampleClause() (*ast.SampleClause, error) {
 			).WithHint("SAMPLE N/D fraction requires an integer denominator")
 		}
 		clause.Denominator = p.currentToken.Token.Value
-		clause.Size = &ast.BinaryExpression{Left: clause.Size, Operator: "/", Right: &ast.LiteralValue{Value: clause.Denominator, Type: numericLiteralType(clause.Denominator)}}
+		clause.Size = p.hintBinaryExpression(&ast.BinaryExpression{Left: clause.Size, Operator: "/", Right: &ast.LiteralValue{Value: clause.Denominator, Type: numericLiteralType(clause.Denominator)}})
 		p.advance()
 	}
 
@@ -738,7 +738,7 @@ func (p *Parser) parseSampleClause() (*ast.SampleClause, error) {
 				).WithHint("SAMPLE OFFSET N/D fraction requires an integer denominator")
 			}
 			clause.OffsetDenominator = p.currentToken.Token.Value
-			clause.OffsetSize = &ast.BinaryExpression{Left: clause.OffsetSize, Operator: "/", Right: &ast.LiteralValue{Value: clause.OffsetDenominator, Type: numericLiteralType(clause.OffsetDenominator)}}
+			clause.OffsetSize = p.hintBinaryExpression(&ast.BinaryExpression{Left: clause.OffsetSize, Operator: "/", Right: &ast.LiteralValue{Value: clause.OffsetDenominator, Type: numericLiteralType(clause.OffsetDenominator)}})
 			p.advance()
 		}
 	}

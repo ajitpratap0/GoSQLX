@@ -268,12 +268,12 @@ func (p *Parser) parseBitwiseExpression(minPrec int) (ast.Expression, error) {
 		if err != nil {
 			return nil, err
 		}
-		binary := &ast.BinaryExpression{
+		binary := p.hintBinaryExpression(&ast.BinaryExpression{
 			Left:     left,
 			Operator: op,
 			Right:    right,
 			Pos:      opPos,
-		}
+		})
 		left = binary
 		// Preserve the established JSON ::type association when its right
 		// operand is just a cast. Arithmetic and power operands retain their
@@ -363,12 +363,12 @@ func (p *Parser) parseXorExpression() (ast.Expression, error) {
 		if err != nil {
 			return nil, err
 		}
-		left = &ast.BinaryExpression{
+		left = p.hintBinaryExpression(&ast.BinaryExpression{
 			Left:     left,
 			Operator: "XOR",
 			Right:    right,
 			Pos:      opPos,
-		}
+		})
 	}
 	return left, nil
 }
@@ -423,7 +423,7 @@ func (p *Parser) parseCastOperand() (ast.Expression, error) {
 		if err != nil {
 			return nil, err
 		}
-		operand = &ast.CastExpression{Expr: operand, Type: dataType}
+		operand = p.hintCastExpression(&ast.CastExpression{Expr: operand, Type: dataType})
 	}
 	return operand, nil
 }
@@ -475,13 +475,13 @@ func (p *Parser) parseCollateSuffix(left ast.Expression) (ast.Expression, error)
 func (p *Parser) parseIsSuffix(left ast.Expression, isPos models.Location, isNot bool) (ast.Expression, error) {
 	if p.isType(models.TokenTypeNull) {
 		p.advance() // Consume NULL
-		return &ast.BinaryExpression{
+		return p.hintBinaryExpression(&ast.BinaryExpression{
 			Left:     left,
 			Operator: "IS NULL",
 			Right:    &ast.LiteralValue{Value: nil, Type: "null"},
 			Not:      isNot,
 			Pos:      isPos,
-		}, nil
+		}), nil
 	}
 
 	isOp := "IS"
@@ -495,16 +495,16 @@ func (p *Parser) parseIsSuffix(left ast.Expression, isPos models.Location, isNot
 		if err != nil {
 			return nil, err
 		}
-		return &ast.BinaryExpression{Left: left, Operator: isOp, Right: right, Pos: isPos}, nil
+		return p.hintBinaryExpression(&ast.BinaryExpression{Left: left, Operator: isOp, Right: right, Pos: isPos}), nil
 
 	case p.currentToken.Token.Type == models.TokenTypeIdentifier && equalsUpper(p.currentToken.Token.Value, "UNKNOWN"):
 		p.advance() // Consume UNKNOWN
-		return &ast.BinaryExpression{
+		return p.hintBinaryExpression(&ast.BinaryExpression{
 			Left:     left,
 			Operator: isOp,
 			Right:    &ast.LiteralValue{Value: "UNKNOWN", Type: "UNKNOWN"},
 			Pos:      isPos,
-		}, nil
+		}), nil
 
 	case p.isType(models.TokenTypeDistinct):
 		p.advance() // Consume DISTINCT
@@ -524,7 +524,7 @@ func (p *Parser) parseIsSuffix(left ast.Expression, isPos models.Location, isNot
 		if isNot {
 			op = "IS NOT DISTINCT FROM"
 		}
-		return &ast.BinaryExpression{Left: left, Operator: op, Right: right, Pos: isPos}, nil
+		return p.hintBinaryExpression(&ast.BinaryExpression{Left: left, Operator: op, Right: right, Pos: isPos}), nil
 
 	case p.IsSQLite():
 		// SQLite: "a IS b" is null-safe equality, with any expression on the right.
@@ -532,7 +532,7 @@ func (p *Parser) parseIsSuffix(left ast.Expression, isPos models.Location, isNot
 		if err != nil {
 			return nil, err
 		}
-		return &ast.BinaryExpression{Left: left, Operator: isOp, Right: right, Pos: isPos}, nil
+		return p.hintBinaryExpression(&ast.BinaryExpression{Left: left, Operator: isOp, Right: right, Pos: isPos}), nil
 	}
 
 	return nil, p.expectedError("NULL, TRUE, FALSE, UNKNOWN or DISTINCT FROM")
@@ -687,11 +687,11 @@ func (p *Parser) postfixNullTest(left ast.Expression) (ast.Expression, bool) {
 	}
 	pos := p.currentLocation()
 	p.advance()
-	return &ast.BinaryExpression{
+	return p.hintBinaryExpression(&ast.BinaryExpression{
 		Left:     left,
 		Operator: "IS NULL",
 		Right:    &ast.LiteralValue{Value: nil, Type: "null"},
 		Not:      isNot,
 		Pos:      pos,
-	}, true
+	}), true
 }

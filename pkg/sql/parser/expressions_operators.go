@@ -194,13 +194,13 @@ func (p *Parser) parseComparisonSuffix(left ast.Expression, afterComparison bool
 			if err != nil {
 				return nil, suffixNone, err
 			}
-			return &ast.BinaryExpression{
+			return p.hintBinaryExpression(&ast.BinaryExpression{
 				Left:     left,
 				Operator: operator,
 				Right:    tuple,
 				Not:      notPrefix,
 				Pos:      opPos,
-			}, suffixPredicate, nil
+			}), suffixPredicate, nil
 		}
 
 		// Parse the pattern at the string-concatenation level so arithmetic
@@ -362,12 +362,12 @@ func (p *Parser) parseComparisonOperatorSuffix(left ast.Expression, afterCompari
 		}
 
 		// Create a binary expression
-		return &ast.BinaryExpression{
+		return p.hintBinaryExpression(&ast.BinaryExpression{
 			Left:     left,
 			Operator: operator,
 			Right:    right,
 			Pos:      opPos,
-		}, suffixComparison, nil
+		}), suffixComparison, nil
 	}
 
 	return nil, suffixNone, nil
@@ -392,13 +392,13 @@ func (p *Parser) parsePatternMatch(left ast.Expression, operator string, not, al
 			return nil, suffixNone, err
 		}
 	}
-	node := &ast.BinaryExpression{
+	node := p.hintBinaryExpression(&ast.BinaryExpression{
 		Left:     left,
 		Operator: operator,
 		Right:    pattern,
 		Not:      not,
 		Pos:      opPos,
-	}
+	})
 	if escape != nil {
 		node.EnsureExtras().Escape = escape
 	}

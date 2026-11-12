@@ -183,6 +183,7 @@ func (p *Parser) ParseWithRecoveryFromModelTokens(tokens []models.TokenWithSpan)
 // It expects a preprocessed []models.TokenWithSpan (output of preprocessTokens or the parser-owned preprocess buffer;
 // nothing may retain p.tokens beyond the call).
 func (p *Parser) parseWithRecovery(tokens []models.TokenWithSpan) ([]ast.Statement, []error) {
+	p.resetRenderHints()
 	p.tokens = tokens
 	p.currentPos = 0
 	p.implicitEnd = 0

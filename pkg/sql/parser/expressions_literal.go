@@ -34,7 +34,7 @@ func (p *Parser) parsePrimaryExpression() (ast.Expression, error) {
 		raw := p.currentToken.Token.Value
 		// U&"..." names arrive as decoded quoted identifiers; only
 		// U&'...' strings reach here.
-		expr := &ast.UnicodeEscapeExpression{RawSQL: raw}
+		expr := p.hintUnicodeEscapeExpression(&ast.UnicodeEscapeExpression{RawSQL: raw})
 		p.advance()
 		return expr, nil
 	}
@@ -52,11 +52,11 @@ func (p *Parser) parsePrimaryExpression() (ast.Expression, error) {
 		if err != nil {
 			return nil, err
 		}
-		return &ast.UnaryExpression{
+		return p.hintUnaryExpression(&ast.UnaryExpression{
 			Operator: op,
 			Expr:     expr,
 			Pos:      unaryPos,
-		}, nil
+		}), nil
 	}
 
 	// Bitwise NOT (~a: MySQL, PostgreSQL, SQL Server, SQLite) and MySQL's !a,
@@ -72,7 +72,7 @@ func (p *Parser) parsePrimaryExpression() (ast.Expression, error) {
 		if err != nil {
 			return nil, err
 		}
-		return &ast.UnaryExpression{Operator: op, Expr: expr, Pos: unaryPos}, nil
+		return p.hintUnaryExpression(&ast.UnaryExpression{Operator: op, Expr: expr, Pos: unaryPos}), nil
 	}
 
 	// PostgreSQL prefix operators |/ (square root), ||/ (cube root), !! (factorial)
@@ -89,7 +89,7 @@ func (p *Parser) parsePrimaryExpression() (ast.Expression, error) {
 			if err != nil {
 				return nil, err
 			}
-			return &ast.UnaryExpression{Operator: op, Expr: expr, Pos: unaryPos}, nil
+			return p.hintUnaryExpression(&ast.UnaryExpression{Operator: op, Expr: expr, Pos: unaryPos}), nil
 		}
 	}
 
@@ -101,7 +101,7 @@ func (p *Parser) parsePrimaryExpression() (ast.Expression, error) {
 		if err != nil {
 			return nil, err
 		}
-		return &ast.UnaryExpression{Operator: ast.MySQLBinary, Expr: expr, Pos: unaryPos}, nil
+		return p.hintUnaryExpression(&ast.UnaryExpression{Operator: ast.MySQLBinary, Expr: expr, Pos: unaryPos}), nil
 	}
 
 	// CONNECT BY: PRIOR is a prefix operator that binds to its operand, so
@@ -113,7 +113,7 @@ func (p *Parser) parsePrimaryExpression() (ast.Expression, error) {
 		if err != nil {
 			return nil, err
 		}
-		return &ast.UnaryExpression{Operator: ast.Prior, Expr: operand, Pos: priorPos}, nil
+		return p.hintUnaryExpression(&ast.UnaryExpression{Operator: ast.Prior, Expr: operand, Pos: priorPos}), nil
 	}
 
 	if p.mayStartPrefixedString() {
@@ -546,13 +546,13 @@ func (p *Parser) parsePrimaryExpression() (ast.Expression, error) {
 			p.advance() // Consume )
 
 			// Return NOT EXISTS as a BinaryExpression with NOT flag
-			return &ast.BinaryExpression{
+			return p.hintBinaryExpression(&ast.BinaryExpression{
 				Left:     &ast.ExistsExpression{Subquery: subquery},
 				Operator: "NOT",
 				Right:    nil,
 				Not:      true,
 				Pos:      notPos,
-			}, nil
+			}), nil
 		}
 
 		// NOT followed by other expression (boolean negation)
@@ -561,11 +561,11 @@ func (p *Parser) parsePrimaryExpression() (ast.Expression, error) {
 		if err != nil {
 			return nil, err
 		}
-		return &ast.UnaryExpression{
+		return p.hintUnaryExpression(&ast.UnaryExpression{
 			Operator: ast.Not,
 			Expr:     expr,
 			Pos:      notPos,
-		}, nil
+		}), nil
 	}
 
 	if expr, err := p.parsePrimaryFallback(); expr != nil || err != nil {
@@ -831,7 +831,7 @@ func (p *Parser) peekMoneyFraction() bool {
 // parseObjectLiteral parses a Snowflake object constant {'k': v, ...}; the
 // current token is the opening brace.
 func (p *Parser) parseObjectLiteral() (ast.Expression, error) {
-	obj := &ast.ObjectLiteral{Pos: p.currentLocation()}
+	obj := p.hintObjectLiteral(&ast.ObjectLiteral{Pos: p.currentLocation()})
 	p.advance() // Consume {
 	if p.isType(models.TokenTypeRBrace) {
 		p.advance()

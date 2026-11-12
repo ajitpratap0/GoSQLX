@@ -77,13 +77,13 @@ func (p *Parser) parseExpression() (ast.Expression, error) {
 			return nil, err
 		}
 
-		left = &ast.BinaryExpression{
+		left = p.hintBinaryExpression(&ast.BinaryExpression{
 			Left:     left,
 			Operator: "OR",
 			Right:    right,
 			PipesOr:  pipes,
 			Pos:      opPos,
-		}
+		})
 	}
 
 	// ClickHouse conditional operator: cond ? then : else (right-associative).
@@ -183,12 +183,12 @@ func (p *Parser) parseAndExpression() (ast.Expression, error) {
 			return nil, err
 		}
 
-		left = &ast.BinaryExpression{
+		left = p.hintBinaryExpression(&ast.BinaryExpression{
 			Left:     left,
 			Operator: "AND",
 			Right:    right,
 			Pos:      opPos,
-		}
+		})
 	}
 
 	return left, nil
@@ -223,12 +223,12 @@ func (p *Parser) parseStringConcatTail(left ast.Expression) (ast.Expression, err
 			return nil, err
 		}
 
-		left = &ast.BinaryExpression{
+		left = p.hintBinaryExpression(&ast.BinaryExpression{
 			Left:     left,
 			Operator: operator,
 			Right:    right,
 			Pos:      opPos,
-		}
+		})
 	}
 
 	return left, nil
@@ -258,14 +258,14 @@ func (p *Parser) parseAdditiveTail(left ast.Expression) (ast.Expression, error) 
 			return nil, err
 		}
 
-		left = &ast.BinaryExpression{
+		left = p.hintBinaryExpression(&ast.BinaryExpression{
 			Left:          left,
 			Operator:      operator,
 			Right:         right,
 			BitwiseXor:    operator == "^", // only SQL Server reaches here with ^
 			XorAtAdditive: operator == "^",
 			Pos:           opPos,
-		}
+		})
 	}
 
 	return left, nil
@@ -308,12 +308,12 @@ func (p *Parser) parseMultiplicativeTail(left ast.Expression) (ast.Expression, e
 			return nil, err
 		}
 
-		left = &ast.BinaryExpression{
+		left = p.hintBinaryExpression(&ast.BinaryExpression{
 			Left:     left,
 			Operator: operator,
 			Right:    right,
 			Pos:      opPos,
-		}
+		})
 	}
 
 	return left, nil
@@ -351,7 +351,7 @@ func (p *Parser) parsePowerTail(left ast.Expression) (ast.Expression, error) {
 		if err != nil {
 			return nil, err
 		}
-		left = &ast.BinaryExpression{Left: left, Operator: "^", Right: right, BitwiseXor: p.isMySQLFamily(), Pos: opPos}
+		left = p.hintBinaryExpression(&ast.BinaryExpression{Left: left, Operator: "^", Right: right, BitwiseXor: p.isMySQLFamily(), Pos: opPos})
 	}
 	return left, nil
 }
@@ -387,10 +387,10 @@ func (p *Parser) parseJSONExpression() (ast.Expression, error) {
 			return nil, err
 		}
 
-		left = &ast.CastExpression{
+		left = p.hintCastExpression(&ast.CastExpression{
 			Expr: left,
 			Type: dataType,
-		}
+		})
 	}
 
 	// PostgreSQL JSON operators share the lower "any other operator"
@@ -422,12 +422,12 @@ func (p *Parser) parseJSONExpression() (ast.Expression, error) {
 			return nil, err
 		}
 
-		left = &ast.BinaryExpression{
+		left = p.hintBinaryExpression(&ast.BinaryExpression{
 			Left:     left,
 			Operator: operator,
 			Right:    right,
 			Pos:      opPos,
-		}
+		})
 
 		// Store operator type for semantic analysis if needed
 		_ = operatorType
@@ -441,10 +441,10 @@ func (p *Parser) parseJSONExpression() (ast.Expression, error) {
 				return nil, err
 			}
 
-			left = &ast.CastExpression{
+			left = p.hintCastExpression(&ast.CastExpression{
 				Expr: left,
 				Type: dataType,
-			}
+			})
 		}
 	}
 
@@ -504,7 +504,7 @@ func (p *Parser) parseLambdaBody(params ast.Expression) (ast.Expression, error) 
 	if err != nil {
 		return nil, err
 	}
-	return &ast.BinaryExpression{Left: params, Operator: "->", Right: body, Lambda: true, Pos: opPos}, nil
+	return p.hintBinaryExpression(&ast.BinaryExpression{Left: params, Operator: "->", Right: body, Lambda: true, Pos: opPos}), nil
 }
 
 // isJSONOperator checks if current token is a JSON/JSONB operator

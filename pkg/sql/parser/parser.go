@@ -143,6 +143,7 @@ const maxPooledTokenBuf = 4096
 
 // Reset clears the parser state for reuse from the pool.
 func (p *Parser) Reset() {
+	p.resetRenderHints()
 	// p.tokens may alias a caller-owned slice (ParseWithPositions) or
 	// tokenBuf; drop the reference rather than keeping either alive. Token
 	// values are substrings of the caller's input, so any retained token
@@ -316,6 +317,8 @@ func (p *Parser) Dialect() string {
 // For dialect-aware parsing or strict mode, use NewParser with options, or call
 // ApplyOptions on a pooled instance before parsing.
 type Parser struct {
+	// Parse-local rewrite metadata; no metadata is retained on ast.AST.
+	renderMask uint64
 	// pooledDraws counts the nodes this parse drew from the ast pools
 	// (ast.Get*/ast.New* other than NewAST). The parser reports it to
 	// ast.ReleaseAST through astrelease.MarkParserBuilt: a tree with no
@@ -333,10 +336,13 @@ type Parser struct {
 	// bytes instead of a 72 B pointerful struct (which cost a GC write barrier
 	// per word). The pointee is read-only: tokens are never mutated while
 	// parsing, and nothing may write through currentToken (see eof).
-	currentToken *models.TokenWithSpan
-	depth        int             // Current recursion depth
-	ctx          context.Context // Optional context for cancellation support
-	strict       bool            // Strict mode rejects empty statements
+	currentToken     *models.TokenWithSpan
+	depth            int             // Current recursion depth
+	ctx              context.Context // Optional context for cancellation support
+	renderHint       uint8
+	renderValid      bool
+	strict           bool // Strict mode rejects empty statements
+	renderGeneration uint32
 	// dialect holds the SQL dialect for dialect-aware parsing as a raw
 	// string (default: "" which the string-returning Dialect() method
 	// reports as "postgresql" for v1.x backward compatibility).
@@ -380,6 +386,8 @@ type Parser struct {
 	// rawStringLiterals caches the dialect's string escape mode for each
 	// literal, avoiding repeated dialect dispatch on the expression path.
 	rawStringLiterals bool
+	// renderCount saturates; scripts beyond this limit fail closed to walking.
+	renderCount uint16
 	// implicitEnd is one more than the token index at which a T-SQL utility
 	// statement ended without a ';' because the next statement began there
 	// (0: none). See utility_implicit_end.go.
@@ -438,6 +446,7 @@ func (p *Parser) preprocess(tokens []models.TokenWithSpan) []models.TokenWithSpa
 // []models.TokenWithSpan (already normalised by preprocessTokens or p.preprocess) and returns
 // the parsed AST.
 func (p *Parser) parseTokens(tokens []models.TokenWithSpan) (*ast.AST, error) {
+	p.resetRenderHints()
 	p.tokens = tokens
 	p.currentPos = 0
 	p.implicitEnd = 0
@@ -496,6 +505,7 @@ func (p *Parser) parseTokens(tokens []models.TokenWithSpan) (*ast.AST, error) {
 		result.ExecuteSlash = append(result.ExecuteSlash, make([]bool, len(result.Statements)-len(result.ExecuteSlash))...)
 		result.ExecuteSlashPositions = append(result.ExecuteSlashPositions, make([]models.Location, len(result.Statements)-len(result.ExecuteSlashPositions))...)
 	}
+	p.renderValid = true
 	astrelease.MarkParserBuilt(result, p.pooledDraws)
 	return result, nil
 }
@@ -507,9 +517,11 @@ func (p *Parser) parseTokens(tokens []models.TokenWithSpan) (*ast.AST, error) {
 // When no ';' follows, noteStatementEnd decides whether the next token may
 // start a statement.
 func (p *Parser) parseScriptItem(result *ast.AST) error {
+	p.renderHint = 0
 	start := p.currentToken.Start
 	if separator, ok := p.parseBatchSeparator(); ok {
 		result.Statements = append(result.Statements, separator)
+		p.appendRenderHint()
 		result.StatementStarts = append(result.StatementStarts, start)
 		result.StatementEnds = append(result.StatementEnds, p.tokens[p.currentPos-1].End)
 		return nil
@@ -518,6 +530,7 @@ func (p *Parser) parseScriptItem(result *ast.AST) error {
 	stmt, err := p.parseStatement()
 	if err == nil {
 		result.Statements = append(result.Statements, stmt)
+		p.appendRenderHint()
 		result.StatementStarts = append(result.StatementStarts, start)
 		p.recordUnicodeIdentifiers(result, startPos, p.currentPos)
 	}
@@ -663,6 +676,7 @@ func (p *Parser) ParseContext(ctx context.Context, tokens []token.Token) (*ast.A
 // parseContextTokens is the core context-aware parsing routine. It takes
 // a preprocessed []models.TokenWithSpan and respects ctx for cancellation.
 func (p *Parser) parseContextTokens(ctx context.Context, tokens []models.TokenWithSpan) (*ast.AST, error) {
+	p.resetRenderHints()
 	// Check context before starting
 	if err := ctx.Err(); err != nil {
 		return nil, err
@@ -733,6 +747,7 @@ func (p *Parser) parseContextTokens(ctx context.Context, tokens []models.TokenWi
 		result.ExecuteSlash = append(result.ExecuteSlash, make([]bool, len(result.Statements)-len(result.ExecuteSlash))...)
 		result.ExecuteSlashPositions = append(result.ExecuteSlashPositions, make([]models.Location, len(result.Statements)-len(result.ExecuteSlashPositions))...)
 	}
+	p.renderValid = true
 	astrelease.MarkParserBuilt(result, p.pooledDraws)
 	return result, nil
 }

@@ -258,8 +258,13 @@ func ParseBytesWithDialect(input []byte, dialect keywords.SQLDialect) (*ast.AST,
 }
 
 func parseWithDialect(in sqlText, dialect keywords.SQLDialect) (*ast.AST, error) {
+	tree, _, _, err := parseWithDialectHints(in, dialect)
+	return tree, err
+}
+
+func parseWithDialectHints(in sqlText, dialect keywords.SQLDialect) (*ast.AST, uint64, bool, error) {
 	if !keywords.IsValidDialect(string(dialect)) {
-		return nil, goerrors.InvalidSyntaxError(
+		return nil, 0, false, goerrors.InvalidSyntaxError(
 			fmt.Sprintf("unknown SQL dialect %q; valid dialects: %s", dialect, validDialectList()),
 			models.Location{},
 			"",
@@ -272,11 +277,11 @@ func parseWithDialect(in sqlText, dialect keywords.SQLDialect) (*ast.AST, error)
 
 	tokens, err := in.tokenize(tkz)
 	if err != nil {
-		return nil, wrapTokenizeError(in, err)
+		return nil, 0, false, wrapTokenizeError(in, err)
 	}
 
 	if len(tokens) == 0 {
-		return nil, goerrors.IncompleteStatementError(models.Location{}, "")
+		return nil, 0, false, goerrors.IncompleteStatementError(models.Location{}, "")
 	}
 
 	// The returned AST does not alias parser or tokenizer pooled state, so it
@@ -285,5 +290,10 @@ func parseWithDialect(in sqlText, dialect keywords.SQLDialect) (*ast.AST, error)
 	defer PutParser(p)
 	p.ApplyOptions(WithDialect(string(dialect)))
 
-	return p.parseWithSource(tokens, in)
+	tree, err := p.parseWithSource(tokens, in)
+	if err != nil {
+		return nil, 0, false, err
+	}
+	mask, ok := p.renderHintSnapshot(len(tree.Statements), p.renderGeneration)
+	return tree, mask, ok, nil
 }

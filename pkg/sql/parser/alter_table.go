@@ -676,6 +676,7 @@ func (p *Parser) parseAlterColumnSub(op *ast.AlterTableOperation) (bool, error) 
 		if err != nil {
 			return false, err
 		}
+		p.noteRenderDataType(typeName)
 		op.DataType = typeName
 		if p.isType(models.TokenTypeUsing) {
 			p.advance()

@@ -367,7 +367,7 @@ func (p *Parser) parseCastTypeString(expr ast.Expression) (*ast.CastExpression, 
 		return nil, p.expectedError(")")
 	}
 	p.advance() // Consume )
-	return &ast.CastExpression{Expr: expr, Type: typ, TypeAsString: true}, nil
+	return p.hintCastExpression(&ast.CastExpression{Expr: expr, Type: typ, TypeAsString: true}), nil
 }
 
 // parseNestedBracketArray parses a nested bracket row of a multi-dimensional

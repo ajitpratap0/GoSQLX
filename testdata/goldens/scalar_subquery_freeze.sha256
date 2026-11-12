@@ -1,0 +1,5 @@
+# GoSQLX behaviour golden "scalar_subquery_freeze": scalar select-list subqueries and caller ownership
+# Generated; do not edit. Regenerate with -goldens.update (task goldens:update) and list every changed cell in the PR.
+# Line: <row> <statements> <one 64-bit hash per column, "=" = same as left>. Readable diff: task goldens:diff.
+columns postgresql_compact postgresql_readable mysql_compact mysql_readable mariadb_compact mariadb_readable sqlserver_compact sqlserver_readable oracle_compact oracle_readable sqlite_compact sqlite_readable snowflake_compact snowflake_readable clickhouse_compact clickhouse_readable
+scalar_subqueries 6 6f819ee39ef99526 332b0e38af5cfa45 16d653c5c83af926 7ac91dba6cf95997 16d653c5c83af926 7ac91dba6cf95997 16d653c5c83af926 7ac91dba6cf95997 16d653c5c83af926 7ac91dba6cf95997 16d653c5c83af926 7ac91dba6cf95997 16d653c5c83af926 7ac91dba6cf95997 16d653c5c83af926 7ac91dba6cf95997

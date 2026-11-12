@@ -171,7 +171,7 @@ func (p *Parser) parseFlashbackBound() (ast.Expression, error) {
 		if err != nil {
 			return nil, err
 		}
-		left = &ast.BinaryExpression{Left: left, Operator: op, Right: right, Pos: opPos}
+		left = p.hintBinaryExpression(&ast.BinaryExpression{Left: left, Operator: op, Right: right, Pos: opPos})
 	}
 	return left, nil
 }

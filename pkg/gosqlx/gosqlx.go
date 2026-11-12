@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/ajitpratap0/GoSQLX/internal/renderhint"
 	"github.com/ajitpratap0/GoSQLX/internal/tokscratch"
 	"github.com/ajitpratap0/GoSQLX/pkg/fingerprint"
 	"github.com/ajitpratap0/GoSQLX/pkg/formatter"
@@ -649,12 +650,18 @@ func formatSQL(sql string, options FormatOptions, dialect keywords.SQLDialect) (
 		p.ApplyOptions(parser.WithDialect(string(dialect)))
 	}
 	var parsedAST *ast.AST
+	var rewriteMask uint64
+	var hintsValid bool
 	if dialect == keywords.DialectOracle {
 		// Only the source-aware parser can distinguish an execute line from
 		// a slash whose line also contains a SQL comment.
-		parsedAST, err = parser.ParseWithDialect(sql, dialect)
+		parsedAST, rewriteMask, hintsValid, err = renderhint.SourceParse(sql, string(dialect))
 	} else {
 		parsedAST, err = p.ParseFromModelTokens(tokens)
+		if err == nil {
+			generation := renderhint.ParserGeneration(p)
+			rewriteMask, hintsValid = renderhint.ParserMask(p, len(parsedAST.Statements), generation)
+		}
 	}
 	if err != nil {
 		return "", fmt.Errorf("cannot format invalid SQL: %w: %w", ErrSyntax, err)
@@ -677,7 +684,7 @@ func formatSQL(sql string, options FormatOptions, dialect keywords.SQLDialect) (
 	}
 
 	if len(comments) == 0 {
-		out, err := formatter.FormatASTChecked(parsedAST, astOpts)
+		out, err := renderhint.FormatAST(parsedAST, rewriteMask, hintsValid, astOpts)
 		if err != nil {
 			return "", fmt.Errorf("cannot format SQL: %w", err)
 		}
@@ -694,7 +701,7 @@ func formatSQL(sql string, options FormatOptions, dialect keywords.SQLDialect) (
 		if i < len(parsedAST.ExecuteSlash) && parsedAST.ExecuteSlash[i] {
 			localOpts.AddSemicolon = false
 		}
-		stmts[i], err = formatter.FormatStatementChecked(stmt, localOpts)
+		stmts[i], err = renderhint.FormatStatement(parsedAST, i, rewriteMask, hintsValid, localOpts)
 		if err != nil {
 			return "", fmt.Errorf("cannot format SQL: %w", err)
 		}

@@ -73,11 +73,11 @@ func (p *Parser) parseColumnDef() (*ast.ColumnDef, error) {
 		}
 	}
 
-	colDef := &ast.ColumnDef{
+	colDef := p.hintColumnDef(&ast.ColumnDef{
 		Name:      name.Name,
 		Type:      dataTypeStr,
 		NameQuote: name.Quotes,
-	}
+	})
 
 	// ClickHouse column options that may appear between the type and the
 	// standard constraint list: CODEC(...), DEFAULT expr, MATERIALIZED expr,
@@ -94,6 +94,7 @@ func (p *Parser) parseColumnDef() (*ast.ColumnDef, error) {
 					return nil, err
 				}
 				colDef.Type += " CODEC" + args
+				p.noteRenderDataType(colDef.Type)
 				continue
 			}
 			break

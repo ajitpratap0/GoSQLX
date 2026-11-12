@@ -345,7 +345,7 @@ func (p *Parser) parseHierarchicalOperator() (ast.Expression, error) {
 	if root {
 		return &ast.ConnectByRootExpression{Expr: operand, Pos: pos}, nil
 	}
-	return &ast.UnaryExpression{Operator: ast.Prior, Expr: operand, Pos: pos}, nil
+	return p.hintUnaryExpression(&ast.UnaryExpression{Operator: ast.Prior, Expr: operand, Pos: pos}), nil
 }
 
 // parsePrimaryFallback parses the primary expressions tried only after every

@@ -196,11 +196,11 @@ func (p *Parser) parseCastLike(try bool) (*ast.CastExpression, error) {
 	}
 	p.advance() // Consume )
 
-	return &ast.CastExpression{
+	return p.hintCastExpression(&ast.CastExpression{
 		Expr: expr,
 		Type: dataType,
 		Try:  try,
-	}, nil
+	}), nil
 }
 
 // parseIntervalExpression parses an INTERVAL expression: INTERVAL 'value'

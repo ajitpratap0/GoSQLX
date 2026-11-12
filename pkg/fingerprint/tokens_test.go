@@ -134,6 +134,7 @@ var normalizeV2RuleCases = []struct {
 	{"N3_bare", `SELECT "users"."id"`, `SELECT users.id`, ""},
 	{"N3_case", `SELECT "Users", "select", "a""b"`, `SELECT "Users", "select", "a""b"`, ""},
 	{"N3_backtick", "SELECT `my-db`.`t`, `select`", "SELECT `my-db`.t, `select`", keywords.DialectMySQL},
+	{"N3_backtick_multiline", "SELECT `a\nb` FROM t", "SELECT `a\nb` FROM t", keywords.DialectMySQL},
 	{"N3_bracket", "SELECT [p q], [users]", "SELECT [p q], users", keywords.DialectSQLServer},
 	{"N3_upper", `SELECT "USERS", "users"`, `SELECT USERS, "users"`, keywords.DialectSnowflake},
 	{"N4", "WHERE a = 1 AND b = 'x' LIMIT 10 OFFSET 20", "WHERE a = ? AND b = ? LIMIT ? OFFSET ?", ""},

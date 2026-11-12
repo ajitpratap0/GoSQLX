@@ -62,8 +62,12 @@ type frame struct {
 	rowPrevious, rowEnd, rowComma                int
 }
 
-// delimited mirrors normalizeTokenInPlace in parser/preprocess.go and
-// isQuotedIdentifierToken in parser/parser.go, including multiline backticks.
+// delimited follows normalizeTokenInPlace in parser/preprocess.go and
+// isQuotedIdentifierToken in parser/parser.go, except that a name whose token
+// spans several lines is also treated as delimited. The parser predicates
+// require Start.Line == End.Line (the legacy output renders the multiline case
+// as a\nb); v2 is deliberately stricter so the name keeps its quotes and
+// re-tokenizes as the same name.
 func delimited(t models.TokenWithSpan) bool {
 	if t.Token.Type == models.TokenTypeDoubleQuotedString {
 		return true

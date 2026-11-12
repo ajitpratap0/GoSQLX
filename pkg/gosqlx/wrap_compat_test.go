@@ -265,11 +265,11 @@ func TestWrapErrLegacyCompatibilityCorpus(t *testing.T) {
 				{"Format", func() error { _, e := Format(sql, DefaultFormatOptions()); return e }, fmt.Errorf("cannot format invalid SQL: %w", parseWant)},
 				{"Lint", func() error { _, e := Lint(sql); return e }, legacyLintError(sql, "")},
 				{"NormalizeLegacy", func() error {
-					_, e := NormalizeWithOptions(sql, fingerprint.Options{Mode: fingerprint.ModeLegacy})
+					_, e := fingerprint.NormalizeWithOptions(sql, fingerprint.Options{Mode: fingerprint.ModeLegacy})
 					return e
 				}, legacyNormalizeError(sql)},
 				{"FingerprintLegacy", func() error {
-					_, e := FingerprintWithOptions(sql, fingerprint.Options{Mode: fingerprint.ModeLegacy})
+					_, e := fingerprint.FingerprintWithOptions(sql, fingerprint.Options{Mode: fingerprint.ModeLegacy})
 					return e
 				}, legacyNormalizeError(sql)},
 				{"NormalizeDefaultV2", func() error { _, e := Normalize(sql); return e }, tokenWant},

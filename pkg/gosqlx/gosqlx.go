@@ -794,8 +794,8 @@ func ParseWithDialect(sql string, dialect keywords.SQLDialect) (*ast.AST, error)
 //
 // Normalize reports tokenization errors and empty input, but does not validate
 // SQL syntax. Call Validate first when syntax validation is required. For the
-// v1.17 parse-and-format output or dialect selection, use NormalizeWithOptions
-// with fingerprint.Options.
+// v1.17 parse-and-format output or dialect selection, import
+// pkg/fingerprint and use fingerprint.NormalizeWithOptions.
 //
 // Example:
 //
@@ -805,14 +805,6 @@ func Normalize(sql string) (string, error) {
 	return fingerprint.Normalize(sql)
 }
 
-// NormalizeWithOptions normalizes sql using the fingerprint mode and dialect.
-// ModeTokens (the zero value) does not validate SQL syntax. ModeLegacy with an
-// empty dialect reproduces v1.17 output and errors; explicit dialects have no
-// v1.17 compatibility guarantee. Errors are returned unchanged from fingerprint.
-func NormalizeWithOptions(sql string, opts fingerprint.Options) (string, error) {
-	return fingerprint.NormalizeWithOptions(sql, opts)
-}
-
 // Fingerprint returns "v2:" followed by the 64-character lowercase SHA-256 hex
 // digest of the version-2 normal form (67 bytes total). Queries that differ
 // only in redacted data literals produce the same fingerprint, making this
@@ -820,7 +812,7 @@ func NormalizeWithOptions(sql string, opts fingerprint.Options) (string, error) 
 //
 // Fingerprint does not validate SQL syntax; call Validate first if needed.
 // To reproduce unprefixed v1.17 fingerprints, use
-// FingerprintWithOptions with fingerprint.Options{Mode:
+// fingerprint.FingerprintWithOptions with fingerprint.Options{Mode:
 // fingerprint.ModeLegacy}. Use fingerprint.VersionOf to distinguish versions;
 // recompute stored fingerprints or key on both versions during migration.
 //
@@ -831,15 +823,6 @@ func NormalizeWithOptions(sql string, opts fingerprint.Options) (string, error) 
 //	// fp1 == fp2
 func Fingerprint(sql string) (string, error) {
 	return fingerprint.Fingerprint(sql)
-}
-
-// FingerprintWithOptions fingerprints sql using the fingerprint mode and dialect.
-// ModeTokens (the zero value) produces a 67-byte v2-prefixed digest without
-// syntax validation. ModeLegacy produces an unprefixed 64-character digest;
-// an empty dialect reproduces v1.17 output and errors. Errors are returned
-// unchanged from fingerprint.
-func FingerprintWithOptions(sql string, opts fingerprint.Options) (string, error) {
-	return fingerprint.FingerprintWithOptions(sql, opts)
 }
 
 // Transpile converts SQL from one dialect to another.

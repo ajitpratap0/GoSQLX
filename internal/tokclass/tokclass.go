@@ -22,12 +22,16 @@
 // mode that emits parser-ready tokens directly must use the same functions so
 // that both paths agree token for token.
 //
-// The package imports only pkg/models and strings and holds no per-call
-// state: every table is read-only package data, so all functions are safe for
-// concurrent use.
+// The package holds no per-call state: every table is read-only package
+// data, so all functions are safe for concurrent use.
 package tokclass
 
-import "github.com/ajitpratap0/GoSQLX/pkg/models"
+import (
+	"strings"
+	"unicode"
+
+	"github.com/ajitpratap0/GoSQLX/pkg/models"
+)
 
 // Gate reports whether preprocessing may change a token of this type:
 // identifiers, generic keywords, the COUNT..MAX aggregate keywords, the typed
@@ -99,13 +103,42 @@ func ParserType(lexType models.TokenType, value string) models.TokenType {
 	return lexType
 }
 
-// AppendCompound appends the expansion of compound token t to dst, copying
-// t's span onto every sub-token. It reports false (leaving dst unchanged) if t
-// is not a compound token. It performs no allocation beyond growing dst.
+// SplitSpans derives the inner boundaries of a normalized two-word Value,
+// using byte widths and the original outer endpoints. Synthetic spans are
+// eligible too, provided the words can be reconstructed without overlap.
+// Malformed Values or locations and spanless tokens retain shared spans.
+func SplitSpans(t *models.TokenWithSpan) (end1, start2 models.Location, ok bool) {
+	if t.Start.Line < 1 || t.Start.Column < 1 || t.End.Line < t.Start.Line {
+		return models.Location{}, models.Location{}, false
+	}
+	w1, w2, found := strings.Cut(t.Token.Value, " ")
+	if !found || w1 == "" || w2 == "" ||
+		strings.IndexFunc(w1, unicode.IsSpace) >= 0 || strings.IndexFunc(w2, unicode.IsSpace) >= 0 {
+		return models.Location{}, models.Location{}, false
+	}
+	end1 = models.Location{Line: t.Start.Line, Column: t.Start.Column + len(w1)}
+	start2 = models.Location{Line: t.End.Line, Column: t.End.Column - len(w2)}
+	if start2.Column < 1 || (start2.Line == end1.Line && start2.Column <= end1.Column) {
+		return models.Location{}, models.Location{}, false
+	}
+	return end1, start2, true
+}
+
+// AppendCompound appends the expansion of compound token t to dst. Eligible
+// two-part compounds get per-word spans; otherwise every child keeps t's span.
+// It reports false (leaving dst unchanged) if t is not a compound token.
+// It performs no allocation beyond growing dst.
 func AppendCompound(dst []models.TokenWithSpan, t *models.TokenWithSpan) ([]models.TokenWithSpan, bool) {
 	parts := CompoundParts(t)
 	if parts == nil {
 		return dst, false
+	}
+	if len(parts) == 2 {
+		if end1, start2, ok := SplitSpans(t); ok {
+			return append(dst,
+				models.TokenWithSpan{Token: parts[0], Start: t.Start, End: end1},
+				models.TokenWithSpan{Token: parts[1], Start: start2, End: t.End}), true
+		}
 	}
 	for i := range parts {
 		dst = append(dst, models.TokenWithSpan{Token: parts[i], Start: t.Start, End: t.End})

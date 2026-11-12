@@ -1,0 +1,3 @@
+- Compound keyword parts now have precise per-word spans across source-aware parser and model-token entry points and LSP diagnostics. `INSERT INTO t (group by) VALUES (1)` reports `expected ), got BY` at 1:22 instead of 1:16; `UPDATE t SET order by = 1` reports `expected =, got BY` at 1:20 instead of 1:14. Error codes, messages and hints are unchanged.
+- `parser.ParseBytesWithTokens` returns per-part spans for reconstructable two-word compounds, including multiline separators. Public tokenizer output remains unchanged.
+- PostgreSQL utility statements `GRANT SELECT ON t TO GROUP by` and `REVOKE SELECT ON t FROM GROUP by` are now accepted: the compound parts are recognized as bare words. Quoted grantee names retain their quoting.

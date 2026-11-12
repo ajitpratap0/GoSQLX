@@ -345,13 +345,25 @@ func TestAppendCompoundGolden(t *testing.T) {
 	rightOuter := wantParts(mtok(models.TokenTypeRight, "RIGHT"), mtok(models.TokenTypeOuter, "OUTER"), mtok(models.TokenTypeJoin, "JOIN"))
 	fullOuter := wantParts(mtok(models.TokenTypeFull, "FULL"), mtok(models.TokenTypeOuter, "OUTER"), mtok(models.TokenTypeJoin, "JOIN"))
 
+	// Literal D11 boundaries for the original 3:7–3:17 synthetic fixture.
+	// Its wider spans remain eligible (Q2); GROUPING SETS cannot fit and
+	// deliberately retains the shared span, as do all three-part fixtures.
+	inner[0].End, inner[1].Start = models.Location{Line: 3, Column: 12}, models.Location{Line: 3, Column: 13}
+	left[0].End, left[1].Start = models.Location{Line: 3, Column: 11}, models.Location{Line: 3, Column: 13}
+	right[0].End, right[1].Start = models.Location{Line: 3, Column: 12}, models.Location{Line: 3, Column: 13}
+	outer[0].End, outer[1].Start = models.Location{Line: 3, Column: 12}, models.Location{Line: 3, Column: 13}
+	full[0].End, full[1].Start = models.Location{Line: 3, Column: 11}, models.Location{Line: 3, Column: 13}
+	cross[0].End, cross[1].Start = models.Location{Line: 3, Column: 12}, models.Location{Line: 3, Column: 13}
+	orderBy[0].End, orderBy[1].Start = models.Location{Line: 3, Column: 12}, models.Location{Line: 3, Column: 15}
+	groupBy[0].End, groupBy[1].Start = models.Location{Line: 3, Column: 12}, models.Location{Line: 3, Column: 15}
+
 	tests := []struct {
 		name string
 		typ  models.TokenType
 		val  string
 		want []models.TokenWithSpan
 	}{
-		// Type-based: Value is deliberately lowercase and must be ignored.
+		// Type-based matching ignores case; original Value bytes determine spans.
 		{"type InnerJoin", models.TokenTypeInnerJoin, "inner join", inner},
 		{"type LeftJoin", models.TokenTypeLeftJoin, "left join", left},
 		{"type RightJoin", models.TokenTypeRightJoin, "right join", right},

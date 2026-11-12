@@ -21,7 +21,7 @@
 // The two responsibilities of the old layer are preserved here:
 //
 //  1. Compound-token expansion   – e.g. a single INNER_JOIN token becomes
-//     [INNER, JOIN] (each carrying the original span).
+//     [INNER, JOIN] (with per-word spans when reconstructable; shared otherwise).
 //  2. Token-type normalisation – identifier/keyword strings whose type was
 //     not resolved by the tokenizer are remapped to the appropriate
 //     models.TokenType constant.

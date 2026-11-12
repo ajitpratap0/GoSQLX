@@ -32,7 +32,7 @@ type scanWalker struct {
 	ancestors []ast.Node
 }
 
-var scanWalkerPool = sync.Pool{New: func() interface{} {
+var scanWalkerPool = sync.Pool{New: func() any {
 	return &scanWalker{ancestors: make([]ast.Node, 0, 16)}
 }}
 

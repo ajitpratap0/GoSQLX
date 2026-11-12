@@ -39,8 +39,14 @@ func (c *Counter) Get() int64 {
 	if !metricsgate.Enabled() {
 		return 0
 	}
-	return c.gets.Add(1)
+	return c.getSlow()
 }
+
+// getSlow is kept out of line so the disabled path is a fall-through with no
+// taken branch; only the enabled path pays the call and the locked add.
+//
+//go:noinline
+func (c *Counter) getSlow() int64 { return c.gets.Add(1) }
 
 // Put records one Put() only while metrics are enabled and returns the new total.
 // It returns 0 without recording anything when metrics are disabled.
@@ -48,8 +54,11 @@ func (c *Counter) Put() int64 {
 	if !metricsgate.Enabled() {
 		return 0
 	}
-	return c.puts.Add(1)
+	return c.putSlow()
 }
+
+//go:noinline
+func (c *Counter) putSlow() int64 { return c.puts.Add(1) }
 
 // Load returns the current gets and puts.
 func (c *Counter) Load() (gets, puts int64) { return c.gets.Load(), c.puts.Load() }

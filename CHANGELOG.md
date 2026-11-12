@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- `pkg/formatter`: width-scaling regression guard for `BenchmarkRenderScale/wide` (exact output, time ratio and bytes per output byte over compact/lower/readable/semicolon/postgresql modes); test-only, no behaviour change (#958, W5-13).
 - **Benchmark and perf-gate infrastructure (performance overhaul, wave 0)**:
   pull requests are now judged by interleaved A/B measurements instead of
   absolute numbers. No library behaviour changes apart from #901 (see Fixed). The pieces, by PR:
@@ -101,8 +102,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - The LSP benchmark server (`setupTestServer`) discards its output, so
     benchmarks that publish diagnostics no longer time a growing buffer.
 
+- **Token classification moved to `internal/tokclass`** (W3-03a1; internal
+  refactor, no behaviour change): the compound-keyword split tables, the
+  identifier/keyword → specific-type remaps, the COUNT..MAX → identifier rule
+  and the backtick-width rule applied by the parser's preprocess pass now live
+  in one internal package that the tokenizer's planned parser-ready mode
+  (W3-03b) will share. Tokens, spans, ASTs, errors and every behaviour golden
+  are unchanged. A differential test checks the new pass, field for field,
+  against a frozen copy of the old one over the benchmark corpus, the SQL
+  fixtures and a generated compound-keyword, Unicode-fold, odd-identifier and
+  tokenizer-error matrix in all 11 dialects.
+
 ### Performance
 - **Parser**: function arguments, the SELECT list, GROUP BY and ORDER BY are now collected on parser-owned scratch stacks and copied once into exact-size slices (previously grown with `append` from a fixed capacity). A `FunctionCall` with up to three arguments shares one allocation with its argument array, and a `SelectStatement` shares one with its single `From` entry and, for up to four columns, its `Columns` array. Parse allocations drop 28% on `aggregate` (18 to 13) and 12% on `complex` (50 to 44), and allocs/op fall on every SELECT shape. On the final merge, the layout-randomized amd64 CI gate (run 41744051257, 20 layouts per arm, Xeon 6973P-C; A/A' moved 0 of 52 benchmarks by more than 3%) shows the parse geomean at -1.02% (p=0.289, not significant) and `aggregate` at -3.18% (p=0.005, not flagged under Benjamini-Hochberg). Of the individual benchmarks only `window` (-4.96%) was flagged faster; `simple_select` -5.52%, `subquery` -4.24%, `cte` -3.49% and `select_where` -3.50% moved in the same direction but are indicative. `ParseRW/sqlite/medium` is +1.55% (not significant), `insert`/`update`/`delete` are flat, and no gated benchmark regressed. An earlier run on a previous merge ref measured a larger parse geomean (-2.17%); the final-merge figures above are the authoritative ones. User-visible: `Columns`, `GroupBy`, `OrderBy` and `FunctionCall.Arguments` now have `len == cap` (they used to carry spare capacity), so a caller that appends to them reallocates instead of writing into spare space; trees are otherwise identical (guarded by the behaviour goldens). Lifetime trade-off: because the blocks are co-allocated, retaining only `Columns`, `From` or `Arguments` of a released tree keeps the whole block (up to 600 B) alive. No exported API change. [W4-04]
+- **Semantic tokens**: pooled highlighting scratch and shared case folding cut 30 KB semantic-token allocs/op by 98.9–99.0% (2,039 to 20, 1,863 to 21, 1,953 to 21), B/op by 26.0–26.8% and sec/op by 13.3–14.3% (amd64 layout-randomized gate); the new highlight golden pins output. No behaviour change. [W6-11]
+- **Linter**: the lint pipeline uses the pooled parser and pooled dialect tokenizer; behavior is unchanged. [W6-06ab]
 - **Linter**: aliasing consistency and four visitor-based rules now reuse the cached preorder AST node list. Violations are unchanged; there is no API or behavior change. [W6-05b]
 - **Linter**: rule L007 (keyword case consistency) scans words without allocating (substring words, ASCII upper-casing into a stack buffer before the keyword lookup). Output is unchanged. On the canonical benchmarks (Apple M4, local), `BenchmarkLintRule/L007` allocates about 98% fewer objects (72565 to 1194 allocs/op) and about 97% fewer bytes, and `BenchmarkLintRW` allocates about 12.5% fewer objects. [W6-03]
 - **gosqlx**: errors returned by `Parse`, `Validate`, `Lint` and the tree helpers now wrap the sentinel and the underlying error in an unexported `wrapErr` that builds its message lazily, instead of `fmt.Errorf("%w: %w", ...)` on every failure. Error text, `errors.Is` and `errors.As` behaviour are unchanged; only the unexported concrete error type differs. The saving applies to callers that only check `errors.Is`/`errors.As` or drop the message: when the message is built (`err.Error()`, as the LSP and CLI do) the gain is about 2 allocs/op and 3-4% B/op per error (syntax_mid 21 -> 19 allocs). Because the message is now built on demand, `Error()` reflects any later mutation of the inner `*errors.Error` reached through `errors.As`; previously the text was fixed at creation. [W1-03]
@@ -132,6 +146,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Formatter**: compact formatting (`ast.CompactStyle()`, no clause newlines, no semicolon, no line width, no target dialect, preserve or upper keyword case) now renders SELECT, INSERT, UPDATE and DELETE through each statement's `SQL()` instead of the visitor renderer, and a single compact statement skips the parts slice and join. `Render/compact/*` is 27-49% faster with 1 alloc/op (was 4-42) and 60-82% fewer bytes/op; `Normalize` and `Fingerprint` are 6-13% faster with 15-39% fewer allocs. Output is byte-identical (differential test over every corpus statement in 9 dialects and all option combinations); lowercase keywords, target-dialect rewrites, set operations and ALTER TABLE keep the visitor path. [W5-02]
 
 ### Behavior changes
+- **Validate blank input**: `parser.Validate` and `parser.ValidateBytes` have
+  always returned E2005 for empty or ASCII-whitespace-only input. Comment-only
+  input (`-- c`, `/* x */`, `;`, `-- c\n;`) has always returned E2005 through
+  all parser entry points and `gosqlx.Validate`/`Parse`. The parser behavior
+  change is limited to `parser.ValidateWithDialect` and
+  `parser.ValidateBytesWithDialect`, which now return E2005 for blank input
+  instead of nil. `gosqlx.Validate` now wraps E2005 or E2004 in `ErrSyntax` for
+  empty or whitespace-only input, replacing the unstructured “empty input”
+  error; `errors.As` now finds the structured error. C binding
+  `gosqlx_validate_dialect` has the same error change.
+  **Migration:** only `parser.ValidateWithDialect`,
+  `parser.ValidateBytesWithDialect` previously accepted blank input;
+  comment-only input was never accepted.
+  `gosqlx.Validate` and C/Python callers should match with
+  `errors.Is(err, gosqlx.ErrSyntax)` or the error code, rather than the
+  “empty input” text.
 - **Linter L010 (redundant whitespace)**: violation columns are byte
   positions on lines with invalid UTF-8. They were shifted before because
   invalid bytes were replaced with U+FFFD (3 bytes) while scanning. Valid

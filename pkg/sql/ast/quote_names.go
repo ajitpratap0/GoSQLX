@@ -27,6 +27,8 @@ package ast
 
 import (
 	"bytes"
+	"fmt"
+	"sort"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -78,18 +80,64 @@ var reservedNameWords = map[string]bool{
 	"TABLES": false, "TARGET": false, "VIEW": false,
 }
 
-// maxReservedNameLen bounds the stack buffer isReservedName upper-cases into;
-// it is at least the length of the longest word in reservedNameWords.
+// maxReservedNameLen bounds the uppercase buffer and index entry width; it
+// is at least the length of the longest word in reservedNameWords.
 const maxReservedNameLen = 16
 
-// reservedLenMask has bit n of entry c-'A' set when reservedNameWords holds
-// a word of length n starting with letter c. isReservedName consults it to
-// skip the map lookup for most ordinary names.
-var reservedLenMask = func() (m [26]uint32) {
+// reservedNameEntry is one word of reservedNameWords in fixed-width form.
+// everyPosition mirrors the map value (true: reserved everywhere).
+type reservedNameEntry struct {
+	word          [maxReservedNameLen]byte
+	everyPosition bool
+}
+
+// reservedNameBucket locates the run of reservedNameEntries holding all
+// words with one first letter and one length: entries[start : start+n].
+type reservedNameBucket struct {
+	start uint16
+	n     uint8
+}
+
+// reservedNameIndex is laid out [firstLetter-'A'][length] -> bucket; the
+// entries slice is sorted by (first letter, length, word) to match.
+var reservedNameEntries, reservedNameIndex = func() ([]reservedNameEntry, [26][maxReservedNameLen + 1]reservedNameBucket) {
+	var index [26][maxReservedNameLen + 1]reservedNameBucket
+	words := make([]string, 0, len(reservedNameWords))
 	for w := range reservedNameWords {
-		m[w[0]-'A'] |= 1 << len(w)
+		valid := len(w) >= 2 && len(w) <= maxReservedNameLen
+		if valid {
+			valid = w[0] >= 'A' && w[0] <= 'Z'
+		}
+		for i := 0; valid && i < len(w); i++ {
+			valid = w[i] >= 'A' && w[i] <= 'Z' || w[i] == '_'
+		}
+		if !valid {
+			panic(fmt.Sprintf("invalid reserved name %q", w))
+		}
+		words = append(words, w)
 	}
-	return m
+	sort.Slice(words, func(i, j int) bool {
+		if words[i][0] != words[j][0] {
+			return words[i][0] < words[j][0]
+		}
+		if len(words[i]) != len(words[j]) {
+			return len(words[i]) < len(words[j])
+		}
+		return words[i] < words[j]
+	})
+	entries := make([]reservedNameEntry, 0, len(words))
+	for _, w := range words {
+		bucket := &index[w[0]-'A'][len(w)]
+		if bucket.n == 0 {
+			bucket.start = uint16(len(entries))
+		}
+		bucket.n++
+		var entry reservedNameEntry
+		copy(entry.word[:], w)
+		entry.everyPosition = reservedNameWords[w]
+		entries = append(entries, entry)
+	}
+	return entries, index
 }()
 
 // isReservedName reports whether name is in reservedNameWords for the given
@@ -99,8 +147,12 @@ func isReservedName(name string, table bool) bool {
 	if len(name) < 2 || len(name) > maxReservedNameLen {
 		return false
 	}
-	first := name[0] | 0x20 // ASCII lower case; non-letters fail below
-	if first < 'a' || first > 'z' || reservedLenMask[first-'a']&(1<<len(name)) == 0 {
+	first := name[0] | 0x20
+	if first < 'a' || first > 'z' {
+		return false
+	}
+	bucket := reservedNameIndex[first-'a'][len(name)]
+	if bucket.n == 0 {
 		return false
 	}
 	var up [maxReservedNameLen]byte
@@ -115,8 +167,12 @@ func isReservedName(name string, table bool) bool {
 		}
 		up[i] = c
 	}
-	inAll, ok := reservedNameWords[string(up[:len(name)])]
-	return ok && (inAll || !table)
+	for _, e := range reservedNameEntries[bucket.start : bucket.start+uint16(bucket.n)] {
+		if e.word == up {
+			return e.everyPosition || !table
+		}
+	}
+	return false
 }
 
 // nameNeedsQuoting reports whether a single name part must be double-quoted

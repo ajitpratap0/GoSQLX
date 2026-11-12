@@ -95,3 +95,23 @@ perf_cachegrind_counts() {
 	done
 	printf '\n'
 }
+
+# perf_ext_seed keeps extension layouts disjoint from both stage-one arms.
+perf_ext_seed() { awk -v seed="$1" -v k="$2" -v j="$3" 'BEGIN { printf "%.0f\n", seed+k+j }'; }
+
+# The plan readers use only portable awk (including macOS /usr/bin/awk).
+perf_plan_max() { awk -F '\t' '$1 == "need" && $3 > m { m=$3 } END { print m+0 }' "$1"; }
+perf_plan_lines() {
+	awk -F '\t' -v r="$2" '$1 == "need" && $3 > r { lines[$2]=1; if ($2 > max) max=$2 } END { for (i=0; i<=max; i++) if (i in lines) print i }' "$1"
+}
+perf_plan_regex() {
+	awk -F '\t' -v line="$2" -v r="$3" '
+		$1 == "warmup" && $2 == line { warm=$3 }
+		$1 == "need" && $2 == line && $3 > r { regex[++n]=$6; selected[$6]=1 }
+		END {
+			if (!n) exit
+			if (warm != "" && !(warm in selected)) out=warm
+			for (i=1; i<=n; i++) out=out (out == "" ? "" : "|") regex[i]
+			print out
+		}' "$1"
+}

@@ -145,6 +145,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Formatter**: compact formatting (`ast.CompactStyle()`, no clause newlines, no semicolon, no line width, no target dialect, preserve or upper keyword case) now renders SELECT, INSERT, UPDATE and DELETE through each statement's `SQL()` instead of the visitor renderer, and a single compact statement skips the parts slice and join. `Render/compact/*` is 27-49% faster with 1 alloc/op (was 4-42) and 60-82% fewer bytes/op; `Normalize` and `Fingerprint` are 6-13% faster with 15-39% fewer allocs. Output is byte-identical (differential test over every corpus statement in 9 dialects and all option combinations); lowercase keywords, target-dialect rewrites, set operations and ALTER TABLE keep the visitor path. [W5-02]
 
 ### Behavior changes
+
+- LSP documentSymbol outline ranges now use exact parser statement spans; see **Fixed**.
 - **Validate blank input**: `parser.Validate` and `parser.ValidateBytes` have
   always returned E2005 for empty or ASCII-whitespace-only input. Comment-only
   input (`-- c`, `/* x */`, `;`, `-- c\n;`) has always returned E2005 through
@@ -167,6 +169,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   UTF-8 is unaffected.
 
 ### Fixed
+
+- **LSP documentSymbol ranges** now come from the parser's statement spans. Statements without positioned children (DROP, TRUNCATE, CREATE TABLE, ALTER TABLE, CREATE INDEX, MERGE) no longer report the range from 0:0 to the first `;`. A statement no longer extends over the statements that follow it on the same line. Range construction no longer rescans the document per statement (O(N²) → O(N) for GO-separated or long-prefix scripts). Behaviour change for LSP clients: outline ranges differ, and are now exact. Positions are still byte columns.
 - Claims checks now verify that published benchmark results were measured at the latest release tag commit.
 - **AST**: `AlterTableStatement.SQL()` now separates multiple ALTER TABLE actions with commas, matching the compact formatter and preserving action boundaries when re-parsed.
 - **Playground**: the GoSQLX WebAssembly module now runs in a Web Worker, so

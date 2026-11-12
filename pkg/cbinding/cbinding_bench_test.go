@@ -59,6 +59,43 @@ func BenchmarkCBinding(b *testing.B) {
 			}
 		})
 	}
+	for _, op := range []struct {
+		name string
+		call func(sql string) string
+	}{
+		{"extract_metadata", func(s string) string { return callLegacyRaw(exportExtractMetadata, &s) }},
+		{"extract_tables", func(s string) string { return callLegacyRaw(exportExtractTables, &s) }},
+		{"lint_opts", func(s string) string {
+			opts := `{"dialect":"postgresql","max_line_length":80}`
+			return lintRaw(s, &opts)
+		}},
+		{"parse_dialect", func(s string) string {
+			dialect := "postgresql"
+			return callDialectRaw(exportParse, &s, &dialect)
+		}},
+	} {
+		b.Run(op.name, func(b *testing.B) {
+			for _, q := range benchQueries {
+				b.Run(q.name, func(b *testing.B) {
+					out := op.call(q.sql)
+					var result struct {
+						Error string `json:"error"`
+					}
+					if err := json.Unmarshal([]byte(out), &result); err != nil {
+						b.Fatalf("%s/%s returned invalid JSON: %v", op.name, q.name, err)
+					}
+					if result.Error != "" {
+						b.Fatalf("%s/%s took the error path: %s", op.name, q.name, out)
+					}
+					b.ReportAllocs()
+					b.ResetTimer()
+					for i := 0; i < b.N; i++ {
+						_ = op.call(q.sql)
+					}
+				})
+			}
+		})
+	}
 	b.Run("free", func(b *testing.B) {
 		sql := benchQueries[1].sql
 		b.ReportAllocs()

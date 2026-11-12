@@ -14,6 +14,7 @@ so performance work cannot change behaviour silently.
 | `security` | `pkg/sql/security` `TestGoldenSecurity` | corpus file x 2 | `ScanSQL` and `Scan` (AST) findings and counts |
 | `transpile` | `pkg/transpiler` `TestGoldenTranspile` | corpus file x 9 targets | `Transpile` from the corpus dialect to each target, identity included |
 | `lsp` | `pkg/lsp` `TestGoldenLSP` | document@dialect x 3 | published diagnostics, decoded semantic tokens, document symbols |
+| `highlight` | `pkg/highlight` `TestGoldenHighlight` | corpus file x 11 dialects | spans for each full statement and its half-length prefix |
 
 Each line is `<row> <statements> <hash per column>`; a hash covers the full
 output of every statement of the row, and `=` means "same as the column to

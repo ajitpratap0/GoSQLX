@@ -555,3 +555,69 @@ func TestUDistributionCacheIsEquivalent(t *testing.T) {
 		}
 	}
 }
+
+// TestPowerUsesBenjaminiHochbergLevel pins Row.Power to the BH single-discovery
+// level alpha/m, not the per-test alpha, and shows that a benchmark which looks
+// well powered at alpha but is under target at alpha/m is planned and listed.
+func TestPowerUsesBenjaminiHochbergLevel(t *testing.T) {
+	cfg := DefaultConfig()
+	res := Evaluate(tailSweepFixture(t), cfg)
+	if res.TimeTests < 2 {
+		t.Fatalf("need several time tests, got %d", res.TimeTests)
+	}
+	level := cfg.Alpha / float64(res.TimeTests)
+	discriminating := ""
+	for _, r := range res.Rows {
+		if !r.Time.ByLayout {
+			continue
+		}
+		want := aucPower(r.residuals, r.K, r.K, level, cfg.LowPowerShiftPct)
+		if r.Power != want {
+			t.Fatalf("%s: Power %v, want aucPower at alpha/m = %v", r.Name, r.Power, want)
+		}
+		atAlpha := aucPower(r.residuals, r.K, r.K, cfg.Alpha, cfg.LowPowerShiftPct)
+		if atAlpha >= cfg.LowPowerTarget && r.Power < cfg.LowPowerTarget {
+			discriminating = r.Name
+		}
+	}
+	if discriminating == "" {
+		t.Fatalf("fixture has no benchmark with power >= target at alpha but < target at alpha/m")
+	}
+	planned := false
+	for _, n := range Plan(res, cfg) {
+		if n.Name == discriminating {
+			planned = true
+		}
+	}
+	if !planned {
+		t.Fatalf("%s is under target at alpha/m but was not planned", discriminating)
+	}
+	md := Markdown(res, cfg, Meta{})
+	i := strings.Index(md, "Low power")
+	if i < 0 || !strings.Contains(md[i:], "`"+strings.TrimPrefix(discriminating, "Benchmark")+"`") {
+		t.Fatalf("Low power section omits %s:\n%s", discriminating, md)
+	}
+}
+
+// tailSweepFixture has twelve benchmarks whose disturbed-layout share rises
+// from 5% to 60%, so their power at +5% falls across the target between the
+// per-test alpha and the Benjamini-Hochberg level alpha/m.
+func tailSweepFixture(t *testing.T) Inputs {
+	build := func(seed uint64) *Run {
+		var a string
+		for i := 0; i < 12; i++ {
+			share := .05 + .05*float64(i)
+			draw := func(r *lcg) float64 {
+				if r.next() >= share {
+					return 1 + .007*normalDraw(r)
+				}
+				return 1.04 + .21*r.next()
+			}
+			b := quiet()[:1]
+			b[0].name = fmt.Sprintf("BenchmarkSweep/s%02d", i)
+			a += distArm(seed+uint64(i), seed+uint64(i), 1, 20, draw, b, 1)
+		}
+		return mustParse(t, a)
+	}
+	return Inputs{Base: build(19), Head: build(51)}
+}

@@ -10,10 +10,12 @@
   other `ASC` tokens are dropped.
   Tokenizable SQL with invalid syntax is accepted; call `gosqlx.Validate` first
   when syntax validation is required. Normalized text is a grouping key, not
-  guaranteed to be parseable SQL: eight corpus cases track parser limitations
-  for aliases without `AS` in RETURNING, qualified projections, XMLATTRIBUTES,
-  subqueries and view queries, plus the redacted `SRID ?` value. Grouping also
-  differs for cast spelling,
+  guaranteed to be parseable SQL: the symmetric reparse oracle tracks 46 corpus
+  cases, including 44 in the implicit-alias parser gap (follow-up F1) for aliases
+  without `AS` in RETURNING, projections, subqueries and view queries, plus one
+  redacted `SRID ?` value and one transaction batch without statement separators.
+  `AS` is retained in XMLATTRIBUTES and XMLFOREST.
+  Grouping also differs for cast spelling,
   `IS TRUE` versus `IS FALSE`, quoted keyword names, clause order, redundant
   parentheses and content omitted by the legacy formatter. Version 2 also
   preserves the source case of bare identifier tokens in contextual grammar

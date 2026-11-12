@@ -8,6 +8,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"strings"
 	"sync"
 
 	"github.com/ajitpratap0/GoSQLX/internal/namequote"
@@ -62,12 +63,12 @@ type frame struct {
 	rowPrevious, rowEnd, rowComma                int
 }
 
-// delimited follows normalizeTokenInPlace in parser/preprocess.go and
-// isQuotedIdentifierToken in parser/parser.go, except that a name whose token
-// spans several lines is also treated as delimited. The parser predicates
-// require Start.Line == End.Line (the legacy output renders the multiline case
-// as a\nb); v2 is deliberately stricter so the name keeps its quotes and
-// re-tokenizes as the same name.
+// delimited follows the single-line span-width predicate in
+// internal/tokclass.NormalizeInPlace, except that a name whose token spans
+// several lines is also treated as delimited (follow-up F2). The shared
+// predicate requires Start.Line == End.Line (the legacy output renders the
+// multiline case as a\nb); v2 is deliberately stricter so the name keeps its
+// quotes and re-tokenizes as the same name.
 func delimited(t models.TokenWithSpan) bool {
 	if t.Token.Type == models.TokenTypeDoubleQuotedString {
 		return true
@@ -110,7 +111,7 @@ func appendUpper(b []byte, s string) []byte {
 	return b
 }
 func castName(t models.TokenWithSpan) bool {
-	return !delimited(t) && (upperEqual(t.Token.Value, "CAST") || upperEqual(t.Token.Value, "TRY_CAST") || upperEqual(t.Token.Value, "SAFE_CAST"))
+	return !delimited(t) && (upperEqual(t.Token.Value, "CAST") || upperEqual(t.Token.Value, "TRY_CAST") || upperEqual(t.Token.Value, "SAFE_CAST") || upperEqual(t.Token.Value, "XMLATTRIBUTES") || upperEqual(t.Token.Value, "XMLFOREST"))
 }
 
 // unaryAfter excludes value-ending punctuation and QUESTION placeholders from
@@ -189,11 +190,18 @@ func redactModifierPrefix(b []byte, start int) []byte {
 }
 
 func appendNormalV2(b []byte, ts []models.TokenWithSpan, sql string, opts Options) []byte {
-	var stack [32]frame
+	// Keep shallow queries on the stack; allocate only for deeper nesting.
+	var local [32]frame
+	stack := local[:]
 	root := frame{rowPrevious: -1}
 	depth := 0
 	var prev, before models.TokenWithSpan
 	var written models.TokenWithSpan
+	var innerPrevious models.TokenWithSpan
+	innerStart := -1
+	var outerPrevious models.TokenWithSpan
+	outerStart := -1
+	joinSide := false
 	var unary bool
 	pendingInto := false
 	pendingAS := 0
@@ -227,6 +235,9 @@ func appendNormalV2(b []byte, ts []models.TokenWithSpan, sql string, opts Option
 			prev = models.TokenWithSpan{}
 			before = prev
 			written = prev
+			innerStart = -1
+			outerStart = -1
+			joinSide = false
 			unary = false
 			pendingInto = false
 			unaryColon = false
@@ -279,11 +290,18 @@ func appendNormalV2(b []byte, ts []models.TokenWithSpan, sql string, opts Option
 				// Apply N11 to the emitted stream so normalizing twice is stable.
 				skip = pendingAS == 0 && written.Token.Type == models.TokenTypeSelect
 				up = true
-			case models.TokenTypeInner, models.TokenTypeOuter:
-				skip = next.Token.Type == models.TokenTypeJoin
+			case models.TokenTypeInner:
 				up = true
-			case models.TokenTypeInnerJoin, models.TokenTypeOuterJoin:
+			case models.TokenTypeOuter:
+				up = true
+			case models.TokenTypeInnerJoin:
 				value = "JOIN"
+			case models.TokenTypeOuterJoin:
+				if pendingAS == 0 && joinSide {
+					value = "JOIN"
+				} else {
+					value = "OUTER JOIN"
+				}
 			case models.TokenTypeAs:
 				if !(f != nil && f.cast) && !(ddl && !selected) && !(with && depth == 0 && !main) {
 					pendingAS++
@@ -321,10 +339,17 @@ func appendNormalV2(b []byte, ts []models.TokenWithSpan, sql string, opts Option
 								quote = '`'
 							}
 						}
+						// U& names can decode newlines even from a single-line
+						// source. Ordinary double quotes reject newlines; the
+						// backtick reader preserves them in every dialect.
+						if quote == '"' && strings.ContainsRune(value, '\n') {
+							quote = '`'
+						}
 					}
-				} else if literalString(typ) {
-					if prev.Token.Type == models.TokenTypeAs && !(f != nil && f.cast) {
-						// Only kept aliases need source bytes rather than decoded token content.
+				} else if literalString(typ) || (typ == models.TokenTypePlaceholder && len(value) > 0 && value[0] == '@') {
+					if typ == models.TokenTypePlaceholder || (prev.Token.Type == models.TokenTypeAs && !(f != nil && f.cast)) {
+						// Kept aliases and @ placeholders need source spelling:
+						// the tokenizer can decode a prefixed literal after '@'.
 						for line < t.Start.Line && lineStart < len(sql) {
 							if sql[lineStart] == '\n' {
 								line++
@@ -357,16 +382,48 @@ func appendNormalV2(b []byte, ts []models.TokenWithSpan, sql string, opts Option
 			if pendingAS > 0 {
 				if !nameToken(t) {
 					b, written = flushAliases(b, written, pendingAS)
+					innerStart = -1
+					joinSide = false
 					unary = false
 					unaryColon = false
 					pendingInto = false
 				}
 				pendingAS = 0
 			}
-			// A discarded token can reveal the identifier of :name after
-			// a unary sign. Remove only the provisional space before the
-			// trailing colon; the usual colon/name rule supplies the rest.
-			if unaryColon && typ == models.TokenTypeIdentifier && len(b) >= 3 && b[len(b)-2] == ' ' && b[len(b)-1] == ':' {
+			// Discarded tokens can hide the query head from the opening
+			// parenthesis's lookahead. Classify the first emitted token too.
+			if f != nil && f.in && len(b) == f.start &&
+				(typ == models.TokenTypeSelect || typ == models.TokenTypeWith || typ == models.TokenTypeValues || typ == models.TokenTypeTable) {
+				f.in = false
+			}
+			// A colon and a bare name emit one bind parameter, even when the
+			// dialect tokenizer returned two tokens or quotes were removed.
+			// Preserve its spelling and track the emitted placeholder so the
+			// following token sees the same context on the next normalization.
+			bindName := written.Token.Type == models.TokenTypeColon && nameToken(t) && quote == 0
+			if bindName {
+				up = false
+			}
+			// Canonicalizing a combined INNER JOIN can expose a run of
+			// preceding INNER tokens. Remove the whole emitted run so the
+			// next normalization cannot discover another optional INNER.
+			if !dotted && (typ == models.TokenTypeJoin || typ == models.TokenTypeInnerJoin) &&
+				written.Token.Type == models.TokenTypeInner && innerStart >= 0 {
+				b = b[:innerStart]
+				written = innerPrevious
+			}
+			// Remove optional OUTER only after an emitted LEFT/RIGHT/FULL
+			// and when the next emitted token becomes JOIN. This composes
+			// with discarded ASC and canonicalized INNER JOIN in one pass.
+			if !dotted && (typ == models.TokenTypeJoin || typ == models.TokenTypeInnerJoin) &&
+				written.Token.Type == models.TokenTypeOuter && outerStart >= 0 {
+				b = b[:outerStart]
+				written = outerPrevious
+			}
+			// A discarded token can reveal a bare or quoted identifier
+			// after a unary sign and colon. Match unaryTarget's identifier
+			// lookahead even when the identifier retains its quotes.
+			if unaryColon && (bindName || typ == models.TokenTypeIdentifier) && len(b) >= 3 && b[len(b)-2] == ' ' && b[len(b)-1] == ':' {
 				b[len(b)-2] = ':'
 				b = b[:len(b)-1]
 			}
@@ -394,7 +451,7 @@ func appendNormalV2(b []byte, ts []models.TokenWithSpan, sql string, opts Option
 				noSpace = noSpace || nameToken(written) || p.IsAggregateFunction() || p.IsDataType() || p == models.TokenTypeCast
 			}
 			p := written.Token.Type
-			if p == models.TokenTypeLParen || p == models.TokenTypeLBracket || p == models.TokenTypePeriod || p == models.TokenTypeDoubleColon || (p == models.TokenTypeColon && typ == models.TokenTypeIdentifier) || (unary && unaryTarget(t, next)) {
+			if p == models.TokenTypeLParen || p == models.TokenTypeLBracket || p == models.TokenTypePeriod || p == models.TokenTypeDoubleColon || bindName || (p == models.TokenTypeColon && typ == models.TokenTypeIdentifier) || (unary && unaryTarget(t, next)) {
 				noSpace = true
 			}
 			first := byte(0)
@@ -404,9 +461,20 @@ func appendNormalV2(b []byte, ts []models.TokenWithSpan, sql string, opts Option
 			if quote != 0 {
 				first = byte(quote)
 			}
+			// Redacting a qualifier can make '.' start a leading-dot
+			// number. Keep digit-starting names separate from the dot.
+			if p == models.TokenTypePeriod && first >= '0' && first <= '9' {
+				noSpace = false
+			}
 			if noSpace && len(b) > 0 {
 				last := b[len(b)-1]
 				if (last == '-' && first == '-') || (last == '/' && first == '*') || (last == '*' && first == '/') || (last == ':' && first == ':') {
+					noSpace = false
+				}
+				// A retained bracket identifier must end before a following
+				// ']'. Joining them creates a SQL Server escape and can consume
+				// another token or leave the identifier unterminated.
+				if written.Token.Quote == '[' && last == ']' && first == ']' {
 					noSpace = false
 				}
 			}
@@ -438,8 +506,13 @@ func appendNormalV2(b []byte, ts []models.TokenWithSpan, sql string, opts Option
 				if f != nil {
 					parent = f
 				}
-				isRow := prev.Token.Type == models.TokenTypeValues || (prev.Token.Type == models.TokenTypeComma && parent.rowPrevious >= 0)
+				// A frame owns either IN elements or VALUES rows. Applying both
+				// rewinds to the same comma leaves the other's offsets stale.
+				isRow := !parent.in && (prev.Token.Type == models.TokenTypeValues || (prev.Token.Type == models.TokenTypeComma && parent.rowPrevious >= 0))
 				depth++
+				if depth > len(stack) {
+					stack = append(stack, frame{})
+				}
 				if depth <= len(stack) {
 					m := (nameToken(prev) || prev.Token.Type.IsDataType()) && (ddl || before.Token.Type == models.TokenTypeDoubleColon || (before.Token.Type == models.TokenTypeAs && f != nil && f.cast))
 					in := prev.Token.Type == models.TokenTypeIn && next.Token.Type != models.TokenTypeSelect && next.Token.Type != models.TokenTypeWith && next.Token.Type != models.TokenTypeValues && next.Token.Type != models.TokenTypeTable
@@ -477,6 +550,29 @@ func appendNormalV2(b []byte, ts []models.TokenWithSpan, sql string, opts Option
 			unary = false
 			if typ == models.TokenTypePlus || typ == models.TokenTypeMinus {
 				unary = unaryAfter(written.Token.Type)
+			}
+			if !dotted && typ == models.TokenTypeInner {
+				if written.Token.Type != models.TokenTypeInner || innerStart < 0 {
+					innerStart = start
+					if start > 0 && b[start-1] == ' ' {
+						innerStart--
+					}
+					innerPrevious = written
+				}
+			} else {
+				innerStart = -1
+				outerStart = -1
+			}
+			if !dotted && typ == models.TokenTypeOuter && joinSide {
+				outerStart = start
+				if start > 0 && b[start-1] == ' ' {
+					outerStart--
+				}
+				outerPrevious = written
+			}
+			joinSide = !dotted && (typ == models.TokenTypeLeft || typ == models.TokenTypeRight || typ == models.TokenTypeFull)
+			if bindName {
+				t = models.TokenWithSpan{Token: models.Token{Type: models.TokenTypePlaceholder}}
 			}
 			written = t
 		}

@@ -9,14 +9,23 @@ import (
 	"testing"
 
 	"github.com/ajitpratap0/GoSQLX/pkg/fingerprint"
+	"github.com/ajitpratap0/GoSQLX/pkg/sql/keywords"
 )
 
 func FuzzNormalizeV2(f *testing.F) {
+	// Regression for /tmp/w5-08-fuzz-ca7775a415f0bcec (SQL Server).
+	f.Add("INNER OUTER JOIN", uint8(77))
+	dialects := append([]keywords.SQLDialect{""}, keywords.AllDialects()...)
+	add := func(sql string) {
+		for i := range dialects {
+			f.Add(sql, uint8(i))
+		}
+	}
 	for _, tc := range normalizeV2RuleCases {
-		f.Add(tc.sql)
+		add(tc.sql)
 	}
 	for _, q := range portableQueries(f) {
-		f.Add(q.SQL)
+		add(q.SQL)
 	}
 	// Rule examples include kept literals, quote escaping, all frame kinds,
 	// placeholder forms, multi-statements, and the operator glue guard.
@@ -35,21 +44,22 @@ func FuzzNormalizeV2(f *testing.F) {
 		"SELECT date '2020-01-01'", "SELECT count (x) FROM t", "SELECT - -1, a = - 1 FROM t",
 		";;SELECT 1; SELECT 2;;", "SELECT $$text$$, $1, x::varchar(10)", "", "SELECT FROM WHERE", "SELECT 'unterminated",
 	} {
-		f.Add(sql)
+		add(sql)
 	}
-	f.Fuzz(func(t *testing.T, sql string) {
-		norm, err := fingerprint.Normalize(sql)
+	f.Fuzz(func(t *testing.T, sql string, dialectIndex uint8) {
+		opts := fingerprint.Options{Dialect: dialects[int(dialectIndex)%len(dialects)]}
+		norm, err := fingerprint.NormalizeWithOptions(sql, opts)
 		if err != nil {
 			return
 		}
-		again, err := fingerprint.Normalize(norm)
+		again, err := fingerprint.NormalizeWithOptions(norm, opts)
 		if err != nil {
 			t.Fatalf("normal form %q cannot tokenize: %v", norm, err)
 		}
 		if norm != again {
 			t.Fatalf("not idempotent: %q -> %q", norm, again)
 		}
-		got, err := fingerprint.Fingerprint(sql)
+		got, err := fingerprint.FingerprintWithOptions(sql, opts)
 		if err != nil {
 			t.Fatal(err)
 		}

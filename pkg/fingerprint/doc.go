@@ -13,9 +13,11 @@
 // Redaction includes LIMIT/OFFSET, FETCH/TOP, typed literals and utility
 // statements; repeated question-mark placeholders also collapse in IN lists
 // and VALUES rows. Normalized text is a grouping key, not guaranteed to be
-// parseable SQL. The parser rejects some aliases without AS in RETURNING,
-// qualified projections, XMLATTRIBUTES, subqueries and view queries, as well as
-// placeholders in positions such as SRID ? and LIMIT ?.
+// parseable SQL. The symmetric reparse oracle tracks 46 corpus cases: 44 in
+// the implicit-alias parser gap (follow-up F1), covering aliases without AS in
+// RETURNING, projections, subqueries and view queries, one redacted SRID value,
+// and one transaction batch without statement separators. Placeholders in
+// positions such as LIMIT ? can also prevent parsing.
 // Token-stream normalization reports lexical errors, but does not validate SQL
 // syntax. Callers that require syntax validation should validate SQL separately.
 //

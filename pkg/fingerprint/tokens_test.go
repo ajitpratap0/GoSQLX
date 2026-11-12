@@ -149,6 +149,8 @@ var normalizeV2RuleCases = []struct {
 	{"N5_ddl", "CREATE TABLE t (a INT NOT NULL DEFAULT NULL, b INT NULL)", "CREATE TABLE t(a INT NOT NULL DEFAULT ?, b INT NULL)", ""},
 	{"N5_bool", "SELECT TRUE, FALSE, NULL; x IS NOT FALSE", "SELECT ?, ?, ?; x IS NOT FALSE", ""},
 	{"N6", "SELECT $1, ?, : name, @p", "SELECT $1, ?, :name, @p", ""},
+	{"N6_colon_unquoted_name", `:"a"`, ":a", keywords.DialectGeneric},
+	{"N6_colon_oracle_quoted_name", `:"A"(`, ":A (", keywords.DialectOracle},
 	{"N6_literal", "SELECT 1, 'x'", "SELECT ?, ?", ""},
 	{"N7_in", "x IN (1, 2, 3) AND y IN (?, ?)", "x IN (?) AND y IN (?)", ""},
 	{"N7_distinct", "x IN ($1, $2) AND y IN (SELECT 1, 2 FROM u)", "x IN ($1, $2) AND y IN (SELECT ?, ? FROM u)", ""},
@@ -156,6 +158,13 @@ var normalizeV2RuleCases = []struct {
 	{"N7_rows", "VALUES ($1,1),($2,2)", "VALUES ($1, ?), ($2, ?)", ""},
 	{"N8", "SELECT * FROM t INNER JOIN u LEFT OUTER JOIN v", "SELECT * FROM t JOIN u LEFT JOIN v", ""},
 	{"N8_cross", "SELECT * FROM t CROSS JOIN u RIGHT JOIN v", "SELECT * FROM t CROSS JOIN u RIGHT JOIN v", ""},
+	{"N8_inner_outer", "INNER OUTER JOIN", "INNER OUTER JOIN", keywords.DialectSQLServer},
+	{"N8_bare_outer", "OUTER JOIN", "OUTER JOIN", keywords.DialectSQLServer},
+	{"N8_outer_prefixes", "LEFT OUTER JOIN t RIGHT OUTER JOIN u FULL OUTER JOIN v", "LEFT JOIN t RIGHT JOIN u FULL JOIN v", keywords.DialectSQLServer},
+	{"N8_outer_discard", "LEFT OUTER ASC JOIN", "LEFT JOIN", keywords.DialectSQLServer},
+	{"N8_outer_inner", "LEFT OUTER INNER JOIN", "LEFT JOIN", keywords.DialectSQLServer},
+	{"N8_outer_dotted", "t.left OUTER JOIN", "t.left OUTER JOIN", keywords.DialectSQLServer},
+	{"N8_outer_alias", "LEFT AS OUTER JOIN", "LEFT AS OUTER JOIN", keywords.DialectSQLServer},
 	{"N9", "SELECT a AS x FROM t AS tt", "SELECT a x FROM t tt", ""},
 	{"N9_cte", "WITH c AS (SELECT 1) SELECT * FROM c", "WITH c AS (SELECT ?) SELECT * FROM c", ""},
 	{"N9_ddl", "CREATE SEQUENCE s AS bigint", "CREATE SEQUENCE s AS bigint", ""},
@@ -198,6 +207,10 @@ var normalizeV2RuleCases = []struct {
 	{"N7_values_query", "x IN (VALUES (1, 2), (3, 4))", "x IN (VALUES (?, ?))", ""},
 	{"N7_nested", "x IN ((1, 2), (3, 4), ($1, $2))", "x IN ((?, ?), ($1, $2))", ""},
 	{"N7_row_interruption", "VALUES (1), foo, (2)", "VALUES (?), foo, (?)", ""},
+	{"N9_xmlattributes", "SELECT XMLATTRIBUTES(employee_id AS id, 'label' AS title)", "SELECT XMLATTRIBUTES(employee_id AS id, ? AS title)", keywords.DialectOracle},
+	{"N9_xmlforest", "SELECT XMLFOREST(employee_id AS id)", "SELECT XMLFOREST(employee_id AS id)", keywords.DialectOracle},
+	{"N9_xml_nested_alias", "SELECT XMLFOREST(f(employee_id AS id) AS title) AS result", "SELECT XMLFOREST(f(employee_id id) AS title) result", keywords.DialectOracle},
+	{"N9_xml_quoted", `SELECT "XMLATTRIBUTES"(employee_id AS id), "XMLFOREST"(employee_id AS id), "CAST"(a AS item)`, `SELECT "XMLATTRIBUTES"(employee_id id), "XMLFOREST"(employee_id id), "CAST"(a item)`, ""},
 	{"N9_try_cast", "SELECT try_cast(x AS varchar(10)), safe_cast(x AS decimal(10,2))", "SELECT try_cast(x AS varchar(10)), safe_cast(x AS decimal(10, 2))", ""},
 	{"N9_after_discard", "SELECT a AS ASC x, b AS AS y", "SELECT a x, b y", ""},
 	{"N9_pending_kept", "SELECT a AS ASC 'lbl'; AS", "SELECT a AS ?; AS", ""},
@@ -220,5 +233,66 @@ func TestNormalizeV2Rules(t *testing.T) {
 				t.Errorf("normal form is not idempotent: %q -> %q, %v", got, again, err)
 			}
 		})
+	}
+	for _, dialect := range append([]keywords.SQLDialect{""}, keywords.AllDialects()...) {
+		for _, tc := range []struct{ sql, want string }{
+			{": a", ":a"},
+			{":A(", ":A ("},
+			{": a 'x'", ":a ?"},
+			{"SELECT - : ASC a, + : AS b", "SELECT -:a, +:b"},
+			{"CREATE TABLE t (x :a(10))", "CREATE TABLE t(x :a (?))"},
+		} {
+			t.Run("N6_colon_bind/"+string(dialect)+"/"+tc.sql, func(t *testing.T) {
+				opts := fingerprint.Options{Dialect: dialect}
+				got, err := fingerprint.NormalizeWithOptions(tc.sql, opts)
+				if err != nil || got != tc.want {
+					t.Fatalf("Normalize(%q)=%q, %v; want %q", tc.sql, got, err, tc.want)
+				}
+				again, err := fingerprint.NormalizeWithOptions(got, opts)
+				if err != nil || again != got {
+					t.Errorf("normal form is not idempotent: %q -> %q, %v", got, again, err)
+				}
+			})
+		}
+	}
+}
+
+// Deep frames must retain the same AS and type-modifier rules as shallow frames.
+func TestNormalizeV2DeepFrames(t *testing.T) {
+	for _, depth := range []int{33, 34, 65} {
+		for _, tc := range []struct{ sql, want string }{
+			{"CAST(a AS varchar(10))", "CAST(a AS varchar(10))"},
+			{"XMLATTRIBUTES(a AS id)", "XMLATTRIBUTES(a AS id)"},
+			{"XMLFOREST(f(a AS id) AS title)", "XMLFOREST(f(a id) AS title)"},
+			{`"CAST"(a AS item)`, `"CAST"(a item)`},
+		} {
+			prefix, suffix := "SELECT "+strings.Repeat("(", depth), strings.Repeat(")", depth)
+			sql, want := prefix+tc.sql+suffix, prefix+tc.want+suffix
+			got, err := fingerprint.Normalize(sql)
+			if err != nil || got != want {
+				t.Fatalf("depth %d: Normalize(%q)=%q, %v; want %q", depth, sql, got, err, want)
+			}
+			again, err := fingerprint.Normalize(got)
+			if err != nil || again != got {
+				t.Fatalf("depth %d: normal form is not idempotent: %q -> %q, %v", depth, got, again, err)
+			}
+		}
+	}
+}
+
+func TestNormalizeV2PooledDialectReset(t *testing.T) {
+	for i := 0; i < 200; i++ {
+		for _, tc := range []struct {
+			dialect keywords.SQLDialect
+			want    string
+		}{
+			{keywords.DialectMySQL, "Users"},
+			{"", `"Users"`},
+		} {
+			got, err := fingerprint.NormalizeWithOptions(`"Users"`, fingerprint.Options{Dialect: tc.dialect})
+			if err != nil || got != tc.want {
+				t.Fatalf("iteration %d dialect %q: got %q, %v; want %q", i, tc.dialect, got, err, tc.want)
+			}
+		}
 	}
 }

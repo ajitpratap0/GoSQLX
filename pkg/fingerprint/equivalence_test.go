@@ -119,14 +119,14 @@ func oracleFor(sql string, ts []models.TokenWithSpan) mutationOracle {
 		if i+1 < len(ts) {
 			next = ts[i+1].Token.Type
 		}
-		inCast := len(stack) > 0 && len(stack) <= 32 && cast[stack[len(stack)-1]]
+		inCast := len(stack) > 0 && cast[stack[len(stack)-1]]
 		o.flip[i] = (k.IsKeyword() && prev != models.TokenTypePeriod && next != models.TokenTypePeriod) || (k == models.TokenTypeIdentifier && !quotedOracle(x) && stringLiteral(next))
 		if k == models.TokenTypeLParen {
-			c := i > 0 && (strings.EqualFold(ts[i-1].Token.Value, "CAST") || strings.EqualFold(ts[i-1].Token.Value, "TRY_CAST") || strings.EqualFold(ts[i-1].Token.Value, "SAFE_CAST"))
+			c := i > 0 && !quotedOracle(ts[i-1]) && (strings.EqualFold(ts[i-1].Token.Value, "CAST") || strings.EqualFold(ts[i-1].Token.Value, "TRY_CAST") || strings.EqualFold(ts[i-1].Token.Value, "SAFE_CAST") || strings.EqualFold(ts[i-1].Token.Value, "XMLATTRIBUTES") || strings.EqualFold(ts[i-1].Token.Value, "XMLFOREST"))
 			cast[i] = c
 			typeName := i > 0 && (prev == models.TokenTypeIdentifier || quotedOracle(ts[i-1]) || prev.IsDataType())
 			context := ddl || (i > 1 && ts[i-2].Token.Value == "::") || (i > 1 && ts[i-2].Token.Type == models.TokenTypeAs && inCast)
-			if typeName && context && len(stack) < 32 {
+			if typeName && context {
 				j := i + 1
 				for j < len(ts) && (ts[j].Token.Type == models.TokenTypeNumber || ts[j].Token.Type == models.TokenTypeComma) {
 					j++
@@ -1143,23 +1143,115 @@ func TestSubstituteQuestionTokens(t *testing.T) {
 	}
 }
 
-// These are the eight parser limitations measured by the external Run 8 driver.
-// Normalized text is a grouping key, not guaranteed parseable SQL. An entry must
-// still fail the substituted parse; improvements require removing that entry.
+// implicitAliasReparses classifies a parser gap only if inserting AS at the
+// reported alias tokens makes the entire substituted statement parse. Each
+// retry must advance to a later original token, so unrelated failures and
+// repeated failures at the same location cannot be hidden by this class.
+func implicitAliasReparses(sql string, err error) bool {
+	lastOffset := -1
+	for err != nil {
+		var parseErr *sqlerrors.Error
+		located := err
+		for {
+			if !errors.As(located, &parseErr) {
+				return false
+			}
+			if parseErr.Location.Line > 0 && parseErr.Location.Column > 0 {
+				break
+			}
+			// CREATE VIEW wraps its query error without a location; inspect
+			// the underlying structured error rather than guessing an alias.
+			located = errors.Unwrap(parseErr)
+		}
+		offset := sourceOffset(sql, parseErr.Location)
+		if offset <= lastOffset || offset > len(sql) {
+			return false
+		}
+		ts, tokenErr := equivalenceTokens(sql, "")
+		if tokenErr != nil {
+			return false
+		}
+		alias := false
+		var requiredAS []bool
+		for i, token := range ts {
+			if token.Token.Type == models.TokenTypeLParen {
+				keep := false
+				if i > 0 && !quotedOracle(ts[i-1]) {
+					switch strings.ToUpper(ts[i-1].Token.Value) {
+					case "CAST", "TRY_CAST", "SAFE_CAST", "XMLATTRIBUTES", "XMLFOREST":
+						keep = true
+					}
+				}
+				requiredAS = append(requiredAS, keep)
+			} else if token.Token.Type == models.TokenTypeRParen && len(requiredAS) > 0 {
+				requiredAS = requiredAS[:len(requiredAS)-1]
+			}
+			if sourceOffset(sql, token.Start) == offset && i > 0 &&
+				(token.Token.Type == models.TokenTypeIdentifier || quotedOracle(token)) &&
+				ts[i-1].Token.Type != models.TokenTypeAs &&
+				(len(requiredAS) == 0 || !requiredAS[len(requiredAS)-1]) {
+				alias = true
+				break
+			}
+		}
+		if !alias {
+			return false
+		}
+		sql = sql[:offset] + "AS " + sql[offset:]
+		lastOffset = offset + len("AS ")
+		tree, nextErr := gosqlx.Parse(sql)
+		if nextErr == nil {
+			ast.ReleaseAST(tree)
+			return true
+		}
+		err = nextErr
+	}
+	return false
+}
+
+func TestImplicitAliasReparses(t *testing.T) {
+	for _, tc := range []struct {
+		name, sql string
+		want      bool
+	}{
+		{"bare", "SELECT id customer_id FROM customers", true},
+		{"qualified", "SELECT a.id first_id, b.id second_id FROM a JOIN b ON a.id = b.id", true},
+		{"returning", "DELETE FROM customers RETURNING id deleted_id", true},
+		{"nested", "SELECT * FROM (SELECT a.id old_id FROM a) q", true},
+		{"view", "CREATE VIEW customers AS SELECT id customer_id FROM source", true},
+		{"multiline", "SELECT a.id first_id,\nb.id second_id FROM a, b", true},
+		{"unrelated", "SELECT id customer_id FROM", false},
+		{"missing_comma", "SELECT id customer_id other_id FROM customers", false},
+		{"bad_limit", "SELECT id customer_id FROM customers LIMIT )", false},
+		{"batch_without_semicolons", "BEGIN TRANSACTION UPDATE t SET id = 1 COMMIT TRANSACTION", false},
+		{"xml_requires_as", "SELECT XMLELEMENT(NAME employee, XMLATTRIBUTES(employee_id id)) FROM employees", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			tree, err := gosqlx.Parse(tc.sql)
+			if err == nil {
+				ast.ReleaseAST(tree)
+				t.Fatal("fixture must fail before AS insertion")
+			}
+			if got := implicitAliasReparses(tc.sql, err); got != tc.want {
+				t.Errorf("implicit-alias=%v want=%v: %v", got, tc.want, err)
+			}
+		})
+	}
+}
+
+// F1 must drive this independently detected implicit-alias parser gap to zero.
+const wantImplicitAliasReparseFailures = 44
+
+// Only failures not repaired by explicit AS belong here. Every entry must
+// still fail the symmetric substituted parse and explain the remaining gap.
 var reparseLimitations = map[string]string{
-	"realworld/mariadb/05_mariadb_specific.sql#14": "RETURNING id new_id requires explicit AS in the parser",
-	"realworld/mariadb/09_mysql_compat_misc.sql#4": "qualified projections orders.id t0_r0 and users.id t1_r0 require AS in the parser",
-	"realworld/mysql/11_stored_programs.sql#11":    "SRID requires a numeric value; N4's placeholder substituted with 'x' is not accepted",
-	"realworld/oracle/02_reporting.sql#22":         "qualified projection m.last_name manager requires AS in the parser",
-	"realworld/oracle/05_dialect_specific.sql#45":  "XMLATTRIBUTES(employee_id id) requires AS before the attribute alias",
-	"realworld/oracle/06_etl_merge.sql#15":         "UPDATE subquery projections e.salary old_sal and n.salary new_sal require AS in the parser",
-	"realworld/postgresql/06_cte_dml_etl.sql#18":   "RETURNING x.id deleted_id requires explicit AS in the parser",
-	"realworld/snowflake/09_dbt_models.sql#3":      "the view query parser rejects the projection id customer_id without AS",
+	"realworld/mysql/11_stored_programs.sql#11":          "SRID requires a numeric value; N4's placeholder substituted with 'x' is not accepted",
+	"realworld/sqlserver/11_batches_no_semicolons.sql#3": "the parser requires statement separators in this transaction batch; legacy formatting inserts semicolons but token normalization preserves their absence",
 }
 
 func TestNormalizeV2Reparses(t *testing.T) {
 	retokenized, names, legacyAccepted, legacyReparseSkipped, limitOffsetSkipped, reparsed := 0, 0, 0, 0, 0, 0
-	substitutedStatements, substitutedQuestions, failures := 0, 0, 0
+	substitutedStatements, substitutedQuestions, implicitAliases, failures := 0, 0, 0, 0
 	allowlistedFailures := make(map[string]bool, len(reparseLimitations))
 	for _, s := range equivalenceCorpus(t) {
 		// Tokenization/name soundness covers every v2-accepted statement,
@@ -1183,7 +1275,12 @@ func TestNormalizeV2Reparses(t *testing.T) {
 			continue
 		}
 		legacyAccepted++
-		baseline, e := gosqlx.Parse(legacy)
+		legacyTokens, e := equivalenceTokens(legacy, "")
+		if e != nil {
+			t.Fatalf("%s legacy re-tokenization: %v", s.Key(), e)
+		}
+		legacyParseText, _ := substituteQuestionTokens(legacy, legacyTokens)
+		baseline, e := gosqlx.Parse(legacyParseText)
 		if e != nil {
 			legacyReparseSkipped++
 			continue
@@ -1196,6 +1293,11 @@ func TestNormalizeV2Reparses(t *testing.T) {
 		}
 		tree, e := gosqlx.Parse(parseText)
 		if e != nil {
+			if implicitAliasReparses(parseText, e) {
+				implicitAliases++
+				t.Logf("T7 implicit-alias parser gap %s", s.Key())
+				continue
+			}
 			if reason, ok := reparseLimitations[s.Key()]; ok {
 				allowlistedFailures[s.Key()] = true
 				t.Logf("T7 known parser limitation %s: %s", s.Key(), reason)
@@ -1215,10 +1317,13 @@ func TestNormalizeV2Reparses(t *testing.T) {
 		ast.ReleaseAST(tree)
 		reparsed++
 	}
+	if implicitAliases != wantImplicitAliasReparseFailures {
+		t.Errorf("implicit-alias failures=%d want=%d; review the symmetric oracle and update the F1 count", implicitAliases, wantImplicitAliasReparseFailures)
+	}
 	for key, reason := range reparseLimitations {
 		if !allowlistedFailures[key] {
 			t.Errorf("%s allowlisted parser limitation no longer fails the substituted parse; remove or review the entry: %s", key, reason)
 		}
 	}
-	t.Logf("T7 retokenized=%d names=%d legacy_accepted=%d legacy_reparse_skipped=%d legacy_parseable=%d substituted_statements=%d substituted_questions=%d limit_offset_placeholder_skipped=%d eligible=%d reparsed=%d allowlisted_failures=%d failures=%d", retokenized, names, legacyAccepted, legacyReparseSkipped, legacyAccepted-legacyReparseSkipped, substitutedStatements, substitutedQuestions, limitOffsetSkipped, legacyAccepted-legacyReparseSkipped-limitOffsetSkipped, reparsed, len(allowlistedFailures), failures)
+	t.Logf("T7 retokenized=%d names=%d legacy_accepted=%d legacy_reparse_skipped=%d legacy_parseable=%d substituted_statements=%d substituted_questions=%d limit_offset_placeholder_skipped=%d eligible=%d reparsed=%d implicit_alias_failures=%d allowlisted_failures=%d failures=%d", retokenized, names, legacyAccepted, legacyReparseSkipped, legacyAccepted-legacyReparseSkipped, substitutedStatements, substitutedQuestions, limitOffsetSkipped, legacyAccepted-legacyReparseSkipped-limitOffsetSkipped, reparsed, implicitAliases, len(allowlistedFailures), failures)
 }

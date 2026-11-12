@@ -217,7 +217,8 @@ jobs:
         check-latest: true
         cache: true
 
-    - name: Run fuzz regression (corpus only)
+    - name: Run fuzz regression
       run: |
         go test -fuzz=FuzzTokenizer -fuzztime=10s -timeout=2m ./pkg/sql/tokenizer/ || true
         go test -fuzz=FuzzScanSQL -fuzztime=10s -timeout=2m ./pkg/sql/security/ || true
+        go test -run ^$ -fuzz=FuzzNormalizeV2 -fuzztime=10s -timeout=2m ./pkg/fingerprint/

@@ -37,8 +37,9 @@ func (p *Parser) wordAt(n int) string {
 	tok := p.tokenAt(n)
 	t := tok.Token
 	// A delimited identifier (`x`, [x]) is recognized by its span; keyword
-	// tokens are never delimited, and the parts of a compound keyword
-	// (ORDER BY) share the compound's span.
+	// tokens are never delimited. Two-part compounds carry per-part spans when
+	// SplitSpans can rebuild them; three-part synthetic joins and spanless or
+	// malformed compounds keep the shared span.
 	if t.Quote != 0 || t.Value == "" ||
 		(t.Type == models.TokenTypeIdentifier && isQuotedSpan(&tok)) {
 		return ""

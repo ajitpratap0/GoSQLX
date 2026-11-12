@@ -20,6 +20,8 @@ import (
 
 	"github.com/ajitpratap0/GoSQLX/pkg/errors"
 	"github.com/ajitpratap0/GoSQLX/pkg/models"
+	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
+	"github.com/ajitpratap0/GoSQLX/pkg/sql/parser"
 )
 
 // TestCreateDiagnosticFromError_WithStructuredError tests that error codes
@@ -157,6 +159,32 @@ func TestCreateDiagnosticFromError_EdgeCases(t *testing.T) {
 			}
 			if diag.Range.Start.Character < 0 {
 				t.Errorf("Character should be >= 0, got %d", diag.Range.Start.Character)
+			}
+		})
+	}
+}
+
+// Actual parser errors retain their code and message while pointing at BY.
+func TestCompoundSpansDiagnostic(t *testing.T) {
+	for _, tc := range []struct {
+		sql, message string
+		start, end   int
+	}{
+		{"INSERT INTO t (group by) VALUES (1)", "expected ), got BY", 21, 24},
+		{"UPDATE t SET order by = 1", "expected =, got BY", 19, 21},
+	} {
+		t.Run(tc.sql, func(t *testing.T) {
+			a, err := parser.ParseBytes([]byte(tc.sql))
+			ast.ReleaseAST(a)
+			if err == nil {
+				t.Fatal("expected parse error")
+			}
+			diag := createDiagnosticFromError(tc.sql, strings.Split(tc.sql, "\n"), err, 0)
+			if diag.Range.Start != (Position{Line: 0, Character: tc.start}) || diag.Range.End != (Position{Line: 0, Character: tc.end}) {
+				t.Errorf("diagnostic range = %+v, want (0,%d)..(0,%d)", diag.Range, tc.start, tc.end)
+			}
+			if diag.Message != tc.message || diag.Code != string(errors.ErrCodeExpectedToken) || diag.Severity != SeverityError || diag.Source != "gosqlx" {
+				t.Errorf("diagnostic metadata changed: %+v", diag)
 			}
 		})
 	}

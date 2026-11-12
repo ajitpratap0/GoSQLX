@@ -269,6 +269,7 @@ func initPatterns() {
 			patterns = append(patterns, &group.patterns[i])
 		}
 	}
+	patterns = append(patterns, &stackedPrefilter)
 	for i := range commentPatterns {
 		patterns = append(patterns, &commentPatterns[i].compiledPattern)
 	}
@@ -374,11 +375,6 @@ func initCompiledPatterns() {
 
 		// Stacked query injection patterns (destructive statements after semicolon)
 		PatternStackedQuery: {
-			patterns: []compiledPattern{
-				compilePattern(`;[\s\v]*(?i)(DROP|DELETE|TRUNCATE|UPDATE|INSERT|ALTER)\b`),
-				compilePattern(`;[\s\v]*(?i)EXEC\b`),
-				compilePattern(`;[\s\v]*(?i)EXECUTE\b`),
-			},
 			severity:   SeverityCritical,
 			risk:       "Stacked query injection with destructive operations",
 			suggestion: "Block semicolons in user input or use parameterized queries",
@@ -812,7 +808,7 @@ func (s *Scanner) scanSQL(sql string, prefilter bool) *ScanResult {
 	s.detectRegexPatterns(views, pf, PatternUnionGeneric, result)
 
 	// Check for stacked query patterns
-	s.detectRegexPatterns(views, pf, PatternStackedQuery, result)
+	detectStackedQueries(s, views, pf, result)
 
 	// Update counts
 	s.updateCounts(result)

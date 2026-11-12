@@ -33,3 +33,15 @@ func EOFSentinelClean(p *Parser) bool { return p.eof == (models.TokenWithSpan{})
 // CursorRepointed reports whether p holds no pointer into a token slice, i.e.
 // currentToken is its own EOF sentinel (the state after Reset or Release).
 func CursorRepointed(p *Parser) bool { return p.currentToken == &p.eof && p.tokens == nil }
+
+// PreprocessTokens is the shipped preprocess pass (a loop over
+// internal/tokclass), for the external differential harness.
+func PreprocessTokens(toks []models.TokenWithSpan) []models.TokenWithSpan {
+	return preprocessTokens(toks)
+}
+
+// LegacyPreprocessTokens is the frozen pre-tokclass preprocess pass
+// (legacy_preprocess_test.go), the harness oracle.
+func LegacyPreprocessTokens(toks []models.TokenWithSpan) []models.TokenWithSpan {
+	return legacyPreprocessTokens(toks)
+}

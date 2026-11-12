@@ -21,8 +21,8 @@ GoSQLX is a **production-ready**, **race-free**, high-performance SQL parsing SD
   behaviour. Never relax a test, threshold or timeout to hide a problem.
 - **Breaking changes are allowed when they are the right fix.** Ship them in
   the current release (no separate major version or `/v2` module path) with
-  an explicit "Breaking Changes" / migration entry in CHANGELOG.md and the PR
-  body. Do not substitute an opt-in flag or compatibility shim for the right
+  an explicit migration entry in a `changelog.d/<slug>.breaking-changes.md`
+  fragment and the PR body. Do not substitute an opt-in flag or compatibility shim for the right
   design unless the maintainer asks for one.
 - **Nothing is deferred to a future major ("2.0", "v-next").** Work planned for
   a later major ships in the current release. An idea with weak evidence is
@@ -245,7 +245,7 @@ go test -bench=. -benchmem -cpuprofile=cpu.prof ./pkg/...    # With profiling
 4. Add parsing logic in `pkg/sql/parser/parser.go`
 5. Write comprehensive tests
 6. Run: `task test:race && task bench`
-7. Update CHANGELOG.md
+7. Add a `changelog.d/<slug>.<section>.md` fragment with Markdown list items (see `changelog.d/README.md`), then run `task changelog:check`.
 
 ### Debugging Parsing Issues
 ```bash
@@ -262,7 +262,7 @@ Use the visitor pattern in `pkg/sql/ast/visitor.go` to traverse and inspect AST.
 ```bash
 # 1. Develop in feature branch
 git checkout -b feature/branch-name
-# ... make changes, update CHANGELOG.md as [Unreleased] ...
+# ... make changes, add a changelog.d/<slug>.<section>.md fragment ...
 git push origin feature/branch-name
 
 # 2. Create PR and get it merged
@@ -270,6 +270,7 @@ git push origin feature/branch-name
 # 3. After merge, create docs PR for release finalization
 git checkout main && git pull
 git checkout -b docs/vX.Y.Z-release
+task changelog:collect
 # Update CHANGELOG.md with version and date
 git push origin docs/vX.Y.Z-release
 

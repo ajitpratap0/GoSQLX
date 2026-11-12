@@ -13,13 +13,17 @@
 // limitations under the License.
 
 // Package poolstats holds the precreated, cache-line padded counters for the
-// three standard pools (tokenizer, parser, ast). The typed API is a single
-// atomic add and inlines at every call site, with no lock, map lookup or
-// string hash. pkg/metrics exposes the counters through GetPoolStats and
-// ResetPoolStats.
+// three standard pools (tokenizer, parser, ast). Counters count only while
+// metrics are enabled. The typed API inlines at every call site, with no lock,
+// map lookup or string hash. pkg/metrics exposes the counters through
+// GetPoolStats and ResetPoolStats.
 package poolstats
 
-import "sync/atomic"
+import (
+	"sync/atomic"
+
+	"github.com/ajitpratap0/GoSQLX/internal/metricsgate"
+)
 
 // Counter is a Get/Put counter pair padded to its own 64-byte cache line so
 // the three standard pools never false-share.
@@ -29,11 +33,32 @@ type Counter struct {
 	_    [48]byte
 }
 
-// Get records one Get() and returns the new total.
-func (c *Counter) Get() int64 { return c.gets.Add(1) }
+// Get records one Get() only while metrics are enabled and returns the new total.
+// It returns 0 without recording anything when metrics are disabled.
+func (c *Counter) Get() int64 {
+	if !metricsgate.Enabled() {
+		return 0
+	}
+	return c.getSlow()
+}
 
-// Put records one Put() and returns the new total.
-func (c *Counter) Put() int64 { return c.puts.Add(1) }
+// getSlow is kept out of line so the disabled path is a fall-through with no
+// taken branch; only the enabled path pays the call and the locked add.
+//
+//go:noinline
+func (c *Counter) getSlow() int64 { return c.gets.Add(1) }
+
+// Put records one Put() only while metrics are enabled and returns the new total.
+// It returns 0 without recording anything when metrics are disabled.
+func (c *Counter) Put() int64 {
+	if !metricsgate.Enabled() {
+		return 0
+	}
+	return c.putSlow()
+}
+
+//go:noinline
+func (c *Counter) putSlow() int64 { return c.puts.Add(1) }
 
 // Load returns the current gets and puts.
 func (c *Counter) Load() (gets, puts int64) { return c.gets.Load(), c.puts.Load() }

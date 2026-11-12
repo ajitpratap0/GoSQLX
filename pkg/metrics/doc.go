@@ -92,6 +92,12 @@
 //	statementCount := len(ast.Statements)
 //	metrics.RecordParse(duration, statementCount, err)
 //
+// # Pool statistics
+//
+// Pool Get/Put statistics count only while metrics are enabled. Call Enable before
+// the workload to measure; counts are not retroactive. GetPoolStats returns only
+// the three standard pools with zero values while metrics are disabled.
+//
 // # Object Pool Metrics
 //
 // Track pool efficiency for all pool types:

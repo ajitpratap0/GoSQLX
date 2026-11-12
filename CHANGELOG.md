@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **Migration:** Call `metrics.Enable()` before the workload to be measured, for example at process start. Tests asserting pool balance through `GetPoolStats` deltas should enable metrics first and restore the previous state in cleanup. Counts are not retroactive.
 
 ### Added
+- `pkg/formatter`: width-scaling regression guard for `BenchmarkRenderScale/wide` (exact output, time ratio and bytes per output byte over compact/lower/readable/semicolon/postgresql modes); test-only, no behaviour change (#958, W5-13).
 - **Benchmark and perf-gate infrastructure (performance overhaul, wave 0)**:
   pull requests are now judged by interleaved A/B measurements instead of
   absolute numbers. No library behaviour changes apart from #901 (see Fixed). The pieces, by PR:
@@ -105,8 +106,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - The LSP benchmark server (`setupTestServer`) discards its output, so
     benchmarks that publish diagnostics no longer time a growing buffer.
 
+- **Token classification moved to `internal/tokclass`** (W3-03a1; internal
+  refactor, no behaviour change): the compound-keyword split tables, the
+  identifier/keyword → specific-type remaps, the COUNT..MAX → identifier rule
+  and the backtick-width rule applied by the parser's preprocess pass now live
+  in one internal package that the tokenizer's planned parser-ready mode
+  (W3-03b) will share. Tokens, spans, ASTs, errors and every behaviour golden
+  are unchanged. A differential test checks the new pass, field for field,
+  against a frozen copy of the old one over the benchmark corpus, the SQL
+  fixtures and a generated compound-keyword, Unicode-fold, odd-identifier and
+  tokenizer-error matrix in all 11 dialects.
+
 ### Performance
 - **Pools [W1-07]**: Skip atomic pool counter updates while metrics are disabled. Measured on the amd64 layout-randomized perf gate, `PoolGetPut/serial` is CPU-dependent. Run 41681726333 (d8bee44, EPYC 9V74 Zen4): -5.41%, p<0.001, faster. Run 41692237594 (3843b87, EPYC 7763 Zen3): +3.93%, p<0.001, REGRESSION. Run 41714155385 (9a7a5fe, Xeon 6973P-C): -37.06%, p<0.001, faster. Run 41718173085 (d0169d9, Zen4): -6.51%, p=0.002, not BH-significant (superseded). Head-of-PR verdict, run 42325763306 (94166cd, merge ref 89935eef, EPYC 9V74 Zen4): `PoolGetPut/serial` -5.30%, p<0.001, status faster (BH-significant), spread 0.30%, A/A' +0.02%; the target is not in the low-power list (4/52 low-power: L010, E2E/join, Normalize/complex, E2E/aggregate); A/A' moved 0/52; suite geomean -0.00% (p=0.799); no gated regression. Production code is identical across 3843b87..94166cd (later commits are tests, CHANGELOG and merges of main). The planned <= -20% gain is missed on Zen4 (-5.3%) and Zen3 (+3.93% regression) and met only on the Xeon. allocs/op and B/op are unchanged and instructions/op is at most +0.40% (e2e/delete); the benefit is expected mainly in contended/parallel use, which the gate does not measure.
+- **Semantic tokens**: pooled highlighting scratch and shared case folding cut 30 KB semantic-token allocs/op by 98.9–99.0% (2,039 to 20, 1,863 to 21, 1,953 to 21), B/op by 26.0–26.8% and sec/op by 13.3–14.3% (amd64 layout-randomized gate); the new highlight golden pins output. No behaviour change. [W6-11]
 - **Linter**: the lint pipeline uses the pooled parser and pooled dialect tokenizer; behavior is unchanged. [W6-06ab]
 - **Linter**: aliasing consistency and four visitor-based rules now reuse the cached preorder AST node list. Violations are unchanged; there is no API or behavior change. [W6-05b]
 - **Linter**: rule L007 (keyword case consistency) scans words without allocating (substring words, ASCII upper-casing into a stack buffer before the keyword lookup). Output is unchanged. On the canonical benchmarks (Apple M4, local), `BenchmarkLintRule/L007` allocates about 98% fewer objects (72565 to 1194 allocs/op) and about 97% fewer bytes, and `BenchmarkLintRW` allocates about 12.5% fewer objects. [W6-03]

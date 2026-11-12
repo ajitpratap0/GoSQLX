@@ -114,7 +114,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   tokenizer-error matrix in all 11 dialects.
 
 ### Performance
-- **Security**: `Scanner.Scan` walks the AST with a pooled struct visitor instead of a per-call closure and ancestor slice. On the amd64 layout-randomized perf gate (20 layouts per arm), `BenchmarkScanASTRW` B/op is -53.27% to -58.31% on all eight dialects (target -45% met), allocs/op about -29% to -33%, and time -12.3% to -17.9% (all p<0.001, none worse). Findings are byte-identical (differential test against the previous implementation over the corpus); no API or behaviour change. [W6-02]
 - **Semantic tokens**: pooled highlighting scratch and shared case folding cut 30 KB semantic-token allocs/op by 98.9–99.0% (2,039 to 20, 1,863 to 21, 1,953 to 21), B/op by 26.0–26.8% and sec/op by 13.3–14.3% (amd64 layout-randomized gate); the new highlight golden pins output. No behaviour change. [W6-11]
 - **Linter**: the lint pipeline uses the pooled parser and pooled dialect tokenizer; behavior is unchanged. [W6-06ab]
 - **Linter**: aliasing consistency and four visitor-based rules now reuse the cached preorder AST node list. Violations are unchanged; there is no API or behavior change. [W6-05b]

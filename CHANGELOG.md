@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- `pkg/formatter`: width-scaling regression guard for `BenchmarkRenderScale/wide` (exact output, time ratio and bytes per output byte over compact/lower/readable/semicolon/postgresql modes); test-only, no behaviour change (#958, W5-13).
 - **Benchmark and perf-gate infrastructure (performance overhaul, wave 0)**:
   pull requests are now judged by interleaved A/B measurements instead of
   absolute numbers. No library behaviour changes apart from #901 (see Fixed). The pieces, by PR:
@@ -101,8 +102,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - The LSP benchmark server (`setupTestServer`) discards its output, so
     benchmarks that publish diagnostics no longer time a growing buffer.
 
+- **Token classification moved to `internal/tokclass`** (W3-03a1; internal
+  refactor, no behaviour change): the compound-keyword split tables, the
+  identifier/keyword → specific-type remaps, the COUNT..MAX → identifier rule
+  and the backtick-width rule applied by the parser's preprocess pass now live
+  in one internal package that the tokenizer's planned parser-ready mode
+  (W3-03b) will share. Tokens, spans, ASTs, errors and every behaviour golden
+  are unchanged. A differential test checks the new pass, field for field,
+  against a frozen copy of the old one over the benchmark corpus, the SQL
+  fixtures and a generated compound-keyword, Unicode-fold, odd-identifier and
+  tokenizer-error matrix in all 11 dialects.
+
 ### Performance
-- **Identifier quoting**: checks names byte by byte with a class table, falling back to the rune loop for non-ASCII names; reserved-name lookup uses a first-letter/length index derived from the word list instead of a map lookup. `AST.SQL()` and formatter output are unchanged. Measured on the amd64 CI runner (layout-randomized matrix run 41706707217, GOGC=off, 16 layouts per arm, base-vs-head Mann-Whitney per row; the run hit the 230-minute job limit before its A/A' stage, so there is no A/A' control for these rows): `BenchmarkRender/sql` -11.0% to -19.9% (all 11 statements, p<0.001) and `BenchmarkRender/readable` -5.7% to -11.0% (p<0.001), allocs/op and B/op unchanged, so the PLAN targets (`render/sql` <= -7%, `render/readable` <= -3%) are met. The gated `BenchmarkNormalize`, which renders through the same helpers, is faster too (layout-randomized PR gate, current head on AMD EPYC 7763: simple_select -1.56% (p 0.002), join -1.46% (p 0.001), complex -2.63% (p<0.001); an earlier run on an Intel Xeon 6975P-C showed -2.85%, -2.35% and -4.94%, so the range across runs is about -1.5% to -5%; none of these is past the 3% flag threshold; A/A' 0 of 52 benchmarks moved more than 3%), and no gated benchmark regressed. [W5-04]
+- **Semantic tokens**: pooled highlighting scratch and shared case folding cut 30 KB semantic-token allocs/op by 98.9–99.0% (2,039 to 20, 1,863 to 21, 1,953 to 21), B/op by 26.0–26.8% and sec/op by 13.3–14.3% (amd64 layout-randomized gate); the new highlight golden pins output. No behaviour change. [W6-11]
 - **Linter**: the lint pipeline uses the pooled parser and pooled dialect tokenizer; behavior is unchanged. [W6-06ab]
 - **Linter**: aliasing consistency and four visitor-based rules now reuse the cached preorder AST node list. Violations are unchanged; there is no API or behavior change. [W6-05b]
 - **Linter**: rule L007 (keyword case consistency) scans words without allocating (substring words, ASCII upper-casing into a stack buffer before the keyword lookup). Output is unchanged. On the canonical benchmarks (Apple M4, local), `BenchmarkLintRule/L007` allocates about 98% fewer objects (72565 to 1194 allocs/op) and about 97% fewer bytes, and `BenchmarkLintRW` allocates about 12.5% fewer objects. [W6-03]

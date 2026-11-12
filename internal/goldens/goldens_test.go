@@ -297,7 +297,7 @@ func TestSafeAndParallel(t *testing.T) {
 func TestCheckPassesOnCommittedGoldenShape(t *testing.T) {
 	// The committed goldens are produced by the per-package tests; here we
 	// only make sure every committed file parses into rows and columns.
-	for _, name := range []string{"tokens", "parse", "format", "fingerprint", "lint", "security", "transpile", "lsp"} {
+	for _, name := range []string{"tokens", "parse", "format", "fingerprint", "lint", "security", "transpile", "lsp", "highlight"} {
 		g := New(name, "", "x")
 		root := mustRoot(t)
 		data, err := readFile(g.Path(root))

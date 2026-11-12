@@ -2299,15 +2299,15 @@ type semanticTokenEncoding struct {
 }
 
 // semanticLegend is the legend advertised in the initialize response, and
-// semanticEncodings maps each category to its encoding in that legend.
+// semanticEncodings indexes each category's encoding in that legend.
 var semanticLegend, semanticEncodings = buildSemanticLegend()
 
 // buildSemanticLegend derives the legend from semanticTokenSpecs. Token types
 // and modifiers are listed in order of first use when walking categories in
 // declaration order, which keeps the legend deterministic.
-func buildSemanticLegend() (SemanticTokensLegend, map[highlight.Category]semanticTokenEncoding) {
+func buildSemanticLegend() (SemanticTokensLegend, [256]semanticTokenEncoding) {
 	legend := SemanticTokensLegend{TokenTypes: []string{}, TokenModifiers: []string{}}
-	encodings := make(map[highlight.Category]semanticTokenEncoding, len(semanticTokenSpecs))
+	var encodings [256]semanticTokenEncoding
 	typeIndex := make(map[string]uint32)
 	modIndex := make(map[string]uint32)
 
@@ -2356,67 +2356,82 @@ func semanticTokensLegend() SemanticTokensLegend {
 // end a line. Spans covering several lines (block comments, multi-line
 // strings) are split into one token per line because clients are not required
 // to support multi-line tokens. Zero-length tokens are never emitted.
+//
+// The emit block is deliberately written out twice (newline branch and
+// end-of-span) so the hot loop stays free of closure calls; keep both copies
+// in sync.
 func encodeSemanticTokens(content string, spans []highlight.Span) []uint32 {
 	data := make([]uint32, 0, len(spans)*5)
-
-	// Cursor state: byte offset into content and its LSP position.
 	pos, line, char := 0, uint32(0), uint32(0)
 	prevLine, prevChar := uint32(0), uint32(0)
-
-	emit := func(l, c, length uint32, enc semanticTokenEncoding) {
-		if length == 0 {
-			return
-		}
-		deltaLine := l - prevLine
-		deltaChar := c
-		if deltaLine == 0 {
-			deltaChar = c - prevChar
-		}
-		data = append(data, deltaLine, deltaChar, length, enc.tokenType, enc.modifiers)
-		prevLine, prevChar = l, c
-	}
-
-	// step consumes one rune or line break at pos, reporting whether it was
-	// a line break.
-	step := func() bool {
-		switch content[pos] {
-		case '\n':
-			pos++
-		case '\r':
-			pos++
-			if pos < len(content) && content[pos] == '\n' {
-				pos++
-			}
-		default:
-			r, size := utf8.DecodeRuneInString(content[pos:])
-			pos += size
-			char += uint32(utf16.RuneLen(r)) // RuneError (invalid UTF-8) counts as 1
-			return false
-		}
-		line++
-		char = 0
-		return true
-	}
-
+	n := len(content)
 	for _, sp := range spans {
 		enc := semanticEncodings[sp.Category]
-		if !enc.ok || sp.Start < 0 || sp.End > len(content) || sp.Start >= sp.End {
+		if !enc.ok || sp.Start < 0 || sp.End > n || sp.Start >= sp.End {
 			continue
 		}
+		// Advance to the span start.
 		for pos < sp.Start {
-			step()
-		}
-		// A preceding "\r\n" consumed as a unit can leave pos past Start;
-		// emit only the remainder of the span.
-		segLine, segChar := line, char
-		for pos < sp.End {
-			before := char
-			if step() {
-				emit(segLine, segChar, before-segChar, enc)
-				segLine, segChar = line, char
+			c := content[pos]
+			switch {
+			case c == '\n':
+				pos++
+				line++
+				char = 0
+			case c == '\r':
+				pos++
+				if pos < n && content[pos] == '\n' {
+					pos++
+				}
+				line++
+				char = 0
+			case c < utf8.RuneSelf:
+				pos++
+				char++
+			default:
+				r, size := utf8.DecodeRuneInString(content[pos:])
+				pos += size
+				char += uint32(utf16.RuneLen(r))
 			}
 		}
-		emit(segLine, segChar, char-segChar, enc)
+		segLine, segChar := line, char
+		for pos < sp.End {
+			c := content[pos]
+			switch {
+			case c == '\n' || c == '\r':
+				before := char
+				pos++
+				if c == '\r' && pos < n && content[pos] == '\n' {
+					pos++
+				}
+				line++
+				char = 0
+				if l := before - segChar; l != 0 {
+					dl, dc := segLine-prevLine, segChar
+					if dl == 0 {
+						dc = segChar - prevChar
+					}
+					data = append(data, dl, dc, l, enc.tokenType, enc.modifiers)
+					prevLine, prevChar = segLine, segChar
+				}
+				segLine, segChar = line, char
+			case c < utf8.RuneSelf:
+				pos++
+				char++
+			default:
+				r, size := utf8.DecodeRuneInString(content[pos:])
+				pos += size
+				char += uint32(utf16.RuneLen(r))
+			}
+		}
+		if l := char - segChar; l != 0 {
+			dl, dc := segLine-prevLine, segChar
+			if dl == 0 {
+				dc = segChar - prevChar
+			}
+			data = append(data, dl, dc, l, enc.tokenType, enc.modifiers)
+			prevLine, prevChar = segLine, segChar
+		}
 	}
 	return data
 }

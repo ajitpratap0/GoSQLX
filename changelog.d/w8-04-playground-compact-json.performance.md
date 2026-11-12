@@ -1,0 +1,1 @@
+- **Playground**: parse returns compact typed AST JSON v1 on request. Local, indicative deterministic parse measurements for small/medium/large inputs: payload bytes -75.7/-73.2/-91.6%; B/op -72/-80/-96%; allocs/op 14->10, 54->43, 714->527. Playground lint removes a second parse (no timing claim). [W8-04]

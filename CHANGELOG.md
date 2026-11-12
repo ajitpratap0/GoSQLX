@@ -9,7 +9,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- `gosqlxParse(sql, dialect, version)` accepts version 1 for AST JSON v1 (`version`, `node_type`, zero-valued fields omitted); omitted versions keep legacy indented output until the site switches in the v1.18 release. [W8-04]
 - `pkg/formatter`: width-scaling regression guard for `BenchmarkRenderScale/wide` (exact output, time ratio and bytes per output byte over compact/lower/readable/semicolon/postgresql modes); test-only, no behaviour change (#958, W5-13).
 - **Benchmark and perf-gate infrastructure (performance overhaul, wave 0)**:
   pull requests are now judged by interleaved A/B measurements instead of
@@ -116,7 +115,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   tokenizer-error matrix in all 11 dialects.
 
 ### Performance
-- **Playground**: parse returns compact typed AST JSON v1 on request. Local, indicative deterministic parse measurements for small/medium/large inputs: payload bytes -75.7/-73.2/-91.6%; B/op -72/-80/-96%; allocs/op 14->10, 54->43, 714->527. Playground lint removes a second parse (no timing claim). [W8-04]
 - **Semantic tokens**: pooled highlighting scratch and shared case folding cut 30 KB semantic-token allocs/op by 98.9–99.0% (2,039 to 20, 1,863 to 21, 1,953 to 21), B/op by 26.0–26.8% and sec/op by 13.3–14.3% (amd64 layout-randomized gate); the new highlight golden pins output. No behaviour change. [W6-11]
 - **Linter**: the lint pipeline uses the pooled parser and pooled dialect tokenizer; behavior is unchanged. [W6-06ab]
 - **Linter**: aliasing consistency and four visitor-based rules now reuse the cached preorder AST node list. Violations are unchanged; there is no API or behavior change. [W6-05b]
@@ -148,9 +146,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Formatter**: compact formatting (`ast.CompactStyle()`, no clause newlines, no semicolon, no line width, no target dialect, preserve or upper keyword case) now renders SELECT, INSERT, UPDATE and DELETE through each statement's `SQL()` instead of the visitor renderer, and a single compact statement skips the parts slice and join. `Render/compact/*` is 27-49% faster with 1 alloc/op (was 4-42) and 60-82% fewer bytes/op; `Normalize` and `Fingerprint` are 6-13% faster with 15-39% fewer allocs. Output is byte-identical (differential test over every corpus statement in 9 dialects and all option combinations); lowercase keywords, target-dialect rewrites, set operations and ALTER TABLE keep the visitor path. [W5-02]
 
 ### Behavior changes
-
-- **Playground (`gosqlxLint`)**: with a non-generic dialect, a tokenizer error is now reported as `gosqlx: tokenize error: Error E1002 ...` (what the no-dialect path and gosqlx.Lint already report) instead of `gosqlx: syntax error: Error E2004 ... tokenization error: ...`. `parse_error_span` is unchanged (it already resolved to the innermost positioned error). Library `gosqlx.Lint`/`LintWithDialect` are unchanged. [W8-04]
-- **Playground (`gosqlxLint`)**: SQL with no statements (blank, whitespace or comment-only) gets no `parse_error`, matching `gosqlx.Lint` (the linter treats it as "nothing to lint", not a syntax error). No `parse_error` on comment-only input is a maintainer-confirmed behaviour change. Library `gosqlx.Lint`/`LintWithDialect` are unchanged. The AST and Analyze tabs still report the parse error. [W8-04]
 - **Validate blank input**: `parser.Validate` and `parser.ValidateBytes` have
   always returned E2005 for empty or ASCII-whitespace-only input. Comment-only
   input (`-- c`, `/* x */`, `;`, `-- c\n;`) has always returned E2005 through
@@ -173,8 +168,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   UTF-8 is unaffected.
 
 ### Fixed
-
-- `gosqlxValidate` now honours its dialect argument. [W8-04]
 - Claims checks now verify that published benchmark results were measured at the latest release tag commit.
 - **AST**: `AlterTableStatement.SQL()` now separates multiple ALTER TABLE actions with commas, matching the compact formatter and preserving action boundaries when re-parsed.
 - **Playground**: the GoSQLX WebAssembly module now runs in a Web Worker, so

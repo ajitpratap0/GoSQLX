@@ -39,14 +39,14 @@ import (
 
 // parseAllocBudget is allocs/op of Parse+ReleaseAST for the 11 portable queries.
 var parseAllocBudget = map[string]float64{
-	"simple_select": 5,
-	"select_where":  18,
-	"join":          17,
-	"aggregate":     18,
-	"subquery":      14,
-	"cte":           21,
-	"window":        11,
-	"complex":       50,
+	"simple_select": 3,
+	"select_where":  16,
+	"join":          15,
+	"aggregate":     13,
+	"subquery":      10,
+	"cte":           16,
+	"window":        9,
+	"complex":       44,
 	"insert":        17,
 	"update":        13,
 	"delete":        5,
@@ -69,14 +69,14 @@ var dialectAllocStatement = map[string]string{
 // dialectAllocBudget is allocs/op of ParseWithDialect+ReleaseAST for the
 // statement pinned in dialectAllocStatement.
 var dialectAllocBudget = map[string]float64{
-	"postgresql": 37,
+	"postgresql": 29,
 	"mysql":      50,
 	"mariadb":    61,
-	"sqlserver":  36,
-	"oracle":     68,
-	"sqlite":     48,
-	"snowflake":  71,
-	"clickhouse": 82,
+	"sqlserver":  28,
+	"oracle":     52,
+	"sqlite":     47,
+	"snowflake":  53,
+	"clickhouse": 80,
 }
 
 const allocRuns = 200

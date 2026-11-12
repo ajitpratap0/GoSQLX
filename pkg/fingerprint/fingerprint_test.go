@@ -15,6 +15,7 @@
 package fingerprint_test
 
 import (
+	"errors"
 	"strings"
 	"testing"
 
@@ -119,7 +120,7 @@ func TestFingerprint_DifferentStructure_DifferentHash(t *testing.T) {
 
 func TestFingerprint_IsHex64Chars(t *testing.T) {
 	sql := "SELECT 1"
-	fp, err := fingerprint.Fingerprint(sql)
+	fp, err := fingerprint.FingerprintWithOptions(sql, fingerprint.Options{Mode: fingerprint.ModeLegacy})
 	if err != nil {
 		t.Fatalf("Fingerprint() error: %v", err)
 	}
@@ -129,7 +130,7 @@ func TestFingerprint_IsHex64Chars(t *testing.T) {
 }
 
 func TestNormalize_InvalidSQL_ReturnsError(t *testing.T) {
-	_, err := fingerprint.Normalize("SELECT FROM WHERE")
+	_, err := fingerprint.NormalizeWithOptions("SELECT FROM WHERE", fingerprint.Options{Mode: fingerprint.ModeLegacy})
 	if err == nil {
 		t.Error("Normalize() should return error for invalid SQL")
 	}
@@ -202,5 +203,42 @@ func TestFingerprint_StringVsNumericLiteralDifferentStructure(t *testing.T) {
 	fp2, _ := fingerprint.Fingerprint(q2)
 	if fp1 == fp2 {
 		t.Errorf("queries with different selected columns must have different fingerprints")
+	}
+}
+
+func TestNormalizeV2ErrorContract(t *testing.T) {
+	for _, tc := range []struct {
+		name, sql, want string
+		empty           bool
+	}{
+		{"syntax is accepted", "SELECT FROM WHERE", "", false},
+		{"unterminated string", "SELECT 'unterminated", "tokenization failed", false},
+		{"empty", "", "", true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := fingerprint.Normalize(tc.sql)
+			if tc.empty {
+				if !errors.Is(err, fingerprint.ErrEmpty) {
+					t.Fatalf("error = %v, want ErrEmpty", err)
+				}
+				return
+			}
+			if tc.want == "" {
+				if err != nil {
+					t.Fatal(err)
+				}
+			} else if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("error = %v, want %q", err, tc.want)
+			}
+		})
+	}
+}
+func TestFingerprintV2VersionPrefix(t *testing.T) {
+	fp, err := fingerprint.Fingerprint("SELECT 1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(fp) != 67 || !strings.HasPrefix(fp, "v2:") || fingerprint.VersionOf(fp) != 2 {
+		t.Fatalf("invalid v2 fingerprint %q", fp)
 	}
 }

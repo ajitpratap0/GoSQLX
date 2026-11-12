@@ -78,11 +78,23 @@ Every cell is a Go benchmark in `compare_test.go`; names are
 | `ParseParallel` | portable query | every parser, plus `gosqlx_metricson` | `b.RunParallel`, one parse function per worker; run at `-cpu 1,4,10` (more on large boxes) |
 | `ParseDialect` | dialect | GoSQLX and the non-legacy peers of that dialect | one whole common-accept set per op |
 | `Lex` | portable query | `gosqlx_scratch`, `gosqlx_public`, `vitess`, `pgquery_scan` | tokenisation only |
-| `Normalize` | portable query | `gosqlx`, `gosqlx_fingerprint`, `tidb_digest`, `pgquery_normalize`, `pgquery_fingerprint`, `vitess_redact` | literal normalisation or fingerprint; outputs differ in form |
+| `Normalize` | portable query | `gosqlx`, `gosqlx_fingerprint`, `gosqlx_legacy`, `gosqlx_fingerprint_legacy`, `tidb_digest`, `pgquery_normalize`, `pgquery_fingerprint`, `vitess_redact` | literal normalisation or fingerprint; outputs differ in form |
 | `Render` | portable query | `gosqlx_sql`, `gosqlx_compact`, `vitess_string`, `tidb_restore`, `pgquery_deparse` | AST to SQL of a pre-parsed statement |
 
-A token-mode GoSQLX normaliser does not exist yet, so `Normalize` has no
-`gosqlx_tokens` entry; add it to `NormalizeImpls` when it lands.
+Starting with v1.18, the `Normalize` cells `gosqlx` and `gosqlx_fingerprint`
+measure the version-2 token-stream defaults. This is a series break: earlier
+runs with those IDs measured parse-and-format normalisation. The new
+`gosqlx_legacy` and `gosqlx_fingerprint_legacy` cells measure that version-1
+algorithm for comparison with earlier runs. Version 2 accepts tokenizable SQL
+without syntax validation and changes grouping, including redacting LIMIT and
+OFFSET values and collapsing repeated IN-list elements and VALUES rows.
+Keyword name parts adjacent to a dot retain their case, including `ASC`; other
+`ASC` tokens are dropped. Fingerprints now have a `v2:` prefix; legacy
+fingerprints remain unprefixed. Version 2 also preserves bare identifier-token
+case in contextual grammar positions where the legacy formatter upper-cases
+it: `SHOW server_version` and `SHOW SERVER_VERSION` have different version-2
+fingerprints but the same legacy fingerprint.
+Compare costs with these semantic differences in mind.
 
 ## Acceptance and common-accept sets
 

@@ -23,6 +23,7 @@ import (
 	"time"
 
 	sqlerrors "github.com/ajitpratap0/GoSQLX/pkg/errors"
+	"github.com/ajitpratap0/GoSQLX/pkg/fingerprint"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/keywords"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/parser"
@@ -129,6 +130,21 @@ func legacyNormalizeError(sql string) error {
 	return nil
 }
 
+// Unlike the legacy reference, this oracle never parses SQL. Every nonblank
+// input in this compatibility corpus contains statement tokens, so only blank
+// input and tokenizer errors remain errors under the default token mode.
+func tokenNormalizeError(sql string) error {
+	if strings.TrimSpace(sql) == "" {
+		return fingerprint.ErrEmpty
+	}
+	tkz := tokenizer.GetTokenizer()
+	defer tokenizer.PutTokenizer(tkz)
+	if _, err := tkz.TokenizeString(sql); err != nil {
+		return fmt.Errorf("fingerprint: tokenization failed: %w", err)
+	}
+	return nil
+}
+
 func assertLegacyError(t *testing.T, got, want error) {
 	t.Helper()
 	if (got == nil) != (want == nil) {
@@ -140,7 +156,7 @@ func assertLegacyError(t *testing.T, got, want error) {
 	if got.Error() != want.Error() {
 		t.Fatalf("error text:\ngot  %q\nwant %q", got.Error(), want.Error())
 	}
-	for _, sentinel := range []error{ErrTokenize, ErrSyntax, ErrTimeout, ErrUnsupportedDialect, ErrTooLarge, context.Canceled, context.DeadlineExceeded} {
+	for _, sentinel := range []error{ErrTokenize, ErrSyntax, ErrTimeout, ErrUnsupportedDialect, ErrTooLarge, context.Canceled, context.DeadlineExceeded, fingerprint.ErrEmpty} {
 		if errors.Is(got, sentinel) != errors.Is(want, sentinel) {
 			t.Errorf("errors.Is(%v): got %v, want %v", sentinel, errors.Is(got, sentinel), errors.Is(want, sentinel))
 		}
@@ -181,6 +197,7 @@ func TestWrapErrLegacyCompatibilityCorpus(t *testing.T) {
 		t.Run(fmt.Sprintf("input_%03d", i), func(t *testing.T) {
 			_, parseWant := legacyParseError(sql, "", "")
 			_, contextWant := legacyParseError(sql, "", "context")
+			tokenWant := tokenNormalizeError(sql)
 			if parseWant == nil {
 				t.Fatalf("corpus input was valid: %q", sql)
 			}
@@ -247,8 +264,16 @@ func TestWrapErrLegacyCompatibilityCorpus(t *testing.T) {
 				{"Validate", func() error { return Validate(sql) }, legacyValidateError(sql)},
 				{"Format", func() error { _, e := Format(sql, DefaultFormatOptions()); return e }, fmt.Errorf("cannot format invalid SQL: %w", parseWant)},
 				{"Lint", func() error { _, e := Lint(sql); return e }, legacyLintError(sql, "")},
-				{"Normalize", func() error { _, e := Normalize(sql); return e }, legacyNormalizeError(sql)},
-				{"Fingerprint", func() error { _, e := Fingerprint(sql); return e }, legacyNormalizeError(sql)},
+				{"NormalizeLegacy", func() error {
+					_, e := fingerprint.NormalizeWithOptions(sql, fingerprint.Options{Mode: fingerprint.ModeLegacy})
+					return e
+				}, legacyNormalizeError(sql)},
+				{"FingerprintLegacy", func() error {
+					_, e := fingerprint.FingerprintWithOptions(sql, fingerprint.Options{Mode: fingerprint.ModeLegacy})
+					return e
+				}, legacyNormalizeError(sql)},
+				{"NormalizeDefaultV2", func() error { _, e := Normalize(sql); return e }, tokenWant},
+				{"FingerprintDefaultV2", func() error { _, e := Fingerprint(sql); return e }, tokenWant},
 			}
 			// Batch APIs retain their zero-based query index and extra context text.
 			batchWant := fmt.Errorf("query %d: %w", 1, parseWant)

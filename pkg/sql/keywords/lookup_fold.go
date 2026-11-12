@@ -20,8 +20,8 @@ import (
 )
 
 // keyBufLen bounds the stack buffer lookupFold upper-cases into. Every
-// built-in key is far shorter; a test pins
-// that every built-in key fits, so every built-in hit takes the fast path.
+// built-in key is far shorter; a test pins that every built-in key fits, so
+// every built-in hit takes the fast path.
 const keyBufLen = 64
 
 // lookupFold returns m[strings.ToUpper(s)] without allocating when s is pure

@@ -350,7 +350,7 @@ kw.IsKeyword("SeLeCt")  // true
 
 ## Performance
 
-- Pure-ASCII words up to 64 bytes are looked up without allocating.
+- **Allocation-free lookups**: Pure-ASCII words up to 64 bytes are looked up without allocating
 - **Lookup Time**: O(1) hash map lookups
 - **Memory**: Pre-allocated keyword maps
 - **Thread-Safe**: No synchronization overhead for reads

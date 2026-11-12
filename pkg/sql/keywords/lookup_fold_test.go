@@ -94,7 +94,7 @@ type lookupFoldInstance struct {
 func lookupFoldAddedKeywords(tb testing.TB) *Keywords {
 	tb.Helper()
 	k := New(DialectPostgreSQL, true)
-	for _, word := range []string{"ÉCOLE", strings.Repeat("A", 64), strings.Repeat("B", 65), "CUSTOM KEY", "A@B", "A[B", "A\x00"} {
+	for _, word := range []string{"ÉCOLE", strings.Repeat("A", keyBufLen), strings.Repeat("B", keyBufLen+1), "CUSTOM KEY", "A@B", "A[B", "A\x00"} {
 		if err := k.AddKeyword(Keyword{Word: word, Type: models.TokenTypeKeyword, Reserved: true}); err != nil {
 			tb.Fatalf("AddKeyword(%q): %v", word, err)
 		}
@@ -130,9 +130,9 @@ func lookupFoldInputs(k *Keywords) []string {
 		"users", "customer_id", "x", "", "ſelect", "dıstınct", "Sſelect",
 		"\xff", "sel\xff" + "ect", "\x80x", "SELECT\x00", "a\xff",
 		"sel`ect", "sel{ect", "sel@ect", "sel[ect", "a`b", "a{b",
-		strings.Repeat("a", 64), strings.Repeat("b", 65),
+		strings.Repeat("a", keyBufLen), strings.Repeat("b", keyBufLen+1),
 	}
-	for _, n := range []int{63, 64, 65, 200} {
+	for _, n := range []int{keyBufLen - 1, keyBufLen, keyBufLen + 1, 200} {
 		inputs = append(inputs, strings.Repeat("x", n))
 	}
 	keys := make(map[string]bool)
@@ -256,13 +256,13 @@ func TestLookupFold_NoAllocs(t *testing.T) {
 	}
 	for _, method := range methods {
 		t.Run(method.name, func(t *testing.T) {
-			for _, input := range []string{"select", "Select", "row_number", "users", "x", strings.Repeat("x", 64), strings.Repeat("x", 65)} {
+			for _, input := range []string{"select", "Select", "row_number", "users", "x", strings.Repeat("x", keyBufLen), strings.Repeat("x", keyBufLen+1)} {
 				t.Run(fmt.Sprintf("%s_%d", input[:min(10, len(input))], len(input)), func(t *testing.T) {
 					allocs := testing.AllocsPerRun(100, func() { method.call(input) })
-					if len(input) <= 64 && allocs != 0 {
+					if len(input) <= keyBufLen && allocs != 0 {
 						t.Errorf("%q: got %g allocations, want 0", input, allocs)
 					}
-					if len(input) == 65 && allocs > 1 {
+					if len(input) == keyBufLen+1 && allocs > 1 {
 						t.Errorf("65-byte fallback: got %g allocations, want at most 1", allocs)
 					}
 				})

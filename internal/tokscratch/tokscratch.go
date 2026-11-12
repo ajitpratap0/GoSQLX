@@ -17,7 +17,7 @@
 // slice, without adding that borrowed-result contract to the public
 // tokenizer API.
 //
-// These tokenize-then-parse entry points also reserve the parse's stack here,
+// These tokscratch callers also reserve the parse's stack here,
 // before tokenizing, so a fresh goroutine grows its stack while frames are shallow.
 //
 // Package tokenizer registers the implementation in its init. Every function

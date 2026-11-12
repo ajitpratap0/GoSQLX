@@ -154,6 +154,8 @@ func TestStackBudget_RealWorldCoverage(t *testing.T) {
 	if len(statements) == 0 {
 		t.Fatal("benchmark corpus is empty")
 	}
+	runtime.GC()
+	defer debug.SetGCPercent(debug.SetGCPercent(-1))
 	movedCount := 0
 	var offenders []string
 	for _, statement := range statements {

@@ -14,7 +14,7 @@
 
 // Differential tests for the preprocess type-gated fast path: the optimised
 // preprocessTokensInto must be byte-for-byte identical to the straightforward
-// reference (appendCompound, else normalizeToken) for every token type and for
+// reference (tokclass.AppendCompound, else normalizeToken) for every token type and for
 // real tokenizer output.
 
 package parser
@@ -25,11 +25,12 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/ajitpratap0/GoSQLX/internal/tokclass"
 	"github.com/ajitpratap0/GoSQLX/pkg/models"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/tokenizer"
 )
 
-// normalizeToken is the by-value reference for normalizeTokenInPlace. It maps a TokenWithSpan to a canonical form expected by the
+// normalizeToken is the by-value reference for tokclass.NormalizeInPlace. It maps a TokenWithSpan to a canonical form expected by the
 // parser. Type mismatches that existed in the tokenizer are corrected here.
 func normalizeToken(t models.TokenWithSpan) models.TokenWithSpan {
 	// TokenTypeMul (*) is the same symbol as TokenTypeAsterisk for the
@@ -60,7 +61,7 @@ func normalizeToken(t models.TokenWithSpan) models.TokenWithSpan {
 			t.Token.Quote = '`'
 			return t
 		}
-		if remapped := identifierKeywordType(t.Token.Value); remapped != models.TokenTypeUnknown {
+		if remapped := tokclass.IdentifierKeywordType(t.Token.Value); remapped != models.TokenTypeUnknown {
 			t.Token.Type = remapped
 		}
 		return t
@@ -68,7 +69,7 @@ func normalizeToken(t models.TokenWithSpan) models.TokenWithSpan {
 
 	// Generic TokenTypeKeyword tokens need a specific type for the parser.
 	if t.Token.Type == models.TokenTypeKeyword {
-		if remapped := keywordType(t.Token.Value); remapped != models.TokenTypeUnknown {
+		if remapped := tokclass.KeywordType(t.Token.Value); remapped != models.TokenTypeUnknown {
 			t.Token.Type = remapped
 		}
 		return t
@@ -82,7 +83,7 @@ func preprocessReference(tokens []models.TokenWithSpan) []models.TokenWithSpan {
 	dst := make([]models.TokenWithSpan, 0, len(tokens)+4)
 	for i := range tokens {
 		var ok bool
-		if dst, ok = appendCompound(dst, &tokens[i]); ok {
+		if dst, ok = tokclass.AppendCompound(dst, &tokens[i]); ok {
 			continue
 		}
 		dst = append(dst, normalizeToken(tokens[i]))
@@ -97,6 +98,15 @@ func diffPreprocess(t *testing.T, name string, in []models.TokenWithSpan) {
 	got := preprocessTokensInto(nil, in)
 	if !reflect.DeepEqual(want, got) {
 		t.Fatalf("%s: fast path diverges from reference\nwant %+v\n got %+v", name, want, got)
+	}
+	// preprocessTokensInto writes tokclass.AppendReady's body out inline;
+	// the per-token function must give the same stream.
+	var ready []models.TokenWithSpan
+	for i := range in {
+		ready = tokclass.AppendReady(ready, &in[i])
+	}
+	if !reflect.DeepEqual(want, ready) {
+		t.Fatalf("%s: tokclass.AppendReady diverges from reference\nwant %+v\n got %+v", name, want, ready)
 	}
 	if !reflect.DeepEqual(snapshot, in) {
 		t.Fatalf("%s: input tokens were mutated", name)

@@ -97,6 +97,8 @@ tasks:
     cmds:
       - echo "Running cbinding tests with CGO enabled..."
       - go test -race -timeout 60s ./pkg/cbinding/...
+      - echo "Allocation and AST-release guards (non-race; compiled out under -race)..."
+      - go test -count=1 -timeout 60s -run 'TestCBindingAlloc' ./pkg/cbinding/
       - echo "Smoke-running cbinding benchmarks (10 iterations)..."
       - go test -race -timeout 120s -run ^\$ -bench CBinding -benchtime=10x ./pkg/cbinding/
 
@@ -356,6 +358,21 @@ tasks:
           echo "staticcheck not installed. Run: go install honnef.co/go/tools/cmd/staticcheck@latest"
           exit 1
         fi
+
+  changelog:check:
+    desc: Validate per-change changelog fragments
+    cmds:
+      - go run ./scripts/changelog check
+
+  changelog:preview:
+    desc: Preview Unreleased notes with changelog fragments
+    cmds:
+      - go run ./scripts/changelog preview
+
+  changelog:collect:
+    desc: Collect changelog fragments for release finalization
+    cmds:
+      - go run ./scripts/changelog collect
 
   docs:metrics:
     desc: Regenerate README metrics block and doc version banners

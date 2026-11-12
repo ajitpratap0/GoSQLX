@@ -1320,6 +1320,9 @@ func TestNormalizeV2Reparses(t *testing.T) {
 	if implicitAliases != wantImplicitAliasReparseFailures {
 		t.Errorf("implicit-alias failures=%d want=%d; review the symmetric oracle and update the F1 count", implicitAliases, wantImplicitAliasReparseFailures)
 	}
+	if limitOffsetSkipped != 0 {
+		t.Errorf("LIMIT/OFFSET placeholder skips=%d, want 0", limitOffsetSkipped)
+	}
 	for key, reason := range reparseLimitations {
 		if !allowlistedFailures[key] {
 			t.Errorf("%s allowlisted parser limitation no longer fails the substituted parse; remove or review the entry: %s", key, reason)

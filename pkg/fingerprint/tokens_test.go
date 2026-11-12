@@ -138,6 +138,15 @@ var normalizeV2RuleCases = []struct {
 	{"N3_bracket", "SELECT [p q], [users]", "SELECT [p q], users", keywords.DialectSQLServer},
 	{"N3_upper", `SELECT "USERS", "users"`, `SELECT USERS, "users"`, keywords.DialectSnowflake},
 	{"N4", "WHERE a = 1 AND b = 'x' LIMIT 10 OFFSET 20", "WHERE a = ? AND b = ? LIMIT ? OFFSET ?", ""},
+	{"N4_double_quote_mysql_email", `WHERE email = "john@example.com"`, "WHERE email = ?", keywords.DialectMySQL},
+	{"N4_double_quote_mysql_name", `WHERE name = "alice"`, "WHERE name = ?", keywords.DialectMySQL},
+	{"N4_double_quote_mariadb", `WHERE name = "alice"`, "WHERE name = ?", keywords.DialectMariaDB},
+	{"N4_double_quote_bigquery", `WHERE name = "alice"`, "WHERE name = ?", keywords.DialectBigQuery},
+	{"N3_double_quote_default", `WHERE email = "john@example.com" AND name = "alice"`, `WHERE email = "john@example.com" AND name = alice`, ""},
+	{"N3_double_quote_postgres", `WHERE email = "john@example.com" AND name = "alice"`, `WHERE email = "john@example.com" AND name = alice`, keywords.DialectPostgreSQL},
+	{"N14_double_quote_mysql", `SELECT date "abc"`, "SELECT DATE ?", keywords.DialectMySQL},
+	{"N4b_double_quote_mysql", `SELECT a AS "lbl"`, `SELECT a AS "lbl"`, keywords.DialectMySQL},
+	{"N9_double_quote_literal_cast", `SELECT "CAST"(a AS item), "XMLFOREST"(a AS id)`, "SELECT ? (a item), ? (a id)", keywords.DialectMySQL},
 	{"N4_utility", "SHOW VARIABLES LIKE 'x'; KILL 1234; SET x = 'a'", "SHOW VARIABLES LIKE ?; KILL ?; SET x = ?", ""},
 	{"N4_typed", "SELECT DATE '2020-01-01', $$abc$$, $1", "SELECT DATE ?, ?, $1", keywords.DialectPostgreSQL},
 	{"N4a", "CREATE TABLE t (a VARCHAR(255), b DECIMAL(10,2))", "CREATE TABLE t(a VARCHAR(255), b DECIMAL(10, 2))", ""},
@@ -149,6 +158,9 @@ var normalizeV2RuleCases = []struct {
 	{"N5_ddl", "CREATE TABLE t (a INT NOT NULL DEFAULT NULL, b INT NULL)", "CREATE TABLE t(a INT NOT NULL DEFAULT ?, b INT NULL)", ""},
 	{"N5_bool", "SELECT TRUE, FALSE, NULL; x IS NOT FALSE", "SELECT ?, ?, ?; x IS NOT FALSE", ""},
 	{"N6", "SELECT $1, ?, : name, @p", "SELECT $1, ?, :name, @p", ""},
+	{"N6_at_at_default", "SELECT @@version, @@session.sql_mode", "SELECT @@version, @@session.sql_mode", ""},
+	{"N6_at_at_mysql", "SELECT @@version, @@session.sql_mode", "SELECT @@version, @@session.sql_mode", keywords.DialectMySQL},
+	{"N6_at_at_mariadb", "SELECT @@version, @@session.sql_mode", "SELECT @@version, @@session.sql_mode", keywords.DialectMariaDB},
 	{"N6_colon_unquoted_name", `:"a"`, ":a", keywords.DialectGeneric},
 	{"N6_colon_oracle_quoted_name", `:"A"(`, ":A (", keywords.DialectOracle},
 	{"N6_literal", "SELECT 1, 'x'", "SELECT ?, ?", ""},
@@ -286,8 +298,11 @@ func TestNormalizeV2PooledDialectReset(t *testing.T) {
 			dialect keywords.SQLDialect
 			want    string
 		}{
-			{keywords.DialectMySQL, "Users"},
+			{keywords.DialectMySQL, "?"},
 			{"", `"Users"`},
+			{keywords.DialectMariaDB, "?"},
+			{keywords.DialectPostgreSQL, `"Users"`},
+			{keywords.DialectBigQuery, "?"},
 		} {
 			got, err := fingerprint.NormalizeWithOptions(`"Users"`, fingerprint.Options{Dialect: tc.dialect})
 			if err != nil || got != tc.want {

@@ -9,15 +9,22 @@
 // parts adjacent to a dot retain their case, including ASC; only other ASC
 // tokens are dropped. Identifier case, placeholders and structurally significant
 // literals are retained. Delimited names keep any quotes needed to preserve
-// their meaning in the selected dialect.
+// their meaning in the selected dialect. With Options.Dialect set to mysql,
+// mariadb or bigquery, double-quoted tokens follow the string-literal rules,
+// including redaction and existing literal-alias exceptions. This deliberately
+// coarsens ANSI_QUOTES identifiers in MySQL and MariaDB. Default and PostgreSQL
+// dialects retain double-quoted identifier handling; legacy mode is unchanged.
+// Session variables retain their spelling, including @@version and
+// @@session.sql_mode.
 // Redaction includes LIMIT/OFFSET, FETCH/TOP, typed literals and utility
 // statements; repeated question-mark placeholders also collapse in IN lists
 // and VALUES rows. Normalized text is a grouping key, not guaranteed to be
-// parseable SQL. The symmetric reparse oracle tracks 46 corpus cases: 44 in
-// the implicit-alias parser gap (follow-up F1), covering aliases without AS in
-// RETURNING, projections, subqueries and view queries, one redacted SRID value,
-// and one transaction batch without statement separators. Placeholders in
-// positions such as LIMIT ? can also prevent parsing.
+// parseable SQL. Parser limitations include implicit aliases without AS in
+// RETURNING, projections, subqueries and view queries, redacted SRID values,
+// and transaction batches without statement separators. Placeholders in
+// positions such as LIMIT ? can also prevent parsing. All normalization rules
+// apply at every nesting depth, including beyond 32 frames; the frame stack
+// grows as needed.
 // Token-stream normalization reports lexical errors, but does not validate SQL
 // syntax. Callers that require syntax validation should validate SQL separately.
 //

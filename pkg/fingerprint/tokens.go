@@ -14,6 +14,7 @@ import (
 	"github.com/ajitpratap0/GoSQLX/internal/namequote"
 	"github.com/ajitpratap0/GoSQLX/internal/tokscratch"
 	"github.com/ajitpratap0/GoSQLX/pkg/models"
+	"github.com/ajitpratap0/GoSQLX/pkg/sql/keywords"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/tokenizer"
 )
 
@@ -61,6 +62,15 @@ type frame struct {
 	cast, modifier, in, row                      bool
 	start, element, comma, previous, previousEnd int
 	rowPrevious, rowEnd, rowComma                int
+}
+
+// dialectToken applies v2's default quote semantics before any rule classifies
+// a token. MySQL/MariaDB ANSI_QUOTES identifiers deliberately coarsen to strings.
+func dialectToken(t models.TokenWithSpan, doubleQuotedStrings bool) models.TokenWithSpan {
+	if doubleQuotedStrings && t.Token.Type == models.TokenTypeDoubleQuotedString {
+		t.Token.Type = models.TokenTypeSingleQuotedString
+	}
+	return t
 }
 
 // delimited follows the single-line span-width predicate in
@@ -111,7 +121,7 @@ func appendUpper(b []byte, s string) []byte {
 	return b
 }
 func castName(t models.TokenWithSpan) bool {
-	return !delimited(t) && (upperEqual(t.Token.Value, "CAST") || upperEqual(t.Token.Value, "TRY_CAST") || upperEqual(t.Token.Value, "SAFE_CAST") || upperEqual(t.Token.Value, "XMLATTRIBUTES") || upperEqual(t.Token.Value, "XMLFOREST"))
+	return (t.Token.Type == models.TokenTypeIdentifier || t.Token.Type.IsKeyword()) && !delimited(t) && (upperEqual(t.Token.Value, "CAST") || upperEqual(t.Token.Value, "TRY_CAST") || upperEqual(t.Token.Value, "SAFE_CAST") || upperEqual(t.Token.Value, "XMLATTRIBUTES") || upperEqual(t.Token.Value, "XMLFOREST"))
 }
 
 // unaryAfter excludes value-ending punctuation and QUESTION placeholders from
@@ -190,6 +200,7 @@ func redactModifierPrefix(b []byte, start int) []byte {
 }
 
 func appendNormalV2(b []byte, ts []models.TokenWithSpan, sql string, opts Options) []byte {
+	doubleQuotedStrings := opts.Dialect == keywords.DialectMySQL || opts.Dialect == keywords.DialectMariaDB || opts.Dialect == keywords.DialectBigQuery
 	// Keep shallow queries on the stack; allocate only for deeper nesting.
 	var local [32]frame
 	stack := local[:]
@@ -209,14 +220,14 @@ func appendNormalV2(b []byte, ts []models.TokenWithSpan, sql string, opts Option
 	ddl, selected, with, main, statement, pending := false, false, false, false, false, false
 	line, lineStart := 1, 0
 	for i := 0; i < len(ts); i++ {
-		t := ts[i]
+		t := dialectToken(ts[i], doubleQuotedStrings)
 		typ := t.Token.Type
 		if typ == models.TokenTypeEOF || typ == models.TokenTypeWhitespace {
 			continue
 		}
 		var next models.TokenWithSpan
 		if i+1 < len(ts) {
-			next = ts[i+1]
+			next = dialectToken(ts[i+1], doubleQuotedStrings)
 		}
 		// A statement consisting only of discarded ASC tokens must not
 		// introduce an empty statement or a leading separator (N10/N16).
@@ -451,7 +462,7 @@ func appendNormalV2(b []byte, ts []models.TokenWithSpan, sql string, opts Option
 				noSpace = noSpace || nameToken(written) || p.IsAggregateFunction() || p.IsDataType() || p == models.TokenTypeCast
 			}
 			p := written.Token.Type
-			if p == models.TokenTypeLParen || p == models.TokenTypeLBracket || p == models.TokenTypePeriod || p == models.TokenTypeDoubleColon || bindName || (p == models.TokenTypeColon && typ == models.TokenTypeIdentifier) || (unary && unaryTarget(t, next)) {
+			if p == models.TokenTypeLParen || p == models.TokenTypeLBracket || p == models.TokenTypePeriod || p == models.TokenTypeDoubleColon || p == models.TokenTypeAtAt || bindName || (p == models.TokenTypeColon && typ == models.TokenTypeIdentifier) || (unary && unaryTarget(t, next)) {
 				noSpace = true
 			}
 			first := byte(0)

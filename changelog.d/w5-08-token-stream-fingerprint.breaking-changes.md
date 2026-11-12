@@ -7,13 +7,18 @@
   typed literals and utility-statement literals, and collapses repeated normalized
   IN-list elements and VALUES rows, including question-mark placeholders.
   Keyword name parts next to a dot retain their source case, including `ASC`;
-  other `ASC` tokens are dropped.
+  other `ASC` tokens are dropped. With `Options.Dialect` set to `mysql`,
+  `mariadb` or `bigquery`, double-quoted tokens follow the string-literal rules,
+  including redaction and existing literal-alias exceptions. This deliberately
+  coarsens MySQL/MariaDB `ANSI_QUOTES` identifiers. Default and `postgresql`
+  dialects retain double-quoted identifier handling; legacy mode is unchanged.
+  Session variables retain their spelling: `@@version` and `@@session.sql_mode`
+  render without a space after `@@`.
   Tokenizable SQL with invalid syntax is accepted; call `gosqlx.Validate` first
   when syntax validation is required. Normalized text is a grouping key, not
-  guaranteed to be parseable SQL: the symmetric reparse oracle tracks 46 corpus
-  cases, including 44 in the implicit-alias parser gap (follow-up F1) for aliases
-  without `AS` in RETURNING, projections, subqueries and view queries, plus one
-  redacted `SRID ?` value and one transaction batch without statement separators.
+  guaranteed to be parseable SQL. Parser limitations include implicit aliases
+  without `AS` in RETURNING, projections, subqueries and view queries, redacted
+  `SRID ?` values and transaction batches without statement separators.
   `AS` is retained in XMLATTRIBUTES and XMLFOREST.
   Grouping also differs for cast spelling,
   `IS TRUE` versus `IS FALSE`, quoted keyword names, clause order, redundant

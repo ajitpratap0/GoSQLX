@@ -13,7 +13,7 @@ import (
 )
 
 func FuzzNormalizeV2(f *testing.F) {
-	// Regression for /tmp/w5-08-fuzz-ca7775a415f0bcec (SQL Server).
+	// Regression for nested INNER/OUTER JOIN normalization in SQL Server.
 	f.Add("INNER OUTER JOIN", uint8(77))
 	dialects := append([]keywords.SQLDialect{""}, keywords.AllDialects()...)
 	add := func(sql string) {

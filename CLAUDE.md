@@ -245,7 +245,7 @@ go test -bench=. -benchmem -cpuprofile=cpu.prof ./pkg/...    # With profiling
 4. Add parsing logic in `pkg/sql/parser/parser.go`
 5. Write comprehensive tests
 6. Run: `task test:race && task bench`
-7. Update CHANGELOG.md
+7. Add a `changelog.d/<slug>.<section>.md` fragment with Markdown list items (see `changelog.d/README.md`), then run `task changelog:check`.
 
 ### Debugging Parsing Issues
 ```bash
@@ -262,7 +262,7 @@ Use the visitor pattern in `pkg/sql/ast/visitor.go` to traverse and inspect AST.
 ```bash
 # 1. Develop in feature branch
 git checkout -b feature/branch-name
-# ... make changes, update CHANGELOG.md as [Unreleased] ...
+# ... make changes, add a changelog.d/<slug>.<section>.md fragment ...
 git push origin feature/branch-name
 
 # 2. Create PR and get it merged
@@ -270,6 +270,7 @@ git push origin feature/branch-name
 # 3. After merge, create docs PR for release finalization
 git checkout main && git pull
 git checkout -b docs/vX.Y.Z-release
+task changelog:collect
 # Update CHANGELOG.md with version and date
 git push origin docs/vX.Y.Z-release
 

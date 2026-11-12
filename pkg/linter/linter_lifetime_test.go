@@ -12,6 +12,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/ajitpratap0/GoSQLX/internal/tokscratch"
 	sqlerrors "github.com/ajitpratap0/GoSQLX/pkg/errors"
 	"github.com/ajitpratap0/GoSQLX/pkg/fingerprint"
 	"github.com/ajitpratap0/GoSQLX/pkg/gosqlx"
@@ -316,9 +317,32 @@ func TestLintLifetimeScratchAllocations(t *testing.T) {
 			panic("unexpected lint failure")
 		}
 	}
-	got, want := testing.AllocsPerRun(100, candidate), testing.AllocsPerRun(100, reference)
-	if got >= want {
-		t.Fatalf("scratch lint allocations %.0f must be less than owned-token reference %.0f", got, want)
+	scratchRef := func() {
+		tkz := tokenizer.GetTokenizer()
+		defer tokenizer.PutTokenizer(tkz)
+		p := parser.GetParser()
+		defer parser.PutParser(p)
+		tkz.SetDialect(keywords.DialectPostgreSQL)
+		p.ApplyOptions(parser.WithDialect("postgresql"))
+		tokens, err := tokscratch.String(tkz, sql)
+		if err != nil {
+			panic(err)
+		}
+		tree, err := p.ParseFromModelTokens(tokens)
+		if err != nil {
+			panic(err)
+		}
+		defer ast.ReleaseAST(tree)
 	}
-	t.Logf("scratch lint %.0f allocs; owned-token reference %.0f", got, want)
+	got, want := testing.AllocsPerRun(100, candidate), testing.AllocsPerRun(100, reference)
+	scratch := testing.AllocsPerRun(100, scratchRef)
+	// The two references differ only in token storage, so this holds
+	// independent of unrelated allocations in LintString's Context or result.
+	if scratch >= want {
+		t.Fatalf("tokscratch reference allocations %.0f must be less than owned-token reference %.0f", scratch, want)
+	}
+	if got >= want {
+		t.Fatalf("lint allocations %.0f must be less than owned-token reference %.0f (tokscratch-only reference %.0f): LintString stopped using scratch tokens or unrelated allocations were added", got, want, scratch)
+	}
+	t.Logf("lint %.0f allocs; owned-token reference %.0f; tokscratch reference %.0f", got, want, scratch)
 }

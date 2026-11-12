@@ -250,6 +250,44 @@ func TestCompoundSpansLookalikesAndComments(t *testing.T) {
 }
 
 func TestCompoundSpansUtility(t *testing.T) {
+	for _, dialect := range keywords.AllDialects() {
+		t.Run(string(dialect), func(t *testing.T) {
+			for _, tc := range []struct {
+				sql, want string
+			}{
+				{"GRANT SELECT ON t TO GROUP by", "GRANT SELECT ON t TO GROUP BY"},
+				{"REVOKE ALL ON t FROM GROUP by", "REVOKE ALL ON t FROM GROUP BY"},
+				{"REVOKE ALL ON t FROM order by", ""},
+			} {
+				t.Run(tc.sql, func(t *testing.T) {
+					a, err := parser.ParseWithDialect(tc.sql, dialect)
+					defer ast.ReleaseAST(a)
+					switch {
+					case dialect == keywords.DialectSQLServer:
+						compoundError(t, err, 30, "expected operand after BY, got EOF", "expected operand after BY here")
+					case dialect == keywords.DialectSQLite:
+						compoundError(t, err, 1, "expected statement, got IDENTIFIER", "expected statement here")
+					case tc.want == "":
+						compoundError(t, err, 28, "expected semicolon or end of statement, got BY", "expected semicolon or end of statement here")
+					default:
+						if err != nil {
+							t.Fatal(err)
+						}
+						if len(a.Statements) != 1 {
+							t.Fatalf("statements = %d, want 1", len(a.Statements))
+						}
+						u, ok := a.Statements[0].(*ast.UtilityStatement)
+						if !ok {
+							t.Fatalf("statement = %T", a.Statements[0])
+						}
+						if u.Text != tc.want {
+							t.Errorf("reconstructed text %q, want %q", u.Text, tc.want)
+						}
+					}
+				})
+			}
+		})
+	}
 	for _, tc := range []struct {
 		sql, want  string
 		dialect    keywords.SQLDialect

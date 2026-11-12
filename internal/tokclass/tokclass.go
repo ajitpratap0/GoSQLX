@@ -103,6 +103,17 @@ func ParserType(lexType models.TokenType, value string) models.TokenType {
 	return lexType
 }
 
+// hasSpace reports whether w contains a Unicode space. ASCII bytes are checked
+// inline; the rune decoder runs only from the first non-ASCII byte onward.
+func hasSpace(w string) bool {
+	for i := 0; i < len(w); i++ {
+		if c := w[i]; c <= ' ' || c >= 0x80 {
+			return strings.IndexFunc(w[i:], unicode.IsSpace) >= 0
+		}
+	}
+	return false
+}
+
 // SplitSpans derives the inner boundaries of a normalized two-word Value,
 // using byte widths and the original outer endpoints. Synthetic spans are
 // eligible too, provided the words can be reconstructed without overlap.
@@ -113,7 +124,7 @@ func SplitSpans(t *models.TokenWithSpan) (end1, start2 models.Location, ok bool)
 	}
 	w1, w2, found := strings.Cut(t.Token.Value, " ")
 	if !found || w1 == "" || w2 == "" ||
-		strings.IndexFunc(w1, unicode.IsSpace) >= 0 || strings.IndexFunc(w2, unicode.IsSpace) >= 0 {
+		hasSpace(w1) || hasSpace(w2) {
 		return models.Location{}, models.Location{}, false
 	}
 	end1 = models.Location{Line: t.Start.Line, Column: t.Start.Column + len(w1)}

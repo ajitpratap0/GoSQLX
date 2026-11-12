@@ -179,9 +179,7 @@ func enablePoolStats(t testing.TB) {
 	was := metrics.IsEnabled()
 	metrics.Enable()
 	t.Cleanup(func() {
-		if was {
-			metrics.Enable()
-		} else {
+		if !was {
 			metrics.Disable()
 		}
 	})
@@ -283,5 +281,4 @@ func TestPoolStats_FollowsEnableDisable(t *testing.T) {
 	if g, p := poolstats.Tokenizer.Load(); g != 1 || p != 0 {
 		t.Fatalf("retained counts = %d/%d, want 1/0", g, p)
 	}
-	metrics.Enable()
 }

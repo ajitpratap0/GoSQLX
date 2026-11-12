@@ -32,9 +32,7 @@ func enablePoolStats(t testing.TB) {
 	was := metrics.IsEnabled()
 	metrics.Enable()
 	t.Cleanup(func() {
-		if was {
-			metrics.Enable()
-		} else {
+		if !was {
 			metrics.Disable()
 		}
 	})

@@ -1,0 +1,638 @@
+// Copyright 2026 GoSQLX Authors
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+// legacy_preprocess_test.go is a FROZEN, verbatim copy of
+// pkg/sql/parser/preprocess.go as it stood before the classification rules
+// moved to internal/tokclass (W3-03a1, origin/main 8c985014), with every
+// identifier prefixed "legacy". It is the oracle for the differential
+// harness in tokstream_equiv_test.go: the shipped preprocess (now a loop over
+// tokclass) must reproduce it token for token on every input.
+//
+// Do not edit it to make a test pass. A deliberate behaviour change to the
+// classification rules (for example W3-03a2) must change the harness
+// expectation explicitly instead, so the diff stays reviewable.
+
+package parser
+
+import (
+	"strings"
+
+	"github.com/ajitpratap0/GoSQLX/pkg/models"
+)
+
+// legacyMaxKeywordLen is the size of the stack buffer used to upper-case a value
+// before matching it against the keyword tables. The longest remapped keyword
+// is AUTO_INCREMENT (14 bytes); TestKeywordTypeCaseInsensitive asserts every
+// table entry fits. Longer values cannot be keywords and are rejected early.
+const legacyMaxKeywordLen = 16
+
+// legacyPreprocessTokens normalises a token stream for the parser.
+// It expands compound tokens and remaps identifier/keyword types, returning a
+// new slice of models.TokenWithSpan that the parser consumes directly.
+//
+// The returned slice is freshly allocated and owned by the caller; use it when
+// the preprocessed stream outlives the parse (e.g. ParseBytesWithTokens).
+func legacyPreprocessTokens(tokens []models.TokenWithSpan) []models.TokenWithSpan {
+	return legacyPreprocessTokensInto(nil, tokens)
+}
+
+// legacyPreprocessTokensInto is legacyPreprocessTokens appending into dst[:0], so a caller
+// that owns a scratch buffer (Parser.tokenBuf) can reuse it across parses.
+// It allocates only when cap(dst) < len(tokens)+4 (the headroom covers the
+// common compound-token expansions).
+//
+// dst must not alias tokens. The returned slice may share dst's backing array,
+// so it must not be handed to anyone who could outlive the next call with the
+// same dst.
+func legacyPreprocessTokensInto(dst, tokens []models.TokenWithSpan) []models.TokenWithSpan {
+	dst = dst[:0]
+	if need := len(tokens) + 4; cap(dst) < need {
+		dst = make([]models.TokenWithSpan, 0, need)
+	}
+	for i := range tokens {
+		t := &tokens[i]
+		switch typ := t.Token.Type; {
+		case typ == models.TokenTypeIdentifier || typ == models.TokenTypeKeyword ||
+			(typ >= models.TokenTypeCount && typ <= models.TokenTypeMax) ||
+			(typ >= models.TokenTypeGroupBy && typ <= models.TokenTypeCrossJoin) ||
+			typ == models.TokenTypeGroupingSets:
+			var ok bool
+			if dst, ok = legacyAppendCompound(dst, t); ok {
+				continue
+			}
+			dst = append(dst, *t)
+			legacyNormalizeTokenInPlace(&dst[len(dst)-1])
+		default:
+			dst = append(dst, *t)
+		}
+	}
+	return dst
+}
+
+// legacyNormalizeTokenInPlace remaps one token's type (and records a backtick quote)
+// in place. Its reference implementation, normalizeToken, lives in
+// preprocess_fastpath_test.go and is checked against it by a differential test.
+func legacyNormalizeTokenInPlace(t *models.TokenWithSpan) {
+	switch t.Token.Type {
+	case models.TokenTypeCount, models.TokenTypeSum, models.TokenTypeAvg,
+		models.TokenTypeMin, models.TokenTypeMax:
+		t.Token.Type = models.TokenTypeIdentifier
+		return
+	case models.TokenTypeIdentifier:
+		if t.Token.Quote != 0 {
+			return
+		}
+		if t.Start.Line != 0 && t.Start.Line == t.End.Line && t.End.Column-t.Start.Column > len(t.Token.Value) {
+			t.Token.Quote = '`'
+			return
+		}
+		if remapped := legacyIdentifierKeywordType(t.Token.Value); remapped != models.TokenTypeUnknown {
+			t.Token.Type = remapped
+		}
+	case models.TokenTypeKeyword:
+		if remapped := legacyKeywordType(t.Token.Value); remapped != models.TokenTypeUnknown {
+			t.Token.Type = remapped
+		}
+	}
+}
+
+// Compound token expansion tables. These slices are shared, read-only package
+// data and must never be mutated: legacyAppendCompound copies each element into a
+// fresh TokenWithSpan, so callers never alias them.
+var (
+	legacyCompoundInnerJoin      = []models.Token{{Type: models.TokenTypeInner, Value: "INNER"}, {Type: models.TokenTypeJoin, Value: "JOIN"}}
+	legacyCompoundLeftJoin       = []models.Token{{Type: models.TokenTypeLeft, Value: "LEFT"}, {Type: models.TokenTypeJoin, Value: "JOIN"}}
+	legacyCompoundRightJoin      = []models.Token{{Type: models.TokenTypeRight, Value: "RIGHT"}, {Type: models.TokenTypeJoin, Value: "JOIN"}}
+	legacyCompoundOuterJoin      = []models.Token{{Type: models.TokenTypeOuter, Value: "OUTER"}, {Type: models.TokenTypeJoin, Value: "JOIN"}}
+	legacyCompoundFullJoin       = []models.Token{{Type: models.TokenTypeFull, Value: "FULL"}, {Type: models.TokenTypeJoin, Value: "JOIN"}}
+	legacyCompoundCrossJoin      = []models.Token{{Type: models.TokenTypeCross, Value: "CROSS"}, {Type: models.TokenTypeJoin, Value: "JOIN"}}
+	legacyCompoundOrderBy        = []models.Token{{Type: models.TokenTypeOrder, Value: "ORDER"}, {Type: models.TokenTypeBy, Value: "BY"}}
+	legacyCompoundGroupBy        = []models.Token{{Type: models.TokenTypeGroup, Value: "GROUP"}, {Type: models.TokenTypeBy, Value: "BY"}}
+	legacyCompoundGroupingSets   = []models.Token{{Type: models.TokenTypeGrouping, Value: "GROUPING"}, {Type: models.TokenTypeSets, Value: "SETS"}}
+	legacyCompoundLeftOuterJoin  = []models.Token{{Type: models.TokenTypeLeft, Value: "LEFT"}, {Type: models.TokenTypeOuter, Value: "OUTER"}, {Type: models.TokenTypeJoin, Value: "JOIN"}}
+	legacyCompoundRightOuterJoin = []models.Token{{Type: models.TokenTypeRight, Value: "RIGHT"}, {Type: models.TokenTypeOuter, Value: "OUTER"}, {Type: models.TokenTypeJoin, Value: "JOIN"}}
+	legacyCompoundFullOuterJoin  = []models.Token{{Type: models.TokenTypeFull, Value: "FULL"}, {Type: models.TokenTypeOuter, Value: "OUTER"}, {Type: models.TokenTypeJoin, Value: "JOIN"}}
+)
+
+// legacyCompoundByValue maps the multi-word Value of a generic keyword token to its
+// sub-token table. Matching is ASCII case-insensitive; see legacyCompoundParts.
+var legacyCompoundByValue = [...]struct {
+	value string
+	parts []models.Token
+}{
+	{"INNER JOIN", legacyCompoundInnerJoin},
+	{"LEFT JOIN", legacyCompoundLeftJoin},
+	{"RIGHT JOIN", legacyCompoundRightJoin},
+	{"FULL JOIN", legacyCompoundFullJoin},
+	{"CROSS JOIN", legacyCompoundCrossJoin},
+	{"LEFT OUTER JOIN", legacyCompoundLeftOuterJoin},
+	{"RIGHT OUTER JOIN", legacyCompoundRightOuterJoin},
+	{"FULL OUTER JOIN", legacyCompoundFullOuterJoin},
+	{"ORDER BY", legacyCompoundOrderBy},
+	{"GROUP BY", legacyCompoundGroupBy},
+	{"GROUPING SETS", legacyCompoundGroupingSets},
+}
+
+// legacyCompoundParts returns the read-only sub-token table for a compound token such
+// as INNER_JOIN → [INNER, JOIN], or nil if the token is not compound.
+// The returned slice is shared package data and must not be modified.
+func legacyCompoundParts(t *models.TokenWithSpan) []models.Token {
+	switch t.Token.Type {
+	case models.TokenTypeInnerJoin:
+		return legacyCompoundInnerJoin
+	case models.TokenTypeLeftJoin:
+		return legacyCompoundLeftJoin
+	case models.TokenTypeRightJoin:
+		return legacyCompoundRightJoin
+	case models.TokenTypeOuterJoin:
+		return legacyCompoundOuterJoin
+	case models.TokenTypeFullJoin:
+		return legacyCompoundFullJoin
+	case models.TokenTypeCrossJoin:
+		return legacyCompoundCrossJoin
+	case models.TokenTypeOrderBy:
+		return legacyCompoundOrderBy
+	case models.TokenTypeGroupBy:
+		return legacyCompoundGroupBy
+	case models.TokenTypeGroupingSets:
+		return legacyCompoundGroupingSets
+	}
+
+	// Value-based compound token matching. The tokenizer emits these as
+	// TokenTypeKeyword whose Value keeps the source spelling ("cross join",
+	// "Grouping Sets"), so the match is case-insensitive (#842). Only keyword
+	// tokens qualify: a string literal such as 'CROSS JOIN' is not a join.
+	if t.Token.Type != models.TokenTypeKeyword {
+		return nil
+	}
+	v := t.Token.Value
+	for i := range legacyCompoundByValue {
+		if len(v) == len(legacyCompoundByValue[i].value) && strings.EqualFold(v, legacyCompoundByValue[i].value) {
+			return legacyCompoundByValue[i].parts
+		}
+	}
+	return nil
+}
+
+// legacyAppendCompound appends the expansion of compound token t to dst, copying
+// t's span onto every sub-token. It reports false (leaving dst unchanged) if t
+// is not a compound token. It performs no allocation beyond growing dst.
+func legacyAppendCompound(dst []models.TokenWithSpan, t *models.TokenWithSpan) ([]models.TokenWithSpan, bool) {
+	parts := legacyCompoundParts(t)
+	if parts == nil {
+		return dst, false
+	}
+	for i := range parts {
+		dst = append(dst, models.TokenWithSpan{Token: parts[i], Start: t.Start, End: t.End})
+	}
+	return dst, true
+}
+
+// legacyIdentifierKeywordType remaps identifiers that carry SQL keyword values to
+// their specific models.TokenType. This is conservative: only keywords that
+// the parser dispatches on by type are included.
+func legacyIdentifierKeywordType(value string) models.TokenType {
+	if len(value) > legacyMaxKeywordLen {
+		return models.TokenTypeUnknown
+	}
+	// ASCII upper-case into a local buffer. The loop is intentionally inline
+	// (no helper, no &buf): taking the array's address is ~2.4x slower, and
+	// switch string(buf[:n]) does not allocate.
+	var buf [legacyMaxKeywordLen]byte
+	for i := 0; i < len(value); i++ {
+		c := value[i]
+		if c >= 'a' && c <= 'z' {
+			c -= 'a' - 'A'
+		}
+		buf[i] = c
+	}
+	switch string(buf[:len(value)]) {
+	case "INSERT":
+		return models.TokenTypeInsert
+	case "UPDATE":
+		return models.TokenTypeUpdate
+	case "DELETE":
+		return models.TokenTypeDelete
+	case "INTO":
+		return models.TokenTypeInto
+	case "VALUES":
+		return models.TokenTypeValues
+	case "SET":
+		return models.TokenTypeSet
+	case "CREATE":
+		return models.TokenTypeCreate
+	case "ALTER":
+		return models.TokenTypeAlter
+	case "DROP":
+		return models.TokenTypeDrop
+	case "TABLE":
+		return models.TokenTypeTable
+	case "INDEX":
+		return models.TokenTypeIndex
+	case "VIEW":
+		return models.TokenTypeView
+	case "WITH":
+		return models.TokenTypeWith
+	case "RECURSIVE":
+		return models.TokenTypeRecursive
+	case "UNION":
+		return models.TokenTypeUnion
+	case "EXCEPT":
+		return models.TokenTypeExcept
+	case "INTERSECT":
+		return models.TokenTypeIntersect
+	case "ALL":
+		return models.TokenTypeAll
+	case "PRIMARY":
+		return models.TokenTypePrimary
+	case "KEY":
+		return models.TokenTypeKey
+	case "FOREIGN":
+		return models.TokenTypeForeign
+	case "REFERENCES":
+		return models.TokenTypeReferences
+	case "UNIQUE":
+		return models.TokenTypeUnique
+	case "CHECK":
+		return models.TokenTypeCheck
+	case "DEFAULT":
+		return models.TokenTypeDefault
+	case "CONSTRAINT":
+		return models.TokenTypeConstraint
+	case "AUTO_INCREMENT", "AUTOINCREMENT":
+		return models.TokenTypeAutoIncrement
+	case "OVER":
+		return models.TokenTypeOver
+	case "PARTITION":
+		return models.TokenTypePartition
+	case "ROWS":
+		return models.TokenTypeRows
+	case "RANGE":
+		return models.TokenTypeRange
+	case "UNBOUNDED":
+		return models.TokenTypeUnbounded
+	case "PRECEDING":
+		return models.TokenTypePreceding
+	case "FOLLOWING":
+		return models.TokenTypeFollowing
+	case "CURRENT":
+		return models.TokenTypeCurrent
+	case "ROW":
+		return models.TokenTypeRow
+	case "CROSS":
+		return models.TokenTypeCross
+	case "NATURAL":
+		return models.TokenTypeNatural
+	case "USING":
+		return models.TokenTypeUsing
+	case "LATERAL":
+		return models.TokenTypeLateral
+	case "DISTINCT":
+		return models.TokenTypeDistinct
+	case "EXISTS":
+		return models.TokenTypeExists
+	case "ANY":
+		return models.TokenTypeAny
+	case "SOME":
+		return models.TokenTypeSome
+	case "ROLLUP":
+		return models.TokenTypeRollup
+	case "CUBE":
+		return models.TokenTypeCube
+	case "GROUPING":
+		return models.TokenTypeGrouping
+	case "ADD":
+		return models.TokenTypeAdd
+	case "NOSUPERUSER":
+		return models.TokenTypeNosuperuser
+	case "NOCREATEDB":
+		return models.TokenTypeNocreatedb
+	case "NOCREATEROLE":
+		return models.TokenTypeNocreaterole
+	case "NOLOGIN":
+		return models.TokenTypeNologin
+	case "VALID":
+		return models.TokenTypeValid
+	case "DCPROPERTIES":
+		return models.TokenTypeDcproperties
+	case "URL":
+		return models.TokenTypeUrl
+	case "OWNER":
+		return models.TokenTypeOwner
+	case "MEMBER":
+		return models.TokenTypeMember
+	case "CONNECTOR":
+		return models.TokenTypeConnector
+	case "POLICY":
+		return models.TokenTypePolicy
+	case "UNTIL":
+		return models.TokenTypeUntil
+	case "RESET":
+		return models.TokenTypeReset
+	default:
+		return models.TokenTypeUnknown
+	}
+}
+
+// legacyKeywordType maps generic TokenTypeKeyword strings to specific token types.
+func legacyKeywordType(value string) models.TokenType {
+	if len(value) > legacyMaxKeywordLen {
+		return models.TokenTypeUnknown
+	}
+	// ASCII upper-case into a local buffer. The loop is intentionally inline
+	// (no helper, no &buf): taking the array's address is ~2.4x slower, and
+	// switch string(buf[:n]) does not allocate.
+	var buf [legacyMaxKeywordLen]byte
+	for i := 0; i < len(value); i++ {
+		c := value[i]
+		if c >= 'a' && c <= 'z' {
+			c -= 'a' - 'A'
+		}
+		buf[i] = c
+	}
+	switch string(buf[:len(value)]) {
+	case "INSERT":
+		return models.TokenTypeInsert
+	case "UPDATE":
+		return models.TokenTypeUpdate
+	case "DELETE":
+		return models.TokenTypeDelete
+	case "INTO":
+		return models.TokenTypeInto
+	case "VALUES":
+		return models.TokenTypeValues
+	case "SET":
+		return models.TokenTypeSet
+	case "CREATE":
+		return models.TokenTypeCreate
+	case "ALTER":
+		return models.TokenTypeAlter
+	case "DROP":
+		return models.TokenTypeDrop
+	case "TABLE":
+		return models.TokenTypeTable
+	case "INDEX":
+		return models.TokenTypeIndex
+	case "VIEW":
+		return models.TokenTypeView
+	case "WITH":
+		return models.TokenTypeWith
+	case "RECURSIVE":
+		return models.TokenTypeRecursive
+	case "UNION":
+		return models.TokenTypeUnion
+	case "EXCEPT":
+		return models.TokenTypeExcept
+	case "INTERSECT":
+		return models.TokenTypeIntersect
+	case "ALL":
+		return models.TokenTypeAll
+	case "PRIMARY":
+		return models.TokenTypePrimary
+	case "KEY":
+		return models.TokenTypeKey
+	case "FOREIGN":
+		return models.TokenTypeForeign
+	case "REFERENCES":
+		return models.TokenTypeReferences
+	case "UNIQUE":
+		return models.TokenTypeUnique
+	case "CHECK":
+		return models.TokenTypeCheck
+	case "DEFAULT":
+		return models.TokenTypeDefault
+	case "CONSTRAINT":
+		return models.TokenTypeConstraint
+	case "AUTO_INCREMENT", "AUTOINCREMENT":
+		return models.TokenTypeAutoIncrement
+	case "OVER":
+		return models.TokenTypeOver
+	case "PARTITION":
+		return models.TokenTypePartition
+	case "ROWS":
+		return models.TokenTypeRows
+	case "RANGE":
+		return models.TokenTypeRange
+	case "UNBOUNDED":
+		return models.TokenTypeUnbounded
+	case "PRECEDING":
+		return models.TokenTypePreceding
+	case "FOLLOWING":
+		return models.TokenTypeFollowing
+	case "CURRENT":
+		return models.TokenTypeCurrent
+	case "ROW":
+		return models.TokenTypeRow
+	case "CROSS":
+		return models.TokenTypeCross
+	case "NATURAL":
+		return models.TokenTypeNatural
+	case "USING":
+		return models.TokenTypeUsing
+	case "LATERAL":
+		return models.TokenTypeLateral
+	case "DISTINCT":
+		return models.TokenTypeDistinct
+	case "EXISTS":
+		return models.TokenTypeExists
+	case "ANY":
+		return models.TokenTypeAny
+	case "SOME":
+		return models.TokenTypeSome
+	case "ROLLUP":
+		return models.TokenTypeRollup
+	case "CUBE":
+		return models.TokenTypeCube
+	case "GROUPING":
+		return models.TokenTypeGrouping
+	case "ADD":
+		return models.TokenTypeAdd
+	case "NOSUPERUSER":
+		return models.TokenTypeNosuperuser
+	case "NOCREATEDB":
+		return models.TokenTypeNocreatedb
+	case "NOCREATEROLE":
+		return models.TokenTypeNocreaterole
+	case "NOLOGIN":
+		return models.TokenTypeNologin
+	case "VALID":
+		return models.TokenTypeValid
+	case "DCPROPERTIES":
+		return models.TokenTypeDcproperties
+	case "URL":
+		return models.TokenTypeUrl
+	case "OWNER":
+		return models.TokenTypeOwner
+	case "MEMBER":
+		return models.TokenTypeMember
+	case "CONNECTOR":
+		return models.TokenTypeConnector
+	case "POLICY":
+		return models.TokenTypePolicy
+	case "UNTIL":
+		return models.TokenTypeUntil
+	case "RESET":
+		return models.TokenTypeReset
+	case "RENAME":
+		return models.TokenTypeRename
+	case "COLUMN":
+		return models.TokenTypeColumn
+	case "CASCADE":
+		return models.TokenTypeCascade
+	case "RESTRICT":
+		return models.TokenTypeRestrict
+	case "MATERIALIZED":
+		return models.TokenTypeMaterialized
+	case "REPLACE":
+		return models.TokenTypeReplace
+	case "COLLATE":
+		return models.TokenTypeCollate
+	case "ASC":
+		return models.TokenTypeAsc
+	case "DESC":
+		return models.TokenTypeDesc
+	case "JOIN":
+		return models.TokenTypeJoin
+	case "INNER":
+		return models.TokenTypeInner
+	case "LEFT":
+		return models.TokenTypeLeft
+	case "RIGHT":
+		return models.TokenTypeRight
+	case "FULL":
+		return models.TokenTypeFull
+	case "OUTER":
+		return models.TokenTypeOuter
+	case "IS":
+		return models.TokenTypeIs
+	case "LIKE":
+		return models.TokenTypeLike
+	case "ILIKE":
+		return models.TokenTypeILike
+	case "BETWEEN":
+		return models.TokenTypeBetween
+	case "CASE":
+		return models.TokenTypeCase
+	case "WHEN":
+		return models.TokenTypeWhen
+	case "THEN":
+		return models.TokenTypeThen
+	case "ELSE":
+		return models.TokenTypeElse
+	case "END":
+		return models.TokenTypeEnd
+	case "CAST":
+		return models.TokenTypeCast
+	case "INTERVAL":
+		return models.TokenTypeInterval
+	case "MERGE":
+		return models.TokenTypeMerge
+	case "MATCHED":
+		return models.TokenTypeMatched
+	case "SOURCE":
+		return models.TokenTypeSource
+	case "TARGET":
+		return models.TokenTypeTarget
+	case "SETS":
+		return models.TokenTypeSets
+	case "FETCH":
+		return models.TokenTypeFetch
+	case "NEXT":
+		return models.TokenTypeNext
+	case "TIES":
+		return models.TokenTypeTies
+	case "PERCENT":
+		return models.TokenTypePercent
+	case "ONLY":
+		return models.TokenTypeOnly
+	case "SHARE":
+		return models.TokenTypeShare
+	case "IF":
+		return models.TokenTypeIf
+	case "REFRESH":
+		return models.TokenTypeRefresh
+	case "COUNT":
+		return models.TokenTypeCount
+	case "TO":
+		return models.TokenTypeTo
+	case "NULLS":
+		return models.TokenTypeNulls
+	case "FIRST":
+		return models.TokenTypeFirst
+	case "LAST":
+		return models.TokenTypeLast
+	case "FILTER":
+		return models.TokenTypeFilter
+	case "FOR":
+		return models.TokenTypeFor
+	case "SELECT":
+		return models.TokenTypeSelect
+	case "FROM":
+		return models.TokenTypeFrom
+	case "WHERE":
+		return models.TokenTypeWhere
+	case "AND":
+		return models.TokenTypeAnd
+	case "OR":
+		return models.TokenTypeOr
+	case "NOT":
+		return models.TokenTypeNot
+	case "NULL":
+		return models.TokenTypeNull
+	case "IN":
+		return models.TokenTypeIn
+	case "AS":
+		return models.TokenTypeAs
+	case "ON":
+		return models.TokenTypeOn
+	case "ORDER":
+		return models.TokenTypeOrder
+	case "BY":
+		return models.TokenTypeBy
+	case "GROUP":
+		return models.TokenTypeGroup
+	case "HAVING":
+		return models.TokenTypeHaving
+	case "LIMIT":
+		return models.TokenTypeLimit
+	case "OFFSET":
+		return models.TokenTypeOffset
+	case "TRUE":
+		return models.TokenTypeTrue
+	case "FALSE":
+		return models.TokenTypeFalse
+	case "TRUNCATE":
+		return models.TokenTypeTruncate
+	case "DATABASE":
+		return models.TokenTypeDatabase
+	case "SCHEMA":
+		return models.TokenTypeSchema
+	case "TRIGGER":
+		return models.TokenTypeTrigger
+	case "INTEGER":
+		return models.TokenTypeInteger
+	case "VARCHAR":
+		return models.TokenTypeVarchar
+	case "TEXT":
+		return models.TokenTypeText
+	case "BOOLEAN":
+		return models.TokenTypeBoolean
+	case "DATE":
+		return models.TokenTypeDate
+	case "TIMESTAMP":
+		return models.TokenTypeTimestamp
+	default:
+		return models.TokenTypeUnknown
+	}
+}

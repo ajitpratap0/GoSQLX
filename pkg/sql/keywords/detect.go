@@ -126,6 +126,10 @@ var dialectPriority = [dialectCount]SQLDialect{
 // one weighted hint, including duplicate patterns with different dialects.
 const matcherClasses = 30
 
+// nonASCIIFold is the byte a folded non-ASCII rune is mapped to. It must stay
+// >= utf8.RuneSelf, so it is a word separator that classifies as classOther.
+const nonASCIIFold = 128
+
 const (
 	classOther      = 0
 	classDigit      = 27
@@ -303,7 +307,7 @@ func dialectScores(sql string) (scores [dialectCount]int) {
 				if r < utf8.RuneSelf {
 					c = byte(r)
 				} else {
-					c = 128
+					c = nonASCIIFold
 				}
 			} else if c >= 'a' && c <= 'z' {
 				c -= 'a' - 'A'

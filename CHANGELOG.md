@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- `pkg/formatter`: width-scaling regression guard for `BenchmarkRenderScale/wide` (exact output, time ratio and bytes per output byte over compact/lower/readable/semicolon/postgresql modes); test-only, no behaviour change (#958, W5-13).
 - **Benchmark and perf-gate infrastructure (performance overhaul, wave 0)**:
   pull requests are now judged by interleaved A/B measurements instead of
   absolute numbers. No library behaviour changes apart from #901 (see Fixed). The pieces, by PR:
@@ -101,8 +102,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - The LSP benchmark server (`setupTestServer`) discards its output, so
     benchmarks that publish diagnostics no longer time a growing buffer.
 
+- **Token classification moved to `internal/tokclass`** (W3-03a1; internal
+  refactor, no behaviour change): the compound-keyword split tables, the
+  identifier/keyword → specific-type remaps, the COUNT..MAX → identifier rule
+  and the backtick-width rule applied by the parser's preprocess pass now live
+  in one internal package that the tokenizer's planned parser-ready mode
+  (W3-03b) will share. Tokens, spans, ASTs, errors and every behaviour golden
+  are unchanged. A differential test checks the new pass, field for field,
+  against a frozen copy of the old one over the benchmark corpus, the SQL
+  fixtures and a generated compound-keyword, Unicode-fold, odd-identifier and
+  tokenizer-error matrix in all 11 dialects.
+
 ### Performance
-- **Dialect detection [W7-09]**: `DetectDialect` uses a lazily built, compact single-pass matcher with no per-call allocations (1 to 0 allocs/op, 48-80 B/op to 0; 72 KiB to 0 on a 64 KiB input). On the amd64 perf gate (20 layouts per arm) every non-empty case is significantly faster (p<0.001), about 3.1x to 4.1x: PostgreSQL 4.1x, MariaDB 3.8x, SQL Server 3.7x, Snowflake 3.6x, MySQL 3.5x, generic and Oracle 3.4x, mixed 3.1x, 64 KiB 3.1x. The 2 ns `empty` case is layout-noise dominated and its result differs between gate runs (0 allocs before and after). The 4x PLAN target is met only for PostgreSQL (4.1x); the other non-empty cases are 3.1x-3.8x. All rows are reported in the PR body from the CI gate.
+- **Dialect detection [W7-09]**: `DetectDialect` uses a lazily built, compact single-pass matcher with no per-call allocations (1 to 0 allocs/op, 48-80 B/op to 0; 72 KiB to 0 on a 64 KiB input). On the amd64 perf gate (run 42347471093, Intel Xeon 8370C, 20 layouts per arm) every non-empty case is significantly faster (p<0.001), about 3.1x to 4.5x: PostgreSQL 4.5x, Snowflake 4.1x, SQL Server 4.05x, MariaDB 3.99x, generic, MySQL and Oracle 3.7x, mixed 3.3x, 64 KiB 3.1x. The 2 ns `empty` case is noise (+0.73%, p 0.256) and is not claimed (0 allocs before and after). The 4x PLAN target is met only for PostgreSQL, Snowflake and SQL Server; generic, MySQL, Oracle, MariaDB (3.99x), mixed and 64 KiB miss it. All rows are reported in the PR body from the CI gate.
+- **Semantic tokens**: pooled highlighting scratch and shared case folding cut 30 KB semantic-token allocs/op by 98.9–99.0% (2,039 to 20, 1,863 to 21, 1,953 to 21), B/op by 26.0–26.8% and sec/op by 13.3–14.3% (amd64 layout-randomized gate); the new highlight golden pins output. No behaviour change. [W6-11]
 - **Linter**: the lint pipeline uses the pooled parser and pooled dialect tokenizer; behavior is unchanged. [W6-06ab]
 - **Linter**: aliasing consistency and four visitor-based rules now reuse the cached preorder AST node list. Violations are unchanged; there is no API or behavior change. [W6-05b]
 - **Linter**: rule L007 (keyword case consistency) scans words without allocating (substring words, ASCII upper-casing into a stack buffer before the keyword lookup). Output is unchanged. On the canonical benchmarks (Apple M4, local), `BenchmarkLintRule/L007` allocates about 98% fewer objects (72565 to 1194 allocs/op) and about 97% fewer bytes, and `BenchmarkLintRW` allocates about 12.5% fewer objects. [W6-03]

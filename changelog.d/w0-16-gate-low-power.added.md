@@ -6,8 +6,7 @@
   list remaining Low power benchmarks with reasons, separate planned
   extensions from line warm-ups, show configured power targets and unknown
   estimates, and say when adaptive layouts were skipped because timings
-  were not judged. Only primary time
-  uses extra layouts; all other rules use stage-1 data. Normal jobs take
-  about 13.5 + 10 minutes, worst-case retry 21.7 + 10 = 31.7 minutes;
-  new work stops at 35 minutes inside a 40-minute step and 45-minute job.
-  Library behaviour is unchanged. [W0-16]
+  were not judged. Only primary time uses extra layouts; all other
+  rules use stage-1 data. The perf step timeout rises from 35 to 40
+  minutes; the job cap stays at 45 minutes. Library behaviour is
+  unchanged. [W0-16]

@@ -57,6 +57,8 @@ def measure(fn: Callable[[], object], repeat: int, number: int) -> float:
 
 
 def run(repeat: int, number: int) -> List[dict]:
+    from pygosqlx.core import _DECODER
+
     rows = []
     for op_name, op in operations().items():
         for q_name, sql in QUERIES.items():
@@ -66,6 +68,7 @@ def run(repeat: int, number: int) -> List[dict]:
                 {
                     "op": op_name,
                     "query": q_name,
+                    "decoder": _DECODER,
                     "us_per_call": round(measure(lambda: op(sql), repeat, number), 3),
                 }
             )
@@ -90,6 +93,7 @@ def main(argv: List[str]) -> int:
     if args.json:
         print(json.dumps(rows, indent=2))
     else:
+        print(f"decoder: {rows[0]['decoder']}")
         print(f"{'op':<18}{'query':<8}{'us/call':>10}")
         for r in rows:
             print(f"{r['op']:<18}{r['query']:<8}{r['us_per_call']:>10.3f}")

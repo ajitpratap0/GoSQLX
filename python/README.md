@@ -10,6 +10,11 @@ Powered by Go's compiled performance, PyGoSQLX is 100x+ faster than pure Python 
 pip install pygosqlx
 ```
 
+### Faster JSON decoding
+
+Install `pip install "pygosqlx[orjson]"` to use optional orjson decoding.
+If orjson is unavailable, pygosqlx uses Python's standard library JSON decoder.
+
 Prebuilt wheels bundle the native `libgosqlx` library, so no Go toolchain is
 needed. pygosqlx is versioned in lockstep with GoSQLX: each GoSQLX release
 (starting with 1.16.0) publishes the matching pygosqlx version, whose wheels

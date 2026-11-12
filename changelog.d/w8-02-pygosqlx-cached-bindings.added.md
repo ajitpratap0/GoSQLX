@@ -1,0 +1,1 @@
+- Add an optional `pygosqlx[orjson]` extra for faster JSON decoding.

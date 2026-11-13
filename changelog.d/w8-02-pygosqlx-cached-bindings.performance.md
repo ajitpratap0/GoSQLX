@@ -1,0 +1,1 @@
+- Cache Python ctypes bindings and decode native JSON responses from bytes. With orjson, invalid UTF-8 in a native JSON response raises JSONDecodeError rather than the standard library's UnicodeDecodeError.

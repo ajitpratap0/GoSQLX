@@ -174,19 +174,9 @@ class TestOlderLibrary:
 
     @pytest.fixture
     def old_library(self, monkeypatch):
-        new_exports = set(core._DIALECT_EXPORTS.values()) | {
-            "gosqlx_lint",
-            "gosqlx_security_scan",
-            "gosqlx_transpile",
-            "gosqlx_dialects",
-        }
+        from tests.test_cached_bindings import FakeLibrary, use_fake
 
-        def fake_has_func(name):
-            if name in new_exports:
-                return False
-            return True
-
-        monkeypatch.setattr(core, "_has_func", fake_has_func)
+        use_fake(monkeypatch, FakeLibrary(old=True))
 
     @pytest.mark.parametrize("name,call", DIALECT_CALLS)
     def test_dialect_argument_needs_new_library(self, old_library, name, call):
@@ -209,7 +199,6 @@ class TestOlderLibrary:
         with pytest.raises(GoSQLXError, match=f"{symbol} not available"):
             call()
 
-    @requires_lib
     def test_calls_without_dialect_still_work(self, old_library):
         # dialect=None goes through the original exports.
         assert pygosqlx.parse("SELECT 1").statement_count == 1

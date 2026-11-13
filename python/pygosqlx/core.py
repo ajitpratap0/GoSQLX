@@ -20,7 +20,17 @@ import platform
 import threading
 from dataclasses import dataclass, field
 from pathlib import Path
+from types import MappingProxyType
 from typing import Any, Dict, List, Optional
+
+try:
+    import orjson
+except ImportError:
+    _loads = json.loads
+    _DECODER = "json"
+else:
+    _loads = orjson.loads
+    _DECODER = "orjson"
 
 from pygosqlx.exceptions import (
     FormatError,
@@ -160,7 +170,7 @@ class SecurityScanResult:
 # Library loading
 # ---------------------------------------------------------------------------
 
-_lib = None
+_bindings = None
 _lib_lock = threading.Lock()
 
 # Original single-argument exports mapped to their dialect-aware variants.
@@ -216,93 +226,106 @@ def _get_lib_path() -> str:
     )
 
 
-def _load_library() -> ctypes.CDLL:
-    """Load the GoSQLX shared library and configure function signatures.
+@dataclass(frozen=True)
+class _Bindings:
+    """One immutable set of exports and their owning library/free function."""
 
-    All functions that return C strings use c_void_p as restype to prevent
-    ctypes from auto-converting the pointer to bytes (which would lose the
-    original pointer needed for gosqlx_free).
-    """
-    lib_path = _get_lib_path()
-    lib = ctypes.CDLL(lib_path)
-
-    # --- gosqlx_parse ---
-    lib.gosqlx_parse.argtypes = [ctypes.c_char_p]
-    lib.gosqlx_parse.restype = ctypes.c_void_p
-
-    # --- gosqlx_validate ---
-    lib.gosqlx_validate.argtypes = [ctypes.c_char_p]
-    lib.gosqlx_validate.restype = ctypes.c_void_p
-
-    # --- gosqlx_extract_tables ---
-    lib.gosqlx_extract_tables.argtypes = [ctypes.c_char_p]
-    lib.gosqlx_extract_tables.restype = ctypes.c_void_p
-
-    # --- gosqlx_free ---
-    lib.gosqlx_free.argtypes = [ctypes.c_void_p]
-    lib.gosqlx_free.restype = None
-
-    # --- gosqlx_version ---
-    lib.gosqlx_version.argtypes = []
-    lib.gosqlx_version.restype = ctypes.c_void_p
-
-    # --- Optional functions (may not exist in older builds) ---
-    _bind_optional(lib, "gosqlx_format", [ctypes.c_char_p], ctypes.c_void_p)
-    _bind_optional(
-        lib, "gosqlx_extract_columns", [ctypes.c_char_p], ctypes.c_void_p
-    )
-    _bind_optional(
-        lib, "gosqlx_extract_functions", [ctypes.c_char_p], ctypes.c_void_p
-    )
-    _bind_optional(
-        lib, "gosqlx_extract_metadata", [ctypes.c_char_p], ctypes.c_void_p
+    __slots__ = (
+        'lib',
+        'free',
+        'exports',
+        'gosqlx_parse',
+        'gosqlx_validate',
+        'gosqlx_extract_tables',
+        'gosqlx_version',
+        'gosqlx_format',
+        'gosqlx_extract_columns',
+        'gosqlx_extract_functions',
+        'gosqlx_extract_metadata',
+        'gosqlx_parse_dialect',
+        'gosqlx_validate_dialect',
+        'gosqlx_format_dialect',
+        'gosqlx_extract_tables_dialect',
+        'gosqlx_extract_columns_dialect',
+        'gosqlx_extract_functions_dialect',
+        'gosqlx_extract_metadata_dialect',
+        'gosqlx_lint',
+        'gosqlx_security_scan',
+        'gosqlx_transpile',
+        'gosqlx_dialects',
     )
 
-    # --- Dialect-aware variants and analysis exports (libgosqlx 1.16.0+) ---
-    for name in _DIALECT_EXPORTS.values():
-        _bind_optional(
-            lib, name, [ctypes.c_char_p, ctypes.c_char_p], ctypes.c_void_p
-        )
-    _bind_optional(
-        lib, "gosqlx_lint", [ctypes.c_char_p, ctypes.c_char_p], ctypes.c_void_p
-    )
-    _bind_optional(lib, "gosqlx_security_scan", [ctypes.c_char_p], ctypes.c_void_p)
-    _bind_optional(
-        lib,
-        "gosqlx_transpile",
-        [ctypes.c_char_p, ctypes.c_char_p, ctypes.c_char_p],
-        ctypes.c_void_p,
-    )
-    _bind_optional(lib, "gosqlx_dialects", [], ctypes.c_void_p)
+    lib: Any
+    free: Any
+    exports: Any
+    gosqlx_parse: Any
+    gosqlx_validate: Any
+    gosqlx_extract_tables: Any
+    gosqlx_version: Any
+    gosqlx_format: Any
+    gosqlx_extract_columns: Any
+    gosqlx_extract_functions: Any
+    gosqlx_extract_metadata: Any
+    gosqlx_parse_dialect: Any
+    gosqlx_validate_dialect: Any
+    gosqlx_format_dialect: Any
+    gosqlx_extract_tables_dialect: Any
+    gosqlx_extract_columns_dialect: Any
+    gosqlx_extract_functions_dialect: Any
+    gosqlx_extract_metadata_dialect: Any
+    gosqlx_lint: Any
+    gosqlx_security_scan: Any
+    gosqlx_transpile: Any
+    gosqlx_dialects: Any
 
-    return lib
 
+def _load_library() -> _Bindings:
+    """Resolve and configure every export once before publishing the set."""
+    lib = ctypes.CDLL(_get_lib_path())
 
-def _bind_optional(
-    lib: ctypes.CDLL,
-    name: str,
-    argtypes: list,
-    restype: Any,
-) -> None:
-    """Bind a C function if it exists in the library, silently skip otherwise."""
-    try:
-        func = getattr(lib, name)
+    def bind(name: str, argtypes: list, optional: bool = False) -> Any:
+        try:
+            func = getattr(lib, name)
+        except AttributeError:
+            if optional:
+                return None
+            raise
         func.argtypes = argtypes
-        func.restype = restype
-    except AttributeError:
-        pass
+        func.restype = None if name == "gosqlx_free" else ctypes.c_void_p
+        return func
+
+    free = bind("gosqlx_free", [ctypes.c_void_p])
+    exports = {}
+    required = {"gosqlx_parse", "gosqlx_validate", "gosqlx_extract_tables", "gosqlx_version"}
+    for name in _Bindings.__slots__[3:]:
+        if name in {"gosqlx_version", "gosqlx_dialects"}:
+            args = []
+        elif name == "gosqlx_transpile":
+            args = [ctypes.c_char_p] * 3
+        elif name.endswith("_dialect") or name == "gosqlx_lint":
+            args = [ctypes.c_char_p] * 2
+        else:
+            args = [ctypes.c_char_p]
+        exports[name] = bind(name, args, optional=name not in required)
+    return _Bindings(lib=lib, free=free, exports=MappingProxyType(exports), **exports)
+
+
+def _get_bindings() -> _Bindings:
+    """Publish a complete binding set with thread-safe lazy initialization."""
+    global _bindings
+    if _bindings is None:
+        with _lib_lock:
+            if _bindings is None:
+                _bindings = _load_library()
+    return _bindings
 
 
 def _get_lib() -> ctypes.CDLL:
-    """Get the shared library, loading it lazily with thread-safe initialization."""
-    global _lib
-    if _lib is not None:
-        return _lib
-    with _lib_lock:
-        # Double-checked locking
-        if _lib is None:
-            _lib = _load_library()
-        return _lib
+    """Return the loaded CDLL for compatibility with existing callers."""
+    bindings = _bindings
+    if bindings is None:
+        bindings = _get_bindings()
+    return bindings.lib
 
 
 # ---------------------------------------------------------------------------
@@ -310,48 +333,34 @@ def _get_lib() -> ctypes.CDLL:
 # ---------------------------------------------------------------------------
 
 
-def _call_and_decode(func: Any, *args: Any) -> Dict[str, Any]:
-    """Call a C function that returns a JSON string, decode, and free memory.
-
-    The function must return a c_void_p (not c_char_p) so we can properly
-    free the pointer after decoding.
-
-    Args:
-        func: A ctypes function object whose restype is c_void_p.
-        *args: Arguments to pass to the C function.
-
-    Returns:
-        Parsed JSON as a Python dict.
-
-    Raises:
-        GoSQLXError: If the C function returns NULL.
-    """
+def _call_and_decode(bindings: _Bindings, func: Any, *args: Any) -> Dict[str, Any]:
+    """Copy a native JSON result and free it with its originating library."""
     result_ptr = func(*args)
     if result_ptr is None:
         raise GoSQLXError("C function returned NULL — possible out-of-memory")
     try:
         result_bytes = ctypes.string_at(result_ptr)
-        return json.loads(result_bytes.decode("utf-8"))
     finally:
-        _get_lib().gosqlx_free(result_ptr)
+        bindings.free(result_ptr)
+    return _loads(result_bytes)
 
 
 def _has_func(name: str) -> bool:
-    """Check if a function exists in the loaded library."""
-    try:
-        getattr(_get_lib(), name)
-        return True
-    except AttributeError:
-        return False
+    """Check the cached export set without resolving a symbol again."""
+    return _get_bindings().exports.get(name) is not None
 
 
-def _require_func(name: str) -> None:
-    """Raise GoSQLXError when the loaded library predates the export ``name``."""
-    if not _has_func(name):
+def _require_func(name: str, bindings: Optional[_Bindings] = None) -> Any:
+    """Return an export, or preserve the older-library compatibility error."""
+    if bindings is None:
+        bindings = _get_bindings()
+    func = bindings.exports.get(name)
+    if func is None:
         raise GoSQLXError(
             f"{name} not available in this library build. "
             "Rebuild the shared library with the latest cbinding."
         )
+    return func
 
 
 def _check_dialect_arg(dialect: Optional[str], arg: str = "dialect") -> None:
@@ -377,15 +386,20 @@ def _call_sql(name: str, sql: str, dialect: Optional[str]) -> Dict[str, Any]:
     UnsupportedDialectError.
     """
     _check_dialect_arg(dialect)
+    bindings = _bindings
+    if bindings is None:
+        bindings = _get_bindings()
     if dialect is None:
-        _require_func(name)
-        return _call_and_decode(getattr(_get_lib(), name), sql.encode("utf-8"))
+        func = bindings.gosqlx_parse if name == "gosqlx_parse" else bindings.exports[name]
+        if func is None:
+            _require_func(name, bindings)
+        return _call_and_decode(bindings, func, sql.encode("utf-8"))
     dialect_name = _DIALECT_EXPORTS[name]
-    _require_func(dialect_name)
+    func = bindings.exports[dialect_name]
+    if func is None:
+        _require_func(dialect_name, bindings)
     data = _call_and_decode(
-        getattr(_get_lib(), dialect_name),
-        sql.encode("utf-8"),
-        dialect.encode("utf-8"),
+        bindings, func, sql.encode("utf-8"), dialect.encode("utf-8")
     )
     _check_dialect_error(data)
     return data
@@ -672,10 +686,10 @@ def lint(
             )
         options["max_line_length"] = max_line_length
 
-    _require_func("gosqlx_lint")
-    lib = _get_lib()
+    bindings = _get_bindings()
+    func = _require_func("gosqlx_lint", bindings)
     data = _call_and_decode(
-        lib.gosqlx_lint, sql.encode("utf-8"), json.dumps(options).encode("utf-8")
+        bindings, func, sql.encode("utf-8"), json.dumps(options).encode("utf-8")
     )
     _check_dialect_error(data)
     if not data.get("success", False):
@@ -718,9 +732,9 @@ def security_scan(sql: str) -> SecurityScanResult:
     Raises:
         GoSQLXError: If the library predates gosqlx_security_scan.
     """
-    _require_func("gosqlx_security_scan")
-    lib = _get_lib()
-    data = _call_and_decode(lib.gosqlx_security_scan, sql.encode("utf-8"))
+    bindings = _get_bindings()
+    func = _require_func("gosqlx_security_scan", bindings)
+    data = _call_and_decode(bindings, func, sql.encode("utf-8"))
     if data.get("error"):
         raise GoSQLXError(message=data["error"])
 
@@ -775,10 +789,10 @@ def transpile(sql: str, from_dialect: str, to_dialect: str) -> str:
             raise UnsupportedDialectError(
                 message=f"{arg} is required", code=_ERR_UNSUPPORTED_DIALECT
             )
-    _require_func("gosqlx_transpile")
-    lib = _get_lib()
+    bindings = _get_bindings()
+    func = _require_func("gosqlx_transpile", bindings)
     data = _call_and_decode(
-        lib.gosqlx_transpile,
+        bindings, func,
         sql.encode("utf-8"),
         (from_dialect or "").encode("utf-8"),
         (to_dialect or "").encode("utf-8"),
@@ -798,9 +812,9 @@ def dialects() -> List[str]:
     Raises:
         GoSQLXError: If the library predates gosqlx_dialects.
     """
-    _require_func("gosqlx_dialects")
-    lib = _get_lib()
-    data = _call_and_decode(lib.gosqlx_dialects)
+    bindings = _get_bindings()
+    func = _require_func("gosqlx_dialects", bindings)
+    data = _call_and_decode(bindings, func)
     return list(data.get("dialects", []))
 
 
@@ -810,12 +824,12 @@ def version() -> str:
     Returns:
         Version string (e.g., "1.7.0").
     """
-    lib = _get_lib()
-    result_ptr = lib.gosqlx_version()
+    bindings = _get_bindings()
+    result_ptr = bindings.gosqlx_version()
     if result_ptr is None:
         raise GoSQLXError("gosqlx_version returned NULL")
     try:
         result_bytes = ctypes.string_at(result_ptr)
         return result_bytes.decode("utf-8")
     finally:
-        lib.gosqlx_free(result_ptr)
+        bindings.free(result_ptr)

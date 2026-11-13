@@ -107,6 +107,13 @@ func vfixed(depths []int) []string {
 			"SELECT 1"+strings.Repeat(" + (1", n)+strings.Repeat(")", n)+" FROM t",
 			"SELECT 1"+strings.Repeat(" * 2 + 3 - (4 / 5)", n/4)+" FROM t",
 			"SELECT 1"+strings.Repeat(" OR a", n)+" FROM t",
+			// Iterative chains without ops bytes pin that the 512 nesting guard cannot be hidden by the ops prefilter.
+			"SELECT a"+strings.Repeat(" ILIKE b", n)+" FROM t",
+			"SELECT a"+strings.Repeat("::INT", n)+" FROM t",
+			"SELECT a"+strings.Repeat(" COLLATE \"C\"", n)+" FROM t",
+			"SELECT a"+strings.Repeat(" AT TIME ZONE 'UTC'", n)+" FROM t",
+			"SELECT a"+strings.Repeat("[1]", n)+" FROM t",
+			"SELECT a"+strings.Repeat(" IS NULL", n)+" FROM t",
 		)
 	}
 	return out

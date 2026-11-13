@@ -21,6 +21,7 @@ import (
 	"sync"
 
 	"github.com/ajitpratap0/GoSQLX/internal/poolstats"
+	"github.com/ajitpratap0/GoSQLX/internal/stackgrow"
 	goerrors "github.com/ajitpratap0/GoSQLX/pkg/errors"
 	"github.com/ajitpratap0/GoSQLX/pkg/models"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
@@ -442,8 +443,11 @@ func (p *Parser) preprocess(tokens []models.TokenWithSpan) []models.TokenWithSpa
 
 // parseTokens is the core parsing routine. It takes a preprocessed
 // []models.TokenWithSpan (already normalised by preprocessTokens or p.preprocess) and returns
-// the parsed AST.
+// the parsed AST. Its stackgrow.Reserve call is a backstop for low-level
+// callers; see internal/stackgrow for the frame budget.
 func (p *Parser) parseTokens(tokens []models.TokenWithSpan) (*ast.AST, error) {
+	// Reserve is a no-op after an earlier reservation.
+	stackgrow.Reserve()
 	p.tokens = tokens
 	p.currentPos = 0
 	p.implicitEnd = 0
@@ -668,7 +672,10 @@ func (p *Parser) ParseContext(ctx context.Context, tokens []token.Token) (*ast.A
 
 // parseContextTokens is the core context-aware parsing routine. It takes
 // a preprocessed []models.TokenWithSpan and respects ctx for cancellation.
+// Its stackgrow.Reserve call is a backstop for low-level callers.
 func (p *Parser) parseContextTokens(ctx context.Context, tokens []models.TokenWithSpan) (*ast.AST, error) {
+	// Reserve is a no-op after an earlier reservation.
+	stackgrow.Reserve()
 	// Check context before starting
 	if err := ctx.Err(); err != nil {
 		return nil, err

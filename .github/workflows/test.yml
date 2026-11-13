@@ -31,10 +31,10 @@ jobs:
     - name: Build WASM
       run: GOOS=js GOARCH=wasm go build -o /dev/null ./wasm/
 
-    # Allocation budgets skip under -race (instrumentation changes the counts),
-    # so every race-enabled gate leaves them unenforced; run them here without it.
-    - name: Allocation budgets (non-race)
-      run: go test -count=1 -run 'AllocBudget' ./pkg/gosqlx
+    # Allocation and stack budgets skip under -race where instrumentation
+    # changes the measurements, so run them here without it.
+    - name: Allocation and stack budgets (non-race)
+      run: go test -count=1 -run 'AllocBudget|StackBudget|StackReserve' ./pkg/gosqlx
 
   test:
     name: Test

@@ -15,6 +15,7 @@
 package gosqlx_test
 
 import (
+	"strings"
 	"sync"
 	"testing"
 
@@ -90,6 +91,42 @@ func BenchmarkParseFresh(b *testing.B) {
 					}
 				}()
 				wg.Wait()
+			}
+			b.StopTimer()
+			if firstErr != nil {
+				b.Fatal(firstErr)
+			}
+		})
+	}
+}
+
+// BenchmarkParseFreshRW parses the small real-world cells with one new
+// goroutine per statement. One operation is a complete pass over the cell.
+func BenchmarkParseFreshRW(b *testing.B) {
+	for _, cell := range mxRWCells(mxCorpus(b)) {
+		if !strings.HasSuffix(cell.name, "/small") {
+			continue
+		}
+		b.Run(cell.name, func(b *testing.B) {
+			b.ReportAllocs()
+			var wg sync.WaitGroup
+			var errOnce sync.Once
+			var firstErr error
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				for _, sql := range cell.sqls {
+					wg.Add(1)
+					go func() {
+						defer wg.Done()
+						tree, err := gosqlx.ParseWithDialect(sql, cell.dialect)
+						if err != nil {
+							errOnce.Do(func() { firstErr = err })
+							return
+						}
+						ast.ReleaseAST(tree)
+					}()
+					wg.Wait()
+				}
 			}
 			b.StopTimer()
 			if firstErr != nil {

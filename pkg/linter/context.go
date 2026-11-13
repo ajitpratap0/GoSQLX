@@ -25,6 +25,13 @@ import (
 
 // Context provides all information needed for linting at multiple levels.
 //
+// In LintString and its wrappers, AST, Tokens and Nodes results are borrowed
+// only for the duration of each Rule.Check call. Rules must not retain them,
+// including through a saved Context, context copy, visitor, closure or goroutine.
+// Materialize independent values or deep copies and finish asynchronous work
+// before Check returns. See Rule.Check for migration guidance. Callers that
+// construct a Context themselves retain responsibility for their own resources.
+//
 // Context is passed to every rule's Check method and contains:
 //   - Text level: Raw SQL and line-by-line access
 //   - Token level: Tokenization results (if successful)
@@ -66,10 +73,13 @@ type Context struct {
 	// SQL split into lines for line-by-line analysis (preserves original content)
 	Lines []string
 
-	// Tokenization results (nil if tokenization failed)
+	// Tokenization results (nil if tokenization failed). In LintString these
+	// slices, elements and Word pointers are borrowed until Check returns;
+	// shallow token or slice copies do not extend that lifetime.
 	Tokens []models.TokenWithSpan
 
-	// Parsing results (nil if parsing failed)
+	// Parsing results (nil if parsing failed). In LintString the tree and all
+	// reachable nodes are borrowed until Check returns and must not be retained.
 	AST *ast.AST
 
 	// Parse error (non-nil if parsing failed, nil if successful or not attempted)
@@ -187,6 +197,12 @@ func (c *nodeCollector) Visit(n ast.Node) (ast.Visitor, error) {
 // c.AST (directly or via WithAST) invalidates the cache; mutating the tree in
 // place does not. Separate Contexts have independent caches. Returns nil when no
 // AST is available.
+//
+// In LintString and its wrappers, the returned slice and its nodes are borrowed
+// until the calling Rule.Check returns. Do not save the slice or node aliases,
+// including in a visitor or closure; copying the slice does not copy the nodes.
+// Join any goroutines using the result before Check returns, and materialize
+// independent values or deep copies for later use.
 func (c *Context) Nodes() []ast.Node {
 	if p := (*nodeCollector)(atomic.LoadPointer(&c.nodesCache)); p != nil && p.root == c.AST {
 		return p.nodes

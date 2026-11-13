@@ -12,9 +12,11 @@ import (
 	"testing"
 
 	sqlerrors "github.com/ajitpratap0/GoSQLX/pkg/errors"
+	"github.com/ajitpratap0/GoSQLX/pkg/fingerprint"
 	"github.com/ajitpratap0/GoSQLX/pkg/gosqlx"
 	"github.com/ajitpratap0/GoSQLX/pkg/linter"
 	"github.com/ajitpratap0/GoSQLX/pkg/models"
+	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/keywords"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/parser"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/tokenizer"
@@ -65,6 +67,7 @@ func freshLint(t *testing.T, sql, filename string, d keywords.SQLDialect, rules 
 		for _, tok := range tokens {
 			if tok.Token.Type != models.TokenTypeEOF {
 				tree, parseErr := p.ParseFromModelTokens(tokens)
+				defer ast.ReleaseAST(tree)
 				ctx.WithAST(tree, parseErr)
 				r.ParseError = parseErr
 				break
@@ -117,6 +120,9 @@ func equalPoolResult(t *testing.T, got, want linter.FileResult) bool {
 func poolEdges() []string {
 	return []string{
 		"", " \t\n", "-- comment only\n/* block */", "SELECT 'unterminated", "SELECT FROM",
+		"SELECT 1; SELECT FROM", "SELECT 1; SELECT 'unterminated",
+		"SELECT (1, 2), ARRAY[1,2]", `SELECT "naïve" FROM "café" WHERE x != 3 AND y <= 7`,
+		"SELECT 42, NULL, TRUE, 'text'; SELECT a FROM t WHERE a <> 1",
 		"SELECT * FROM users WHERE id = ?", "SELECT TOP 2 [name] FROM [users]",
 		"SELECT 'a' || 'b' FROM users", `SELECT 'a\'b' FROM users`,
 		"SELECT * EXCEPT (secret) FROM users QUALIFY ROW_NUMBER() OVER (ORDER BY id) = 1",
@@ -165,7 +171,8 @@ func TestLintPoolContamination(t *testing.T) {
 				p := parser.GetParser()
 				p.ApplyOptions(parser.WithDialect("mysql"), parser.WithStrictMode(), parser.WithPipesAsConcat())
 				parser.PutParser(p)
-				_, _ = gosqlx.ParseWithDialect("SELECT TOP 1 [id] FROM [users]", keywords.DialectSQLServer)
+				tree, _ := gosqlx.ParseWithDialect("SELECT TOP 1 [id] FROM [users]", keywords.DialectSQLServer)
+				ast.ReleaseAST(tree)
 				l.SetDialect(d)
 				equalPoolResult(t, l.LintString(sql, "pool.sql"), freshLint(t, sql, "pool.sql", d, rules))
 			}
@@ -216,7 +223,7 @@ func TestLintPoolConcurrent(t *testing.T) {
 		probe linter.FileResult
 	}
 	var inputs []input
-	rules := poolRules()
+	rules := append(poolRules(), lifetimeRule("SUMMARY", lifetimeSummary))
 	for _, d := range poolDialects() {
 		l := linter.New(rules...)
 		l.SetDialect(d) // Publish immutable linters before starting workers.
@@ -255,10 +262,17 @@ func TestLintPoolConcurrent(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			for i := 0; i < 100; i++ {
-				if _, err := gosqlx.Parse("SELECT id FROM users WHERE id = 1"); err != nil {
+				tree, err := gosqlx.Parse("SELECT id FROM users WHERE id = 1")
+				if err != nil {
 					t.Error(err)
 				}
-				if _, err := gosqlx.ParseWithDialect("SELECT TOP 1 [id] FROM [users]", keywords.DialectSQLServer); err != nil {
+				ast.ReleaseAST(tree)
+				tree, err = gosqlx.ParseWithDialect("SELECT TOP 1 [id] FROM [users]", keywords.DialectSQLServer)
+				if err != nil {
+					t.Error(err)
+				}
+				ast.ReleaseAST(tree)
+				if _, err := fingerprint.Normalize("SELECT id FROM users WHERE id = 2"); err != nil {
 					t.Error(err)
 				}
 				if _, err := gosqlx.Format("SELECT id FROM users", gosqlx.DefaultFormatOptions()); err != nil {

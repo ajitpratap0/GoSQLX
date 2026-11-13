@@ -20,7 +20,9 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/ajitpratap0/GoSQLX/internal/tokscratch"
 	"github.com/ajitpratap0/GoSQLX/pkg/models"
+	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/keywords"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/parser"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/tokenizer"
@@ -207,6 +209,12 @@ func (l *Linter) LintFile(filename string) FileResult {
 // only text-based rules execute. If parsing fails, token-based rules still run.
 // This allows partial linting of syntactically invalid SQL.
 //
+// For every rule set, AST, node and token resources are borrowed only during
+// each Rule.Check call. Rules must materialize independent values or deep
+// copies and join asynchronous work before returning (see Rule.Check).
+// Resources remain alive through all checks, then are released even if a rule
+// returns an error or panics. Returned violations and syntax errors remain valid.
+//
 // Returns a FileResult containing violations. The Error field is only set if
 // a rule execution fails. Tokenization and parsing failures are recorded in
 // TokenizeError and ParseError (see FileResult.SyntaxError).
@@ -237,7 +245,7 @@ func (l *Linter) LintString(sql string, filename string) FileResult {
 	ctx := NewContext(sql, filename)
 
 	// Attempt tokenization (best effort - some rules don't need it).
-	tokens, tokenErr := tkz.TokenizeString(sql)
+	tokens, tokenErr := tokscratch.String(tkz, sql)
 	if tokenErr == nil {
 		ctx.WithTokens(tokens)
 
@@ -246,6 +254,9 @@ func (l *Linter) LintString(sql string, filename string) FileResult {
 		if hasStatementTokens(tokens) {
 			// Attempt parsing with position tracking (best effort - some rules are token-only)
 			astObj, parseErr := p.ParseFromModelTokens(tokens)
+			if astObj != nil {
+				defer ast.ReleaseAST(astObj)
+			}
 			ctx.WithAST(astObj, parseErr)
 			result.ParseError = parseErr
 		}

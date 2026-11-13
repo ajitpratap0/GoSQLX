@@ -24,8 +24,10 @@
 // returned slice, and the Word values its tokens point to, are owned by t.
 // They are valid only until the next tokenize call on t, t.Reset or
 // tokenizer.PutTokenizer(t). Callers must copy what they keep (the parser's
-// preprocess step does) and must never return the slice to a user. Token
-// strings are substrings of the input as with the public methods, so they
+// preprocess step does) and must not return the slice as an owned result.
+// The linter lends the borrowed slice to rules via Context.Tokens only for the
+// duration of Check, under the Rule lifetime contract.
+// Token strings are substrings of the input as with the public methods, so they
 // stay valid.
 package tokscratch
 

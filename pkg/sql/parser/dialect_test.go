@@ -446,9 +446,10 @@ func containsAny(s string, substrs ...string) bool {
 }
 
 // ---------------------------------------------------------------------------
-// Default-dialect PostgreSQL compatibility: the dialect-free parser and the
-// generic dialect follow the PostgreSQL grammar for constructs every backend
-// shares (unlike ILIKE, which the generic dialect rejects).
+// Default-dialect PostgreSQL compatibility: the dialect-free parser follows
+// the PostgreSQL grammar for constructs every backend shares. The generic
+// dialect keeps to standard SQL ("parse standard SQL only",
+// pkg/sql/dialect/capabilities.go); ILIKE stays default-only.
 // ---------------------------------------------------------------------------
 
 // TestAcceptTableFunctionDefaultAndGenericDialect checks that a table-valued
@@ -474,23 +475,40 @@ func TestAcceptTableFunctionDefaultAndGenericDialect(t *testing.T) {
 	}
 }
 
-// TestAcceptDistanceOperatorDefaultAndGenericDialect checks that the
-// PostgreSQL distance operator <-> parses in the default dialect and under
-// the generic dialect, in every clause position.
-func TestAcceptDistanceOperatorDefaultAndGenericDialect(t *testing.T) {
+// TestAcceptDistanceOperatorDefaultDialect checks that the PostgreSQL
+// distance operator <-> parses when no dialect is set, in every clause
+// position. The generic dialect keeps rejecting it: it means
+// "parse standard SQL only" (pkg/sql/dialect/capabilities.go).
+func TestAcceptDistanceOperatorDefaultDialect(t *testing.T) {
 	tests := []string{
 		"SELECT a FROM t WHERE a <-> b",
 		"SELECT a <-> b FROM t",
 		"SELECT a FROM t ORDER BY a <-> b",
 		"SELECT a FROM t GROUP BY a <-> b",
 	}
-	for _, dialect := range []keywords.SQLDialect{"", keywords.DialectGeneric} {
-		for _, sql := range tests {
-			t.Run(string(dialect)+"/"+sql, func(t *testing.T) {
-				if _, err := ParseWithDialect(sql, dialect); err != nil {
-					t.Fatalf("<-> should parse with dialect %q: %v", dialect, err)
-				}
-			})
-		}
+	for _, sql := range tests {
+		t.Run(sql, func(t *testing.T) {
+			if _, err := ParseWithDialect(sql, ""); err != nil {
+				t.Fatalf("<-> should parse with the default dialect: %v", err)
+			}
+		})
+	}
+}
+
+// TestRejectDistanceOperatorGenericDialect pins the rejection of <-> under
+// the generic dialect, which parses standard SQL only
+// (pkg/sql/dialect/capabilities.go).
+func TestRejectDistanceOperatorGenericDialect(t *testing.T) {
+	for _, sql := range []string{
+		"SELECT a FROM t WHERE a <-> b",
+		"SELECT a <-> b FROM t",
+		"SELECT a FROM t ORDER BY a <-> b",
+		"SELECT a FROM t GROUP BY a <-> b",
+	} {
+		t.Run(sql, func(t *testing.T) {
+			if _, err := ParseWithDialect(sql, keywords.DialectGeneric); err == nil {
+				t.Fatalf("<-> should be rejected under the generic dialect: %q", sql)
+			}
+		})
 	}
 }

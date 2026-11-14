@@ -25,6 +25,7 @@ import (
 	goerrors "github.com/ajitpratap0/GoSQLX/pkg/errors"
 	"github.com/ajitpratap0/GoSQLX/pkg/models"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
+	"github.com/ajitpratap0/GoSQLX/pkg/sql/keywords"
 )
 
 // peekAt returns the token offset positions after the current one (1 is the
@@ -135,7 +136,11 @@ func (p *Parser) bitwiseOperator() (op string, prec, n int) {
 			return "<=>", 2, 1
 		}
 	case models.TokenTypeCustomBinaryOperator:
-		if p.currentToken.Token.Value == "<->" && p.IsPostgreSQL() {
+		// PostgreSQL's distance operator; the generic dialect and the
+		// dialect-free parser follow the PostgreSQL grammar for shared
+		// constructs.
+		if p.currentToken.Token.Value == "<->" &&
+			(p.IsPostgreSQL() || p.dialect == "" || p.dialect == string(keywords.DialectGeneric)) {
 			return "<->", 2, 1
 		}
 	}

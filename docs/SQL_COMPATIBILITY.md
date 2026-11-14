@@ -117,7 +117,7 @@ statement-by-statement corpus totals above do not count GO directives.
 
 #### PostgreSQL Extensions and SQL Standards
 - ✅ **PostgreSQL Extensions**:
-  - **LATERAL JOIN** - Correlated subqueries and table functions in FROM/JOIN clauses; select the PostgreSQL dialect for table functions
+  - **LATERAL JOIN** - Correlated subqueries and table functions in FROM/JOIN clauses. Table function calls in FROM/JOIN parse for every dialect, including the generic dialect and the default (no dialect) parser
   - **Table Function Aliases** - Column alias lists and `WITH ORDINALITY` on FROM/JOIN table functions: `unnest(arr) AS g(elem)`, `generate_series(1, 3) WITH ORDINALITY AS s(n, idx)`. `WITH ORDINALITY` is PostgreSQL-only.
   - **Composite Field Access** - `(get_item(payload)).name`, `(payload).*`, quoted fields and chained field/subscript access such as `(payload).items[1].name` and `(items)[1].name`. Any keyword, reserved ones included, is accepted as a field name, e.g. `(payload).order`. Field access parses for PostgreSQL, BigQuery, the generic dialect and the default (no dialect) parser; MySQL, MariaDB, SQL Server, SQLite, Oracle, Snowflake, ClickHouse and Redshift reject it with E4001.
   - **JSON/JSONB Operators** - Complete operator set (`->`, `->>`, `#>`, `#>>`, `@>`, `<@`, `?`, `?|`, `?&`, `#-`)
@@ -515,6 +515,7 @@ named dialect.
 | **EXPLAIN** | PostgreSQL, MySQL, SQLite | ✅ Full | `ExplainStatement` now retains the explained statement as an AST (`EXPLAIN ANALYZE ...`, SQLite `EXPLAIN QUERY PLAN ...`) |
 | **SQL\*Plus `/` line** | Oracle | ✅ Full | A line holding only `/` ends a statement in the parser and in `SplitStatements`; `/` with other SQL on the line is still division. Known gap: formatting drops the `/` lines |
 | **`<=>` operator** | MySQL, MariaDB, PostgreSQL | ✅ Full | Null-safe equality (MySQL family) and pgvector distance (PostgreSQL). Accepted only in these dialects and rejected in the others; v1.16.0 accepted `<=>` in no dialect |
+| **`<->` operator** | PostgreSQL and the default (no dialect) parser | ✅ Full | pgvector distance operator in every clause position (`WHERE a <-> b`, `ORDER BY`, select list, `GROUP BY`). The generic dialect rejects it, consistent with "parse standard SQL only" |
 | **`==` operator** | SQLite, ClickHouse | ✅ Full | Accepted only in these dialects and rejected in the others; v1.16.0 accepted `==` in no dialect |
 
 Related grammar checks: outside SQL Server, a utility statement
@@ -727,7 +728,7 @@ GoSQLX provides a first-class dialect mode engine that threads the SQL dialect t
 | **MariaDB** | `"mariadb"` | MariaDB keywords (superset of MySQL) | All MySQL features + SEQUENCE DDL, FOR SYSTEM_TIME, WITH SYSTEM VERSIONING, PERIOD FOR, CONNECT BY | ✅ |
 | **BigQuery** | `"bigquery"` | BigQuery keywords | Composite field access `(expr).field`, table functions, QUALIFY, PIVOT/UNPIVOT | ⚠️ Keywords + basic parsing |
 | **Redshift** | `"redshift"` | Redshift keywords | Keyword recognition | ⚠️ Keywords + basic parsing |
-| **Generic** | `"generic"` | Standard SQL keywords | No dialect-specific syntax; composite field access allowed | ✅ |
+| **Generic** | `"generic"` | Standard SQL keywords | No dialect-specific syntax; table functions in FROM/JOIN (accepted by every dialect) and composite field access allowed | ✅ |
 
 ### Usage
 

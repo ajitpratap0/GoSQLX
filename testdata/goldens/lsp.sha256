@@ -13,8 +13,8 @@ generic@bigquery 1 2149f5236e4717e5 4a00d713d77fc423 ceba8441e3f2136f
 generic@generic 1 2149f5236e4717e5 4a00d713d77fc423 ceba8441e3f2136f
 generic@redshift 1 2149f5236e4717e5 4a00d713d77fc423 ceba8441e3f2136f
 rw-clickhouse@clickhouse 1 2149f5236e4717e5 b6405117039d22eb e841baf6cc7aff3d
-rw-clickhouse@generic 1 9d351516b070c73c 6e677175fd312ead 9517e1aa987edd02
-rw-mariadb@generic 1 8b697fecc9e3aaee be970f88de99eddc 9517e1aa987edd02
+rw-clickhouse@generic 1 19eaf575b0f55533 6e677175fd312ead 9517e1aa987edd02
+rw-mariadb@generic 1 7198be66a5b54337 be970f88de99eddc 9517e1aa987edd02
 rw-mariadb@mariadb 1 2149f5236e4717e5 e8d201c81cbf6f6f f01765855df85e95
 rw-mysql@generic 1 c7ba2eb6569248ff 2847573242da4b8e 9517e1aa987edd02
 rw-mysql@mysql 1 2149f5236e4717e5 08f7e79e38b52d89 9110ea3e4cb9f7fe
@@ -22,7 +22,7 @@ rw-oracle@generic 1 bd1a4255a1a9049c 324093a7677a80a0 9517e1aa987edd02
 rw-oracle@oracle 1 2149f5236e4717e5 416c8a0bf7395e39 4ab58f70b5990fdd
 rw-postgresql@generic 1 f7a5bc8815659cbb 2b6d68c9472a782f 9517e1aa987edd02
 rw-postgresql@postgresql 1 2149f5236e4717e5 2b6d68c9472a782f 9910f9f8333db4ca
-rw-snowflake@generic 1 d3409fe92bddffe6 39557953a9ae506a 9517e1aa987edd02
+rw-snowflake@generic 1 0de597ff60f7c4c9 39557953a9ae506a 9517e1aa987edd02
 rw-snowflake@snowflake 1 2149f5236e4717e5 f73ef79b97b41e88 be5b593ae61cd8a4
 rw-sqlite@generic 1 af243cdf444fd7c7 e05852973608031d 9517e1aa987edd02
 rw-sqlite@sqlite 1 2149f5236e4717e5 95379672530d37bc 398d900fc4968d02

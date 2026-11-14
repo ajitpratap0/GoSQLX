@@ -182,6 +182,13 @@ type InsertDialectFields struct {
 	// TableNameQuote records the delimiters of TableName when they must be
 	// kept (see NameQuote).
 	TableNameQuote NameQuote
+	// TableAlias is the PostgreSQL target-table alias: INSERT INTO t AS u.
+	// The AS form is the only valid one; a bare alias without AS is not
+	// accepted by the parser.
+	TableAlias string
+	// TableAliasQuote records the delimiters of TableAlias when they must
+	// be kept (see NameQuote).
+	TableAliasQuote NameQuote
 	// LogErrors is the Oracle error logging clause LOG ERRORS [INTO table]
 	// [(tag)] [REJECT LIMIT n | UNLIMITED].
 	LogErrors *LogErrorsClause

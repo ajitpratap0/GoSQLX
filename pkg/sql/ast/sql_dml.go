@@ -149,6 +149,10 @@ func (i *InsertStatement) writeInsertHead(buf *bytes.Buffer) {
 		return
 	}
 	writeQualifiedNameQ(buf, i.TableName, i.DialectExtras().TableNameQuote)
+	if x := i.DialectExtras(); x.TableAlias != "" {
+		buf.WriteString(" AS ")
+		writeTableAliasQ(buf, x.TableAlias, x.TableAliasQuote)
+	}
 }
 
 // writeInsertBeforeSource writes the clauses between the column list and the

@@ -444,3 +444,76 @@ func containsAny(s string, substrs ...string) bool {
 	}
 	return false
 }
+
+// ---------------------------------------------------------------------------
+// PostgreSQL grammar regression pins: the constructs below are what the
+// downstream SQL formatters rely on when parsing with the postgresql
+// dialect (see the dimitri/sqlfmt corpus triage that surfaced them).
+// ---------------------------------------------------------------------------
+
+// TestAcceptTableFunctionInPostgreSQL pins that a table-valued function in
+// FROM (with its column alias) parses in the postgresql dialect, in every
+// position a real query puts one.
+func TestAcceptTableFunctionInPostgreSQL(t *testing.T) {
+	tests := []string{
+		"SELECT * FROM get_all_albums(127)",
+		"SELECT x FROM generate_series(1, 3) AS t(x)",
+		"SELECT * FROM get_albums(127) AS a JOIN t ON t.id = a.id",
+		"SELECT * FROM t CROSS JOIN generate_series(1, 3) g",
+		"INSERT INTO t SELECT * FROM generate_series(1, 3)",
+		"SELECT (SELECT count(*) FROM get_all_albums(127)) AS n",
+	}
+	for _, sql := range tests {
+		t.Run(sql, func(t *testing.T) {
+			if _, err := ParseWithDialect(sql, keywords.DialectPostgreSQL); err != nil {
+				t.Fatalf("table-valued function should parse in the postgresql dialect: %v", err)
+			}
+		})
+	}
+}
+
+// TestAcceptDistanceOperatorInPostgreSQL pins the PostgreSQL distance
+// operator <-> in every clause position.
+func TestAcceptDistanceOperatorInPostgreSQL(t *testing.T) {
+	tests := []string{
+		"SELECT a FROM t WHERE a <-> b",
+		"SELECT a <-> b FROM t",
+		"SELECT a FROM t ORDER BY a <-> b",
+		"SELECT a FROM t GROUP BY a <-> b",
+	}
+	for _, sql := range tests {
+		t.Run(sql, func(t *testing.T) {
+			if _, err := ParseWithDialect(sql, keywords.DialectPostgreSQL); err != nil {
+				t.Fatalf("<-> should parse in the postgresql dialect: %v", err)
+			}
+		})
+	}
+}
+
+// TestCreateOrReplaceFunctionDefaultDialect checks that the PostgreSQL
+// CREATE OR REPLACE FUNCTION with an AS $$ ... $$ body parses when no
+// dialect is set. The generic end-of-statement scan used to treat the
+// REPLACE of the header as a MySQL-family REPLACE statement and end the
+// CREATE there (nothing valid ends an expression with a bare OR, so a word
+// after OR is always part of the current statement).
+func TestCreateOrReplaceFunctionDefaultDialect(t *testing.T) {
+	tests := []string{
+		"CREATE OR REPLACE FUNCTION f() RETURNS int LANGUAGE sql AS $$ SELECT 1 $$",
+		"CREATE OR REPLACE FUNCTION f() RETURNS int AS $$ SELECT 1 $$ LANGUAGE sql",
+		"CREATE OR REPLACE FUNCTION twcache.f() RETURNS trigger LANGUAGE plpgsql AS $$ declare x int := TG_ARGV[0]; begin return new; end $$",
+	}
+	for _, sql := range tests {
+		t.Run(sql, func(t *testing.T) {
+			if _, err := ParseWithDialect(sql, ""); err != nil {
+				t.Fatalf("CREATE OR REPLACE FUNCTION should parse with the default dialect: %v", err)
+			}
+			if _, err := ParseWithDialect(sql, keywords.DialectPostgreSQL); err != nil {
+				t.Fatalf("CREATE OR REPLACE FUNCTION should parse in the postgresql dialect: %v", err)
+			}
+		})
+	}
+	// The MySQL dialect keeps its own grammar: REPLACE stays a statement.
+	if _, err := ParseWithDialect("REPLACE INTO t (a) VALUES (1)", keywords.DialectMySQL); err != nil {
+		t.Fatalf("REPLACE INTO should parse in the MySQL dialect: %v", err)
+	}
+}

@@ -270,6 +270,11 @@ func (p *Parser) startsStatementInContext(i int, word string) bool {
 		// SELECT ...), and WITH GRANT OPTION: the word continues the
 		// statement.
 		return false
+	case "OR":
+		// CREATE OR REPLACE / OR ALTER: the word after OR is part of the
+		// CREATE header, never a MySQL-family REPLACE statement (nothing
+		// valid can end an expression with OR before a statement keyword).
+		return false
 	}
 	if word == "IF" {
 		// DROP TABLE IF EXISTS t, CREATE ... IF NOT EXISTS: a clause of the

@@ -345,6 +345,25 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 		}
 	}
 
+	// PostgreSQL accepts a limit clause after the locking clause
+	// (SELECT ... ORDER BY x FOR UPDATE SKIP LOCKED LIMIT 10), while the
+	// SQL-standard order limit-clause ... FOR UPDATE is parsed above. A
+	// limit-clause token on both sides of the locking clause is invalid
+	// in any combination (verified against libpg_query), and MySQL
+	// forbids LIMIT after its LOCK IN SHARE MODE, so the trailing
+	// sequence is parsed only when no limit clause was seen before, for
+	// PostgreSQL plus the permissive generic dialect. LIMIT ALL is a
+	// limit clause with no count (Limit stays nil, Extras.LimitAll set),
+	// so it is checked separately.
+	if selectStmt.For != nil && (p.dialect == "" ||
+		p.dialect == string(keywords.DialectGeneric) || p.IsPostgreSQL()) &&
+		selectStmt.Limit == nil && selectStmt.Offset == nil && selectStmt.Fetch == nil &&
+		(selectStmt.Extras == nil || !selectStmt.Extras.LimitAll) {
+		if err = p.parseLimitClausesAfterLocking(selectStmt); err != nil {
+			return nil, err
+		}
+	}
+
 	// MySQL 8: INTO after the locking clause
 	if !hasSelectInto(selectStmt) && selectStmt.For != nil && p.isMySQLFamily() && p.isType(models.TokenTypeInto) {
 		if err = p.parseTrailingSelectInto(selectStmt); err != nil {

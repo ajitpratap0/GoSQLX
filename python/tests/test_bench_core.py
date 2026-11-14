@@ -91,6 +91,9 @@ def test_ab_driver_interleaves_independent_process_samples(tmp_path, monkeypatch
         calls.append((root, decoder))
         return {("parse", "small"): 10 if root == roots[0] else 8}
 
+    lib = tmp_path / "libfake.so"
+    lib.touch()
+    monkeypatch.setenv("GOSQLX_LIB_PATH", str(lib))
     monkeypatch.setattr(ab, "measure", measure)
     assert ab.main(["--base", str(roots[0]), "--head", str(roots[1]), "--runs", "10", "--decoder", "json"]) == 0
     assert calls == [(root, "json") for _ in range(10) for root in roots]

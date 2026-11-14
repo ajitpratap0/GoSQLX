@@ -25,6 +25,7 @@ import (
 
 	"github.com/ajitpratap0/GoSQLX/pkg/models"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
+	"github.com/ajitpratap0/GoSQLX/pkg/sql/keywords"
 )
 
 // tableModifiers returns ref.Modifiers, allocating it on first use.
@@ -709,12 +710,17 @@ func (p *Parser) parseTableHintArgs() (string, error) {
 }
 
 // acceptsTableFunctionCall reports whether a "(" after a FROM / JOIN table
-// name starts a table-valued function call. Every named dialect has them
-// (PostgreSQL unnest, SQL Server STRING_SPLIT / OPENJSON, SQLite json_each,
-// Oracle TABLE(...), MySQL JSON_TABLE, ClickHouse numbers, Snowflake
-// FLATTEN); the generic dialect keeps the narrower historical gate.
+// name starts a table-valued function call. All dialects accept them: named
+// dialects have their own function families (PostgreSQL unnest, SQL Server
+// STRING_SPLIT / OPENJSON, SQLite json_each, Oracle TABLE(...), MySQL
+// JSON_TABLE, ClickHouse numbers, Snowflake FLATTEN), while the generic
+// dialect and the dialect-free parser follow the PostgreSQL grammar for
+// shared constructs.
 func (p *Parser) acceptsTableFunctionCall() bool {
 	if p.supportsTableFunction() {
+		return true
+	}
+	if p.dialect == "" || p.dialect == string(keywords.DialectGeneric) {
 		return true
 	}
 	return p.IsSQLServer() || p.IsSQLite() || p.IsOracle() || p.IsMySQL() || p.IsMariaDB() ||

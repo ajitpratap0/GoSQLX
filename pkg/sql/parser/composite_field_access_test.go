@@ -197,14 +197,33 @@ func TestJoinedTableFunctionInvalid(t *testing.T) {
 			}
 		})
 	}
-	// Adding JOIN support must not bypass the existing table-function gate.
+	// Adding JOIN support must not relax the malformed-input rejection:
+	// the generic dialect now follows the PostgreSQL grammar (see
+	// TestAcceptTableFunctionDefaultAndGenericDialect), so a well-formed call
+	// parses, while the malformed shapes above still fail.
+	for _, query := range []string{
+		`SELECT * FROM get_items(,) f`,
+		`SELECT * FROM t CROSS JOIN LATERAL get_items(,) f`,
+		`SELECT * FROM t CROSS JOIN LATERAL get_items(t.x f`,
+		`SELECT * FROM t LEFT JOIN LATERAL get_items(t.x) f`,
+	} {
+		t.Run("generic "+query, func(t *testing.T) {
+			tree, err := gosqlx.ParseWithDialect(query, keywords.DialectGeneric)
+			if tree != nil {
+				ast.ReleaseAST(tree)
+			}
+			if err == nil {
+				t.Fatal("expected malformed joined function to be rejected")
+			}
+		})
+	}
 	tree, err := gosqlx.ParseWithDialect(
 		`SELECT * FROM t CROSS JOIN get_items(t.x) f`, keywords.DialectGeneric,
 	)
-	if err == nil {
-		ast.ReleaseAST(tree)
-		t.Fatal("generic dialect must retain the existing table-function restriction")
+	if err != nil {
+		t.Fatalf("generic dialect follows the PostgreSQL grammar: %v", err)
 	}
+	ast.ReleaseAST(tree)
 }
 
 func BenchmarkCompositeFieldAccess(b *testing.B) {

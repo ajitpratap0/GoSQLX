@@ -1,0 +1,1 @@
+- **Parser**: table-valued function calls in FROM (`SELECT * FROM generate_series(1, 3) AS t(x)`) now parse when no dialect is set or the `generic` dialect is selected. The other named dialects already accepted them. Malformed calls are still rejected in every dialect.

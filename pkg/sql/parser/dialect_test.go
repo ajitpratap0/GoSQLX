@@ -444,3 +444,53 @@ func containsAny(s string, substrs ...string) bool {
 	}
 	return false
 }
+
+// ---------------------------------------------------------------------------
+// Default-dialect PostgreSQL compatibility: the dialect-free parser and the
+// generic dialect follow the PostgreSQL grammar for constructs every backend
+// shares (unlike ILIKE, which the generic dialect rejects).
+// ---------------------------------------------------------------------------
+
+// TestAcceptTableFunctionDefaultAndGenericDialect checks that a table-valued
+// function in FROM (with its column alias) parses when no dialect is set and
+// under the generic dialect, as in PostgreSQL.
+func TestAcceptTableFunctionDefaultAndGenericDialect(t *testing.T) {
+	tests := []string{
+		"SELECT * FROM get_all_albums(127)",
+		"SELECT x FROM generate_series(1, 3) AS t(x)",
+		"SELECT * FROM get_albums(127) AS a JOIN t ON t.id = a.id",
+		"SELECT * FROM t CROSS JOIN generate_series(1, 3) g",
+		"INSERT INTO t SELECT * FROM generate_series(1, 3)",
+		"SELECT (SELECT count(*) FROM get_all_albums(127)) AS n",
+	}
+	for _, dialect := range []keywords.SQLDialect{"", keywords.DialectGeneric} {
+		for _, sql := range tests {
+			t.Run(string(dialect)+"/"+sql, func(t *testing.T) {
+				if _, err := ParseWithDialect(sql, dialect); err != nil {
+					t.Fatalf("table-valued function should parse with dialect %q: %v", dialect, err)
+				}
+			})
+		}
+	}
+}
+
+// TestAcceptDistanceOperatorDefaultAndGenericDialect checks that the
+// PostgreSQL distance operator <-> parses in the default dialect and under
+// the generic dialect, in every clause position.
+func TestAcceptDistanceOperatorDefaultAndGenericDialect(t *testing.T) {
+	tests := []string{
+		"SELECT a FROM t WHERE a <-> b",
+		"SELECT a <-> b FROM t",
+		"SELECT a FROM t ORDER BY a <-> b",
+		"SELECT a FROM t GROUP BY a <-> b",
+	}
+	for _, dialect := range []keywords.SQLDialect{"", keywords.DialectGeneric} {
+		for _, sql := range tests {
+			t.Run(string(dialect)+"/"+sql, func(t *testing.T) {
+				if _, err := ParseWithDialect(sql, dialect); err != nil {
+					t.Fatalf("<-> should parse with dialect %q: %v", dialect, err)
+				}
+			})
+		}
+	}
+}

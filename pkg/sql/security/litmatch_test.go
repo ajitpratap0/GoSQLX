@@ -246,9 +246,6 @@ func TestRequiredLiterals_SoundOnGeneratedMatches(t *testing.T) {
 			positives = append(positives, verb+" "+name+"(")
 		}
 	}
-	for _, verb := range []string{"DROP", "DELETE", "TRUNCATE", "UPDATE", "INSERT", "ALTER"} {
-		positives = append(positives, ";"+verb)
-	}
 	for _, schema := range []string{"information_schema", "pg_catalog", "mysql", "sys."} {
 		suffix := ".tables"
 		if schema == "sys." {

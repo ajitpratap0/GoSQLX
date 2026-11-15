@@ -41,6 +41,7 @@ on:
     paths:
       - 'pkg/**'
       - 'internal/**'
+      - 'wasm/internal/**'
       - 'cmd/perfdriver/**'
       - 'go.mod'
       - 'go.sum'

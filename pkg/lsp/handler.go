@@ -1296,10 +1296,7 @@ func (h *Handler) handleDocumentSymbol(params json.RawMessage) ([]DocumentSymbol
 		}
 		var span Range
 		if validSpans {
-			span = statementRange(parsed.StatementStarts[i:i+1], parsed.StatementEnds[i:i+1], lines)
-		} else {
-			start := locationToPosition(statementStartLocation(stmt), lines)
-			span = Range{Start: start, End: start}
+			span = statementRange(parsed.StatementStarts[i], parsed.StatementEnds[i], lines)
 		}
 		symbols = append(symbols, *h.extractStatementSymbol(stmt, i, lines, span))
 	}
@@ -1323,8 +1320,8 @@ func locationToPosition(loc models.Location, lines []string) Position {
 }
 
 // statementRange converts one pair of parser spans without scanning source text.
-func statementRange(starts, ends []models.Location, lines []string) Range {
-	return Range{Start: locationToPosition(starts[0], lines), End: locationToPosition(ends[0], lines)}
+func statementRange(start, end models.Location, lines []string) Range {
+	return Range{Start: locationToPosition(start, lines), End: locationToPosition(end, lines)}
 }
 
 func (h *Handler) extractStatementSymbol(stmt ast.Statement, index int, lines []string, span Range) *DocumentSymbol {
@@ -1496,138 +1493,6 @@ func selectPrimaryTable(s *ast.SelectStatement) string {
 		return ""
 	}
 	return s.From[0].Name
-}
-
-// statementStartLocation returns the declared start Pos for a statement if it
-// exposes one via a known field; otherwise returns a zero Location.
-func statementStartLocation(stmt ast.Statement) models.Location {
-	switch s := stmt.(type) {
-	case *ast.SelectStatement:
-		return s.Pos
-	case *ast.InsertStatement:
-		return s.Pos
-	case *ast.UpdateStatement:
-		return s.Pos
-	case *ast.DeleteStatement:
-		return s.Pos
-	case *ast.WithClause:
-		return s.Pos
-	case *ast.CreateSequenceStatement:
-		return s.Pos
-	case *ast.DropSequenceStatement:
-		return s.Pos
-	case *ast.AlterSequenceStatement:
-		return s.Pos
-	case *ast.BatchSeparator:
-		return s.Pos
-	}
-	// Statement has no declared Pos; fall back to first child position.
-	if n, ok := stmt.(ast.Node); ok {
-		return earliestChildLocation(n)
-	}
-	return models.Location{}
-}
-
-// earliestChildLocation walks descendants via Children() and returns the
-// earliest non-zero Location it can find. This is a best-effort for
-// statement kinds that don't carry a Pos field (CREATE TABLE, DROP, ALTER
-// TABLE, TRUNCATE, MERGE, CREATE VIEW/INDEX).
-func earliestChildLocation(n ast.Node) models.Location {
-	var best models.Location
-	visit := func(loc models.Location) {
-		if loc.IsZero() {
-			return
-		}
-		if best.IsZero() || locBefore(loc, best) {
-			best = loc
-		}
-	}
-	walkNode(n, func(child ast.Node) {
-		visit(nodeLocation(child))
-	})
-	return best
-}
-
-// walkNode performs a depth-first traversal of the node and its descendants
-// via Children(), invoking fn on each visited node (including the root).
-// It guards against nil children and cycles via a bounded visit counter.
-func walkNode(n ast.Node, fn func(ast.Node)) {
-	if n == nil {
-		return
-	}
-	const maxVisits = 10000
-	visited := 0
-	var walk func(ast.Node)
-	walk = func(cur ast.Node) {
-		if cur == nil || visited >= maxVisits {
-			return
-		}
-		visited++
-		fn(cur)
-		for _, c := range cur.Children() {
-			if c == nil {
-				continue
-			}
-			walk(c)
-		}
-	}
-	walk(n)
-}
-
-// nodeLocation returns the Location for a node if it carries one via a known
-// Pos field. This is an explicit dispatch (no reflection) for the concrete
-// types known to carry positions.
-func nodeLocation(n ast.Node) models.Location {
-	switch v := n.(type) {
-	case *ast.SelectStatement:
-		return v.Pos
-	case *ast.InsertStatement:
-		return v.Pos
-	case *ast.UpdateStatement:
-		return v.Pos
-	case *ast.DeleteStatement:
-		return v.Pos
-	case *ast.WithClause:
-		return v.Pos
-	case *ast.CreateSequenceStatement:
-		return v.Pos
-	case *ast.DropSequenceStatement:
-		return v.Pos
-	case *ast.AlterSequenceStatement:
-		return v.Pos
-	case *ast.Identifier:
-		return v.Pos
-	case *ast.FunctionCall:
-		return v.Pos
-	case *ast.CaseExpression:
-		return v.Pos
-	case *ast.WhenClause:
-		return v.Pos
-	case *ast.InExpression:
-		return v.Pos
-	case *ast.SubqueryExpression:
-		return v.Pos
-	case *ast.ParenthesizedExpression:
-		return v.Pos
-	case *ast.FieldAccessExpression:
-		return v.Pos
-	case *ast.BetweenExpression:
-		return v.Pos
-	}
-	return models.Location{}
-}
-
-// locBefore reports whether a comes strictly before b in (line, column) order.
-// A zero Location is treated as "unset" and returns false when on either side
-// (caller handles the zero case explicitly).
-func locBefore(a, b models.Location) bool {
-	if a.IsZero() || b.IsZero() {
-		return false
-	}
-	if a.Line != b.Line {
-		return a.Line < b.Line
-	}
-	return a.Column < b.Column
 }
 
 // handleSignatureHelp provides signature help for SQL functions.

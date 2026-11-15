@@ -10,10 +10,16 @@ import (
 	"github.com/ajitpratap0/GoSQLX/internal/benchcorpus"
 	"github.com/ajitpratap0/GoSQLX/pkg/models"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
-	"github.com/ajitpratap0/GoSQLX/pkg/sql/tokenizer"
-
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/keywords"
+	"github.com/ajitpratap0/GoSQLX/pkg/sql/tokenizer"
 )
+
+func TestLocationToPositionClampsColumn(t *testing.T) {
+	got := locationToPosition(models.Location{Line: 2, Column: 99}, []string{"first", "abc"})
+	if want := (Position{Line: 1, Character: 3}); got != want {
+		t.Fatalf("locationToPosition = %+v, want %+v", got, want)
+	}
+}
 
 func TestDocumentSymbolExactRanges(t *testing.T) {
 	cases := []struct {

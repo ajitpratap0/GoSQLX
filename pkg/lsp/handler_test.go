@@ -949,3 +949,46 @@ func TestCompositeFieldAccessLocation(t *testing.T) {
 		t.Fatalf("nodeLocation = %v, want %v", got, want)
 	}
 }
+
+// nodeLocation returns the Location for a node if it carries one via a known
+// Pos field. This is an explicit dispatch (no reflection) for the concrete
+// types known to carry positions.
+func nodeLocation(n ast.Node) models.Location {
+	switch v := n.(type) {
+	case *ast.SelectStatement:
+		return v.Pos
+	case *ast.InsertStatement:
+		return v.Pos
+	case *ast.UpdateStatement:
+		return v.Pos
+	case *ast.DeleteStatement:
+		return v.Pos
+	case *ast.WithClause:
+		return v.Pos
+	case *ast.CreateSequenceStatement:
+		return v.Pos
+	case *ast.DropSequenceStatement:
+		return v.Pos
+	case *ast.AlterSequenceStatement:
+		return v.Pos
+	case *ast.Identifier:
+		return v.Pos
+	case *ast.FunctionCall:
+		return v.Pos
+	case *ast.CaseExpression:
+		return v.Pos
+	case *ast.WhenClause:
+		return v.Pos
+	case *ast.InExpression:
+		return v.Pos
+	case *ast.SubqueryExpression:
+		return v.Pos
+	case *ast.ParenthesizedExpression:
+		return v.Pos
+	case *ast.FieldAccessExpression:
+		return v.Pos
+	case *ast.BetweenExpression:
+		return v.Pos
+	}
+	return models.Location{}
+}

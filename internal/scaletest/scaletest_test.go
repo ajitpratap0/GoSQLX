@@ -34,6 +34,10 @@ func (r *recorder) Helper()               {}
 var sink int
 
 // work burns CPU proportional to n (linear) or n*n/64 (quadratic) steps.
+// The quadratic tests use an 8x size gap, so the true time ratio is 64x
+// against a bound of 10x. A 4x gap (16x ratio) left too little margin: on a
+// loaded race-detector runner the measured ratio sometimes fell under 10 and
+// the tests that expect a failure passed instead.
 func work(n int, quadratic bool) func() {
 	return func() {
 		steps := n
@@ -58,7 +62,7 @@ func TestAssertLinearGrowthAcceptsLinear(t *testing.T) {
 
 func TestAssertLinearGrowthRejectsQuadratic(t *testing.T) {
 	r := &recorder{TB: t}
-	AssertLinearGrowth(r, "quadratic", 10, work(4000, true), work(16000, true))
+	AssertLinearGrowth(r, "quadratic", 10, work(2000, true), work(16000, true))
 	if !r.failed {
 		t.Error("quadratic work was not reported")
 	}
@@ -74,7 +78,7 @@ func TestAssertLinearGrowthSlowQuadraticFailsWithinBudget(t *testing.T) {
 	start := time.Now()
 	// Large case takes a few hundred ms; unbounded retries would take
 	// 5 attempts x 7 samples of it (tens of seconds).
-	AssertLinearGrowth(r, "slow quadratic", 10, work(40000, true), work(160000, true))
+	AssertLinearGrowth(r, "slow quadratic", 10, work(20000, true), work(160000, true))
 	if !r.failed {
 		t.Error("slow quadratic work was not reported")
 	}
@@ -89,7 +93,7 @@ func TestAssertLinearGrowthStallOnSmallDoesNotHideQuadratic(t *testing.T) {
 	old := budget
 	budget = time.Nanosecond // over budget from the first pair on
 	defer func() { budget = old }()
-	quad := work(40000, true)
+	quad := work(20000, true)
 	calls := 0
 	small := func() {
 		calls++

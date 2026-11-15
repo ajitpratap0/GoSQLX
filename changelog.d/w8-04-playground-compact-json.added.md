@@ -1,0 +1,1 @@
+- `gosqlxParse(sql, dialect, version)` accepts version 1 for AST JSON v1 (`version`, `node_type`, zero-valued fields omitted); omitted versions keep legacy indented output until the site switches in the v1.18 release. [W8-04]

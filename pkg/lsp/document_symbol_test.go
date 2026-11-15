@@ -21,6 +21,23 @@ func TestLocationToPositionClampsColumn(t *testing.T) {
 	}
 }
 
+func assertSelectionContained(t *testing.T, symbol DocumentSymbol) {
+	t.Helper()
+	le := func(a, b Position) bool { return a.Line < b.Line || (a.Line == b.Line && a.Character <= b.Character) }
+	if !le(symbol.Range.Start, symbol.SelectionRange.Start) || !le(symbol.SelectionRange.Start, symbol.SelectionRange.End) || !le(symbol.SelectionRange.End, symbol.Range.End) {
+		t.Errorf("symbol %q: selection %+v outside range %+v", symbol.Name, symbol.SelectionRange, symbol.Range)
+	}
+}
+
+func TestDocumentSymbolZeroWidthSelection(t *testing.T) {
+	h := setupTestServer().handler
+	symbol := h.extractStatementSymbol(&ast.SelectStatement{}, 0, []string{"SELECT 1"}, Range{})
+	if symbol.SelectionRange != (Range{}) {
+		t.Errorf("selection = %+v, want zero width", symbol.SelectionRange)
+	}
+	assertSelectionContained(t, *symbol)
+}
+
 func TestDocumentSymbolExactRanges(t *testing.T) {
 	cases := []struct {
 		name, dialect, sql string
@@ -33,6 +50,8 @@ func TestDocumentSymbolExactRanges(t *testing.T) {
 		{"ddl and dml", "", "CREATE TABLE t (id INT);\nINSERT INTO t VALUES (1);\nALTER TABLE t ADD c INT;\nUPDATE t SET c = 1;\nCREATE INDEX ix ON t (id);", []Range{{Position{0, 0}, Position{0, 24}}, {Position{1, 0}, Position{1, 25}}, {Position{2, 0}, Position{2, 24}}, {Position{3, 0}, Position{3, 19}}, {Position{4, 0}, Position{4, 26}}}, []Range{{Position{0, 0}, Position{0, 14}}, {Position{1, 0}, Position{1, 13}}, {Position{2, 0}, Position{2, 7}}, {Position{3, 0}, Position{3, 8}}, {Position{4, 0}, Position{4, 15}}}},
 		{"empty document", "", "", nil, nil},
 		{"empty", "", " \n\n", nil, nil},
+		{"trailing comment", "", "SELECT 1 -- trailing comment", []Range{{Position{0, 0}, Position{0, 8}}}, []Range{{Position{0, 0}, Position{0, 8}}}},
+		{"short statement before GO", "sqlserver", "SELECT 1  \nGO\n", []Range{{Position{0, 0}, Position{0, 8}}}, []Range{{Position{0, 0}, Position{0, 8}}}},
 		{"parse error", "", "SELECT FROM ;", nil, nil},
 		{"go", "sqlserver", "DROP TABLE t;\nGO\nDROP TABLE u\nGO\n", []Range{{Position{0, 0}, Position{0, 13}}, {Position{2, 0}, Position{2, 12}}}, []Range{{Position{0, 0}, Position{0, 12}}, {Position{2, 0}, Position{2, 12}}}},
 		{"oracle slash", "oracle", "SELECT 1 FROM dual;\n/\nDROP TABLE t;", []Range{{Position{0, 0}, Position{0, 19}}, {Position{2, 0}, Position{2, 13}}}, []Range{{Position{0, 0}, Position{0, 16}}, {Position{2, 0}, Position{2, 12}}}},
@@ -48,6 +67,7 @@ func TestDocumentSymbolExactRanges(t *testing.T) {
 				t.Fatalf("got %d symbols, want %d: %+v", len(got), len(tc.ranges), got)
 			}
 			for i := range got {
+				assertSelectionContained(t, got[i])
 				if got[i].Range != tc.ranges[i] || got[i].SelectionRange != tc.selections[i] {
 					t.Errorf("symbol %d %q: range %+v selection %+v; want %+v %+v", i, got[i].Name, got[i].Range, got[i].SelectionRange, tc.ranges[i], tc.selections[i])
 				}
@@ -80,6 +100,7 @@ func TestDocumentSymbolSpanInvariant(t *testing.T) {
 
 // tokenRanges uses parser first-token positions only as boundaries, and derives
 // each end independently from the tokenizer. It never reads StatementEnds.
+// Starts are not independent here; the exact-range table tests them instead.
 func tokenRanges(t *testing.T, sql string, dialect keywords.SQLDialect) ([]Range, error) {
 	t.Helper()
 	parsed, err := parseForDialect(sql, dialect)
@@ -156,6 +177,7 @@ func checkDocumentSymbolOracle(t *testing.T, sql string, d keywords.SQLDialect) 
 		t.Fatalf("got %d symbols, want %d", len(got), len(want))
 	}
 	for i := range want {
+		assertSelectionContained(t, got[i])
 		if got[i].Range != want[i] {
 			t.Errorf("symbol %d: got %+v want %+v", i, got[i].Range, want[i])
 			if i > 10 {

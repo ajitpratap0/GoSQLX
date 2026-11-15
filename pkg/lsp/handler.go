@@ -1331,6 +1331,9 @@ func (h *Handler) extractStatementSymbol(stmt ast.Statement, index int, lines []
 	if selectionEnd.Line < len(lines) && selectionEnd.Character > len(lines[selectionEnd.Line]) {
 		selectionEnd.Character = len(lines[selectionEnd.Line])
 	}
+	if span.End.Line < selectionEnd.Line || (span.End.Line == selectionEnd.Line && span.End.Character < selectionEnd.Character) {
+		selectionEnd = span.End
+	}
 	return &DocumentSymbol{Name: name, Detail: detail, Kind: kind, Range: span,
 		SelectionRange: Range{Start: span.Start, End: selectionEnd}}
 }

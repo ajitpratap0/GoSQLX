@@ -135,7 +135,12 @@ func (p *Parser) bitwiseOperator() (op string, prec, n int) {
 			return "<=>", 2, 1
 		}
 	case models.TokenTypeCustomBinaryOperator:
-		if p.currentToken.Token.Value == "<->" && p.IsPostgreSQL() {
+		// PostgreSQL's distance operator. The dialect-free parser accepts it
+		// because the default pipeline follows the PostgreSQL grammar for
+		// backward compatibility (see the ILIKE note in dialect_test.go);
+		// the generic dialect means "parse standard SQL only"
+		// (pkg/sql/dialect/capabilities.go) and keeps rejecting it.
+		if p.currentToken.Token.Value == "<->" && (p.IsPostgreSQL() || p.dialect == "") {
 			return "<->", 2, 1
 		}
 	}

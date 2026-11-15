@@ -20,13 +20,18 @@ import (
 // was linked with) that produced Values[name][unit][i], or "" when the input
 // carries no "layout:" lines.
 type Run struct {
-	Names   []string
-	Values  map[string]map[string][]float64
-	Layouts map[string]map[string][]string
+	Names     []string
+	Values    map[string]map[string][]float64
+	Layouts   map[string]map[string][]string
+	Line      map[string]int
+	LineFirst map[int]string
+	// Planned marks benchmarks explicitly requested by an extension plan,
+	// distinguishing them from the suite-line warm-ups in the same process.
+	Planned map[string]bool
 }
 
 func newRun() *Run {
-	return &Run{Values: make(map[string]map[string][]float64), Layouts: make(map[string]map[string][]string)}
+	return &Run{Values: make(map[string]map[string][]float64), Layouts: make(map[string]map[string][]string), Line: make(map[string]int), LineFirst: make(map[int]string), Planned: make(map[string]bool)}
 }
 
 // Get returns the samples of name in unit (nil if absent).
@@ -85,6 +90,12 @@ var procSuffix = regexp.MustCompile(`-\d+$`)
 // holds for every result line that follows until the next layout line.
 const layoutKey = "layout:"
 
+// lineKey identifies the suite line whose binary produced subsequent results.
+const lineKey = "suite-line:"
+
+// plannedKey records an extension's intended benchmark, excluding warm-ups.
+const plannedKey = "adaptive-planned:"
+
 // parseBench reads Go benchmark output (the format of `go test -bench`):
 // lines of "BenchmarkName[-procs] <iterations> <value> <unit> ...", labelled
 // with the most recent "layout: <seed>" line. Every other line (goos:, pkg:,
@@ -92,12 +103,31 @@ const layoutKey = "layout:"
 func parseBench(r io.Reader) (*Run, error) {
 	run := newRun()
 	layout := ""
+	suiteLine, hasLine := 0, false
 	sc := bufio.NewScanner(r)
 	sc.Buffer(make([]byte, 0, 64*1024), 1024*1024)
 	for line := 1; sc.Scan(); line++ {
 		f := strings.Fields(sc.Text())
 		if len(f) >= 1 && f[0] == layoutKey {
 			layout = strings.Join(f[1:], " ")
+			continue
+		}
+		if len(f) >= 1 && f[0] == plannedKey {
+			if len(f) != 2 || !strings.HasPrefix(f[1], "Benchmark") {
+				return nil, fmt.Errorf("line %d: bad adaptive-planned label: %q", line, sc.Text())
+			}
+			run.Planned[f[1]] = true
+			continue
+		}
+		if len(f) >= 1 && f[0] == lineKey {
+			if len(f) != 2 {
+				return nil, fmt.Errorf("line %d: bad suite-line label: %q", line, sc.Text())
+			}
+			value, err := strconv.Atoi(f[1])
+			if err != nil {
+				return nil, fmt.Errorf("line %d: bad suite-line %q: %w", line, f[1], err)
+			}
+			suiteLine, hasLine = value, true
 			continue
 		}
 		if len(f) < 4 || !strings.HasPrefix(f[0], "Benchmark") {
@@ -110,6 +140,14 @@ func parseBench(r io.Reader) (*Run, error) {
 			return nil, fmt.Errorf("line %d: odd number of value/unit fields: %q", line, sc.Text())
 		}
 		name := procSuffix.ReplaceAllString(f[0], "")
+		if hasLine {
+			if _, ok := run.Line[name]; !ok {
+				run.Line[name] = suiteLine
+			}
+			if _, ok := run.LineFirst[suiteLine]; !ok {
+				run.LineFirst[suiteLine] = name
+			}
+		}
 		for i := 2; i+1 < len(f); i += 2 {
 			v, err := strconv.ParseFloat(f[i], 64)
 			if err != nil {
@@ -119,6 +157,46 @@ func parseBench(r io.Reader) (*Run, error) {
 		}
 	}
 	return run, sc.Err()
+}
+
+// mergeRuns appends b's samples and previously unseen names to a fresh Run,
+// preserving layout labels and preferring a's suite-line context.
+func mergeRuns(a, b *Run) *Run {
+	if b == nil {
+		return a
+	}
+	out := newRun()
+	for _, run := range []*Run{a, b} {
+		if run == nil {
+			continue
+		}
+		for _, name := range run.Names {
+			for unit, values := range run.Values[name] {
+				labels := run.Layouts[name][unit]
+				for i, value := range values {
+					label := ""
+					if i < len(labels) {
+						label = labels[i]
+					}
+					out.add(name, unit, label, value)
+				}
+			}
+		}
+		for name, line := range run.Line {
+			if _, ok := out.Line[name]; !ok {
+				out.Line[name] = line
+			}
+		}
+		for line, name := range run.LineFirst {
+			if _, ok := out.LineFirst[line]; !ok {
+				out.LineFirst[line] = name
+			}
+		}
+		for name, planned := range run.Planned {
+			out.Planned[name] = out.Planned[name] || planned
+		}
+	}
+	return out
 }
 
 func parseFile(path string) (*Run, error) {

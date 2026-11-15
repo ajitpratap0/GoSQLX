@@ -25,16 +25,30 @@ import (
 const keyBufLen = 64
 
 // lookupFold returns m[strings.ToUpper(s)] without allocating when s is pure
-// ASCII and at most keyBufLen bytes: it upper-cases into a stack buffer and
+// ASCII and at most keyBufLen bytes. Input that is already upper-case ASCII
+// indexes m directly; otherwise it upper-cases into a stack buffer and
 // indexes the map with string(buf[:n]), which the compiler does not allocate.
 // Any other input (a non-ASCII byte, or longer than keyBufLen) takes the
 // strings.ToUpper path, so results are identical to the old code for every
 // input, including Unicode simple case mappings such as U+017F (ſ) -> 'S' and
 // U+0131 (ı) -> 'I', and invalid UTF-8.
 func lookupFold[V any](m map[string]V, s string) (V, bool) {
+	// Already upper-case ASCII (the common spelling of SQL keywords): index
+	// with s itself, with no copy, like strings.ToUpper returning s unchanged.
+	i := 0
+	for ; i < len(s); i++ {
+		c := s[i]
+		if c >= utf8.RuneSelf || ('a' <= c && c <= 'z') {
+			break
+		}
+	}
+	if i == len(s) {
+		v, ok := m[s]
+		return v, ok
+	}
 	if len(s) <= keyBufLen {
 		var buf [keyBufLen]byte
-		i := 0
+		copy(buf[:i], s[:i])
 		for ; i < len(s); i++ {
 			c := s[i]
 			if c >= utf8.RuneSelf {

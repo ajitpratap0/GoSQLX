@@ -17,6 +17,7 @@ package gosqlx
 import (
 	"fmt"
 
+	"github.com/ajitpratap0/GoSQLX/internal/stackgrow"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/parser"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/tokenizer"
@@ -63,6 +64,7 @@ type AnalysisSuggestion struct {
 //	    fmt.Printf("[%s] %s\n", s.RuleID, s.Message)
 //	}
 func Analyze(sql string) (*AnalysisResult, error) {
+	stackgrow.Reserve()
 	tkz := tokenizer.GetTokenizer()
 	defer tokenizer.PutTokenizer(tkz)
 

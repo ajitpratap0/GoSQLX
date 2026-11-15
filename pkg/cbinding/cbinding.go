@@ -69,7 +69,6 @@ package main
 // #include <stdlib.h>
 import "C"
 import (
-	"encoding/json"
 	"regexp"
 	"strconv"
 	"unsafe"
@@ -151,19 +150,10 @@ func extractErrorPosition(errMsg string) (int, int) {
 
 // toJSON marshals the value to a JSON C string. If marshaling fails, it returns
 // a fallback error JSON string with the error message properly escaped.
-func toJSON(v interface{}) *C.char {
-	jsonBytes, err := json.Marshal(v)
-	if err != nil {
-		// Marshal the error message separately to ensure proper JSON escaping.
-		errMsg, marshalErr := json.Marshal("json marshal failed: " + err.Error())
-		if marshalErr != nil {
-			// Both marshals failed; return a safe static fallback.
-			return C.CString(`{"error":"json marshal failed"}`)
-		}
-		fallback := `{"error":` + string(errMsg) + `}`
-		return C.CString(fallback)
-	}
-	return C.CString(string(jsonBytes))
+func toJSON(v any) *C.char {
+	sc := getScratch()
+	defer putScratch(sc)
+	return sc.encode(v)
 }
 
 // statementTypeName returns the string name for a given AST statement type.
@@ -210,7 +200,7 @@ func statementTypeName(stmt ast.Statement) string {
 func gosqlx_parse(sql *C.char) (result *C.char) {
 	defer recoverExport(&result, panicSuccessJSON)
 	checkExportPanic("gosqlx_parse")
-	return toJSON(parseResultFor(C.GoString(sql), ""))
+	return parseJSON(C.GoString(sql), "")
 }
 
 // gosqlx_validate validates a SQL string for syntactic correctness and returns
@@ -227,7 +217,7 @@ func gosqlx_parse(sql *C.char) (result *C.char) {
 func gosqlx_validate(sql *C.char) (result *C.char) {
 	defer recoverExport(&result, panicValidationJSON)
 	checkExportPanic("gosqlx_validate")
-	return toJSON(validationResultFor(C.GoString(sql), ""))
+	return validateJSON(C.GoString(sql), "")
 }
 
 // gosqlx_format formats a SQL string using default formatting options and
@@ -244,7 +234,7 @@ func gosqlx_validate(sql *C.char) (result *C.char) {
 func gosqlx_format(sql *C.char) (result *C.char) {
 	defer recoverExport(&result, panicSuccessJSON)
 	checkExportPanic("gosqlx_format")
-	return toJSON(formatResultFor(C.GoString(sql), ""))
+	return formatJSON(C.GoString(sql), "")
 }
 
 // gosqlx_extract_tables parses a SQL string and extracts all referenced table

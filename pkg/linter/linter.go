@@ -20,6 +20,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/ajitpratap0/GoSQLX/internal/stackgrow"
 	"github.com/ajitpratap0/GoSQLX/internal/tokscratch"
 	"github.com/ajitpratap0/GoSQLX/pkg/models"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
@@ -225,6 +226,7 @@ func (l *Linter) LintFile(filename string) FileResult {
 //	result := linter.LintString(sql, "<stdin>")
 //	fmt.Printf("Found %d violations\n", len(result.Violations))
 func (l *Linter) LintString(sql string, filename string) FileResult {
+	stackgrow.Reserve()
 	// Both pools reset dialect state when objects are returned. Keep them until
 	// every rule has finished using the tokens and AST.
 	tkz := tokenizer.GetTokenizer()

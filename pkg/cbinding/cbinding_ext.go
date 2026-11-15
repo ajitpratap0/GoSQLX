@@ -28,6 +28,8 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"sync"
+	"sync/atomic"
 
 	goerrors "github.com/ajitpratap0/GoSQLX/pkg/errors"
 	"github.com/ajitpratap0/GoSQLX/pkg/gosqlx"
@@ -94,6 +96,10 @@ func parseFor(sql, dialect string) (*ast.AST, error) {
 
 // parseResultFor builds the gosqlx_parse / gosqlx_parse_dialect result.
 func parseResultFor(sql, dialect string) ParseResult {
+	return parseResultInto(sql, dialect, nil)
+}
+
+func parseResultInto(sql, dialect string, dst []string) ParseResult {
 	tree, err := parseFor(sql, dialect)
 	if err != nil {
 		line, col := extractErrorPosition(err.Error())
@@ -106,7 +112,12 @@ func parseResultFor(sql, dialect string) ParseResult {
 		}
 	}
 
-	stmtTypes := make([]string, 0, len(tree.Statements))
+	defer ast.ReleaseAST(tree)
+
+	stmtTypes := dst
+	if stmtTypes == nil {
+		stmtTypes = make([]string, 0, len(tree.Statements))
+	}
 	for _, stmt := range tree.Statements {
 		if _, ok := stmt.(*ast.BatchSeparator); ok {
 			continue // a GO line is a client directive, not a statement
@@ -118,6 +129,31 @@ func parseResultFor(sql, dialect string) ParseResult {
 		StmtCount: len(stmtTypes),
 		StmtTypes: stmtTypes,
 	}
+}
+
+// parseJSON encodes a parse result using pooled result and statement storage.
+func parseJSON(sql, dialect string) *C.char {
+	sc := getScratch()
+	defer putScratch(sc)
+	sc.parse = parseResultInto(sql, dialect, sc.stmtTypes[:0])
+	if sc.parse.Success {
+		sc.stmtTypes = sc.parse.StmtTypes[:0]
+	}
+	return sc.encode(&sc.parse)
+}
+
+func validateJSON(sql, dialect string) *C.char {
+	sc := getScratch()
+	defer putScratch(sc)
+	sc.valid = validationResultFor(sql, dialect)
+	return sc.encode(&sc.valid)
+}
+
+func formatJSON(sql, dialect string) *C.char {
+	sc := getScratch()
+	defer putScratch(sc)
+	sc.format = formatResultFor(sql, dialect)
+	return sc.encode(&sc.format)
 }
 
 // validateFor validates sql with the given dialect. An empty dialect goes
@@ -178,23 +214,48 @@ func formatResultFor(sql, dialect string) FormatResult {
 	return FormatResult{Success: true, Formatted: formatted}
 }
 
+type extractTablesResult struct {
+	Tables []string `json:"tables"`
+}
+
+type extractColumnsResult struct {
+	Columns []string `json:"columns"`
+}
+
+type extractFunctionsResult struct {
+	Functions []string `json:"functions"`
+}
+
+type extractErrorResult struct {
+	Error     string `json:"error"`
+	ErrorCode string `json:"error_code,omitempty"`
+}
+
 // extractListFor builds the JSON object of the gosqlx_extract_{tables,columns,
 // functions}[_dialect] exports: {key: [...]} on success, {"error": ...} (plus
 // "error_code" for an unknown dialect) on failure.
-func extractListFor(sql, dialect, key string, extract func(*ast.AST) []string) map[string]interface{} {
+func extractListFor(sql, dialect, key string, extract func(*ast.AST) []string) any {
 	tree, err := parseFor(sql, dialect)
 	if err != nil {
-		out := map[string]interface{}{"error": err.Error()}
-		if code := errorCodeFor(err); code != "" {
-			out["error_code"] = code
-		}
-		return out
+		return extractErrorResult{Error: err.Error(), ErrorCode: errorCodeFor(err)}
 	}
+	defer ast.ReleaseAST(tree)
+
 	items := extract(tree)
 	if items == nil {
 		items = []string{}
 	}
-	return map[string]interface{}{key: items}
+	switch key {
+	case "tables":
+		return extractTablesResult{Tables: items}
+	case "columns":
+		return extractColumnsResult{Columns: items}
+	case "functions":
+		return extractFunctionsResult{Functions: items}
+	default:
+		// Unreachable: callers supply one of the three export keys above.
+		panic("unknown extract result key: " + key)
+	}
 }
 
 // metadataFor builds the gosqlx_extract_metadata[_dialect] result.
@@ -203,6 +264,7 @@ func metadataFor(sql, dialect string) MetadataResult {
 	if err != nil {
 		return MetadataResult{Error: err.Error(), ErrorCode: errorCodeFor(err)}
 	}
+	defer ast.ReleaseAST(tree)
 
 	metadata := gosqlx.ExtractMetadata(tree)
 
@@ -263,7 +325,7 @@ func metadataFor(sql, dialect string) MetadataResult {
 func gosqlx_parse_dialect(sql, dialect *C.char) (result *C.char) {
 	defer recoverExport(&result, panicSuccessJSON)
 	checkExportPanic("gosqlx_parse_dialect")
-	return toJSON(parseResultFor(C.GoString(sql), C.GoString(dialect)))
+	return parseJSON(C.GoString(sql), C.GoString(dialect))
 }
 
 // gosqlx_validate_dialect is gosqlx_validate with a SQL dialect. A NULL or
@@ -277,7 +339,7 @@ func gosqlx_parse_dialect(sql, dialect *C.char) (result *C.char) {
 func gosqlx_validate_dialect(sql, dialect *C.char) (result *C.char) {
 	defer recoverExport(&result, panicValidationJSON)
 	checkExportPanic("gosqlx_validate_dialect")
-	return toJSON(validationResultFor(C.GoString(sql), C.GoString(dialect)))
+	return validateJSON(C.GoString(sql), C.GoString(dialect))
 }
 
 // gosqlx_format_dialect is gosqlx_format with a SQL dialect: the SQL is parsed
@@ -292,7 +354,7 @@ func gosqlx_validate_dialect(sql, dialect *C.char) (result *C.char) {
 func gosqlx_format_dialect(sql, dialect *C.char) (result *C.char) {
 	defer recoverExport(&result, panicSuccessJSON)
 	checkExportPanic("gosqlx_format_dialect")
-	return toJSON(formatResultFor(C.GoString(sql), C.GoString(dialect)))
+	return formatJSON(C.GoString(sql), C.GoString(dialect))
 }
 
 // gosqlx_extract_tables_dialect is gosqlx_extract_tables with a SQL dialect.
@@ -423,6 +485,44 @@ func newLinter(maxLineLength int, dialect string) *linter.Linter {
 	return l
 }
 
+type lintKey struct {
+	maxLineLength int
+	dialect       string
+}
+
+const maxCachedLinters = 64
+
+var lintCache sync.Map
+var lintCacheLen atomic.Int32
+
+// cachedLinter shares immutable linters across goroutines under the invariant
+// documented at pkg/gosqlx/lint.go: defaultLinter: built-in rules are stateless
+// after construction and LintString keeps its Context, tokenizer, parser and AST
+// local. W6-05a (#928) made Context.Nodes safe for concurrent Check. D16 requires
+// that rules must not retain AST/token references after Check. Stored linters
+// are never mutated. The cap bounds retention because max_line_length can be
+// any positive int.
+func cachedLinter(maxLen int, dialect string) *linter.Linter {
+	key := lintKey{maxLineLength: maxLen, dialect: dialect}
+	if value, found := lintCache.Load(key); found {
+		if cached, ok := value.(*linter.Linter); ok {
+			return cached
+		}
+	}
+	l := newLinter(maxLen, dialect)
+	if lintCacheLen.Add(1) > maxCachedLinters {
+		lintCacheLen.Add(-1)
+		return l
+	}
+	if value, loaded := lintCache.LoadOrStore(key, l); loaded {
+		lintCacheLen.Add(-1)
+		if cached, ok := value.(*linter.Linter); ok {
+			return cached
+		}
+	}
+	return l
+}
+
 // lintFor runs the CLI lint rule set over sql.
 func lintFor(sql, optionsJSON string) LintResult {
 	fail := func(err error, code string) LintResult {
@@ -446,9 +546,16 @@ func lintFor(sql, optionsJSON string) LintResult {
 		maxLen = *opts.MaxLineLength
 	}
 
-	fileResult := newLinter(maxLen, opts.Dialect).LintString(sql, "<input>")
+	return lintResultFrom(cachedLinter(maxLen, opts.Dialect).LintString(sql, "<input>"))
+}
+
+func lintResultFrom(fileResult linter.FileResult) LintResult {
 	if fileResult.Error != nil {
-		return fail(fileResult.Error, "")
+		return LintResult{
+			Success:    false,
+			Violations: []LintViolationJSON{},
+			Error:      fileResult.Error.Error(),
+		}
 	}
 
 	violations := make([]LintViolationJSON, 0, len(fileResult.Violations))

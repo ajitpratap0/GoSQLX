@@ -49,6 +49,7 @@ func (p *Parser) parseFunctionCall(funcName string) (*ast.FunctionCall, error) {
 
 	// Parse arguments if not empty
 	var separator *ast.LiteralValue
+	var funcCall *ast.FunctionCall
 	if form := specialFormOf(funcName); form != formNone && !p.isType(models.TokenTypeRParen) {
 		// Keyword-introduced arguments: SUBSTRING(s FROM 1 FOR 2), TRIM(BOTH ' ' FROM s), ...
 		args, err := p.parseSpecialFormArgs(form)
@@ -57,6 +58,12 @@ func (p *Parser) parseFunctionCall(funcName string) (*ast.FunctionCall, error) {
 		}
 		arguments = args
 	} else if !p.isType(models.TokenTypeRParen) {
+		// Arguments are collected on the parser's scratch stack and copied once
+		// into the call's co-allocated storage (see newFunctionCall). Every
+		// error return in the loop drops the stack back to argBase first: a
+		// caller that swallows the error and carries on must find the stack as
+		// it left it.
+		argBase := p.exprMark()
 		// A few functions take arguments with their own syntax (CURSOR(SELECT
 		// ...), JSON_OBJECT(k VALUE v), XMLTABLE(... COLUMNS ...)); every other
 		// call skips those checks.
@@ -78,9 +85,10 @@ func (p *Parser) parseFunctionCall(funcName string) (*ast.FunctionCall, error) {
 				p.advance() // =>
 				value, err := p.parseExpression()
 				if err != nil {
+					p.exprDrop(argBase)
 					return nil, err
 				}
-				arguments = append(arguments, &ast.NamedArgument{
+				p.exprPushOutOfLine(&ast.NamedArgument{
 					Name:  argName,
 					Value: value,
 					Pos:   namePos,
@@ -92,6 +100,7 @@ func (p *Parser) parseFunctionCall(funcName string) (*ast.FunctionCall, error) {
 				if p.isType(models.TokenTypeRParen) {
 					break
 				}
+				p.exprDrop(argBase)
 				return nil, p.expectedError(", or )")
 			}
 
@@ -103,16 +112,19 @@ func (p *Parser) parseFunctionCall(funcName string) (*ast.FunctionCall, error) {
 				pos := p.currentLocation()
 				sub, err := p.parseSubquery()
 				if err != nil {
+					p.exprDrop(argBase)
 					return nil, err
 				}
-				arguments = append(arguments, &ast.SubqueryExpression{Subquery: sub, Pos: pos, Bare: true})
+				p.exprPushOutOfLine(&ast.SubqueryExpression{Subquery: sub, Pos: pos, Bare: true})
 				if p.isType(models.TokenTypeRParen) {
 					break
 				}
+				p.exprDrop(argBase)
 				return nil, p.expectedError(")")
 			}
 			if quirky && p.isJSONObjectFunc(funcName) {
 				if arg, err = p.parseJSONObjectArg(); err != nil {
+					p.exprDrop(argBase)
 					return nil, err
 				}
 			} else if quirky && p.isOpenRowsetBulk(funcName) {
@@ -121,22 +133,25 @@ func (p *Parser) parseFunctionCall(funcName string) (*ast.FunctionCall, error) {
 				ka := &ast.KeywordArgument{Keyword: "BULK", Pos: p.currentLocation()}
 				p.advance() // Consume BULK
 				if ka.Value, err = p.parseExpression(); err != nil {
+					p.exprDrop(argBase)
 					return nil, err
 				}
 				arg = ka
 			} else if arg, err = p.parseExpression(); err != nil {
+				p.exprDrop(argBase)
 				return nil, err
 			}
 			if quirky && p.isType(models.TokenTypeAs) && isXMLNamedArgFunc(funcName) {
 				// XMLATTRIBUTES(col AS "name") / XMLFOREST(col AS name)
 				p.advance() // Consume AS
 				if !p.isAliasAfterAS() {
+					p.exprDrop(argBase)
 					return nil, p.expectedError("name after AS")
 				}
 				arg = &ast.AliasedExpression{Expr: arg, Alias: p.currentToken.Token.Value, AliasQuote: p.currentNameQuote()}
 				p.advance()
 			}
-			arguments = append(arguments, arg)
+			p.exprPushOutOfLine(arg)
 
 			// Check for comma or end of arguments
 			if p.isType(models.TokenTypeComma) {
@@ -152,14 +167,20 @@ func (p *Parser) parseFunctionCall(funcName string) (*ast.FunctionCall, error) {
 				// argument.
 				last, err := p.parseClauseArgument(funcName, arg)
 				if err != nil {
+					p.exprDrop(argBase)
 					return nil, err
 				}
-				arguments[len(arguments)-1] = last
+				p.exprScratch[len(p.exprScratch)-1] = last
 				break
 			} else {
+				p.exprDrop(argBase)
 				return nil, p.expectedError(", or )")
 			}
 		}
+		// The arguments move into the call's own storage now, so no later
+		// return has anything to unwind on the scratch stack.
+		funcCall = newFunctionCall(p.exprScratch[argBase:])
+		p.exprDrop(argBase)
 	}
 
 	// Parse ORDER BY clause inside aggregate functions (STRING_AGG, ARRAY_AGG, etc.)
@@ -237,12 +258,12 @@ func (p *Parser) parseFunctionCall(funcName string) (*ast.FunctionCall, error) {
 	p.advance() // Consume )
 
 	// Create function call
-	funcCall := &ast.FunctionCall{
-		Name:      funcName,
-		Arguments: arguments,
-		Distinct:  distinct,
-		OrderBy:   orderByExprs,
+	if funcCall == nil {
+		funcCall = &ast.FunctionCall{Arguments: arguments}
 	}
+	funcCall.Name = funcName
+	funcCall.Distinct = distinct
+	funcCall.OrderBy = orderByExprs
 	if separator != nil {
 		funcCall.EnsureExtras().Separator = separator
 	}
@@ -778,4 +799,52 @@ func hasQuirkyArgs(funcName string) bool {
 		return equalsUpper(funcName, "JSON_OBJECTAGG")
 	}
 	return false
+}
+
+// Co-allocation blocks: a FunctionCall and its argument array in one object.
+// Most calls take one or two arguments (COUNT(*), SUM(x), COALESCE(a, b)).
+// The blocks are 200, 216 and 232 bytes (size classes 208, 224 and 240);
+// TestCoallocBlockSizes pins them. As with the SELECT blocks (select.go), a
+// caller that keeps only a call's Arguments slice pins the whole block.
+type functionCall1 struct {
+	fc ast.FunctionCall
+	a  [1]ast.Expression
+}
+
+type functionCall2 struct {
+	fc ast.FunctionCall
+	a  [2]ast.Expression
+}
+
+type functionCall3 struct {
+	fc ast.FunctionCall
+	a  [3]ast.Expression
+}
+
+// newFunctionCall returns a FunctionCall whose Arguments is a copy of args
+// with len == cap. Up to three arguments live in the same allocation as the
+// call; a call with no arguments has a nil Arguments slice.
+func newFunctionCall(args []ast.Expression) *ast.FunctionCall {
+	switch len(args) {
+	case 0:
+		return &ast.FunctionCall{}
+	case 1:
+		b := &functionCall1{}
+		b.a[0] = args[0]
+		b.fc.Arguments = b.a[:1:1]
+		return &b.fc
+	case 2:
+		b := &functionCall2{}
+		b.a[0], b.a[1] = args[0], args[1]
+		b.fc.Arguments = b.a[:2:2]
+		return &b.fc
+	case 3:
+		b := &functionCall3{}
+		b.a[0], b.a[1], b.a[2] = args[0], args[1], args[2]
+		b.fc.Arguments = b.a[:3:3]
+		return &b.fc
+	}
+	fc := &ast.FunctionCall{Arguments: make([]ast.Expression, len(args))}
+	copy(fc.Arguments, args)
+	return fc
 }

@@ -4,6 +4,7 @@
 package main
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -110,5 +111,120 @@ run_line() {
 		if planned < 0 || ran < planned {
 			t.Fatalf("metadata must precede benchmark run: %s", chunk)
 		}
+	}
+}
+
+// runExtensionWithClock runs extend() against stubs and a scripted clock. The
+// first early calls to date return base; every later call returns late. Calls
+// are, in order: the budget start, the stage planning check, the batch check
+// and then one check per layout. The stubs record every judge and build_ext
+// call so a skipped cut-off shows up as extra work. It returns the shell
+// output (calls, ext_status, layouts per arm).
+func runExtensionWithClock(t *testing.T, budget, extDeadline, early, base, late int) string {
+	t.Helper()
+	src := extensionShellSource(t)
+	start, end := strings.Index(src, "extend() {"), strings.Index(src, "\n# The gate tool comes")
+	if start < 0 || end < start {
+		t.Fatal("extension function not found")
+	}
+	lib, err := filepath.Abs("../lib.sh")
+	if err != nil {
+		t.Fatal(err)
+	}
+	setup := fmt.Sprintf(`out=$OUT; mkdir -p "$out/raw"
+. "%s"
+layouts=20 seed0=100 budget=%d ext_deadline=%d ext_j=0 ext_stages=0 ext_seconds=0 ab_t0=%d
+final_flags=() ext_dirs=() pkgs=(./fake)
+: > "$out/calls"
+date() {
+ local n; n=$(cat "$out/dn" 2>/dev/null || echo 0); n=$((n + 1)); echo "$n" > "$out/dn"
+ if [ "$n" -le %d ]; then echo %d; else echo %d; fi
+}
+log() { :; }
+die() { echo "$*"; exit 3; }
+judge() {
+ local plan=$2
+ echo judge >> "$out/calls"
+ if [ "$plan" = "$out/plan-1.tsv" ]; then
+  printf 'need\t0\t3\t20\t23\t^Short$\tBenchmarkShort\n' > "$plan"
+ else : > "$plan"; fi
+}
+build_ext() { echo build >> "$out/calls"; mkdir -p "$out/bin/$1/L$2"; }
+run_line() { printf 'BenchmarkShort 1 1 ns/op\n' >> "$3"; }
+`, lib, budget, extDeadline, base, early, base, late)
+	tail := "\nextend\nprintf 'status: %s\\n' \"$ext_status\"\n" +
+		"printf 'judges: %s\\n' \"$(grep -c judge \"$out/calls\" 2>/dev/null || true)\"\n" +
+		"printf 'builds: %s\\n' \"$(grep -c build \"$out/calls\" 2>/dev/null || true)\"\n" +
+		"printf 'base layouts: %s\\n' \"$(grep -c '^layout:' \"$out/raw/gcoff-base-ext.txt\")\"\n" +
+		"printf 'head layouts: %s\\n' \"$(grep -c '^layout:' \"$out/raw/gcoff-head-ext.txt\")\"\n"
+	return runExtensionShell(t, setup+src[start:end]+tail)
+}
+
+func TestExtensionBudgetCutoffs(t *testing.T) {
+	// base is the clock before the cut-off; late is past any deadline below.
+	const base, late = 1000, 1100
+	for _, tc := range []struct {
+		name                     string
+		budget, extDeadline, ear int
+		want                     []string
+		absent                   []string
+	}{
+		{
+			// Budget already spent when planning would start: no planning, no work.
+			name: "spent before planning", budget: 0, ear: 1,
+			want: []string{"status: budget\n", "judges: 0\n", "builds: 0\n", "base layouts: 0\n", "head layouts: 0\n"},
+		},
+		{
+			// Deadline passes after planning, before the first batch is built.
+			name: "expires after planning", budget: 60, ear: 2,
+			want: []string{"status: budget\n", "judges: 1\n", "builds: 0\n", "base layouts: 0\n", "head layouts: 0\n"},
+		},
+		{
+			// Deadline passes mid-stage: the first of three planned layouts runs, then the cut-off.
+			name: "expires mid stage", budget: 60, ear: 4,
+			want: []string{"status: budget\n", "judges: 1\n", "base layouts: 1\n", "head layouts: 1\n"},
+		},
+		{
+			// Never expires: all three planned layouts run and the stage plan is exhausted.
+			name: "within budget", budget: 600, ear: 1000,
+			want:   []string{"status: done\n", "base layouts: 3\n", "head layouts: 3\n"},
+			absent: []string{"status: budget\n"},
+		},
+		{
+			// The -E deadline (ab_t0+10 = 1010) is earlier than the budget (1600): it wins.
+			name: "ext deadline earlier than budget", budget: 600, extDeadline: 10, ear: 1,
+			want: []string{"status: budget\n", "judges: 0\n", "base layouts: 0\n"},
+		},
+		{
+			// A budget (1050) earlier than the -E deadline (1500): the budget wins.
+			name: "budget earlier than ext deadline", budget: 50, extDeadline: 500, ear: 1,
+			want: []string{"status: budget\n", "judges: 0\n", "base layouts: 0\n"},
+		},
+		{
+			// Neither deadline (1500, 1600) has passed at late (1100): work proceeds.
+			name: "later ext deadline does not cut", budget: 600, extDeadline: 500, ear: 1000,
+			want:   []string{"status: done\n", "base layouts: 3\n"},
+			absent: []string{"status: budget\n"},
+		},
+		{
+			// ext_deadline 0 disables it; only the budget applies.
+			name: "ext deadline off", budget: 600, extDeadline: 0, ear: 1000,
+			want:   []string{"status: done\n", "base layouts: 3\n"},
+			absent: []string{"status: budget\n"},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			output := runExtensionWithClock(t, tc.budget, tc.extDeadline, tc.ear, base, late)
+			for _, w := range tc.want {
+				if !strings.Contains(output, w) {
+					t.Errorf("missing %q in:\n%s", w, output)
+				}
+			}
+			for _, a := range tc.absent {
+				if strings.Contains(output, a) {
+					t.Errorf("unexpected %q in:\n%s", a, output)
+				}
+			}
+		})
 	}
 }

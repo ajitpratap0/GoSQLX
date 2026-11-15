@@ -42,8 +42,8 @@ func (c *Counter) Get() int64 {
 	return c.getSlow()
 }
 
-// getSlow is kept out of line so the disabled path is a fall-through with no
-// taken branch; only the enabled path pays the call and the locked add.
+// getSlow is kept out of line so the locked add stays out of every inlined
+// call site; only the enabled path pays the call and the locked add.
 //
 //go:noinline
 func (c *Counter) getSlow() int64 { return c.gets.Add(1) }

@@ -1,0 +1,1 @@
+- **Dialect detection [W7-09]**: Tied positive scores now resolve in a fixed order: Oracle, Snowflake, PostgreSQL, MySQL, SQL Server, MariaDB, SQLite; previously the result depended on map iteration order. Input with only `NVL` now always returns Oracle (previously about 86% Oracle), and `TOP` with a backtick now always returns MySQL.

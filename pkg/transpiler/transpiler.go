@@ -94,8 +94,16 @@ func transpile(sql string, from, to keywords.SQLDialect, prefilter bool) (string
 				return "", fmt.Errorf("rewrite: %w", err)
 			}
 		}
-		if err := retargetOperators(stmt, from, to); err != nil {
-			return "", fmt.Errorf("rewrite: %w", err)
+		// RetargetOperators acts on ops spellings, $ money, { objects and U& escapes.
+		// Its formKeep regrouping is repeated by the formatter's dialect pass.
+		// Its 512 nesting guard cannot trigger on parser-built trees without these
+		// bytes: parser.MaxRecursionDepth is 100. U& is caught by '&'; <-, =>,
+		// and := are conservative pairs; W7-05 owns pruning. This list mirrors
+		// pkg/sql/ast/retarget_operators.go and retarget_bitwise.go.
+		if !prefilter || src.ops {
+			if err := retargetOperators(stmt, from, to); err != nil {
+				return "", fmt.Errorf("rewrite: %w", err)
+			}
 		}
 		// requoteDataType (ast/data_type_quotes.go) is the identity without
 		// ", ` or [. The parser inserts these only from quoted type tokens
@@ -129,23 +137,77 @@ func transpile(sql string, from, to keywords.SQLDialect, prefilter bool) (string
 	return out, nil
 }
 
-type sourceFeatures struct{ pipe, quote, nonASCII, typeDelim bool }
+// sourceFeatures records possible source constructs; ops indicates an operator,
+// literal or nesting that ast.RetargetOperators rewrites or refuses.
+type sourceFeatures struct{ pipe, quote, nonASCII, typeDelim, ops bool }
+
+const (
+	srcPipe uint8 = 1 << iota
+	srcQuote
+	srcNonASCII
+	srcTypeDelim
+	srcOps
+	// srcPair marks bytes that set srcOps only when the next byte completes a
+	// retargetable two-byte spelling (<<, <-, >>, ->, =>, :=).
+	srcPair
+)
+
+// srcClass maps every byte to its scanSource flags, so the hot loop is one
+// table load per byte and only pair-opening bytes take the branch below.
+var srcClass = func() (t [256]uint8) {
+	t['|'] = srcPipe | srcOps
+	t['\''] = srcQuote
+	t['$'] = srcQuote | srcOps
+	t['"'] = srcQuote | srcTypeDelim
+	t['`'] = srcTypeDelim
+	t['['] = srcTypeDelim
+	for _, c := range []byte("^&#~@?!{") {
+		t[c] = srcOps
+	}
+	for _, c := range []byte("<>-=:") {
+		t[c] = srcPair
+	}
+	for c := 0x80; c < 256; c++ {
+		t[c] = srcNonASCII
+	}
+	return t
+}()
 
 func scanSource(sql string) sourceFeatures {
-	var f sourceFeatures
+	var acc uint8
 	for i := 0; i < len(sql); i++ {
-		switch c := sql[i]; {
-		case c >= 0x80:
-			f.nonASCII = true
-		case c == '|':
-			f.pipe = true
-		case c == '\'' || c == '$':
-			f.quote = true
-		case c == '"':
-			f.quote, f.typeDelim = true, true
-		case c == '`' || c == '[':
-			f.typeDelim = true
+		c := sql[i]
+		k := srcClass[c]
+		if k == 0 {
+			continue
 		}
+		if k&srcPair != 0 {
+			if i+1 < len(sql) {
+				n := sql[i+1]
+				switch c {
+				case '<':
+					if n == '<' || n == '-' {
+						acc |= srcOps
+					}
+				case '>', '-', '=':
+					if n == '>' {
+						acc |= srcOps
+					}
+				case ':':
+					if n == '=' {
+						acc |= srcOps
+					}
+				}
+			}
+			continue
+		}
+		acc |= k
 	}
-	return f
+	return sourceFeatures{
+		pipe:      acc&srcPipe != 0,
+		quote:     acc&srcQuote != 0,
+		nonASCII:  acc&srcNonASCII != 0,
+		typeDelim: acc&srcTypeDelim != 0,
+		ops:       acc&srcOps != 0,
+	}
 }

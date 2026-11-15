@@ -158,6 +158,7 @@ func (p *Parser) Reset() {
 		clear(p.tokenBuf)
 		p.tokenBuf = p.tokenBuf[:0]
 	}
+	p.resetScratch()
 	p.currentPos = 0
 	p.implicitEnd = 0
 	p.openBlockWork = 0
@@ -395,6 +396,11 @@ type Parser struct {
 	// token applies, which is also what makes a zero-value &Parser{} usable.
 	// Nothing may write through currentToken.
 	eof models.TokenWithSpan
+
+	// exprScratch and orderScratch are the list-building stacks described in
+	// scratch.go. INVARIANT: [len:cap] is zeroed.
+	exprScratch  []ast.Expression
+	orderScratch []ast.OrderByExpression
 }
 
 // Deprecated: Parse is provided for backward compatibility only and is scheduled for

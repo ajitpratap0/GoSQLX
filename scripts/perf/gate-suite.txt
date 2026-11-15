@@ -10,7 +10,7 @@
 # every added benchmark costs about rounds x arms x benchtime of CI time.
 ./pkg/gosqlx         ^BenchmarkParseE2E$
 ./pkg/gosqlx         ^BenchmarkParseRW$/^[a-z]+$/^medium$
-./pkg/gosqlx         ^BenchmarkParseFresh$/^(simple_select|join|complex)$
+./pkg/gosqlx         ^BenchmarkParseFresh$/^(simple_select|join|complex|insert|update|delete)$
 ./pkg/gosqlx         ^BenchmarkPoolGetPut$/^serial$
 ./pkg/sql/tokenizer  ^BenchmarkTokenize$/^scratch$/^(join|complex|insert)$
 ./pkg/fingerprint    ^BenchmarkNormalize$/^(simple_select|join|complex)$

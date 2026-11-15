@@ -24,6 +24,9 @@
 // which bridgeContract.check.ts type-checks against those TS types during the
 // website's typecheck. Changing a tag is a breaking change for the website and
 // must be mirrored there.
+//
+// ParseJSON supports legacy JSON and the versioned AST JSON v1 contract
+// specified by internal/astjson.
 package bridge
 
 import (
@@ -129,6 +132,8 @@ type LintViolation struct {
 // ParseErrorSpan locates it when the error carries a position. The
 // violations from rules that can still run (text- and token-level rules) are
 // reported alongside it, but the SQL must never be presented as clean.
+// SQL with no statements has no ParseError, matching gosqlx.Lint. Tokenizer
+// failures use gosqlx's tokenize-error text for every dialect.
 type LintResponse struct {
 	ParseError     string          `json:"parse_error,omitempty"`
 	ParseErrorSpan *ErrorSpan      `json:"parse_error_span,omitempty"`
@@ -139,23 +144,20 @@ type LintResponse struct {
 // Lint runs the full built-in rule set that gosqlx.Lint ships (L001-L030)
 // with the selected dialect, so AST-level rules see dialect-specific syntax,
 // and reports whether the SQL parses in that dialect.
+// It parses once. SQL with no statements is treated as nothing to lint;
+// tokenizer errors use the same tokenize-error text in every dialect.
 func Lint(sql, dialect string) LintResponse {
 	resp := LintResponse{Violations: []LintViolation{}}
 
-	if _, err := Parse(sql, dialect); err != nil {
-		resp.ParseError = err.Error()
-		resp.ParseErrorSpan = errorSpan(sql, err)
-	}
-
 	result, err := gosqlx.LintWithDialect(sql, Dialect(dialect))
 	if err != nil {
-		// Invalid SQL is reported through ParseError above; the violations of
-		// the rules that still ran are returned with the error.
 		invalidSQL := errors.Is(err, gosqlx.ErrSyntax) || errors.Is(err, gosqlx.ErrTokenize)
 		if result == nil || !invalidSQL {
 			resp.Error = err.Error()
 			return resp
 		}
+		resp.ParseError = err.Error()
+		resp.ParseErrorSpan = errorSpan(sql, err)
 	}
 	for _, v := range result.Violations {
 		resp.Violations = append(resp.Violations, LintViolation{

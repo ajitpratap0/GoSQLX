@@ -483,3 +483,73 @@ done
 		t.Errorf("env.txt does not record the GOGC=off environment:\n%s", env)
 	}
 }
+
+// TestPlanHelpersInLib exercises a gate-written plan and the shell consumer.
+func TestPlanHelpersInLib(t *testing.T) {
+	needs := []PlanNeed{{Line: 0, Name: "BenchmarkWarm", Regex: exactBenchRegex("BenchmarkWarm"), More: 1, Have: 20, Target: 21}, {Line: 0, Name: "BenchmarkA/a+b", Regex: exactBenchRegex("BenchmarkA/a+b"), More: 3, Have: 20, Target: 23}, {Line: 2, Name: "BenchmarkB/x", Regex: exactBenchRegex("BenchmarkB/x"), More: 2, Have: 20, Target: 22}}
+	var plan strings.Builder
+	if err := WritePlan(&plan, needs, map[int]string{0: "BenchmarkWarm", 2: "BenchmarkOther"}, .001, 3, DefaultConfig()); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(t.TempDir(), "plan.tsv")
+	if err := os.WriteFile(path, []byte(plan.String()), 0600); err != nil {
+		t.Fatal(err)
+	}
+	env := []string{"PLAN=" + path}
+	if got := bashLib(t, env, `perf_plan_max "$PLAN"`); got != "3\n" {
+		t.Errorf("max = %q", got)
+	}
+	for _, tc := range []struct{ r, lines, regex string }{{"0", "0\n2\n", "^BenchmarkWarm$|^BenchmarkA$/^a\\+b$\n"}, {"1", "0\n2\n", "^BenchmarkWarm$|^BenchmarkA$/^a\\+b$\n"}, {"2", "0\n", "^BenchmarkWarm$|^BenchmarkA$/^a\\+b$\n"}, {"3", "", ""}} {
+		if got := bashLib(t, append(env, "R="+tc.r), `perf_plan_lines "$PLAN" "$R"`); got != tc.lines {
+			t.Errorf("R=%s lines %q want %q", tc.r, got, tc.lines)
+		}
+		if got := bashLib(t, append(env, "R="+tc.r), `perf_plan_regex "$PLAN" 0 "$R"`); got != tc.regex {
+			t.Errorf("R=%s regex %q want %q", tc.r, got, tc.regex)
+		}
+	}
+	if got := bashLib(t, env, `perf_plan_regex "$PLAN" 2 0`); got != "^BenchmarkOther$|^BenchmarkB$/^x$\n" {
+		t.Errorf("warmup = %q", got)
+	}
+	empty := filepath.Join(t.TempDir(), "empty.tsv")
+	if err := os.WriteFile(empty, nil, 0600); err != nil {
+		t.Fatal(err)
+	}
+	if got := bashLib(t, []string{"PLAN=" + empty}, `perf_plan_max "$PLAN"`); got != "0\n" {
+		t.Errorf("empty max %q", got)
+	}
+	// Retry moves seed0 by 2K first. Each attempt's extension must avoid
+	// both its own base/head block and its own A/A' block.
+	bashLib(t, nil, `for seed0 in 100 140; do
+   for j in $(awk 'BEGIN {for(j=21;j<=200;j++)print j}'); do
+     seed=$(perf_ext_seed "$seed0" 20 "$j")
+     [ "$seed" -eq "$((seed0+20+j))" ] || exit 1
+     [ "$seed" -gt "$((seed0+40))" ] || exit 1
+   done
+ done`)
+}
+
+func TestPerfGateBudgetFitsTheJob(t *testing.T) {
+	wf := readRepoFile(t, ".github/workflows/perf-gate.yml")
+	ab := readRepoFile(t, "scripts/perf/ab.sh")
+	input := regexp.MustCompile(`(?s)\n      power_budget:\n(.*?)(?:\n      [a-z_]+:|\n\S)`).FindStringSubmatch(wf)
+	if input == nil {
+		t.Fatal("power_budget dispatch input missing")
+	}
+	def := regexp.MustCompile(`(?m)^\s+default:\s*['"]?([0-9]+)['"]?\s*$`).FindStringSubmatch(input[1])
+	if def == nil {
+		t.Fatal("power_budget numeric default missing")
+	}
+	limits := regexp.MustCompile(`timeout-minutes:\s*\$\{\{[^\n]*\|\|\s*([0-9]+)\s*\}\}`).FindAllStringSubmatch(wf, -1)
+	if len(limits) < 2 {
+		t.Fatalf("gate job/step timeout expressions missing: %v", limits)
+	}
+	job, step := limits[0][1], limits[1][1]
+	bashLib(t, []string{"B=" + def[1], "JOB=" + job, "STEP=" + step}, `[ "$STEP" -ge "$((22+(B+59)/60+1))" ]; [ "$STEP" -le "$((JOB-3))" ]; [ "$JOB" -le 45 ]`)
+	if !strings.Contains(wf, `-B "${POWER_BUDGET:-600}" -E 2100`) {
+		t.Error("gate flags must pass power budget and absolute deadline")
+	}
+	bashLib(t, []string{"STEP=" + step}, `[ 2100 -lt "$((STEP*60))" ]`)
+	if !regexp.MustCompile(`(?m)\b(?:power_budget|budget|ext_budget)=` + def[1] + `\b`).MatchString(ab) {
+		t.Errorf("ab.sh -G default does not match workflow %s", def[1])
+	}
+}

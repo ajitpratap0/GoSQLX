@@ -16,7 +16,6 @@ package security
 
 import (
 	"encoding/json"
-	"fmt"
 	"math/rand"
 	"os"
 	"reflect"
@@ -30,21 +29,6 @@ var stackedOracle = [3]*regexp.Regexp{
 	regexp.MustCompile(`;[\s\v]*(?i)(DROP|DELETE|TRUNCATE|UPDATE|INSERT|ALTER)\b`),
 	regexp.MustCompile(`;[\s\v]*(?i)EXEC\b`),
 	regexp.MustCompile(`;[\s\v]*(?i)EXECUTE\b`),
-}
-
-func BenchmarkScanSQLStackedScript(b *testing.B) {
-	for _, size := range []int{4 << 10, 30 << 10, 1 << 20} {
-		b.Run(fmt.Sprintf("%dKB", size>>10), func(b *testing.B) {
-			// The trailing identifier keeps the keyword prefilter open, so the
-			// stacked-query scan really walks every ";" in the script.
-			sql := strings.Repeat("SELECT 1234567;\n", size/16) + "SELECT update_count FROM t"
-			s := NewScanner()
-			b.ReportAllocs()
-			for i := 0; i < b.N; i++ {
-				s.ScanSQL(sql)
-			}
-		})
-	}
 }
 
 func BenchmarkStackedMatcher(b *testing.B) {

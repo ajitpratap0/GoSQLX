@@ -48,6 +48,13 @@ import (
 //     ({'a': 1}) are refused in other dialects.
 //   - PostgreSQL U& escaped literals and identifiers are refused outside
 //     PostgreSQL because their source spelling cannot be copied safely.
+//
+// pkg/transpiler skips this pass when the source contains none of the
+// spellings its scanSource keys on (^ | & # ~ @ ? ! { $, <<, >>, -> and a few
+// conservative pairs). U& is caught by '&'. A construct whose source spelling
+// avoids all of them must be added there too; TestOpsPrefilterRequiredConstructs
+// and TestTranspileDifferential in pkg/transpiler enforce this. Add any new
+// operator to the differential generator vocabulary (vbin, vun, vatoms).
 func RetargetOperators(stmt Statement, from, to string) error {
 	if (from != "" && from == to) || stmt == nil {
 		return nil

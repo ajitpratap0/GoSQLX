@@ -12,7 +12,8 @@
 //   - W3-03a1 (this change): the preprocess pass, now a loop over
 //     internal/tokclass, against legacyPreprocess, a frozen copy of the pass
 //     from before the move (legacy_preprocess_test.go). Equality proves the
-//     move is a pure refactor.
+//     move is a pure refactor. W3-03a2 adjusts only the intended D11 inner
+//     span boundaries in the frozen stream, checked against source bytes.
 //   - W3-03b plugs in the tokenizer's parser-ready mode as the producer under
 //     test, with preprocess(Tokenize(sql)) as the expected stream, through the
 //     same runEquivalence, inputs and comparator.
@@ -117,10 +118,166 @@ func preprocessWith(pass func([]models.TokenWithSpan) []models.TokenWithSpan) pr
 	}
 }
 
-var (
-	legacyProducer  = preprocessWith(parser.LegacyPreprocessTokens)
-	shippedProducer = preprocessWith(parser.PreprocessTokens)
-)
+var shippedProducer = preprocessWith(parser.PreprocessTokens)
+
+// legacyD11Expected preserves the frozen pass's decisions and metadata. Mapping
+// one input token at a time identifies expansion boundaries without consulting
+// production CompoundParts, AppendCompound or SplitSpans.
+func legacyD11Expected(tokens []models.TokenWithSpan, source *string) ([]models.TokenWithSpan, error) {
+	out := make([]models.TokenWithSpan, 0, len(tokens)+4)
+	var anchors []legacyD11Anchor
+	for _, input := range tokens {
+		children := parser.LegacyPreprocessTokens([]models.TokenWithSpan{input})
+		if len(children) == 2 && children[0].Start == input.Start && children[0].End == input.End &&
+			children[1].Start == input.Start && children[1].End == input.End {
+			// Fields plus exact rejoining is intentionally a different word
+			// parser from the allocation-free production implementation.
+			words := strings.Fields(input.Token.Value)
+			if len(words) == 2 && strings.Join(words, " ") == input.Token.Value &&
+				input.Start.Line >= 1 && input.Start.Column >= 1 && input.End.Line >= input.Start.Line {
+				firstEnd := models.Location{Line: input.Start.Line, Column: input.Start.Column + len(words[0])}
+				secondStart := models.Location{Line: input.End.Line, Column: input.End.Column - len(words[1])}
+				if secondStart.Column >= 1 && (firstEnd.Line != secondStart.Line || secondStart.Column > firstEnd.Column) {
+					children[0].End, children[1].Start = firstEnd, secondStart
+					if source != nil {
+						for i := range children {
+							anchors = append(anchors, legacyD11Anchor{children[i], words[i]})
+						}
+					}
+				}
+			}
+		}
+		out = append(out, children...)
+	}
+	if source != nil && len(anchors) > 0 {
+		if err := checkLegacyD11Source(*source, tokens, anchors); err != nil {
+			return nil, err
+		}
+	}
+	return out, nil
+}
+
+type legacyD11Anchor struct {
+	token models.TokenWithSpan
+	word  string
+}
+
+// legacySourceOffsets maps line/byte-column positions independently of span
+// derivation. A UTF-8 BOM is excluded from first-line columns; CR remains a
+// byte on its line, and LF starts the next line (including CRLF inputs).
+func legacySourceOffsets(source string) func(models.Location) (int, bool) {
+	starts := []int{0}
+	if strings.HasPrefix(source, "\uFEFF") {
+		starts[0] = len("\uFEFF")
+	}
+	for i := range source {
+		if source[i] == '\n' {
+			starts = append(starts, i+1)
+		}
+	}
+	return func(loc models.Location) (int, bool) {
+		if loc.Line < 1 || loc.Line > len(starts) || loc.Column < 1 {
+			return 0, false
+		}
+		offset := starts[loc.Line-1] + loc.Column - 1
+		limit := len(source)
+		if loc.Line < len(starts) {
+			limit = starts[loc.Line] - 1
+		}
+		return offset, offset <= limit
+	}
+}
+
+func checkLegacyD11Source(source string, inputs []models.TokenWithSpan, anchors []legacyD11Anchor) error {
+	offset := legacySourceOffsets(source)
+	check := func(tok models.TokenWithSpan, word string) error {
+		start, startOK := offset(tok.Start)
+		end, endOK := offset(tok.End)
+		if !startOK || !endOK || end < start || source[start:end] != word {
+			return fmt.Errorf("D11 source anchor %s does not select original word %q", fmtToken(tok), word)
+		}
+		return nil
+	}
+	// Calibrate on ordinary unquoted, unsplit words in this same stream,
+	// before checking the adjusted children. Ignore decoded/quoted payloads
+	// whose Value intentionally differs from their spelling in source.
+	for _, tok := range inputs {
+		v := tok.Token.Value
+		if tok.Token.Type == models.TokenTypeEOF || tok.Token.Type == models.TokenTypeString || tok.Token.Quote != 0 ||
+			len(parser.LegacyPreprocessTokens([]models.TokenWithSpan{tok})) != 1 ||
+			tok.Start.Line != tok.End.Line || tok.End.Column-tok.Start.Column != len(v) || v == "" {
+			continue
+		}
+		plain := true
+		for i := range v {
+			if !(v[i] >= 'a' && v[i] <= 'z' || v[i] >= 'A' && v[i] <= 'Z' || v[i] == '_' || i > 0 && v[i] >= '0' && v[i] <= '9') {
+				plain = false
+				break
+			}
+		}
+		if plain {
+			if err := check(tok, v); err != nil {
+				return fmt.Errorf("calibrating source offsets: %w", err)
+			}
+		}
+	}
+	for _, anchor := range anchors {
+		if err := check(anchor.token, anchor.word); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func legacyProducer(tkz *tokenizer.Tokenizer, in equivInput) tokStream {
+	tokens, err := tokenizePublic(tkz, in)
+	if err != nil {
+		return ownStream(nil, tkz.Comments, err)
+	}
+	want, err := legacyD11Expected(tokens, &in.sql)
+	return ownStream(want, tkz.Comments, err)
+}
+
+func TestCompoundSpansLegacySourceOffsets(t *testing.T) {
+	source := "\uFEFFSELECT a\r\nFROM t GROUP\r\n  BY a"
+	offset := legacySourceOffsets(source)
+	for _, tc := range []struct {
+		location models.Location
+		want     int
+	}{
+		{models.Location{Line: 1, Column: 1}, 3},
+		{models.Location{Line: 1, Column: 7}, 9},
+		{models.Location{Line: 2, Column: 1}, 13},
+		{models.Location{Line: 2, Column: 8}, 20},
+		{models.Location{Line: 2, Column: 13}, 25},
+		{models.Location{Line: 3, Column: 3}, 29},
+		{models.Location{Line: 3, Column: 5}, 31},
+	} {
+		if got, ok := offset(tc.location); !ok || got != tc.want {
+			t.Errorf("offset(%+v) = %d, %t; want %d, true", tc.location, got, ok, tc.want)
+		}
+	}
+	for _, loc := range []models.Location{{}, {Line: 1, Column: 0}, {Line: 4, Column: 1}, {Line: 1, Column: 99}} {
+		if got, ok := offset(loc); ok {
+			t.Errorf("offset(%+v) = %d, true; want invalid", loc, got)
+		}
+	}
+	inputs := []models.TokenWithSpan{
+		{Token: models.Token{Type: models.TokenTypeSelect, Value: "SELECT"}, Start: models.Location{Line: 1, Column: 1}, End: models.Location{Line: 1, Column: 7}},
+		{Token: models.Token{Type: models.TokenTypeFrom, Value: "FROM"}, Start: models.Location{Line: 2, Column: 1}, End: models.Location{Line: 2, Column: 5}},
+	}
+	anchors := []legacyD11Anchor{
+		{models.TokenWithSpan{Start: models.Location{Line: 2, Column: 8}, End: models.Location{Line: 2, Column: 13}}, "GROUP"},
+		{models.TokenWithSpan{Start: models.Location{Line: 3, Column: 3}, End: models.Location{Line: 3, Column: 5}}, "BY"},
+	}
+	if err := checkLegacyD11Source(source, inputs, anchors); err != nil {
+		t.Fatal(err)
+	}
+	anchors[1].token.Start.Column--
+	if err := checkLegacyD11Source(source, inputs, anchors); err == nil {
+		t.Error("source anchor accepted a shifted child boundary")
+	}
+}
 
 // diffTokens returns "" when want and got are equal field for field, or a
 // description of the first difference.
@@ -548,9 +705,9 @@ func (c *countingCtx) Err() error {
 	return nil
 }
 
-// TestTokclassMatchesLegacy proves the W3-03a1 move is a pure refactor: the
-// preprocess pass built on internal/tokclass reproduces the frozen
-// pre-move pass on every harness input under every dialect.
+// TestTokclassMatchesLegacy preserves exact equality with the frozen pass
+// except for D11 inner boundaries, independently anchored to the original
+// source bytes, on every harness input under every dialect.
 func TestTokclassMatchesLegacy(t *testing.T) {
 	inputs := equivInputs(t)
 	st := runEquivalence(t, inputs, legacyProducer, shippedProducer)
@@ -595,7 +752,10 @@ func TestTokclassMatchesLegacyEveryKey(t *testing.T) {
 						if wide == 0 {
 							in[0].Start, in[0].End = models.Location{}, models.Location{}
 						}
-						want := parser.LegacyPreprocessTokens(in)
+						want, err := legacyD11Expected(in, nil)
+						if err != nil {
+							t.Fatal(err)
+						}
 						got := parser.PreprocessTokens(in)
 						if d := diffTokens(want, got); d != "" {
 							t.Fatalf("type %s value %q quote %q width %d: %s", typ, v, q, wide, d)

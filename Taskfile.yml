@@ -97,6 +97,8 @@ tasks:
     cmds:
       - echo "Running cbinding tests with CGO enabled..."
       - go test -race -timeout 60s ./pkg/cbinding/...
+      - echo "Allocation and AST-release guards (non-race; compiled out under -race)..."
+      - go test -count=1 -timeout 60s -run 'TestCBindingAlloc' ./pkg/cbinding/
       - echo "Smoke-running cbinding benchmarks (10 iterations)..."
       - go test -race -timeout 120s -run ^\$ -bench CBinding -benchtime=10x ./pkg/cbinding/
 

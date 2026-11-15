@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/ajitpratap0/GoSQLX/internal/stackgrow"
 	"github.com/ajitpratap0/GoSQLX/pkg/gosqlx"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/keywords"
@@ -53,6 +54,7 @@ func usesDefaultPipeline(d keywords.SQLDialect) bool {
 // and parser configured for d. Errors are wrapped with the same gosqlx
 // sentinels so diagnostics look the same for every dialect.
 func parseWithRecoveryForDialect(sql string, d keywords.SQLDialect) ([]ast.Statement, []error) {
+	stackgrow.Reserve()
 	if usesDefaultPipeline(d) {
 		return gosqlx.ParseWithRecovery(sql)
 	}

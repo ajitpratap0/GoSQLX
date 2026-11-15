@@ -17,6 +17,7 @@ package parser
 import (
 	"fmt"
 
+	"github.com/ajitpratap0/GoSQLX/internal/stackgrow"
 	"github.com/ajitpratap0/GoSQLX/pkg/models"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/token"
@@ -183,6 +184,7 @@ func (p *Parser) ParseWithRecoveryFromModelTokens(tokens []models.TokenWithSpan)
 // It expects a preprocessed []models.TokenWithSpan (output of preprocessTokens or the parser-owned preprocess buffer;
 // nothing may retain p.tokens beyond the call).
 func (p *Parser) parseWithRecovery(tokens []models.TokenWithSpan) ([]ast.Statement, []error) {
+	stackgrow.Reserve()
 	p.tokens = tokens
 	p.currentPos = 0
 	p.implicitEnd = 0

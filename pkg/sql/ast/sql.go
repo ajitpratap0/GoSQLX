@@ -212,13 +212,74 @@ func writeDottedIdentifier(buf *bytes.Buffer, name string) {
 	}
 }
 
+const (
+	identifierByteOther = iota
+	identifierByteWord
+	identifierByteDigit
+	identifierByteDot
+	identifierByteDollar
+	identifierByteNonASCII
+)
+
+var identifierByteClass = func() (classes [256]uint8) {
+	for i := range classes {
+		c := byte(i)
+		switch {
+		case c >= 0x80:
+			classes[i] = identifierByteNonASCII
+		case c|0x20 >= 'a' && c|0x20 <= 'z', c == '_', c == '*':
+			classes[i] = identifierByteWord
+		case c >= '0' && c <= '9':
+			classes[i] = identifierByteDigit
+		case c == '.':
+			classes[i] = identifierByteDot
+		case c == '$':
+			classes[i] = identifierByteDollar
+		}
+	}
+	return
+}()
+
 // identifierNeedsQuoting reports whether name must be double-quoted: it is
 // empty, contains a character other than letters, digits, '_', '*' and '.',
 // or has a dot-separated part that starts with a digit but is not all digits
 // (1abc would re-read as the number 1 followed by the alias abc). An
 // all-digit part stays bare: it is how the parser stores ClickHouse tuple
-// element access (d.1).
+// element access (d.1). ASCII names use a byte-class fast path.
 func identifierNeedsQuoting(name string) bool {
+	if name == "" {
+		return true
+	}
+	partStart, digitLed := true, false
+	for i := 0; i < len(name); i++ {
+		switch identifierByteClass[name[i]] {
+		case identifierByteWord:
+			if digitLed {
+				return true
+			}
+			partStart = false
+		case identifierByteDigit:
+			if partStart {
+				digitLed = true
+			}
+			partStart = false
+		case identifierByteDot:
+			partStart, digitLed = true, false
+		case identifierByteDollar:
+			if partStart || digitLed {
+				return true
+			}
+		case identifierByteNonASCII:
+			return identifierNeedsQuotingRunes(name)
+		default:
+			return true
+		}
+	}
+	return false
+}
+
+// identifierNeedsQuotingRunes is the general rune loop and non-ASCII fallback.
+func identifierNeedsQuotingRunes(name string) bool {
 	if name == "" {
 		return true
 	}

@@ -85,9 +85,10 @@ func scanSQLRegexOnly(s *Scanner, sql string) *ScanResult {
 	views := append([]string{sql}, commentViews(sql)...)
 	s.detectRegexPatterns(views, scanPrefilter{}, PatternTautology, result)
 	s.detectTautologyInSQL(views, scanPrefilter{}, result)
-	for _, pattern := range []PatternType{PatternTimeBased, PatternOutOfBand, PatternDangerousFunc, PatternUnionInjection, PatternUnionGeneric, PatternStackedQuery} {
+	for _, pattern := range []PatternType{PatternTimeBased, PatternOutOfBand, PatternDangerousFunc, PatternUnionInjection, PatternUnionGeneric} {
 		s.detectRegexPatterns(views, scanPrefilter{}, pattern, result)
 	}
+	stackedReference(s, views, result)
 	s.updateCounts(result)
 	return result
 }

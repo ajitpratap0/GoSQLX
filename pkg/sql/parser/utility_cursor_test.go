@@ -115,7 +115,7 @@ func TestParserSeekNegativeIndex(t *testing.T) {
 	if p.currentPos != len(p.tokens) {
 		t.Errorf("position = %d, want EOF at %d", p.currentPos, len(p.tokens))
 	}
-	if p.currentToken != (models.TokenWithSpan{}) {
-		t.Errorf("token = %+v, want zero EOF token", p.currentToken)
+	if *p.currentToken != (models.TokenWithSpan{}) {
+		t.Errorf("token = %+v, want zero EOF token", *p.currentToken)
 	}
 }

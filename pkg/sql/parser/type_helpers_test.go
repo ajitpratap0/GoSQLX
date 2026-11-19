@@ -67,7 +67,7 @@ func TestIsAnyType(t *testing.T) {
 			p := &Parser{
 				tokens:       tokens,
 				currentPos:   0,
-				currentToken: tokens[0],
+				currentToken: &tokens[0],
 			}
 			result := p.isAnyType(tt.types...)
 			if result != tt.expected {
@@ -113,7 +113,7 @@ func TestMatchType(t *testing.T) {
 			p := &Parser{
 				tokens:       tt.tokens,
 				currentPos:   0,
-				currentToken: tt.tokens[0],
+				currentToken: &tt.tokens[0],
 			}
 			result := p.matchType(tt.matchAgainst)
 			if result != tt.wantMatch {

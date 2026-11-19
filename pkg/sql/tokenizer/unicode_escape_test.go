@@ -4,9 +4,11 @@
 package tokenizer
 
 import (
+	stderrors "errors"
 	"strings"
 	"testing"
 
+	goerrors "github.com/ajitpratap0/GoSQLX/pkg/errors"
 	"github.com/ajitpratap0/GoSQLX/pkg/models"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/keywords"
 )
@@ -125,11 +127,42 @@ func TestUnicodeEscapeCommentsBeforeUESCAPE(t *testing.T) {
 	}
 }
 
+// In dialects with an & operator, U&'x' is the expression U & 'x'.
 func TestOtherDialectsKeepUnicodeAmpersandTokens(t *testing.T) {
-	for _, dialect := range []keywords.SQLDialect{keywords.DialectMySQL, keywords.DialectSQLServer, keywords.DialectSQLite, keywords.DialectOracle} {
+	for _, dialect := range []keywords.SQLDialect{keywords.DialectMySQL, keywords.DialectMariaDB, keywords.DialectSQLServer, keywords.DialectSQLite} {
 		tokens := lexAll(t, dialect, `U&'x'`)
 		if len(tokens) != 3 || tokens[0].val != "U" || tokens[1].val != "&" || tokens[2].val != "x" {
 			t.Errorf("%s: %v", dialect, tokens)
+		}
+	}
+}
+
+// Oracle, Snowflake and ClickHouse have neither U& literals nor an &
+// operator. Reading U&'x' as U & 'x' there let formatting turn it into
+// BITAND(U, 'x') or bitAnd(U, 'x'), so it is rejected instead.
+func TestUnicodeAmpersandRejectedWithoutAmpersandOperator(t *testing.T) {
+	for _, dialect := range []keywords.SQLDialect{keywords.DialectOracle, keywords.DialectSnowflake, keywords.DialectClickHouse} {
+		for _, sql := range []string{`U&'x'`, `u&'x'`, `SELECT U&"col" FROM t`, `SELECT 1, U&'d\0061t' UESCAPE '\'`} {
+			tk, err := NewWithDialect(dialect)
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, err = tk.TokenizeString(sql)
+			var e *goerrors.Error
+			if !stderrors.As(err, &e) || e.Code != goerrors.ErrCodeUnsupportedFeature || !strings.Contains(e.Message, "U& Unicode escape") {
+				t.Errorf("%s %q: err = %v, want unsupported U& feature error", dialect, sql, err)
+				continue
+			}
+			if want := strings.IndexAny(sql, "Uu") + 1; e.Location.Line != 1 || e.Location.Column != want {
+				t.Errorf("%s %q: location = %+v, want line 1 column %d", dialect, sql, e.Location, want)
+			}
+		}
+		// Only the adjacent U&' spelling is a Unicode literal: spaced or
+		// longer names keep their tokens.
+		for _, sql := range []string{`U & 'x'`, `menu&'x'`, `U&x`} {
+			if tokens := lexAll(t, dialect, sql); len(tokens) != 3 {
+				t.Errorf("%s %q: %v", dialect, sql, tokens)
+			}
 		}
 	}
 }

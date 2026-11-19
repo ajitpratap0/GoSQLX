@@ -494,11 +494,12 @@ func assertQuotedFastMatchesSlow(t testing.TB, d keywords.SQLDialect, s string) 
 			break
 		}
 		kind := quotedReaderKind(slow)
-		ft, ferr := fast.nextToken()
+		var ft models.Token
+		ferr := fast.nextToken(&ft)
 		var st models.Token
 		var serr error
 		if kind == "" {
-			st, serr = slow.nextToken()
+			serr = slow.nextToken(&st)
 		} else {
 			st, serr = readQuotedSlowRef(slow, kind)
 		}

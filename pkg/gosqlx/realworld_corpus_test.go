@@ -15,7 +15,6 @@
 package gosqlx
 
 import (
-	"bufio"
 	"flag"
 	"fmt"
 	"os"
@@ -160,39 +159,17 @@ func writeKnownFailures(t *testing.T, lines []string) {
 // loadKnownFailures reads "dialect/file.sql#N stage  # reason" lines.
 func loadKnownFailures(t *testing.T) map[string]string {
 	t.Helper()
-	known := map[string]string{}
 	f, err := os.Open(filepath.Join(realworldRoot, "known_failures.txt"))
 	if os.IsNotExist(err) {
-		return known
+		return map[string]string{}
 	}
 	if err != nil {
 		t.Fatalf("open known_failures.txt: %v", err)
 	}
 	defer f.Close()
-	sc := bufio.NewScanner(f)
-	for sc.Scan() {
-		line := sc.Text()
-		if i := strings.IndexByte(line, '#'); i == 0 {
-			continue
-		}
-		if i := strings.Index(line, " #"); i >= 0 {
-			line = line[:i]
-		}
-		fields := strings.Fields(line)
-		if len(fields) == 0 {
-			continue
-		}
-		if len(fields) != 2 {
-			t.Errorf("known_failures.txt: malformed entry %q (want \"file.sql#N stage\")", sc.Text())
-			continue
-		}
-		if _, dup := known[fields[0]]; dup {
-			t.Errorf("known_failures.txt: duplicate entry %s", fields[0])
-		}
-		known[fields[0]] = fields[1]
-	}
-	if err := sc.Err(); err != nil {
-		t.Fatalf("scan known_failures.txt: %v", err)
+	known, err := dialectaudit.ParseKnownFailures(f)
+	if err != nil {
+		t.Fatalf("known_failures.txt: %v", err)
 	}
 	return known
 }

@@ -1,0 +1,1 @@
+- Use per-PR changelog fragments in `changelog.d/` to avoid merge conflicts; collect them into `CHANGELOG.md` when preparing a release.

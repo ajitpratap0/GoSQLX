@@ -29,8 +29,22 @@ const (
 //   - || concatenation becomes CONCAT() in MySQL and MariaDB, where || is OR.
 //   - PostgreSQL containment, JSON key, text search, overlap, distance and
 //     regular-expression operators are refused in the other known dialects.
-func binaryTargetForm(op string, pipesOr bool, target string) (binaryForm, string) {
+//   - A lambda (lambda is BinaryExpression.Lambda) is refused in every known
+//     dialect without lambdas, where -> is JSON field access. JSON -> and ->>
+//     are refused in ClickHouse and Snowflake, where -> is the lambda operator
+//     and ->> is Snowflake's flow operator. The generic dialect keeps both.
+func binaryTargetForm(op string, pipesOr, lambda bool, target string) (binaryForm, string) {
+	if lambda {
+		if target == "" || lambdaTarget(target) {
+			return formKeep, ""
+		}
+		return formRefuse, ""
+	}
 	switch op {
+	case "->", "->>":
+		if lambdaTarget(target) {
+			return formRefuse, ""
+		}
 	case "#":
 		switch target {
 		case "postgresql":
@@ -94,7 +108,7 @@ func pick(first bool, a, b string) string {
 // rewriteBitwise applies binaryTargetForm to x. handled is false when x keeps
 // its operator.
 func (r *operatorRetargeter) rewriteBitwise(x *BinaryExpression, inOperator bool) (repl Expression, handled bool, err error) {
-	form, name := binaryTargetForm(x.Operator, x.PipesOr, r.to)
+	form, name := binaryTargetForm(x.Operator, x.PipesOr, x.Lambda, r.to)
 	switch form {
 	case formFunc:
 		return &FunctionCall{Name: name, Arguments: []Expression{x.Left, x.Right}}, true, nil
@@ -109,7 +123,12 @@ func (r *operatorRetargeter) rewriteBitwise(x *BinaryExpression, inOperator bool
 		return call, true, nil
 	case formRefuse:
 		what := "the PostgreSQL operator " + x.Operator
-		if x.Operator == "#" {
+		switch {
+		case x.Lambda:
+			what = "the lambda operator ->"
+		case x.Operator == "->" || x.Operator == "->>":
+			what = "the JSON operator " + x.Operator
+		case x.Operator == "#":
 			what = "the PostgreSQL bitwise XOR operator #"
 		}
 		return nil, true, fmt.Errorf("%s has no equivalent in %s", what, r.target())

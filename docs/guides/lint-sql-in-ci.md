@@ -15,7 +15,7 @@ Pick one of three setups:
 Install a specific release so that a new GoSQLX version cannot change your CI results overnight:
 
 ```bash
-go install github.com/ajitpratap0/GoSQLX/cmd/gosqlx@v1.16.0
+go install github.com/ajitpratap0/GoSQLX/cmd/gosqlx@v1.17.0
 ```
 
 Bump the version deliberately, in its own pull request, the same way you would bump any other linter.
@@ -44,7 +44,7 @@ jobs:
         with:
           go-version: '1.26'
       - name: Install gosqlx
-        run: go install github.com/ajitpratap0/GoSQLX/cmd/gosqlx@v1.16.0
+        run: go install github.com/ajitpratap0/GoSQLX/cmd/gosqlx@v1.17.0
       - name: Validate and lint SQL
         run: gosqlx action --files '**/*.sql' --severity warning
       - name: Check formatting

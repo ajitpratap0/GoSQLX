@@ -19,8 +19,8 @@ import (
 	"fmt"
 	"strings"
 	"testing"
-	"time"
 
+	"github.com/ajitpratap0/GoSQLX/internal/scaletest"
 	"github.com/ajitpratap0/GoSQLX/pkg/models"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/keywords"
@@ -498,27 +498,18 @@ func TestParser_TSQLElseIfChain(t *testing.T) {
 	if testing.Short() {
 		return
 	}
-	measure := func(n int) time.Duration {
-		sql := tsqlElseIfChain(n)
-		best := time.Duration(1<<63 - 1)
-		for i := 0; i < 3; i++ {
-			start := time.Now()
+	parseChain := func(sql string) func() {
+		return func() {
 			tree, err := ParseWithDialect(sql, keywords.DialectSQLServer)
-			d := time.Since(start)
 			if err != nil {
-				t.Fatalf("%d branches: %v", n, err)
+				t.Errorf("parse ELSE IF chain: %v", err)
+				return
 			}
 			ast.ReleaseAST(tree)
-			if d < best {
-				best = d
-			}
 		}
-		return best
 	}
-	small, large := measure(2500), measure(10000)
-	if ratio := float64(large) / float64(small); ratio > 10 {
-		t.Errorf("4x the branches took %.1fx the time (%v vs %v), want linear", ratio, large, small)
-	}
+	scaletest.AssertLinearGrowth(t, "ELSE IF chain 2500 -> 10000 branches", 10,
+		parseChain(tsqlElseIfChain(2500)), parseChain(tsqlElseIfChain(10000)))
 }
 
 // A line holding only GO ends the batch wherever it appears in SQL Server,

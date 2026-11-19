@@ -20,11 +20,13 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/ajitpratap0/GoSQLX/internal/poolstats"
+	"github.com/ajitpratap0/GoSQLX/internal/stackgrow"
 	goerrors "github.com/ajitpratap0/GoSQLX/pkg/errors"
-	"github.com/ajitpratap0/GoSQLX/pkg/metrics"
 	"github.com/ajitpratap0/GoSQLX/pkg/models"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/dialect"
+	"github.com/ajitpratap0/GoSQLX/pkg/sql/internal/astrelease"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/keywords"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/token"
 )
@@ -67,6 +69,7 @@ type TokenPosition struct {
 var parserPool = sync.Pool{
 	New: func() interface{} {
 		p := &Parser{}
+		p.currentToken = &p.eof
 		p.resetDialectState()
 		return p
 	},
@@ -88,7 +91,7 @@ var parserPool = sync.Pool{
 //
 // Thread Safety: Safe for concurrent calls - each goroutine gets its own instance.
 func GetParser() *Parser {
-	metrics.RecordNamedPoolGet("parser")
+	poolstats.Parser.Get()
 	return parserPool.Get().(*Parser)
 }
 
@@ -110,7 +113,7 @@ func PutParser(p *Parser) {
 	if p != nil {
 		p.Reset()
 		parserPool.Put(p)
-		metrics.RecordNamedPoolPut("parser")
+		poolstats.Parser.Put()
 	}
 }
 
@@ -156,10 +159,12 @@ func (p *Parser) Reset() {
 		clear(p.tokenBuf)
 		p.tokenBuf = p.tokenBuf[:0]
 	}
+	p.resetScratch()
 	p.currentPos = 0
 	p.implicitEnd = 0
 	p.openBlockWork = 0
-	p.currentToken = models.TokenWithSpan{}
+	p.pooledDraws = 0
+	p.currentToken = &p.eof
 	p.depth = 0
 	p.ctx = nil
 	p.strict = false
@@ -219,7 +224,8 @@ const MaxRecursionDepth = 100
 //   - tokenBuf: Parser-owned scratch buffer holding the preprocessed stream,
 //     reused across parses and scrubbed (or dropped when large) by Reset
 //   - currentPos: Current position in token stream
-//   - currentToken: Current token being examined
+//   - currentToken: Pointer to the current token in tokens (or to the per-parser
+//     zero EOF sentinel past the end); read-only
 //   - depth: Recursion depth counter (DoS protection via MaxRecursionDepth)
 //   - ctx: Optional context for cancellation support
 //   - positions: Source position mapping for enhanced error reporting
@@ -312,13 +318,24 @@ func (p *Parser) Dialect() string {
 // For dialect-aware parsing or strict mode, use NewParser with options, or call
 // ApplyOptions on a pooled instance before parsing.
 type Parser struct {
-	tokens []models.TokenWithSpan
+	// pooledDraws counts the nodes this parse drew from the ast pools
+	// (ast.Get*/ast.New* other than NewAST). The parser reports it to
+	// ast.ReleaseAST through astrelease.MarkParserBuilt: a tree with no
+	// pooled draws is released in O(1). Every such draw site must call
+	// notePooledDraw (TestReleaseDrawnPolicy_ParserCountsDraws enforces it).
+	pooledDraws int
+	tokens      []models.TokenWithSpan
 	// tokenBuf is parser-owned scratch holding the preprocessed token stream
 	// (see preprocess). It is reused across parses and never exposed to
 	// callers. INVARIANT: tokenBuf[len:cap] is always zeroed.
-	tokenBuf     []models.TokenWithSpan
-	currentPos   int
-	currentToken models.TokenWithSpan
+	tokenBuf   []models.TokenWithSpan
+	currentPos int
+	// currentToken points at p.tokens[currentPos], or at p.eof once the cursor
+	// is past the stream. It is a pointer, not a copy, so advance moves 8
+	// bytes instead of a 72 B pointerful struct (which cost a GC write barrier
+	// per word). The pointee is read-only: tokens are never mutated while
+	// parsing, and nothing may write through currentToken (see eof).
+	currentToken *models.TokenWithSpan
 	depth        int             // Current recursion depth
 	ctx          context.Context // Optional context for cancellation support
 	strict       bool            // Strict mode rejects empty statements
@@ -373,6 +390,18 @@ type Parser struct {
 	// examined before running into the end of the input inside an unclosed
 	// block. It bounds that wasted work (see utilityStatementEnd).
 	openBlockWork int
+	// eof is this parser's end-of-input sentinel: always the zero token. It is
+	// per parser, not a package variable, so a stray write can neither race
+	// across goroutines nor leak into other parsers. Every parse entry point,
+	// advance, seek, Reset and Release point currentToken at it when no real
+	// token applies, which is also what makes a zero-value &Parser{} usable.
+	// Nothing may write through currentToken.
+	eof models.TokenWithSpan
+
+	// exprScratch and orderScratch are the list-building stacks described in
+	// scratch.go. INVARIANT: [len:cap] is zeroed.
+	exprScratch  []ast.Expression
+	orderScratch []ast.OrderByExpression
 }
 
 // Deprecated: Parse is provided for backward compatibility only and is scheduled for
@@ -414,14 +443,20 @@ func (p *Parser) preprocess(tokens []models.TokenWithSpan) []models.TokenWithSpa
 
 // parseTokens is the core parsing routine. It takes a preprocessed
 // []models.TokenWithSpan (already normalised by preprocessTokens or p.preprocess) and returns
-// the parsed AST.
+// the parsed AST. Its stackgrow.Reserve call is a backstop for low-level
+// callers; see internal/stackgrow for the frame budget.
 func (p *Parser) parseTokens(tokens []models.TokenWithSpan) (*ast.AST, error) {
+	// Reserve is a no-op after an earlier reservation.
+	stackgrow.Reserve()
 	p.tokens = tokens
 	p.currentPos = 0
 	p.implicitEnd = 0
 	p.openBlockWork = 0
+	p.pooledDraws = 0
 	if len(tokens) > 0 {
-		p.currentToken = tokens[0]
+		p.currentToken = &tokens[0]
+	} else {
+		p.currentToken = &p.eof
 	}
 
 	// Get a pre-allocated AST from the pool
@@ -471,6 +506,7 @@ func (p *Parser) parseTokens(tokens []models.TokenWithSpan) (*ast.AST, error) {
 		result.ExecuteSlash = append(result.ExecuteSlash, make([]bool, len(result.Statements)-len(result.ExecuteSlash))...)
 		result.ExecuteSlashPositions = append(result.ExecuteSlashPositions, make([]models.Location, len(result.Statements)-len(result.ExecuteSlashPositions))...)
 	}
+	astrelease.MarkParserBuilt(result, p.pooledDraws)
 	return result, nil
 }
 
@@ -636,7 +672,10 @@ func (p *Parser) ParseContext(ctx context.Context, tokens []token.Token) (*ast.A
 
 // parseContextTokens is the core context-aware parsing routine. It takes
 // a preprocessed []models.TokenWithSpan and respects ctx for cancellation.
+// Its stackgrow.Reserve call is a backstop for low-level callers.
 func (p *Parser) parseContextTokens(ctx context.Context, tokens []models.TokenWithSpan) (*ast.AST, error) {
+	// Reserve is a no-op after an earlier reservation.
+	stackgrow.Reserve()
 	// Check context before starting
 	if err := ctx.Err(); err != nil {
 		return nil, err
@@ -650,8 +689,11 @@ func (p *Parser) parseContextTokens(ctx context.Context, tokens []models.TokenWi
 	p.currentPos = 0
 	p.implicitEnd = 0
 	p.openBlockWork = 0
+	p.pooledDraws = 0
 	if len(tokens) > 0 {
-		p.currentToken = tokens[0]
+		p.currentToken = &tokens[0]
+	} else {
+		p.currentToken = &p.eof
 	}
 
 	// Get a pre-allocated AST from the pool
@@ -704,8 +746,12 @@ func (p *Parser) parseContextTokens(ctx context.Context, tokens []models.TokenWi
 		result.ExecuteSlash = append(result.ExecuteSlash, make([]bool, len(result.Statements)-len(result.ExecuteSlash))...)
 		result.ExecuteSlashPositions = append(result.ExecuteSlashPositions, make([]models.Location, len(result.Statements)-len(result.ExecuteSlashPositions))...)
 	}
+	astrelease.MarkParserBuilt(result, p.pooledDraws)
 	return result, nil
 }
+
+// notePooledDraw records one node drawn from an ast pool; see Parser.pooledDraws.
+func (p *Parser) notePooledDraw() { p.pooledDraws++ }
 
 // Release releases any resources held by the parser
 func (p *Parser) Release() {
@@ -713,7 +759,7 @@ func (p *Parser) Release() {
 	p.tokens = nil
 	p.tokenBuf = nil
 	p.currentPos = 0
-	p.currentToken = models.TokenWithSpan{}
+	p.currentToken = &p.eof
 	p.depth = 0
 	p.ctx = nil
 }
@@ -993,6 +1039,7 @@ func (p *Parser) parseSnowflakeStageStatement(kind string) (ast.Statement, error
 // NewParser creates a new parser with optional configuration.
 func NewParser(opts ...ParserOption) *Parser {
 	p := &Parser{}
+	p.currentToken = &p.eof
 	p.resetDialectState()
 	for _, opt := range opts {
 		opt(p)
@@ -1036,20 +1083,23 @@ func (p *Parser) checkStrictEmptySemicolon() error {
 func (p *Parser) advance() {
 	p.currentPos++
 	if p.currentPos < len(p.tokens) {
-		p.currentToken = p.tokens[p.currentPos]
+		p.currentToken = &p.tokens[p.currentPos]
 	} else {
-		p.currentToken = models.TokenWithSpan{} // EOF sentinel
+		p.currentToken = &p.eof // EOF sentinel
 	}
 }
 
 // peekToken returns the next token without advancing the parser position.
 // Returns an empty TokenWithSpan if at the end of input.
-func (p *Parser) peekToken() models.TokenWithSpan {
+//
+// The result points into p.tokens (or at the parser's zero EOF sentinel) and
+// is read-only.
+func (p *Parser) peekToken() *models.TokenWithSpan {
 	nextPos := p.currentPos + 1
 	if nextPos < len(p.tokens) {
-		return p.tokens[nextPos]
+		return &p.tokens[nextPos]
 	}
-	return models.TokenWithSpan{}
+	return &p.eof
 }
 
 // =============================================================================

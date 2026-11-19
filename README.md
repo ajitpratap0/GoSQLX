@@ -17,7 +17,7 @@
 <br/>
 
 <!-- metrics:start -->
-| **~2.9M parses/sec†** | **349 ns parse latency†** | **~80–85% SQL-99 (est.)** | **8 dialects** | **0 race conditions** |
+| **~2.8M parses/sec†** | **363 ns parse latency†** | **~80–85% SQL-99 (est.)** | **8 dialects** | **0 race conditions** |
 |:---:|:---:|:---:|:---:|:---:|
 
 <sub>† Parse stage only (pre-tokenized input to AST), `SELECT id, name FROM users`, Apple M4, Go 1.27, median of 20 runs of `BenchmarkPerformanceBaseline`. Complex queries take longer (see `performance_baselines.json`). Reproduce: `go test -run ^$ -bench BenchmarkPerformanceBaseline -benchmem -count=20 ./pkg/sql/parser/`.</sub>
@@ -33,7 +33,7 @@
 
 ## What is GoSQLX?
 
-GoSQLX is a **production-ready SQL parsing SDK** for Go. It tokenizes, parses, and generates ASTs from SQL with zero-copy optimizations and intelligent object pooling - parsing a simple SELECT in about <!-- metrics-inline:start -->**349 ns (~2.9M parses/sec)**<!-- metrics-inline:end -->.
+GoSQLX is a **production-ready SQL parsing SDK** for Go. It tokenizes, parses, and generates ASTs from SQL with zero-copy optimizations and intelligent object pooling - parsing a simple SELECT in about <!-- metrics-inline:start -->**363 ns (~2.8M parses/sec)**<!-- metrics-inline:end -->.
 
 ### Why GoSQLX?
 

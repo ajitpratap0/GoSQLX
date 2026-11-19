@@ -92,6 +92,14 @@ func TestWriteNameList(t *testing.T) {
 }
 
 func TestQuoteName_FastPathAllocs(t *testing.T) {
+	for _, name := range []string{"users", "t.$1", "naïve"} {
+		if n := testing.AllocsPerRun(100, func() { _ = identifierNeedsQuoting(name) }); n != 0 {
+			t.Errorf("identifierNeedsQuoting(%q) allocs = %v, want 0", name, n)
+		}
+	}
+	if n := testing.AllocsPerRun(100, func() { _ = isReservedName("Orders", true) }); n != 0 {
+		t.Errorf("isReservedName(Orders) allocs = %v, want 0", n)
+	}
 	if n := testing.AllocsPerRun(100, func() { _ = QuoteName("users") }); n != 0 {
 		t.Errorf("QuoteName(users) allocs = %v, want 0", n)
 	}

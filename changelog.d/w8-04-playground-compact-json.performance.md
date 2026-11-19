@@ -1,0 +1,1 @@
+- **Playground**: parse returns compact typed AST JSON v1 on request. amd64 layout-randomized perf gate (20 layouts, p<0.001): parse -76.4/-74.8/-85.6% sec/op and lint -34.5/-26.8/-29.3% sec/op for small/medium/large inputs, with allocs/op and B/op down. Payload bytes -75.7/-73.2/-91.6% (local, deterministic). Playground lint removes a second parse. [W8-04]

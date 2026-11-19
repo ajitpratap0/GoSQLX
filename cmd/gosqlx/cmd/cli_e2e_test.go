@@ -199,6 +199,26 @@ func TestCLI_DialectAliases(t *testing.T) {
 	}
 }
 
+func TestCLI_ValidateBlankInputParity(t *testing.T) {
+	tests := []struct {
+		name string
+		args []string
+	}{
+		{name: "default", args: []string{"validate", ""}},
+		{name: "postgresql dialect", args: []string{"validate", "--dialect", "postgresql", ""}},
+		{name: "json", args: []string{"validate", "-f", "json", ""}},
+		{name: "mysql dialect json", args: []string{"validate", "--dialect", "mysql", "-f", "json", ""}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			res := runCLI(t, nil, tt.args...)
+			if res.err == nil {
+				t.Fatalf("%v succeeded for blank input; want non-zero exit", tt.args)
+			}
+		})
+	}
+}
+
 func TestCLI_FormatNoUppercase(t *testing.T) {
 	res := runCLI(t, str("SELECT a FROM t"), "format", "--no-uppercase")
 	if res.err != nil {

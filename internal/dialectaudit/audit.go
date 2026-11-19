@@ -5,7 +5,9 @@
 package dialectaudit
 
 import (
+	"bufio"
 	"fmt"
+	"io"
 	"strings"
 
 	"github.com/ajitpratap0/GoSQLX/internal/dropcheck"
@@ -98,4 +100,38 @@ func Compact(s string) string {
 		s = string(r[:300]) + "…"
 	}
 	return s
+}
+
+// ParseKnownFailures parses the testdata/realworld/known_failures.txt format,
+// "dialect/file.sql#N stage  # reason". Lines starting with '#' and lines that
+// are empty once a trailing " #..." comment is cut are skipped; every other
+// line must have exactly two fields, and a key may appear only once.
+func ParseKnownFailures(r io.Reader) (map[string]string, error) {
+	known := map[string]string{}
+	sc := bufio.NewScanner(r)
+	for sc.Scan() {
+		raw := sc.Text()
+		line := raw
+		if strings.HasPrefix(line, "#") {
+			continue
+		}
+		if i := strings.Index(line, " #"); i >= 0 {
+			line = line[:i]
+		}
+		fields := strings.Fields(line)
+		if len(fields) == 0 {
+			continue
+		}
+		if len(fields) != 2 {
+			return nil, fmt.Errorf("known_failures.txt: malformed entry %q (want \"file.sql#N stage\")", raw)
+		}
+		if _, dup := known[fields[0]]; dup {
+			return nil, fmt.Errorf("known_failures.txt: duplicate entry %s", fields[0])
+		}
+		known[fields[0]] = fields[1]
+	}
+	if err := sc.Err(); err != nil {
+		return nil, fmt.Errorf("known_failures.txt: scan: %w", err)
+	}
+	return known, nil
 }

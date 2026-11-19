@@ -20,6 +20,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/ajitpratap0/GoSQLX/internal/scaletest"
 )
 
 // TestParseWithContext_BasicSuccess verifies that ParseWithContext works for valid SQL
@@ -362,39 +364,30 @@ func TestParseWithContext_ErrorHandling(t *testing.T) {
 	}
 }
 
-// TestParseWithContext_CancellationResponseTime verifies fast cancellation
+// TestParseWithContext_CancellationResponseTime verifies that cancellation is
+// honoured promptly. Rather than cancelling after a sleep and timing the
+// response (which measures scheduler load), the context turns cancelled after
+// a fixed number of polls and the test counts how much further the callee
+// goes: it must stop at the next check instead of finishing the input.
 func TestParseWithContext_CancellationResponseTime(t *testing.T) {
-	// Create a large query
 	columns := make([]string, 500)
 	for i := range columns {
 		columns[i] = "column" + strings.Repeat(string(rune('a'+i%26)), 2)
 	}
 	sql := "SELECT " + strings.Join(columns, ", ") + " FROM table WHERE id = 1"
 
-	ctx, cancel := context.WithCancel(context.Background())
-
-	// Start parsing in goroutine
-	done := make(chan bool)
-	go func() {
-		_, _ = ParseWithContext(ctx, sql)
-		done <- true
-	}()
-
-	// Wait a bit then cancel
-	time.Sleep(10 * time.Millisecond)
-	cancelTime := time.Now()
-	cancel()
-
-	// Wait for completion
-	<-done
-	responseTime := time.Since(cancelTime)
-
-	// Verify cancellation response time is < 100ms
-	if responseTime > 100*time.Millisecond {
-		t.Errorf("Cancellation response time %v exceeds 100ms requirement", responseTime)
+	// Poll 1 is ParseWithContext's entry check, poll 2 the tokenizer's first
+	// check; poll 3, 100 tokens in, reports cancellation.
+	const allow = 2
+	ctx := scaletest.NewTrippingContext(allow)
+	if _, err := ParseWithContext(ctx, sql); !errors.Is(err, context.Canceled) {
+		t.Fatalf("err = %v, want context.Canceled", err)
 	}
-
-	t.Logf("Cancellation response time: %v", responseTime)
+	// One poll reports the cancellation and the error path re-reads ctx.Err
+	// once; anything more means work continued after cancellation.
+	if n := ctx.PollsAfterTrip(); n > 2 {
+		t.Errorf("%d context checks after cancellation, want at most 2", n)
+	}
 }
 
 // TestParseWithTimeout_MultipleCalls verifies helper can be called multiple times

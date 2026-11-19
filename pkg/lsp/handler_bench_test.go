@@ -513,13 +513,11 @@ LIMIT 10`
 	}
 }
 
-// setupTestServer creates a test server with mock I/O
+// setupTestServer creates a test server with empty input whose output
+// (responses and publishDiagnostics notifications) is discarded, so
+// benchmarks do not time an ever-growing output buffer.
 func setupTestServer() *Server {
-	mock := &mockReadWriter{
-		input:  bytes.NewBuffer(nil),
-		output: bytes.NewBuffer(nil),
-	}
-	return NewServer(mock.input, mock.output, log.New(io.Discard, "", 0))
+	return NewServer(bytes.NewBuffer(nil), io.Discard, log.New(io.Discard, "", 0))
 }
 
 // generateLargeSQLDocument generates a SQL document with the specified number of statements
@@ -611,5 +609,54 @@ func BenchmarkServer_SendMessage(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		server.SendNotification("window/logMessage", params)
+	}
+}
+
+// TestSetupTestServerDiscardsOutput: the benchmarks (and the W0-06 LSP
+// matrix) build their server with setupTestServer, and validateDocument sends
+// a publishDiagnostics message on every call. Writing those into a growing
+// buffer would time buffer growth and copying that scale with b.N and inflate
+// B/op, so the output must go to io.Discard. No caller reads it back.
+func TestSetupTestServerDiscardsOutput(t *testing.T) {
+	if w := setupTestServer().writer; w != io.Discard {
+		t.Fatalf("setupTestServer writes to %T, want io.Discard", w)
+	}
+}
+
+func BenchmarkDocumentSymbolScaling(b *testing.B) {
+	for _, kind := range []string{"gosep", "longfirst"} {
+		for _, n := range []int{1000, 2000, 4000} {
+			b.Run(fmt.Sprintf("%s/%d", kind, n), func(b *testing.B) {
+				var doc strings.Builder
+				dialect := ""
+				if kind == "gosep" {
+					dialect = "sqlserver"
+				} else {
+					doc.WriteString("SELECT '")
+					doc.WriteString(strings.Repeat("x", 64*n))
+					doc.WriteString("';\n")
+				}
+				for i := 0; i < n; i++ {
+					fmt.Fprintf(&doc, "DROP TABLE t%d", i)
+					if kind == "gosep" {
+						doc.WriteString("\nGO\n")
+					} else {
+						doc.WriteString(";\n")
+					}
+				}
+				if kind == "gosep" {
+					doc.WriteString(";")
+				}
+				h, _, _ := lspBenchHandler(b, dialect, doc.String())
+				params := mustMarshal(b, DocumentSymbolParams{TextDocument: TextDocumentIdentifier{URI: benchURI}})
+				b.ReportAllocs()
+				b.ResetTimer()
+				for i := 0; i < b.N; i++ {
+					if _, err := h.handleDocumentSymbol(params); err != nil {
+						b.Fatal(err)
+					}
+				}
+			})
+		}
 	}
 }

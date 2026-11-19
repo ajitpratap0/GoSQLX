@@ -1,0 +1,1080 @@
+// Copyright 2026 GoSQLX Authors
+// SPDX-License-Identifier: Apache-2.0
+
+package main
+
+import (
+	"fmt"
+	"io"
+	"math"
+	"regexp"
+	"sort"
+	"strings"
+)
+
+// Units the gate reads from benchmark output.
+const (
+	unitTime   = "ns/op"
+	unitBytes  = "B/op"
+	unitAllocs = "allocs/op"
+	unitIr     = "instructions/op"
+)
+
+// Verdict is the gate outcome.
+type Verdict string
+
+const (
+	// Pass: nothing regressed.
+	Pass Verdict = "pass"
+	// Regression: a gated metric regressed past its threshold.
+	Regression Verdict = "regression"
+	// Noisy: the A/A control was too noisy to trust the timings; the caller
+	// should measure again once.
+	Noisy Verdict = "noisy"
+	// Inconclusive: still noisy after the re-run. Neutral, never a failure.
+	Inconclusive Verdict = "inconclusive"
+)
+
+// Config holds the thresholds of PLAN section 2.6. Percentages are in percent.
+type Config struct {
+	Alpha            float64 // significance level for time, B/op and allocs/op
+	TimePct          float64 // per-benchmark time regression threshold
+	GeomeanPct       float64 // time geomean regression threshold
+	BytesPct         float64 // B/op regression threshold
+	IrPct            float64 // instructions/op regression threshold
+	AADeltaPct       float64 // an A/A benchmark is noisy when |delta| exceeds this
+	AANoisyFraction  float64 // the A/A run is noisy when more than this % of benchmarks are
+	FinalAttempt     bool    // a noisy A/A is now inconclusive instead of noisy
+	MinSamplesForSig int     // below this many samples per arm the p-value is not used
+	// LowPowerShiftPct and LowPowerTarget define the report's low-power
+	// list: benchmarks whose estimated chance of catching a slowdown of
+	// LowPowerShiftPct on its own is below LowPowerTarget (a fraction).
+	LowPowerShiftPct float64
+	LowPowerTarget   float64
+	ExtMax           int
+	ExtStatus        string
+}
+
+// DefaultConfig is the configuration CI uses.
+func DefaultConfig() Config {
+	return Config{
+		Alpha:            0.01,
+		TimePct:          3,
+		GeomeanPct:       1.5,
+		BytesPct:         2,
+		IrPct:            1.5,
+		AADeltaPct:       3,
+		AANoisyFraction:  10,
+		MinSamplesForSig: 3,
+		LowPowerShiftPct: 5,
+		LowPowerTarget:   0.8,
+		ExtMax:           200,
+		ExtStatus:        "off",
+	}
+}
+
+// Inputs are the parsed arms. Base, Head and (optionally) AA are the primary
+// GOGC=off -cpu 1 runs; AA is the A/A' control: the base revision again,
+// interleaved, linked with a layout seed set disjoint from the one base and
+// head share (or, without layout labels, a second run of the base binary).
+// SecBase/SecHead are the default-GC -cpu 1 runs (informational). IrBase and
+// IrHead hold instructions/op from cmd/perfdriver.
+type Inputs struct {
+	Base, Head, AA   *Run
+	BaseExt, HeadExt *Run
+	SecBase, SecHead *Run
+	IrBase, IrHead   *Run
+}
+
+// Cmp compares one metric of one benchmark between two arms.
+type Cmp struct {
+	OK         bool    // both arms have samples
+	Base, Head float64 // medians of the samples, or of the per-layout medians
+	Ratio      float64 // head/base effect: Head/Base, or the Hodges-Lehmann shift when ByLayout; 0 if unknown
+	DeltaPct   float64 // (Ratio - 1) * 100
+	P          float64 // Mann-Whitney two-sided p-value
+	Separated  bool    // every head sample (layout) is above every base one, or every one below
+	NBase      int     // samples, or layouts when ByLayout
+	NHead      int
+	// ByLayout: both arms ran at least two randomized code layouts and the
+	// layout is the unit of comparison (see compareLayouts).
+	ByLayout bool
+	// SpreadPct is the base arm's spread across layouts: the robust standard
+	// deviation (1.4826 x MAD) of its per-layout medians relative to their
+	// median, in percent. With one round per layout it includes run-to-run
+	// noise as well as the layout effect. NaN unless ByLayout.
+	SpreadPct float64
+}
+
+// compare treats every sample as independent: right for deterministic
+// metrics (allocs/op, B/op) and for runs without randomized layouts.
+func compare(base, head []float64) Cmp {
+	if len(base) == 0 || len(head) == 0 {
+		return Cmp{}
+	}
+	return finish(Cmp{OK: true, Base: median(base), Head: median(head), NBase: len(base), NHead: len(head), SpreadPct: math.NaN()}, base, head)
+}
+
+func finish(c Cmp, base, head []float64) Cmp {
+	switch {
+	case c.Base != 0:
+		c.Ratio = c.Head / c.Base
+		c.DeltaPct = (c.Ratio - 1) * 100
+	case c.Head != 0:
+		c.DeltaPct = math.Inf(1)
+	}
+	c.P = mannWhitney(base, head)
+	bLo, bHi := minMax(base)
+	hLo, hHi := minMax(head)
+	c.Separated = hLo > bHi || hHi < bLo
+	return c
+}
+
+// compareLayouts compares two arms whose samples come from several code
+// layouts each (test binaries linked with -ldflags=-randlayout=<seed>).
+//
+// Where the linker puts a function moves its timing by a few percent through
+// alignment, branch-predictor and cache aliasing, and that offset is the same
+// for every sample of one binary. Pooling the samples of a binary therefore
+// pseudo-replicates one draw of the layout effect: a change that adds no
+// work but shifts the text by a few bytes looks "significant". The layout is
+// the experimental unit instead: each layout is summarised by the median of
+// its samples (robust to a disturbed run), and the arms are compared with an
+// exact Mann-Whitney U test over the per-layout medians. Under "no change",
+// the per-layout values of both arms are exchangeable draws from the same
+// layout distribution, so the test is calibrated whatever that distribution
+// looks like (layout effects are often bimodal: a hot loop straddles a
+// boundary or it does not). Base and head share seeds, but the linker
+// shuffles a different symbol list, so equal seeds do not give
+// corresponding layouts; the unpaired test is the valid one (and only
+// conservative when they do correspond).
+//
+// The effect size is the Hodges-Lehmann shift that goes with the U test: the
+// median over all (head layout, base layout) pairs of their time ratio. A
+// layout is often measured once, and on a busy runner a single run can be
+// tens of percent off; the mean of the layouts would move with it, the
+// Hodges-Lehmann ratio does not (it tolerates about 29% outliers).
+func compareLayouts(base, head [][]float64) Cmp {
+	bm, hm := groupMedians(base), groupMedians(head)
+	if len(bm) == 0 || len(hm) == 0 {
+		return Cmp{}
+	}
+	c := finish(Cmp{OK: true, Base: median(bm), Head: median(hm), NBase: len(bm), NHead: len(hm), ByLayout: true, SpreadPct: robustRelSD(bm)}, bm, hm)
+	if r := hodgesLehmannRatio(bm, hm); r > 0 {
+		c.Ratio = r
+		c.DeltaPct = (r - 1) * 100
+	}
+	return c
+}
+
+// compareArms compares one benchmark's metric between two runs, by layout
+// when both runs have at least two layouts, else sample by sample.
+func compareArms(base, head *Run, name, unit string) Cmp {
+	_, bg := base.ByLayout(name, unit)
+	_, hg := head.ByLayout(name, unit)
+	if len(bg) >= 2 && len(hg) >= 2 {
+		return compareLayouts(bg, hg)
+	}
+	return compare(base.Get(name, unit), head.Get(name, unit))
+}
+
+// significant reports whether the change is unlikely to be noise: p below
+// alpha. For a deterministic metric (allocs/op, B/op) complete separation of
+// the two arms also counts, so that a run with too few rounds for the test to
+// reach alpha still catches an extra allocation; timings never get that
+// shortcut.
+func (c Cmp) significant(cfg Config, deterministic bool) bool {
+	if !c.OK {
+		return false
+	}
+	if c.NBase >= cfg.MinSamplesForSig && c.NHead >= cfg.MinSamplesForSig && c.P < cfg.Alpha {
+		return true
+	}
+	return deterministic && c.Separated
+}
+
+// Row is the per-benchmark result.
+type Row struct {
+	Name      string
+	K         int
+	Power     float64
+	NeedK     int
+	residuals []float64
+	line      int
+	hasLine   bool
+	stageK    int
+	planned   bool
+	warmup    bool
+	Time      Cmp
+	TimeSig   bool // the time change survives the suite-wide false-discovery control (timeSignificance)
+	AA        Cmp  // base vs the A/A' arm, time
+	AASig     bool
+	Bytes     Cmp
+	Allocs    Cmp
+	Sec       Cmp // secondary (default GC) time
+	Status    []string
+	Regress   bool
+}
+
+// IrRow is the instruction-count result of one perfdriver case.
+type IrRow struct {
+	Name    string
+	Cmp     Cmp
+	Regress bool
+}
+
+// Result is the full gate outcome.
+type Result struct {
+	Verdict    Verdict
+	Reasons    []string
+	Rows       []Row
+	IrRows     []IrRow
+	Geomean    float64 // head/base time geomean ratio, NaN if unknown
+	GeomeanP   float64 // p-value of the per-layout (or per-round) suite geomeans, NaN if unknown
+	AAGeomean  float64
+	AAGeomeanP float64
+	SecGeomean float64
+	AANoisy    int // A/A' benchmarks with |delta| > AADeltaPct
+	AACompared int
+	AAFlagged  int // A/A' benchmarks the time rule would have flagged (|delta| >= TimePct, p < Alpha)
+	// ByLayout: every timed comparison used randomized layouts as the unit;
+	// Layouts is the smallest number of layouts per arm among them.
+	ByLayout     bool
+	Layouts      int
+	StageLayouts int
+	// TimeTests is m, the number of benchmarks in the false-discovery
+	// family of the time rule; MinUnits is the smallest number of layouts
+	// (or, without layouts, samples) per arm among them.
+	TimeTests int
+	MinUnits  int
+	// GeomeanNote explains why the geomean rule could not be judged, if so.
+	GeomeanNote    string
+	TimeRegressed  int
+	HardRegressed  int
+	MissingInHead  []string
+	NewInHead      []string
+	HasAA, HasSec  bool
+	HasIr          bool
+	TimingDisabled bool // A/A noisy: timing results are not trusted
+}
+
+// Evaluate applies the gate rules.
+//
+// Hard metrics (allocs/op, B/op, instructions/op) count even when the A/A
+// control is noisy, because GC-free allocation counts and instruction counts
+// do not depend on machine noise. Timing regressions count only when the A/A
+// control is quiet.
+func Evaluate(in Inputs, cfg Config) Result {
+	res := Result{
+		Geomean:    math.NaN(),
+		GeomeanP:   math.NaN(),
+		AAGeomean:  math.NaN(),
+		AAGeomeanP: math.NaN(),
+		SecGeomean: math.NaN(),
+		HasAA:      in.AA != nil,
+		HasSec:     in.SecBase != nil && in.SecHead != nil,
+		HasIr:      in.IrBase != nil && in.IrHead != nil,
+	}
+	baseTime, headTime := mergeRuns(in.Base, in.BaseExt), mergeRuns(in.Head, in.HeadExt)
+	hasPlanLabels := (in.BaseExt != nil && len(in.BaseExt.Planned) > 0) || (in.HeadExt != nil && len(in.HeadExt.Planned) > 0)
+	var stageRows []Row
+	var ratios, aaRatios, secRatios []float64
+	headSeen := make(map[string]bool)
+	if in.Head != nil {
+		for _, n := range in.Head.Names {
+			headSeen[n] = true
+		}
+	}
+	if in.Base != nil {
+		for _, name := range in.Base.Names {
+			if !headSeen[name] {
+				res.MissingInHead = append(res.MissingInHead, name)
+				continue
+			}
+			row := Row{Name: name, Power: math.NaN()}
+			stageTime := compareArms(in.Base, in.Head, name, unitTime)
+			stageRows = append(stageRows, Row{Name: name, Time: stageTime})
+			row.stageK = min(stageTime.NBase, stageTime.NHead)
+			row.planned = baseTime.Planned[name] || headTime.Planned[name]
+			row.warmup = hasPlanLabels && !row.planned
+			row.Time = compareArms(baseTime, headTime, name, unitTime)
+			row.line, row.hasLine = baseTime.Line[name]
+			if row.Time.ByLayout {
+				row.K = min(row.Time.NBase, row.Time.NHead)
+				row.residuals = powerResiduals(name, baseTime, headTime, in.AA)
+			}
+			row.Bytes = compare(in.Base.Get(name, unitBytes), in.Head.Get(name, unitBytes))
+			row.Allocs = compare(in.Base.Get(name, unitAllocs), in.Head.Get(name, unitAllocs))
+			if in.AA != nil {
+				row.AA = compareArms(in.Base, in.AA, name, unitTime)
+			}
+			if res.HasSec {
+				row.Sec = compareArms(in.SecBase, in.SecHead, name, unitTime)
+			}
+			if stageTime.OK && stageTime.Ratio > 0 {
+				ratios = append(ratios, stageTime.Ratio)
+			}
+			if row.AA.OK && row.AA.Ratio > 0 {
+				aaRatios = append(aaRatios, row.AA.Ratio)
+				res.AACompared++
+				if math.Abs(row.AA.DeltaPct) > cfg.AADeltaPct {
+					res.AANoisy++
+				}
+			}
+			if row.Sec.OK && row.Sec.Ratio > 0 {
+				secRatios = append(secRatios, row.Sec.Ratio)
+			}
+			res.Rows = append(res.Rows, row)
+		}
+	}
+	if in.Head != nil {
+		for _, name := range in.Head.Names {
+			if in.Base == nil || in.Base.Values[name] == nil {
+				res.NewInHead = append(res.NewInHead, name)
+			}
+		}
+	}
+	res.Geomean = geomean(ratios)
+	res.ByLayout, res.Layouts = layoutLevel(stageRows)
+	res.StageLayouts = res.Layouts
+	res.TimeTests, res.MinUnits = timeSignificance(res.Rows, cfg, func(r *Row) (*Cmp, *bool) { return &r.Time, &r.TimeSig })
+	if res.TimeTests > 0 {
+		level := cfg.Alpha / float64(res.TimeTests)
+		for i := range res.Rows {
+			r := &res.Rows[i]
+			if r.Time.ByLayout {
+				r.Power = aucPower(r.residuals, r.K, r.K, level, cfg.LowPowerShiftPct)
+				r.NeedK = requiredLayouts(r.residuals, level, cfg.LowPowerShiftPct, cfg.LowPowerTarget, cfg.ExtMax)
+			}
+		}
+	}
+	timeSignificance(res.Rows, cfg, func(r *Row) (*Cmp, *bool) { return &r.AA, &r.AASig })
+	for _, r := range res.Rows {
+		if r.AASig && math.Abs(r.AA.DeltaPct) >= cfg.TimePct {
+			res.AAFlagged++
+		}
+	}
+	if in.Base != nil && in.Head != nil {
+		res.GeomeanP = suiteGeomeanP(in.Base, in.Head, stageRows, func(r Row) Cmp { return r.Time })
+	}
+	if in.AA != nil {
+		res.AAGeomeanP = suiteGeomeanP(in.Base, in.AA, res.Rows, func(r Row) Cmp { return r.AA })
+	}
+	res.AAGeomean = geomean(aaRatios)
+	res.SecGeomean = geomean(secRatios)
+	if !math.IsNaN(res.Geomean) && math.IsNaN(res.GeomeanP) {
+		unit := "round"
+		if res.ByLayout {
+			unit = "layout"
+		}
+		res.GeomeanNote = fmt.Sprintf("the time geomean rule was not judged: per-%s suite geomeans need every benchmark measured in every %s of both arms, "+
+			"and at least one benchmark lacks a %s (a missing or failed run; compare the raw files)", unit, unit, unit)
+	}
+
+	aaNoisy := res.AACompared > 0 &&
+		float64(res.AANoisy)*100/float64(res.AACompared) > cfg.AANoisyFraction
+	res.TimingDisabled = aaNoisy
+
+	var slower, faster, moreAllocs, moreBytes int
+	for i := range res.Rows {
+		r := &res.Rows[i]
+		if r.TimeSig {
+			switch {
+			case r.Time.DeltaPct >= cfg.TimePct:
+				r.Status = append(r.Status, "slower")
+				slower++
+				if !aaNoisy {
+					r.Regress = true
+					res.TimeRegressed++
+				}
+			case r.Time.DeltaPct <= -cfg.TimePct:
+				r.Status = append(r.Status, "faster")
+				faster++
+			}
+		}
+		if r.Allocs.Head > r.Allocs.Base && r.Allocs.significant(cfg, true) {
+			r.Status = append(r.Status, "+allocs")
+			r.Regress = true
+			moreAllocs++
+		} else if r.Allocs.Head < r.Allocs.Base && r.Allocs.significant(cfg, true) {
+			r.Status = append(r.Status, "-allocs")
+		}
+		if exceeds(r.Bytes.DeltaPct, cfg.BytesPct) && r.Bytes.significant(cfg, true) {
+			r.Status = append(r.Status, "+B/op")
+			r.Regress = true
+			moreBytes++
+		}
+		if len(r.Status) == 0 {
+			r.Status = append(r.Status, "ok")
+		}
+	}
+
+	var moreIr int
+	if res.HasIr {
+		for _, name := range in.IrBase.Names {
+			c := compare(in.IrBase.Get(name, unitIr), in.IrHead.Get(name, unitIr))
+			if !c.OK {
+				continue
+			}
+			row := IrRow{Name: name, Cmp: c, Regress: exceeds(c.DeltaPct, cfg.IrPct)}
+			if row.Regress {
+				moreIr++
+			}
+			res.IrRows = append(res.IrRows, row)
+		}
+	}
+	res.HardRegressed = moreAllocs + moreBytes + moreIr
+
+	// The geomean is a regression only when the per-round suite geomeans
+	// of the two arms also differ significantly; one noisy benchmark in a
+	// short run must not trip it.
+	geoRegressed := !aaNoisy && !math.IsNaN(res.Geomean) && (res.Geomean-1)*100 >= cfg.GeomeanPct &&
+		!math.IsNaN(res.GeomeanP) && res.GeomeanP < cfg.Alpha
+
+	if moreAllocs > 0 {
+		res.Reasons = append(res.Reasons, fmt.Sprintf("allocs/op increased in %d benchmark(s)", moreAllocs))
+	}
+	if moreBytes > 0 {
+		res.Reasons = append(res.Reasons, fmt.Sprintf("B/op rose more than %.3g%% in %d benchmark(s)", cfg.BytesPct, moreBytes))
+	}
+	if moreIr > 0 {
+		res.Reasons = append(res.Reasons, fmt.Sprintf("instructions/op rose more than %.3g%% in %d case(s)", cfg.IrPct, moreIr))
+	}
+	if aaNoisy {
+		what := "two runs of the same binary"
+		if res.ByLayout {
+			what = "the base revision under two disjoint sets of code layouts"
+		}
+		res.Reasons = append(res.Reasons, fmt.Sprintf(
+			"A/A control noisy: %d of %d benchmarks moved more than %.3g%% between %s; timings are not judged",
+			res.AANoisy, res.AACompared, cfg.AADeltaPct, what))
+		if slower > 0 {
+			res.Reasons = append(res.Reasons, fmt.Sprintf("%d benchmark(s) look slower, but the run is too noisy to tell", slower))
+		}
+	} else {
+		if res.TimeRegressed > 0 {
+			res.Reasons = append(res.Reasons, fmt.Sprintf("%d benchmark(s) slower by %.3g%% or more, significant at a suite-wide false discovery rate of %.3g", res.TimeRegressed, cfg.TimePct, cfg.Alpha))
+		}
+		if geoRegressed {
+			res.Reasons = append(res.Reasons, fmt.Sprintf("time geomean %s at p = %.2g (threshold +%.3g%%)", pct((res.Geomean-1)*100), res.GeomeanP, cfg.GeomeanPct))
+		}
+	}
+	if faster > 0 && !aaNoisy {
+		res.Reasons = append(res.Reasons, fmt.Sprintf("%d benchmark(s) faster by %.3g%% or more", faster, cfg.TimePct))
+	}
+
+	switch {
+	case res.HardRegressed > 0:
+		res.Verdict = Regression
+	case aaNoisy && cfg.FinalAttempt:
+		res.Verdict = Inconclusive
+	case aaNoisy:
+		res.Verdict = Noisy
+	case res.TimeRegressed > 0 || geoRegressed:
+		res.Verdict = Regression
+	default:
+		res.Verdict = Pass
+	}
+	return res
+}
+
+// timeSignificance marks which rows' time comparisons (picked by cmp) are
+// significant. Each benchmark is tested at the gate's alpha, but a suite of
+// 30-odd benchmarks tested that way flags at least one of them on roughly
+// one no-op change in ten once every test is calibrated, so the p-values of
+// the suite are judged together, with the false discovery rate held at alpha
+// (benjaminiHochberg). Rows without enough samples or layouts for a p-value
+// (significant's minimum) are left out of the family and never significant.
+// It returns the family size m and the smallest per-arm unit count in it.
+func timeSignificance(rows []Row, cfg Config, pick func(*Row) (*Cmp, *bool)) (m, minUnits int) {
+	ps := make([]float64, len(rows))
+	for i := range rows {
+		c, _ := pick(&rows[i])
+		ps[i] = math.NaN()
+		if c.OK && c.NBase >= cfg.MinSamplesForSig && c.NHead >= cfg.MinSamplesForSig {
+			ps[i] = c.P
+			if n := min(c.NBase, c.NHead); m == 0 || n < minUnits {
+				minUnits = n
+			}
+			m++
+		}
+	}
+	for i, rejected := range benjaminiHochberg(ps, cfg.Alpha) {
+		_, sig := pick(&rows[i])
+		*sig = rejected
+	}
+	return m, minUnits
+}
+
+// LowPowerRow is a benchmark the time rule cannot reliably guard on its own.
+type LowPowerRow struct {
+	Name      string
+	SpreadPct float64
+	Power     float64
+	MinShift  float64
+	K, NeedK  int
+	Reason    string
+}
+
+// LowPower lists remaining underpowered layout comparisons, weakest first.
+// A lone discovery must reach the first Benjamini-Hochberg level alpha/m.
+func LowPower(res Result, cfg Config) []LowPowerRow {
+	if !res.ByLayout || res.TimeTests == 0 {
+		return nil
+	}
+	level := cfg.Alpha / float64(res.TimeTests)
+	var out []LowPowerRow
+	for _, r := range res.Rows {
+		if !r.Time.OK || !r.Time.ByLayout || r.Power >= cfg.LowPowerTarget {
+			continue
+		}
+		var reason string
+		switch {
+		case r.NeedK > cfg.ExtMax:
+			reason = fmt.Sprintf("needs more than %d layouts per arm (cap)", cfg.ExtMax)
+		case cfg.ExtStatus == "off":
+			reason = "adaptive layouts off"
+		case cfg.ExtStatus == "budget":
+			reason = "time budget ran out"
+		case cfg.ExtStatus == "stages":
+			reason = "still short after the last extension stage"
+		case cfg.ExtStatus == "done":
+			reason = "estimate rose after the last extension"
+		case cfg.ExtStatus == "skipped":
+			reason = "timings not judged"
+		}
+		if r.NeedK <= cfg.ExtMax && cfg.ExtStatus != "off" && r.K <= r.stageK {
+			if cfg.ExtStatus == "done" {
+				reason = "no extension samples"
+			}
+			reason = "not planned (" + reason + ")"
+		}
+		out = append(out, LowPowerRow{Name: r.Name, SpreadPct: r.Time.SpreadPct, Power: r.Power, MinShift: aucMinShift(r.residuals, r.K, r.K, level, cfg.LowPowerTarget), K: r.K, NeedK: r.NeedK, Reason: reason})
+	}
+	sort.SliceStable(out, func(i, j int) bool {
+		if math.IsNaN(out[i].Power) {
+			return !math.IsNaN(out[j].Power)
+		}
+		return out[i].Power < out[j].Power
+	})
+	return out
+}
+
+// PlanNeed sizes one benchmark's next extension in its original suite line.
+type PlanNeed struct {
+	Line               int
+	Name, Regex        string
+	More, Have, Target int
+}
+
+func powerSizingTarget(cfg Config) float64 {
+	return cfg.LowPowerTarget + (1-cfg.LowPowerTarget)/2
+}
+
+// Plan returns additional layouts needed to reach the power target, up to the cap.
+// Sizing halfway from the reporting target to full power leaves a safety margin
+// for dispersion estimates that rise after new layouts, within the same budget.
+func Plan(res Result, cfg Config) []PlanNeed {
+	var needs []PlanNeed
+	for _, r := range res.Rows {
+		if !r.Time.ByLayout || !(r.Power < cfg.LowPowerTarget) || !r.hasLine || res.TimeTests == 0 {
+			continue
+		}
+		sizingTarget := powerSizingTarget(cfg)
+		target := min(requiredLayouts(r.residuals, cfg.Alpha/float64(res.TimeTests), cfg.LowPowerShiftPct, sizingTarget, cfg.ExtMax), cfg.ExtMax)
+		if r.K < target {
+			needs = append(needs, PlanNeed{Line: r.line, Name: r.Name, Regex: exactBenchRegex(r.Name), More: target - r.K, Have: r.K, Target: target})
+		}
+	}
+	return needs
+}
+
+// exactBenchRegex anchors every slash-separated benchmark level literally.
+func exactBenchRegex(name string) string {
+	levels := strings.Split(name, "/")
+	for i, level := range levels {
+		levels[i] = "^" + regexp.QuoteMeta(level) + "$"
+	}
+	return strings.Join(levels, "/")
+}
+
+// WritePlan writes the awk-readable adaptive layout plan and one warm-up per line.
+// Its header describes the reporting and sizing targets used by the planner.
+func WritePlan(w io.Writer, needs []PlanNeed, lineFirst map[int]string, level float64, m int, cfg Config) error {
+	var b strings.Builder
+	fmt.Fprintf(&b, "# perf gate adaptive-layout plan (W0-16): level %.8g m %d shift %.8g target %.8g sizing-target %.8g kmax %d\n", level, m, cfg.LowPowerShiftPct, cfg.LowPowerTarget, powerSizingTarget(cfg), cfg.ExtMax)
+	seen := make(map[int]bool)
+	for _, n := range needs {
+		if !seen[n.Line] {
+			if first, ok := lineFirst[n.Line]; ok {
+				fmt.Fprintf(&b, "warmup\t%d\t%s\n", n.Line, exactBenchRegex(first))
+			}
+			seen[n.Line] = true
+		}
+	}
+	for _, n := range needs {
+		fmt.Fprintf(&b, "need\t%d\t%d\t%d\t%d\t%s\t%s\n", n.Line, n.More, n.Have, n.Target, n.Regex, n.Name)
+	}
+	_, err := io.WriteString(w, b.String())
+	return err
+}
+
+// layoutLevel reports whether every timed row was compared by layout, and
+// the smallest layout count per arm among them.
+func layoutLevel(rows []Row) (bool, int) {
+	k, seen := 0, false
+	for _, r := range rows {
+		if !r.Time.OK {
+			continue
+		}
+		if !r.Time.ByLayout {
+			return false, 0
+		}
+		n := min(r.Time.NBase, r.Time.NHead)
+		if !seen || n < k {
+			k = n
+		}
+		seen = true
+	}
+	return seen, k
+}
+
+// suiteGeomeanP tests whether the suite as a whole moved between two runs.
+// With randomized layouts, every layout of an arm yields one suite geomean
+// (over the benchmarks' per-layout medians) and those K values per arm are
+// compared, for the reason given at compareLayouts. Without layouts it falls
+// back to per-round suite geomeans (roundGeomeanP). NaN when the runs are
+// not aligned.
+func suiteGeomeanP(base, head *Run, rows []Row, pick func(Row) Cmp) float64 {
+	var names []string
+	byLayout := true
+	for _, r := range rows {
+		c := pick(r)
+		if !c.OK {
+			continue
+		}
+		names = append(names, r.Name)
+		byLayout = byLayout && c.ByLayout
+	}
+	if len(names) == 0 {
+		return math.NaN()
+	}
+	if !byLayout {
+		return roundGeomeanP(base, head, names)
+	}
+	b, okB := layoutSuiteGeomeans(base, names)
+	h, okH := layoutSuiteGeomeans(head, names)
+	if !okB || !okH {
+		return math.NaN()
+	}
+	return mannWhitney(b, h)
+}
+
+// layoutSuiteGeomeans returns, for each layout of run (in first-seen order of
+// the first benchmark), the geometric mean over names of that layout's
+// median time. It fails when a benchmark lacks one of the layouts.
+func layoutSuiteGeomeans(run *Run, names []string) ([]float64, bool) {
+	labels, _ := run.ByLayout(names[0], unitTime)
+	sums := make([]float64, len(labels))
+	for _, name := range names {
+		ls, groups := run.ByLayout(name, unitTime)
+		if len(ls) != len(labels) {
+			return nil, false
+		}
+		at := make(map[string]int, len(ls))
+		for i, l := range ls {
+			at[l] = i
+		}
+		for i, l := range labels {
+			j, ok := at[l]
+			if !ok {
+				return nil, false
+			}
+			m := median(groups[j])
+			if !(m > 0) {
+				return nil, false
+			}
+			sums[i] += math.Log(m)
+		}
+	}
+	out := make([]float64, len(labels))
+	for i, s := range sums {
+		out[i] = math.Exp(s / float64(len(names)))
+	}
+	return out, true
+}
+
+// roundGeomeanP compares the suite geomean of each round between the arms.
+// Sample i of every benchmark comes from round i (ab.sh runs each benchmark
+// once per arm per round), so when every compared benchmark has the same
+// sample count the i-th suite geomean of an arm is a valid per-round sample.
+// It returns NaN when the counts differ.
+func roundGeomeanP(base, head *Run, names []string) float64 {
+	n := -1
+	for _, name := range names {
+		nb, nh := len(base.Get(name, unitTime)), len(head.Get(name, unitTime))
+		if n == -1 {
+			n = nb
+		}
+		if nb != n || nh != n {
+			return math.NaN()
+		}
+	}
+	if n < 1 {
+		return math.NaN()
+	}
+	perRound := func(run *Run) []float64 {
+		out := make([]float64, n)
+		for i := 0; i < n; i++ {
+			var s float64
+			for _, name := range names {
+				s += math.Log(run.Get(name, unitTime)[i])
+			}
+			out[i] = math.Exp(s / float64(len(names)))
+		}
+		return out
+	}
+	return mannWhitney(perRound(base), perRound(head))
+}
+
+// exceeds reports d > limit, treating values within rounding error of the
+// limit as equal: 400 -> 408 B/op is exactly +2%, not "more than 2%".
+func exceeds(d, limit float64) bool { return d > limit+1e-9 }
+
+func pct(d float64) string {
+	if math.IsNaN(d) {
+		return "n/a"
+	}
+	if math.IsInf(d, 0) {
+		return "+inf%"
+	}
+	return fmt.Sprintf("%+.2f%%", d)
+}
+
+func pval(c Cmp) string {
+	if !c.OK {
+		return ""
+	}
+	if c.P < 0.001 {
+		return "<0.001"
+	}
+	return fmt.Sprintf("%.3f", c.P)
+}
+
+// Meta is free-form context printed above the tables.
+type Meta struct {
+	BaseRef, HeadRef string
+	Mode             string // "shadow", "enforce" or "report" (a comparison that is not a gate, e.g. the matrix)
+	Title            string // report heading; default "Perf gate"
+	Accepted         bool   // perf-regression-accepted label present
+	Settings         string // one line: rounds, layouts, benchtime, pinning
+	Env              string // lscpu / go version block
+	Benchstat        string // raw benchstat output
+	IrNote           string // why instruction counts were skipped, if they were
+}
+
+// ReportMarker identifies the sticky PR comment.
+const ReportMarker = "<!-- perf-gate-report -->"
+
+type layoutExtensions struct {
+	planned, warmups, unknown, maxK int
+}
+
+// summarizeExtensions counts actual extra measurements by their recorded role.
+// Older extension files without plan labels remain explicitly unclassified.
+func summarizeExtensions(res Result) layoutExtensions {
+	s := layoutExtensions{maxK: res.StageLayouts}
+	for _, r := range res.Rows {
+		if r.K <= r.stageK {
+			continue
+		}
+		s.maxK = max(s.maxK, r.K)
+		switch {
+		case r.planned:
+			s.planned++
+		case r.warmup:
+			s.warmups++
+		default:
+			s.unknown++
+		}
+	}
+	return s
+}
+
+func powerText(power float64) string {
+	if math.IsNaN(power) {
+		return "n/a"
+	}
+	return fmt.Sprintf("%.0f%%", power*100)
+}
+
+// Markdown renders the result for the job summary and the PR comment. Only
+// relative deltas are shown; absolute timings live in the raw artifacts.
+func Markdown(res Result, cfg Config, meta Meta) string {
+	var b strings.Builder
+	b.WriteString(ReportMarker + "\n")
+	verdict := strings.ToUpper(string(res.Verdict))
+	mode := "shadow mode: report only, this check never fails"
+	if meta.Mode == "enforce" {
+		mode = "enforced"
+		if meta.Accepted && res.Verdict == Regression {
+			mode = "enforced, regression accepted by the perf-regression-accepted label"
+		}
+	}
+	if meta.Mode == "report" {
+		mode = "report only, not a gate verdict"
+	}
+	title := meta.Title
+	if title == "" {
+		title = "Perf gate"
+	}
+	fmt.Fprintf(&b, "## %s: %s (%s)\n\n", title, verdict, mode)
+	if meta.BaseRef != "" || meta.HeadRef != "" {
+		fmt.Fprintf(&b, "Base `%s`, head `%s`.", meta.BaseRef, meta.HeadRef)
+		if meta.Settings != "" {
+			fmt.Fprintf(&b, " %s", meta.Settings)
+		}
+		b.WriteString("\n\n")
+	}
+	fmt.Fprintf(&b, "Runner CPU: `%s`. Base and head ran interleaved in this job, so the tables show their ratios only; "+
+		"absolute timings (raw files in the artifact) hold for this CPU and this job alone and are never compared across jobs.\n\n", runnerCPU(meta.Env))
+	if len(res.Reasons) > 0 {
+		for _, r := range res.Reasons {
+			fmt.Fprintf(&b, "- %s\n", r)
+		}
+		b.WriteString("\n")
+	} else {
+		b.WriteString("- no gated metric moved past its threshold\n\n")
+	}
+	if res.ByLayout {
+		fmt.Fprintf(&b, "Rules: each arm runs %d randomized code layouts (`-ldflags=-randlayout`); time regresses at >= +%.3g%% when significant at a false discovery rate of %.3g "+
+			"over the suite (Benjamini-Hochberg on exact Mann-Whitney U p-values of the per-layout medians, so a regression must hold across layouts, not within one binary), "+
+			"or a suite geomean >= +%.3g%% (per-layout suite geomeans, same test); "+
+			"allocs/op must not increase; B/op must not rise more than %.3g%%; instructions/op must not rise more than %.3g%%. "+
+			"The A/A' control runs the base revision under a disjoint set of layout seeds; when more than %.3g%% of benchmarks move over %.3g%% in it, "+
+			"the run is noisy: re-run once, then inconclusive (neutral). Benchmarks under %.0f%% estimated power for a lone +%.3g%% slowdown at alpha/m get extra layouts (adaptive, budget-limited); plans size to %.0f%% estimated power, and time is judged over all of each benchmark's layouts.\n\n",
+			res.Layouts, cfg.TimePct, cfg.Alpha, cfg.GeomeanPct, cfg.BytesPct, cfg.IrPct, cfg.AANoisyFraction, cfg.AADeltaPct, cfg.LowPowerTarget*100, cfg.LowPowerShiftPct, powerSizingTarget(cfg)*100)
+		ext := summarizeExtensions(res)
+		if ext.planned+ext.warmups+ext.unknown > 0 {
+			fmt.Fprintf(&b, "Stage 1 used %d layouts per arm; %d benchmark(s) received planned adaptive extensions, with %d warm-up benchmark(s) and %d unclassified benchmark(s), to up to %d layouts per arm. Only primary time uses those extra layouts; every other rule uses stage-1 data.\n\n", res.Layouts, ext.planned, ext.warmups, ext.unknown, ext.maxK)
+		}
+	} else {
+		fmt.Fprintf(&b, "Rules: time regresses at >= +%.3g%% when significant at a false discovery rate of %.3g over the suite (Benjamini-Hochberg on Mann-Whitney U p-values), "+
+			"or a suite geomean >= +%.3g%% (per-round geomeans, Mann-Whitney U); "+
+			"allocs/op must not increase; B/op must not rise more than %.3g%%; instructions/op must not rise more than %.3g%%. "+
+			"An A/A control with more than %.3g%% of benchmarks moving over %.3g%% is noisy: re-run once, then inconclusive (neutral). "+
+			"Code layouts were not randomized, so a change that only moves code can look like a regression.\n\n",
+			cfg.TimePct, cfg.Alpha, cfg.GeomeanPct, cfg.BytesPct, cfg.IrPct, cfg.AANoisyFraction, cfg.AADeltaPct)
+	}
+	if w := reachWarning(res, cfg); w != "" {
+		fmt.Fprintf(&b, "**Warning:** %s\n\n", w)
+	}
+	if res.GeomeanNote != "" {
+		fmt.Fprintf(&b, "**Note:** %s.\n\n", res.GeomeanNote)
+	}
+
+	b.WriteString("### Gated suite (GOGC=off, GOMAXPROCS=1)\n\n")
+	if res.ByLayout {
+		b.WriteString("| benchmark | time | p | A/A' | spread | K | power | B/op | allocs/op | status |\n")
+		b.WriteString("|---|---:|---:|---:|---:|---:|---:|---:|---:|---|\n")
+	} else {
+		b.WriteString("| benchmark | time | p | A/A | B/op | allocs/op | status |\n")
+		b.WriteString("|---|---:|---:|---:|---:|---:|---|\n")
+	}
+	for _, r := range res.Rows {
+		aa := ""
+		if r.AA.OK {
+			aa = pct(r.AA.DeltaPct)
+		}
+		if res.ByLayout {
+			spread := ""
+			if !math.IsNaN(r.Time.SpreadPct) {
+				spread = fmt.Sprintf("%.2f%%", r.Time.SpreadPct)
+			}
+			aa += fmt.Sprintf(" | %s | %d | %s", spread, r.K, powerText(r.Power))
+		}
+		bytes := ""
+		if r.Bytes.OK {
+			bytes = pct(r.Bytes.DeltaPct)
+		}
+		allocs := ""
+		if r.Allocs.OK {
+			allocs = fmt.Sprintf("%g → %g", r.Allocs.Base, r.Allocs.Head)
+		}
+		status := strings.Join(r.Status, ", ")
+		if r.Regress {
+			status = "**" + status + "**"
+		}
+		fmt.Fprintf(&b, "| `%s` | %s | %s | %s | %s | %s | %s |\n",
+			strings.TrimPrefix(r.Name, "Benchmark"), pct(r.Time.DeltaPct), pval(r.Time), aa, bytes, allocs, status)
+	}
+	geoP := ""
+	if !math.IsNaN(res.GeomeanP) {
+		geoP = pval(Cmp{OK: true, P: res.GeomeanP})
+	}
+	extra := ""
+	if res.ByLayout {
+		extra = " | | |"
+	}
+	fmt.Fprintf(&b, "| **geomean** | %s | %s | %s |%s | | |\n\n", pct((res.Geomean-1)*100), geoP, pct((res.AAGeomean-1)*100), extra)
+	if res.ByLayout {
+		fmt.Fprintf(&b, "`time` and `A/A'` are Hodges-Lehmann shifts over the per-layout medians. `spread`: the base arm's robust standard deviation "+
+			"across its layouts (1.4826 x MAD, relative), i.e. how much this benchmark moves between builds that differ only in function placement, plus run-to-run noise; "+
+			"`K` is layouts per arm. Power uses Noether's normal approximation with the effect size taken from the data: AUC = P(head layout slower than base layout) under a +%.3g%% shift over pooled within-arm residuals, a conservative estimate. Plans size to %.0f%% estimated power while the stopping target remains %.0f%%.\n\n", cfg.LowPowerShiftPct, powerSizingTarget(cfg)*100, cfg.LowPowerTarget*100)
+	}
+	switch {
+	case res.HasAA && res.ByLayout:
+		aaP := ""
+		if !math.IsNaN(res.AAGeomeanP) {
+			aaP = ", p " + pval(Cmp{OK: true, P: res.AAGeomeanP})
+		}
+		fmt.Fprintf(&b, "A/A' control (base revision, disjoint layout seeds): %d of %d benchmarks moved more than %.3g%%; "+
+			"%d would have been flagged by the time rule; suite geomean %s%s.\n\n",
+			res.AANoisy, res.AACompared, cfg.AADeltaPct, res.AAFlagged, pct((res.AAGeomean-1)*100), aaP)
+	case res.HasAA:
+		fmt.Fprintf(&b, "A/A control: %d of %d benchmarks moved more than %.3g%%.\n\n", res.AANoisy, res.AACompared, cfg.AADeltaPct)
+	default:
+		b.WriteString("A/A control not run: timings were not checked against machine noise.\n\n")
+	}
+	writeLowPower(&b, res, cfg)
+	if len(res.MissingInHead) > 0 {
+		fmt.Fprintf(&b, "Missing in head (not judged): %s\n\n", codeList(res.MissingInHead))
+	}
+	if len(res.NewInHead) > 0 {
+		fmt.Fprintf(&b, "New in head, no base to compare (not judged): %s\n\n", codeList(res.NewInHead))
+	}
+
+	b.WriteString("### Instructions per operation (cmd/perfdriver)\n\n")
+	if res.HasIr && len(res.IrRows) > 0 {
+		b.WriteString("| case | instructions/op | status |\n|---|---:|---|\n")
+		for _, r := range res.IrRows {
+			st := "ok"
+			if r.Regress {
+				st = "**+instructions**"
+			}
+			fmt.Fprintf(&b, "| `%s` | %s | %s |\n", strings.TrimPrefix(r.Name, "BenchmarkPerfdriver/"), pct(r.Cmp.DeltaPct), st)
+		}
+		b.WriteString("\n")
+	} else {
+		note := meta.IrNote
+		if note == "" {
+			note = "not measured"
+		}
+		fmt.Fprintf(&b, "Skipped: %s.\n\n", note)
+	}
+
+	if res.HasSec {
+		b.WriteString("<details><summary>Secondary metric: default GC, GOMAXPROCS=1 (informational)</summary>\n\n")
+		b.WriteString("| benchmark | time | p |\n|---|---:|---:|\n")
+		for _, r := range res.Rows {
+			if r.Sec.OK {
+				fmt.Fprintf(&b, "| `%s` | %s | %s |\n", strings.TrimPrefix(r.Name, "Benchmark"), pct(r.Sec.DeltaPct), pval(r.Sec))
+			}
+		}
+		fmt.Fprintf(&b, "| **geomean** | %s | |\n\n</details>\n\n", pct((res.SecGeomean-1)*100))
+	}
+	if meta.Env != "" {
+		fmt.Fprintf(&b, "<details><summary>Environment</summary>\n\n```\n%s\n```\n\n</details>\n\n", strings.TrimSpace(meta.Env))
+	}
+	if meta.Benchstat != "" {
+		summary := "benchstat (primary metric)"
+		if res.ByLayout {
+			summary = "benchstat (primary metric, samples pooled across layouts: informational, the verdict uses the per-layout test)"
+		}
+		fmt.Fprintf(&b, "<details><summary>%s</summary>\n\n```\n%s\n```\n\n</details>\n", summary, strings.TrimSpace(meta.Benchstat))
+	}
+	return b.String()
+}
+
+// runnerCPU extracts the CPU model from the environment block: the
+// "cpu model:" line scripts/perf/lib.sh writes, else lscpu's "Model name:",
+// else "unknown".
+func runnerCPU(env string) string {
+	for _, prefix := range []string{"cpu model:", "Model name:"} {
+		for _, line := range strings.Split(env, "\n") {
+			if v, ok := strings.CutPrefix(strings.TrimSpace(line), prefix); ok {
+				if v = strings.TrimSpace(v); v != "" {
+					return v
+				}
+			}
+		}
+	}
+	return "unknown"
+}
+
+// reachWarning says when the run is too small for the time rule to flag
+// anything: the smallest p-value an exact U test can give (complete
+// separation of minUnits vs minUnits) is compared both with alpha and with
+// alpha/m, the Benjamini-Hochberg level a single discovery among m
+// benchmarks must reach.
+func reachWarning(res Result, cfg Config) string {
+	if res.TimeTests == 0 || res.MinUnits == 0 {
+		return ""
+	}
+	unit := "samples"
+	if res.ByLayout {
+		unit = "layouts"
+	}
+	p := minMWP(res.MinUnits, res.MinUnits)
+	single := cfg.Alpha / float64(res.TimeTests)
+	switch {
+	case p >= cfg.Alpha:
+		return fmt.Sprintf("with %d %s per arm the smallest attainable p-value is %.3g, not below alpha = %.3g: no time change can be judged significant. Use more %s.",
+			res.MinUnits, unit, p, cfg.Alpha, unit)
+	case p > single:
+		return fmt.Sprintf("with %d %s per arm the smallest attainable p-value is %.3g. That is below alpha = %.3g but above alpha/m = %.3g, "+
+			"the Benjamini-Hochberg level one benchmark must reach when it is the only one of the m = %d that moved: "+
+			"a single benchmark's slowdown can never be flagged on its own, only changes that move many benchmarks together (or the suite geomean). Use more %s.",
+			res.MinUnits, unit, p, cfg.Alpha, single, res.TimeTests, unit)
+	}
+	return ""
+}
+
+// writeLowPower renders the low-power section (layout runs only).
+func writeLowPower(b *strings.Builder, res Result, cfg Config) {
+	if !res.ByLayout || res.TimeTests == 0 {
+		return
+	}
+	level := cfg.Alpha / float64(res.TimeTests)
+	b.WriteString("### Low power\n\n")
+	ext := summarizeExtensions(res)
+	if cfg.ExtStatus == "skipped" {
+		b.WriteString("Adaptive layouts: skipped (timings not judged).\n\n")
+	} else {
+		fmt.Fprintf(b, "Adaptive layouts: %d benchmark(s) extended from %d to up to %d layouts per arm (%s); %d warm-up benchmark(s), %d unclassified benchmark(s) received extra measurements.\n\n", ext.planned, res.StageLayouts, ext.maxK, cfg.ExtStatus, ext.warmups, ext.unknown)
+	}
+	noneReach := true
+	for _, r := range res.Rows {
+		if r.Time.OK && minMWP(r.Time.NBase, r.Time.NHead) <= level {
+			noneReach = false
+			break
+		}
+	}
+	if noneReach {
+		fmt.Fprintf(b, "None of the %d benchmarks can be flagged on its own at this layout count (see the warning above): every one is under-guarded against a single-benchmark slowdown.\n\n", res.TimeTests)
+	}
+	rows := LowPower(res, cfg)
+	if len(rows) == 0 {
+		fmt.Fprintf(b, "Every benchmark has an estimated %.0f%% or better chance of being flagged on its own for a +%.3g%% slowdown.\n\n",
+			cfg.LowPowerTarget*100, cfg.LowPowerShiftPct)
+		return
+	}
+	fmt.Fprintf(b, "%d benchmark(s) have under %.0f%% estimated power to be flagged on their own for a +%.3g%% slowdown at the Benjamini-Hochberg level alpha/m = %.3g. Instructions/op, allocs/op and the stage-1 suite geomean still guard them.\n\n", len(rows), cfg.LowPowerTarget*100, cfg.LowPowerShiftPct, level)
+	fmt.Fprintf(b, "| benchmark | K | power at +%.3g%% | slowdown caught %.0f%% of the time | reason |\n|---|---:|---:|---:|---|\n", cfg.LowPowerShiftPct, cfg.LowPowerTarget*100)
+	for _, r := range rows {
+		shift := fmt.Sprintf("+%.1f%%", r.MinShift)
+		if math.IsNaN(r.MinShift) {
+			shift = "n/a"
+		}
+		fmt.Fprintf(b, "| `%s` | %d | %s | %s | %s |\n", strings.TrimPrefix(r.Name, "Benchmark"), r.K, powerText(r.Power), shift, r.Reason)
+	}
+	b.WriteString("\nPower is estimated by Noether's normal approximation using the empirical AUC of pooled within-arm log residuals, excluding self-pairs and giving half credit for ties.\n\n")
+}
+
+func codeList(names []string) string {
+	q := make([]string, len(names))
+	for i, n := range names {
+		q[i] = "`" + strings.TrimPrefix(n, "Benchmark") + "`"
+	}
+	return strings.Join(q, ", ")
+}

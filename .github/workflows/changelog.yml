@@ -1,0 +1,75 @@
+name: Changelog Fragments
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  changelog:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Go
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
+        with:
+          go-version: '1.26'
+
+      - name: Validate fragments
+        run: go run ./scripts/changelog check
+
+      - name: Guard Unreleased additions
+        if: ${{ !startsWith(github.head_ref, 'docs/v') }}
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          ENFORCE: ${{ vars.CHANGELOG_FRAGMENTS_ENFORCE }}
+        run: |
+          python3 - <<'PY'
+          import os
+          import re
+          import subprocess
+
+          base = os.environ["BASE_SHA"]
+          head = os.environ["HEAD_SHA"]
+          # PR metadata enters subprocess arguments rather than executable shell text.
+          if not all(re.fullmatch(r"[0-9a-f]{40,64}", sha) for sha in (base, head)):
+              raise SystemExit("Invalid PR commit SHA")
+          diff = subprocess.check_output(
+              ["git", "diff", "--no-ext-diff", "--unified=0", f"{base}...{head}", "--", "CHANGELOG.md"],
+              text=True,
+          )
+          lines = subprocess.check_output(
+              ["git", "show", f"{head}:CHANGELOG.md"], text=True,
+          ).splitlines()
+          start = next((i for i, line in enumerate(lines, 1) if line == "## [Unreleased]"), None)
+          if start is None:
+              raise SystemExit(0)
+          end = next((i for i in range(start + 1, len(lines) + 1) if lines[i - 1].startswith("## ")), len(lines) + 1)
+          added_line = None
+          new_line = 0
+          for line in diff.splitlines():
+              hunk = re.match(r"@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@", line)
+              if hunk:
+                  new_line = int(hunk.group(1))
+              elif new_line == 0:
+                  continue
+              elif line.startswith("+"):
+                  if start <= new_line < end:
+                      added_line = new_line
+                      break
+                  new_line += 1
+              elif line.startswith(" "):
+                  new_line += 1
+          if added_line is not None:
+              print(f"::warning file=CHANGELOG.md,line={added_line}::Add a changelog.d/ fragment instead of adding lines to the Unreleased section of CHANGELOG.md.")
+              if os.environ.get("ENFORCE") == "true":
+                  raise SystemExit(1)
+          PY

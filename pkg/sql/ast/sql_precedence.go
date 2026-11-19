@@ -18,6 +18,9 @@ func expressionPrecedence(e Expression) int {
 		if x.CustomOp != nil {
 			return 6
 		}
+		if x.Lambda {
+			return 0
+		}
 		switch strings.ToUpper(x.Operator) {
 		case "OR":
 			return 1

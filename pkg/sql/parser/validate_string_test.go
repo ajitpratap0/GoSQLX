@@ -15,12 +15,97 @@
 package parser
 
 import (
+	"errors"
 	"fmt"
+	"strings"
 	"testing"
 
+	goerrors "github.com/ajitpratap0/GoSQLX/pkg/errors"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/keywords"
 )
+
+func assertValidateCode(t *testing.T, err error, want goerrors.ErrorCode) {
+	t.Helper()
+	if err == nil {
+		t.Fatalf("expected structured error %s, got nil", want)
+	}
+	var structured *goerrors.Error
+	if !errors.As(err, &structured) {
+		t.Fatalf("expected structured error %s, got %T: %v", want, err, err)
+	}
+	if structured.Code != want {
+		t.Errorf("error code = %s, want %s (%v)", structured.Code, want, err)
+	}
+}
+
+func TestValidateDialectBlankInputContract(t *testing.T) {
+	cases := []struct {
+		name      string
+		sql       string
+		wantCode  goerrors.ErrorCode
+		wantCause string
+	}{
+		{name: "empty", sql: "", wantCode: goerrors.ErrCodeIncompleteStatement},
+		{name: "ASCII whitespace", sql: " \t\r\n", wantCode: goerrors.ErrCodeIncompleteStatement},
+		{name: "byte order mark", sql: "\uFEFF", wantCode: goerrors.ErrCodeIncompleteStatement},
+		{name: "vertical tab", sql: "\v", wantCode: goerrors.ErrCodeInvalidSyntax, wantCause: string(goerrors.ErrCodeUnexpectedChar)},
+		{name: "form feed", sql: "\f", wantCode: goerrors.ErrCodeInvalidSyntax, wantCause: string(goerrors.ErrCodeUnexpectedChar)},
+		{name: "no-break space", sql: "\u00a0", wantCode: goerrors.ErrCodeInvalidSyntax, wantCause: string(goerrors.ErrCodeUnexpectedChar)},
+		{name: "em space", sql: "\u2003", wantCode: goerrors.ErrCodeInvalidSyntax, wantCause: string(goerrors.ErrCodeUnexpectedChar)},
+		{name: "next line", sql: "\u0085", wantCode: goerrors.ErrCodeInvalidSyntax, wantCause: string(goerrors.ErrCodeUnexpectedChar)},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			for _, dialect := range []keywords.SQLDialect{keywords.DialectPostgreSQL, keywords.DialectMySQL} {
+				t.Run(string(dialect)+"/string", func(t *testing.T) {
+					err := ValidateWithDialect(tc.sql, dialect)
+					assertValidateCode(t, err, tc.wantCode)
+					if tc.wantCause != "" && !strings.Contains(err.Error(), tc.wantCause) {
+						t.Errorf("error %q does not include tokenizer cause %s", err, tc.wantCause)
+					}
+				})
+				t.Run(string(dialect)+"/bytes", func(t *testing.T) {
+					err := ValidateBytesWithDialect([]byte(tc.sql), dialect)
+					assertValidateCode(t, err, tc.wantCode)
+					if tc.wantCause != "" && !strings.Contains(err.Error(), tc.wantCause) {
+						t.Errorf("error %q does not include tokenizer cause %s", err, tc.wantCause)
+					}
+				})
+			}
+		})
+	}
+}
+
+func TestValidateCommentOnlyInputIsIncomplete(t *testing.T) {
+	for _, sql := range []string{"-- c", "/* x */", ";", "-- c\n;"} {
+		t.Run(fmt.Sprintf("%q", sql), func(t *testing.T) {
+			t.Run("default/string", func(t *testing.T) {
+				assertValidateCode(t, Validate(sql), goerrors.ErrCodeIncompleteStatement)
+			})
+			t.Run("default/bytes", func(t *testing.T) {
+				assertValidateCode(t, ValidateBytes([]byte(sql)), goerrors.ErrCodeIncompleteStatement)
+			})
+			for _, dialect := range []keywords.SQLDialect{keywords.DialectPostgreSQL, keywords.DialectMySQL} {
+				t.Run(string(dialect)+"/string", func(t *testing.T) {
+					assertValidateCode(t, ValidateWithDialect(sql, dialect), goerrors.ErrCodeIncompleteStatement)
+				})
+				t.Run(string(dialect)+"/bytes", func(t *testing.T) {
+					assertValidateCode(t, ValidateBytesWithDialect([]byte(sql), dialect), goerrors.ErrCodeIncompleteStatement)
+				})
+			}
+		})
+	}
+}
+
+func TestValidateBOMOnlyIsIncomplete(t *testing.T) {
+	// A byte order mark is not blank according to sqlText.blank. The
+	// tokenizer always appends an EOF token, so the len(tokens)==0 guards in
+	// the validate paths are defensive and unreachable from public input; the
+	// parser reports the incomplete statement instead.
+	assertValidateCode(t, Validate("\uFEFF"), goerrors.ErrCodeIncompleteStatement)
+	assertValidateCode(t, ValidateWithDialect("\uFEFF", keywords.DialectPostgreSQL), goerrors.ErrCodeIncompleteStatement)
+}
 
 // TestStringAndBytesEntryPointsAgree checks that the string entry points,
 // which tokenize the caller's string in place into the tokenizer's scratch

@@ -31,6 +31,11 @@ jobs:
     - name: Build WASM
       run: GOOS=js GOARCH=wasm go build -o /dev/null ./wasm/
 
+    # Allocation and stack budgets skip under -race where instrumentation
+    # changes the measurements, so run them here without it.
+    - name: Allocation and stack budgets (non-race)
+      run: go test -count=1 -run 'AllocBudget|StackBudget|StackReserve' ./pkg/gosqlx
+
   test:
     name: Test
     runs-on: ${{ matrix.os }}
@@ -54,7 +59,11 @@ jobs:
         cache: true
 
     - name: Get dependencies
-      run: go mod download
+      # The module proxy occasionally fails a single fetch (run 43742190386:
+      # modernc.org/sqlite zip from storage.googleapis.com), which fails a whole
+      # package as "setup failed". Download up front, with retries.
+      shell: bash
+      run: for i in 1 2 3; do go mod download && exit 0; echo "go mod download failed (attempt $i), retrying"; sleep $((i * 15)); done; exit 1
 
     - name: Run tests
       run: go test -v -race -coverprofile coverage.txt -covermode atomic ./pkg/...
@@ -67,9 +76,16 @@ jobs:
         name: codecov-${{ matrix.os }}-${{ matrix.go }}
       continue-on-error: true
 
-  race-check:
-    name: Race Detector
+  # `task test:race` split across runners (scripts/race-shard.sh): the heavy
+  # race packages starve each other on one 4-vCPU runner and cross the
+  # 120s per-package timeout. Same packages, flags and timeout as the task.
+  race-shard:
+    name: Race Detector (shard ${{ matrix.shard }}/4)
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3]
     steps:
     - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
@@ -80,13 +96,34 @@ jobs:
         check-latest: true
         cache: true
 
+    - name: Get dependencies
+      # The module proxy occasionally fails a single fetch (run 43742190386:
+      # modernc.org/sqlite zip from storage.googleapis.com), which fails a whole
+      # package as "setup failed". Download up front, with retries.
+      shell: bash
+      run: for i in 1 2 3; do go mod download && exit 0; echo "go mod download failed (attempt $i), retrying"; sleep $((i * 15)); done; exit 1
+
     - name: Install Task
       run: go install github.com/go-task/task/v3/cmd/task@v3.54.0
 
-    # Use Taskfile so CI matches local `task test:race` (pkg/cbinding excluded -
-    # it requires CGO and is exercised separately in the cbinding-race job).
+    # pkg/cbinding is excluded - it requires CGO and is exercised separately
+    # in the cbinding-race job.
     - name: Run tests with race detector
-      run: task test:race
+      run: task test:race:shard SHARD=${{ matrix.shard }} SHARDS=4
+
+  # Required status check name; passes only if every shard passed.
+  race-check:
+    name: Race Detector
+    runs-on: ubuntu-latest
+    needs: race-shard
+    if: always()
+    steps:
+    - name: Check race shards
+      env:
+        RESULT: ${{ needs.race-shard.result }}
+      run: |
+        echo "race shards: $RESULT"
+        [ "$RESULT" = success ]
 
   cbinding-race:
     name: Race Detector (CGO / cbinding)
@@ -156,7 +193,7 @@ jobs:
     - name: Run benchmarks
       run: |
         go test -run=^$ -bench=. -benchmem -timeout=5m ./pkg/sql/tokenizer/
-        go test -run=^$ -bench=. -benchmem -timeout=5m ./pkg/sql/parser/
+        go test -run=^$ -bench=. -benchmem -timeout=5m -skip '^BenchmarkParseStage$/^release$' ./pkg/sql/parser/
         go test -run=^$ -bench=. -benchmem -timeout=5m ./pkg/sql/ast/
 
   perf-regression:
@@ -191,7 +228,8 @@ jobs:
         check-latest: true
         cache: true
 
-    - name: Run fuzz regression (corpus only)
+    - name: Run fuzz regression
       run: |
         go test -fuzz=FuzzTokenizer -fuzztime=10s -timeout=2m ./pkg/sql/tokenizer/ || true
         go test -fuzz=FuzzScanSQL -fuzztime=10s -timeout=2m ./pkg/sql/security/ || true
+        go test -run ^$ -fuzz=FuzzNormalizeV2 -fuzztime=10s -timeout=2m ./pkg/fingerprint/

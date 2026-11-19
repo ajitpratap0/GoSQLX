@@ -16,7 +16,7 @@ SQL linters exist in several ecosystems. The most popular, SQLFluff, is a Python
 A Go binary removes most of that:
 
 - **One file.** `go install` produces a single executable with no runtime dependencies. In CI it is one cached download.
-- **Exact pinning.** `@v1.16.0` in the install command pins every rule and every parser decision. A new release cannot change your build overnight.
+- **Exact pinning.** `@v1.17.0` in the install command pins every rule and every parser decision. A new release cannot change your build overnight.
 - **Same binary everywhere.** Developers run the same version in a pre-commit hook that CI runs on the pull request, so "passes locally, fails in CI" stops happening.
 - **Fast start-up.** There is no interpreter to boot, which matters when a hook runs on every commit.
 
@@ -35,7 +35,7 @@ Linting SQL in CI is really three separate checks, and it helps to keep them apa
 Each exits with a non-zero status on failure, so they work in any CI system:
 
 ```bash
-go install github.com/ajitpratap0/GoSQLX/cmd/gosqlx@v1.16.0
+go install github.com/ajitpratap0/GoSQLX/cmd/gosqlx@v1.17.0
 
 gosqlx validate -r --dialect postgresql ./sql
 gosqlx lint -r ./sql
@@ -84,7 +84,7 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: '1.26'
-      - run: go install github.com/ajitpratap0/GoSQLX/cmd/gosqlx@v1.16.0
+      - run: go install github.com/ajitpratap0/GoSQLX/cmd/gosqlx@v1.17.0
       - run: gosqlx action --files '**/*.sql' --severity warning
       - run: gosqlx format --check $(git ls-files '*.sql')
 ```

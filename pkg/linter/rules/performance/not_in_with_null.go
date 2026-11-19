@@ -71,8 +71,8 @@ func (r *NotInWithNullRule) Check(ctx *linter.Context) ([]linter.Violation, erro
 	}
 	var violations []linter.Violation
 	v := &notInVisitor{rule: r, violations: &violations}
-	for _, stmt := range ctx.AST.Statements {
-		if err := ast.Walk(v, stmt); err != nil {
+	for _, node := range ctx.Nodes() {
+		if _, err := v.Visit(node); err != nil {
 			return nil, err
 		}
 	}

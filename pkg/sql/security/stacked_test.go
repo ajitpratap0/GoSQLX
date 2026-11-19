@@ -22,7 +22,8 @@ import (
 	"regexp"
 	"strings"
 	"testing"
-	"time"
+
+	"github.com/ajitpratap0/GoSQLX/internal/scaletest"
 )
 
 var stackedOracle = [3]*regexp.Regexp{
@@ -140,39 +141,22 @@ func TestStackedSeverityFilter(t *testing.T) {
 }
 
 func TestStackedMatcherLinear(t *testing.T) {
+	if testing.Short() {
+		t.Skip("timing regression; skipped under -short")
+	}
 	for name, unit := range map[string]string{"semicolons": ";", "whitespace": ";   \t\n"} {
 		t.Run(name, func(t *testing.T) {
-			makeInput := func(n int) string { return strings.Repeat(unit, n/len(unit)) }
-			// The race detector and coverage instrumentation make each byte
-			// ~100x dearer; the linear/quadratic split is still visible at 64 KiB.
-			base := 1 << 20
-			if raceEnabled {
-				base = 64 << 10
-			}
-			small, large := makeInput(base), makeInput(2*base)
-			sample := func(s string) time.Duration {
-				start := time.Now()
-				for i := 0; i < 3; i++ {
-					if got := stackedMatches([]string{s}); got != [3]string{} {
-						t.Fatalf("unexpected match: %q", got)
-					}
-				}
-				return time.Since(start)
-			}
-			var a, b time.Duration
-			for i := 0; i < 5; i++ {
-				x, y := sample(small), sample(large)
-				if i == 0 || x < a {
-					a = x
-				}
-				if i == 0 || y < b {
-					b = y
+			input := func(n int) string { return strings.Repeat(unit, n/len(unit)) }
+			small, large := input(16<<10), input(64<<10)
+			for _, s := range []string{small, large} {
+				if got := stackedMatches([]string{s}); got != [3]string{} {
+					t.Fatalf("unexpected match: %q", got)
 				}
 			}
-			t.Logf("%d B %v, %d B %v, ratio %.2f", base, a, 2*base, b, float64(b)/float64(a))
-			if b > 3*a {
-				t.Fatalf("scaling exceeds linear allowance: %v vs %v", a, b)
-			}
+			// 4x input: linear is about 4x, the quadratic scan this replaced is 16x.
+			scaletest.AssertLinearGrowth(t, "stackedMatches "+name+" 16KiB -> 64KiB", 10,
+				func() { _ = stackedMatches([]string{small}) },
+				func() { _ = stackedMatches([]string{large}) })
 		})
 	}
 }

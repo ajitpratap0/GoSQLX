@@ -21,3 +21,5 @@
 ./pkg/gosqlx         ^BenchmarkParseError$/^(syntax_mid|syntax_end|tokenize|long_prefix)$/^(parse|validate)$
 ./wasm/internal/bridge ^BenchmarkWASMBridge$/^(parse|lint)$/^(small|medium|large)$
 ./pkg/sql/keywords  ^BenchmarkDetectDialect$
+./pkg/sql/security ^BenchmarkScanSQLStackedScript$
+./pkg/sql/security ^BenchmarkScanSQLRW$

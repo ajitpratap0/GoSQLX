@@ -1,0 +1,1 @@
+- **Keywords**: case-insensitive lookups avoid allocations for pure-ASCII words up to 64 bytes. No behaviour change. [W2-07]

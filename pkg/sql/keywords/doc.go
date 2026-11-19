@@ -209,7 +209,8 @@
 //   - Pre-computed hash maps for O(1) keyword lookup
 //   - Case-insensitive matching with uppercase normalization
 //   - Minimal memory footprint with shared keyword definitions
-//   - No allocations during keyword checking operations
+//   - Case-insensitive lookups do not allocate for ASCII words up to 64 bytes;
+//     other words fall back to strings.ToUpper
 //
 // # Thread Safety
 //

@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/ajitpratap0/GoSQLX/internal/tokscratch"
+	"github.com/ajitpratap0/GoSQLX/pkg/fingerprint"
 	"github.com/ajitpratap0/GoSQLX/pkg/formatter"
 	"github.com/ajitpratap0/GoSQLX/pkg/gosqlx"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
@@ -98,12 +99,10 @@ var LexImpls = []Impl{
 // NormalizeImpls are the literal-normalisation cells:
 // BenchmarkNormalize/<q>/<impl>. The outputs differ in form (placeholders,
 // digests, fingerprints), so the numbers compare cost, not identical output.
-// A token-mode GoSQLX normaliser does not exist yet; add gosqlx_tokens here
-// when it lands.
 var NormalizeImpls = []Impl{
 	{
 		ID: "gosqlx", Name: "GoSQLX Normalize", Parser: "gosqlx",
-		Note: "Parse, replace literals with placeholders, render.",
+		Note: "Version-2 token-stream normalisation; no syntax validation.",
 		New: func(sql string) (Op, func(), error) {
 			if _, err := gosqlx.Normalize(sql); err != nil {
 				return nil, nil, err
@@ -113,12 +112,34 @@ var NormalizeImpls = []Impl{
 	},
 	{
 		ID: "gosqlx_fingerprint", Name: "GoSQLX Fingerprint", Parser: "gosqlx",
-		Note: "Normalize then hash.",
+		Note: "Version-2 token-stream normalisation plus SHA-256; v2: prefix.",
 		New: func(sql string) (Op, func(), error) {
 			if _, err := gosqlx.Fingerprint(sql); err != nil {
 				return nil, nil, err
 			}
 			return func() error { _, err := gosqlx.Fingerprint(sql); return err }, nil, nil
+		},
+	},
+	{
+		ID: "gosqlx_legacy", Name: "GoSQLX Normalize (legacy)", Parser: "gosqlx",
+		Note: "Version-1 parse, replace literals with placeholders, render.",
+		New: func(sql string) (Op, func(), error) {
+			opts := fingerprint.Options{Mode: fingerprint.ModeLegacy}
+			if _, err := fingerprint.NormalizeWithOptions(sql, opts); err != nil {
+				return nil, nil, err
+			}
+			return func() error { _, err := fingerprint.NormalizeWithOptions(sql, opts); return err }, nil, nil
+		},
+	},
+	{
+		ID: "gosqlx_fingerprint_legacy", Name: "GoSQLX Fingerprint (legacy)", Parser: "gosqlx",
+		Note: "Version-1 parse-and-format normalisation plus SHA-256; no prefix.",
+		New: func(sql string) (Op, func(), error) {
+			opts := fingerprint.Options{Mode: fingerprint.ModeLegacy}
+			if _, err := fingerprint.FingerprintWithOptions(sql, opts); err != nil {
+				return nil, nil, err
+			}
+			return func() error { _, err := fingerprint.FingerprintWithOptions(sql, opts); return err }, nil, nil
 		},
 	},
 	{

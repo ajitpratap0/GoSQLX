@@ -20,6 +20,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ajitpratap0/GoSQLX/internal/metricsgate"
 	sqlerrors "github.com/ajitpratap0/GoSQLX/pkg/errors"
 	"github.com/ajitpratap0/GoSQLX/pkg/models"
 )
@@ -496,5 +497,32 @@ func TestReset_ZerosErrorBuckets(t *testing.T) {
 	RecordTokenization(time.Microsecond, 10, err)
 	if got := GetStats().ErrorsByType[string(sqlerrors.ErrCodeUnexpectedChar)]; got != 1 {
 		t.Errorf("after Reset+record expected count 1, got %d", got)
+	}
+}
+
+func TestIsEnabledMatchesGate(t *testing.T) {
+	was := IsEnabled()
+	t.Cleanup(func() {
+		if was {
+			Enable()
+		} else {
+			Disable()
+		}
+	})
+	Enable()
+	if !IsEnabled() || !metricsgate.Enabled() {
+		t.Fatal("Enable must enable metrics and the shared gate")
+	}
+	Reset()
+	if !IsEnabled() || !metricsgate.Enabled() {
+		t.Fatal("Reset must preserve enabled state")
+	}
+	Disable()
+	if IsEnabled() || metricsgate.Enabled() {
+		t.Fatal("Disable must disable metrics and the shared gate")
+	}
+	Reset()
+	if IsEnabled() || metricsgate.Enabled() {
+		t.Fatal("Reset must preserve disabled state")
 	}
 }

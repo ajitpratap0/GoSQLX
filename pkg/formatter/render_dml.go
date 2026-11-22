@@ -149,6 +149,12 @@ func writeInsertHead(sb *strings.Builder, f *nodeFormatter, i *ast.InsertStateme
 		return
 	}
 	sb.WriteString(ast.QuoteQualifiedNameWith(i.TableName, f.nq(i.DialectExtras().TableNameQuote)))
+	if x := i.DialectExtras(); x.TableAlias != "" {
+		sb.WriteString(" ")
+		sb.WriteString(f.kw("AS"))
+		sb.WriteString(" ")
+		sb.WriteString(ast.QuoteTableAliasWith(x.TableAlias, f.nq(x.TableAliasQuote)))
+	}
 }
 
 // writeInsertBeforeSource writes ClickHouse SETTINGS and PostgreSQL

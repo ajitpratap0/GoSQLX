@@ -79,6 +79,21 @@ func TestRenderInsertForms(t *testing.T) {
 			compactOnly: true,
 		},
 		{
+			name: "target alias", dialect: keywords.DialectPostgreSQL,
+			sql:      "INSERT INTO core.\"user\" AS u (org_id) VALUES (1) RETURNING u.id",
+			contains: []string{"INSERT INTO core.\"user\" AS u (org_id)", "RETURNING u.id"},
+		},
+		{
+			name: "target alias with on conflict", dialect: keywords.DialectPostgreSQL,
+			sql:      "INSERT INTO t AS u (id, x) VALUES (1, 2) ON CONFLICT (id) DO UPDATE SET x = u.x",
+			contains: []string{"INSERT INTO t AS u (id, x)", "ON CONFLICT (id) DO UPDATE SET x = u.x"},
+		},
+		{
+			name: "non-reserved keyword as target alias", dialect: keywords.DialectPostgreSQL,
+			sql:      "INSERT INTO t AS name (a) VALUES (1)",
+			contains: []string{"INSERT INTO t AS name (a)"},
+		},
+		{
 			name: "update from", dialect: keywords.DialectPostgreSQL,
 			sql:      "UPDATE t SET a = s.b FROM s WHERE t.id = s.id",
 			contains: []string{"FROM s"},

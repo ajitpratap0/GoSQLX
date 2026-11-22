@@ -20,6 +20,7 @@ import (
 	"testing"
 
 	goerrors "github.com/ajitpratap0/GoSQLX/pkg/errors"
+	"github.com/ajitpratap0/GoSQLX/pkg/fingerprint"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/keywords"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/parser"
 )
@@ -735,7 +736,7 @@ func TestGosqlx_Normalize_PreservesPlaceholder(t *testing.T) {
 }
 
 func TestGosqlx_Fingerprint_CrossVersion(t *testing.T) {
-	fp, err := Fingerprint("SELECT 1")
+	fp, err := fingerprint.FingerprintWithOptions("SELECT 1", fingerprint.Options{Mode: fingerprint.ModeLegacy})
 	if err != nil {
 		t.Fatalf("Fingerprint() error: %v", err)
 	}
@@ -759,8 +760,31 @@ func TestGosqlx_Fingerprint_SameStructureDifferentLiterals(t *testing.T) {
 }
 
 func TestGosqlx_Fingerprint_InvalidSQL_ReturnsError(t *testing.T) {
-	_, err := Fingerprint("NOT VALID SQL @@##")
+	_, err := fingerprint.FingerprintWithOptions("NOT VALID SQL @@##", fingerprint.Options{Mode: fingerprint.ModeLegacy})
 	if err == nil {
 		t.Error("Fingerprint() should return error for invalid SQL")
+	}
+}
+
+func TestGosqlx_Fingerprint_V2(t *testing.T) {
+	fp, err := Fingerprint("SELECT 1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(fp) != 67 || !strings.HasPrefix(fp, "v2:") {
+		t.Fatalf("expected 67-char v2 fingerprint, got %q", fp)
+	}
+}
+func TestGosqlx_Normalize_V2SyntaxAndTokenErrors(t *testing.T) {
+	for _, tc := range []struct {
+		sql       string
+		wantError bool
+	}{{"SELECT FROM WHERE", false}, {"SELECT 'unterminated", true}, {"", true}} {
+		t.Run(tc.sql, func(t *testing.T) {
+			_, err := Normalize(tc.sql)
+			if (err != nil) != tc.wantError {
+				t.Fatalf("Normalize() error = %v, want error %v", err, tc.wantError)
+			}
+		})
 	}
 }

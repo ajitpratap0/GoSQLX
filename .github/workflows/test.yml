@@ -59,7 +59,11 @@ jobs:
         cache: true
 
     - name: Get dependencies
-      run: go mod download
+      # The module proxy occasionally fails a single fetch (run 43742190386:
+      # modernc.org/sqlite zip from storage.googleapis.com), which fails a whole
+      # package as "setup failed". Download up front, with retries.
+      shell: bash
+      run: for i in 1 2 3; do go mod download && exit 0; echo "go mod download failed (attempt $i), retrying"; sleep $((i * 15)); done; exit 1
 
     - name: Run tests
       run: go test -v -race -coverprofile coverage.txt -covermode atomic ./pkg/...
@@ -91,6 +95,13 @@ jobs:
         go-version: '1.26'
         check-latest: true
         cache: true
+
+    - name: Get dependencies
+      # The module proxy occasionally fails a single fetch (run 43742190386:
+      # modernc.org/sqlite zip from storage.googleapis.com), which fails a whole
+      # package as "setup failed". Download up front, with retries.
+      shell: bash
+      run: for i in 1 2 3; do go mod download && exit 0; echo "go mod download failed (attempt $i), retrying"; sleep $((i * 15)); done; exit 1
 
     - name: Install Task
       run: go install github.com/go-task/task/v3/cmd/task@v3.54.0
@@ -217,7 +228,8 @@ jobs:
         check-latest: true
         cache: true
 
-    - name: Run fuzz regression (corpus only)
+    - name: Run fuzz regression
       run: |
         go test -fuzz=FuzzTokenizer -fuzztime=10s -timeout=2m ./pkg/sql/tokenizer/ || true
         go test -fuzz=FuzzScanSQL -fuzztime=10s -timeout=2m ./pkg/sql/security/ || true
+        go test -run ^$ -fuzz=FuzzNormalizeV2 -fuzztime=10s -timeout=2m ./pkg/fingerprint/

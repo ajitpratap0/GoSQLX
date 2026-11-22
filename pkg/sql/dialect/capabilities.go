@@ -87,6 +87,9 @@ const (
 	// Generic represents standard/ANSI SQL with no dialect-specific
 	// features. It is distinct from Unknown: Generic explicitly means
 	// "parse standard SQL only"; Unknown means "no choice has been made".
+	// Standard SQL here includes constructs the standard itself defines,
+	// such as table-valued functions in FROM (SQL:2003 TABLE(...)); it
+	// excludes dialect-only operators like PostgreSQL's <->.
 	Generic Dialect = "generic"
 )
 
@@ -263,6 +266,13 @@ type Capabilities struct {
 	// dialect treats || as concatenation.
 	PipesAsLogicalOr bool
 
+	// SupportsDistanceOp indicates the pg_trgm / pgvector distance
+	// operator <->. It is PostgreSQL-only syntax, not standard SQL, so the
+	// generic dialect rejects it; the permissive no-dialect default accepts
+	// it to match the parser's pre-typed-dialect PostgreSQL-ish behaviour
+	// (same precedent as SupportsILike).
+	SupportsDistanceOp bool
+
 	// --- Expressions ---
 
 	// SupportsCompositeFieldAccess indicates field selection on a
@@ -271,6 +281,17 @@ type Capabilities struct {
 	// (PostgreSQL composite types, BigQuery STRUCT values). Dialects without
 	// composite row values (MySQL, MariaDB, SQL Server, SQLite, ...) reject it.
 	SupportsCompositeFieldAccess bool
+
+	// --- Table references ---
+
+	// SupportsTableFunction indicates table-valued function calls in the
+	// FROM / JOIN list: `SELECT * FROM generate_series(1, 3) AS t(x)`.
+	// Standard SQL since SQL:2003 (the TABLE multiset value constructor),
+	// and every dialect ships its own function family (PostgreSQL unnest,
+	// SQL Server STRING_SPLIT / OPENJSON, SQLite json_each, Oracle
+	// TABLE(...), MySQL JSON_TABLE, ClickHouse numbers, Snowflake FLATTEN),
+	// so every dialect accepts the shape.
+	SupportsTableFunction bool
 }
 
 // Capabilities returns the capability matrix for d.
@@ -285,7 +306,7 @@ func (d Dialect) Capabilities() Capabilities {
 
 	case PostgreSQL:
 		return Capabilities{
-			SupportsSample:                true, // TABLESAMPLE
+			SupportsSample:                true,  // TABLESAMPLE
 			SupportsPivotUnpivot:          false,
 			SupportsLimitOffset:           true,
 			SupportsFetchFirst:            true, // SQL:2008 fetch
@@ -296,6 +317,8 @@ func (d Dialect) Capabilities() Capabilities {
 			SupportsDoubleQuoteIdentifier: true,
 			SupportsILike:                 true,
 			SupportsCompositeFieldAccess:  true, // (row).field
+			SupportsDistanceOp:            true, // pg_trgm / pgvector <->
+			SupportsTableFunction:         true, // unnest, generate_series, ...
 		}
 
 	case MySQL:
@@ -306,6 +329,7 @@ func (d Dialect) Capabilities() Capabilities {
 			SupportsBacktickQuoting:       true,
 			SupportsDoubleQuoteIdentifier: true, // when ANSI_QUOTES is set
 			PipesAsLogicalOr:              true, // unless PIPES_AS_CONCAT is set
+			SupportsTableFunction:         true, // JSON_TABLE
 		}
 
 	case MariaDB:
@@ -318,6 +342,7 @@ func (d Dialect) Capabilities() Capabilities {
 			SupportsBacktickQuoting:       true,
 			SupportsDoubleQuoteIdentifier: true,
 			PipesAsLogicalOr:              true, // unless PIPES_AS_CONCAT is set
+			SupportsTableFunction:         true, // JSON_TABLE
 		}
 
 	case SQLServer:
@@ -330,6 +355,7 @@ func (d Dialect) Capabilities() Capabilities {
 			SupportsCompoundReturning:     true, // OUTPUT clause
 			SupportsBracketQuoting:        true,
 			SupportsDoubleQuoteIdentifier: true, // with QUOTED_IDENTIFIER ON
+			SupportsTableFunction:         true, // STRING_SPLIT, OPENJSON
 		}
 
 	case Oracle:
@@ -344,6 +370,7 @@ func (d Dialect) Capabilities() Capabilities {
 			SupportsReturning:             true,
 			SupportsMaterializedView:      true,
 			SupportsDoubleQuoteIdentifier: true,
+			SupportsTableFunction:         true, // TABLE(...)
 		}
 
 	case SQLite:
@@ -352,6 +379,7 @@ func (d Dialect) Capabilities() Capabilities {
 			SupportsMerge:                 false, // SQLite has no MERGE
 			SupportsReturning:             true,  // 3.35+
 			SupportsDoubleQuoteIdentifier: true,
+			SupportsTableFunction:         true, // json_each, json_tree
 			// SQLite also accepts bracket and backtick quoting for MySQL/
 			// SQL Server compatibility, but that is a tokenizer-level detail
 			// and not currently gated in the parser.
@@ -372,6 +400,7 @@ func (d Dialect) Capabilities() Capabilities {
 			SupportsMaterializedView:      true,
 			SupportsDoubleQuoteIdentifier: true,
 			SupportsILike:                 true,
+			SupportsTableFunction:         true, // FLATTEN, GENERATOR
 		}
 
 	case ClickHouse:
@@ -384,6 +413,7 @@ func (d Dialect) Capabilities() Capabilities {
 			SupportsMaterializedView:      true,
 			SupportsBacktickQuoting:       true,
 			SupportsDoubleQuoteIdentifier: true,
+			SupportsTableFunction:         true, // numbers, remote, file, s3, url
 		}
 
 	case BigQuery:
@@ -398,6 +428,7 @@ func (d Dialect) Capabilities() Capabilities {
 			SupportsBacktickQuoting:       true,
 			SupportsDoubleQuoteIdentifier: true,
 			SupportsCompositeFieldAccess:  true, // (struct_expr).field
+			SupportsTableFunction:         true, // UNNEST, TABLE
 		}
 
 	case Redshift:
@@ -409,6 +440,7 @@ func (d Dialect) Capabilities() Capabilities {
 			SupportsMaterializedView:      true,
 			SupportsDoubleQuoteIdentifier: true,
 			SupportsILike:                 true,
+			SupportsTableFunction:         true, // PG-compatible family
 		}
 
 	case Generic:
@@ -420,6 +452,7 @@ func (d Dialect) Capabilities() Capabilities {
 			SupportsReturning:             false, // RETURNING is PG/Oracle, not ANSI
 			SupportsDoubleQuoteIdentifier: true,
 			SupportsCompositeFieldAccess:  true, // SQL:1999 <field reference>
+			SupportsTableFunction:         true, // SQL:2003 TABLE multiset
 		}
 
 	case Unknown:
@@ -437,6 +470,8 @@ func (d Dialect) Capabilities() Capabilities {
 			SupportsDoubleQuoteIdentifier: true,
 			SupportsILike:                 true,
 			SupportsCompositeFieldAccess:  true, // PostgreSQL-ish default
+			SupportsDistanceOp:            true, // PostgreSQL-ish default
+			SupportsTableFunction:         true, // PostgreSQL-ish default
 		}
 	}
 }

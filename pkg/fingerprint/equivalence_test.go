@@ -873,7 +873,10 @@ func formatDifferenceClass(a, b string) string {
 const formatIdentCaseCount = 7 // Run 5 decision; bare contextual words upcased by legacy.
 
 var formatDifferenceCounts = map[string]int{
-	"cast": 31, "reorder": 6, "paren": 4, "reorder+paren": 1,
+	// cast 31 -> 38: PR #971 widens the default-pipeline parser (table
+	// functions in FROM, <-> with no dialect), so more corpus statements
+	// fingerprint instead of erroring, and more cast mismatches surface.
+	"cast": 38, "reorder": 6, "paren": 4, "reorder+paren": 1,
 	"keyword-name": 7, "legacy-lossy": 1, "split": 4,
 	"ident-case": formatIdentCaseCount, "unclassified": 0,
 }
@@ -1240,7 +1243,10 @@ func TestImplicitAliasReparses(t *testing.T) {
 }
 
 // F1 must drive this independently detected implicit-alias parser gap to zero.
-const wantImplicitAliasReparseFailures = 44
+// 44 -> 46: PR #971 widens the default-pipeline parser (table functions in
+// FROM, <-> with no dialect), so two more corpus statements fingerprint
+// through the v2 path and enter the implicit-alias check.
+const wantImplicitAliasReparseFailures = 46
 
 // Only failures not repaired by explicit AS belong here. Every entry must
 // still fail the symmetric substituted parse and explain the remaining gap.

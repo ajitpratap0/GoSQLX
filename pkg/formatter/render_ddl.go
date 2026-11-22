@@ -121,10 +121,27 @@ func renderDescribe(s *ast.DescribeStatement, opts ast.FormatOptions) string {
 	f := newNodeFormatter(opts)
 	sb := f.sb
 
-	sb.WriteString(f.kw("DESCRIBE"))
+	sb.WriteString(f.kw(s.Prefix()))
 	if s.TableName != "" {
 		sb.WriteString(" ")
 		sb.WriteString(ast.QuoteQualifiedName(s.TableName))
+	}
+	return sb.String()
+}
+
+// renderExplain renders EXPLAIN / DESCRIBE <options> <statement>.
+func renderExplain(s *ast.ExplainStatement, opts ast.FormatOptions) string {
+	f := newNodeFormatter(opts)
+	sb := f.sb
+
+	sb.WriteString(f.kw(s.Keyword))
+	if s.Options != "" {
+		sb.WriteString(" ")
+		sb.WriteString(s.Options)
+	}
+	if s.Statement != nil {
+		sb.WriteString(" ")
+		sb.WriteString(formatStatement(s.Statement, opts))
 	}
 	return sb.String()
 }

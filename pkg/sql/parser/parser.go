@@ -17,15 +17,16 @@ package parser
 import (
 	"context"
 	"errors"
-	"fmt"
 	"strings"
 	"sync"
 
+	"github.com/ajitpratap0/GoSQLX/internal/poolstats"
+	"github.com/ajitpratap0/GoSQLX/internal/stackgrow"
 	goerrors "github.com/ajitpratap0/GoSQLX/pkg/errors"
-	"github.com/ajitpratap0/GoSQLX/pkg/metrics"
 	"github.com/ajitpratap0/GoSQLX/pkg/models"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/dialect"
+	"github.com/ajitpratap0/GoSQLX/pkg/sql/internal/astrelease"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/keywords"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/token"
 )
@@ -68,6 +69,7 @@ type TokenPosition struct {
 var parserPool = sync.Pool{
 	New: func() interface{} {
 		p := &Parser{}
+		p.currentToken = &p.eof
 		p.resetDialectState()
 		return p
 	},
@@ -89,7 +91,7 @@ var parserPool = sync.Pool{
 //
 // Thread Safety: Safe for concurrent calls - each goroutine gets its own instance.
 func GetParser() *Parser {
-	metrics.RecordNamedPoolGet("parser")
+	poolstats.Parser.Get()
 	return parserPool.Get().(*Parser)
 }
 
@@ -111,7 +113,7 @@ func PutParser(p *Parser) {
 	if p != nil {
 		p.Reset()
 		parserPool.Put(p)
-		metrics.RecordNamedPoolPut("parser")
+		poolstats.Parser.Put()
 	}
 }
 
@@ -124,6 +126,7 @@ func (p *Parser) resetDialectState() {
 	p.dialectTyped = dialect.Unknown
 	p.capabilitiesCache = dialect.Unknown.Capabilities()
 	p.capabilitiesSet = true
+	p.rawStringLiterals = false // Unknown.StringEscape() is StringEscapeStrict.
 	p.refreshPipesMode()
 }
 
@@ -156,8 +159,12 @@ func (p *Parser) Reset() {
 		clear(p.tokenBuf)
 		p.tokenBuf = p.tokenBuf[:0]
 	}
+	p.resetScratch()
 	p.currentPos = 0
-	p.currentToken = models.TokenWithSpan{}
+	p.implicitEnd = 0
+	p.openBlockWork = 0
+	p.pooledDraws = 0
+	p.currentToken = &p.eof
 	p.depth = 0
 	p.ctx = nil
 	p.strict = false
@@ -217,7 +224,8 @@ const MaxRecursionDepth = 100
 //   - tokenBuf: Parser-owned scratch buffer holding the preprocessed stream,
 //     reused across parses and scrubbed (or dropped when large) by Reset
 //   - currentPos: Current position in token stream
-//   - currentToken: Current token being examined
+//   - currentToken: Pointer to the current token in tokens (or to the per-parser
+//     zero EOF sentinel past the end); read-only
 //   - depth: Recursion depth counter (DoS protection via MaxRecursionDepth)
 //   - ctx: Optional context for cancellation support
 //   - positions: Source position mapping for enhanced error reporting
@@ -267,6 +275,7 @@ func WithDialect(newDialect string) ParserOption {
 		p.dialectTyped = dialect.Parse(newDialect)
 		p.capabilitiesCache = p.dialectTyped.Capabilities()
 		p.capabilitiesSet = true
+		p.rawStringLiterals = p.dialectTyped.StringEscape() == dialect.StringEscapeNone
 		p.refreshPipesMode()
 	}
 }
@@ -309,13 +318,24 @@ func (p *Parser) Dialect() string {
 // For dialect-aware parsing or strict mode, use NewParser with options, or call
 // ApplyOptions on a pooled instance before parsing.
 type Parser struct {
-	tokens []models.TokenWithSpan
+	// pooledDraws counts the nodes this parse drew from the ast pools
+	// (ast.Get*/ast.New* other than NewAST). The parser reports it to
+	// ast.ReleaseAST through astrelease.MarkParserBuilt: a tree with no
+	// pooled draws is released in O(1). Every such draw site must call
+	// notePooledDraw (TestReleaseDrawnPolicy_ParserCountsDraws enforces it).
+	pooledDraws int
+	tokens      []models.TokenWithSpan
 	// tokenBuf is parser-owned scratch holding the preprocessed token stream
 	// (see preprocess). It is reused across parses and never exposed to
 	// callers. INVARIANT: tokenBuf[len:cap] is always zeroed.
-	tokenBuf     []models.TokenWithSpan
-	currentPos   int
-	currentToken models.TokenWithSpan
+	tokenBuf   []models.TokenWithSpan
+	currentPos int
+	// currentToken points at p.tokens[currentPos], or at p.eof once the cursor
+	// is past the stream. It is a pointer, not a copy, so advance moves 8
+	// bytes instead of a 72 B pointerful struct (which cost a GC write barrier
+	// per word). The pointee is read-only: tokens are never mutated while
+	// parsing, and nothing may write through currentToken (see eof).
+	currentToken *models.TokenWithSpan
 	depth        int             // Current recursion depth
 	ctx          context.Context // Optional context for cancellation support
 	strict       bool            // Strict mode rejects empty statements
@@ -359,6 +379,29 @@ type Parser struct {
 	// Capabilities.PipesAsLogicalOr (MySQL, MariaDB) and pipesAsConcat is
 	// unset. Derived by refreshPipesMode; never set it directly.
 	pipesAsOr bool
+	// rawStringLiterals caches the dialect's string escape mode for each
+	// literal, avoiding repeated dialect dispatch on the expression path.
+	rawStringLiterals bool
+	// implicitEnd is one more than the token index at which a T-SQL utility
+	// statement ended without a ';' because the next statement began there
+	// (0: none). See utility_implicit_end.go.
+	implicitEnd int
+	// openBlockWork counts the tokens that block-tracking statement scans
+	// examined before running into the end of the input inside an unclosed
+	// block. It bounds that wasted work (see utilityStatementEnd).
+	openBlockWork int
+	// eof is this parser's end-of-input sentinel: always the zero token. It is
+	// per parser, not a package variable, so a stray write can neither race
+	// across goroutines nor leak into other parsers. Every parse entry point,
+	// advance, seek, Reset and Release point currentToken at it when no real
+	// token applies, which is also what makes a zero-value &Parser{} usable.
+	// Nothing may write through currentToken.
+	eof models.TokenWithSpan
+
+	// exprScratch and orderScratch are the list-building stacks described in
+	// scratch.go. INVARIANT: [len:cap] is zeroed.
+	exprScratch  []ast.Expression
+	orderScratch []ast.OrderByExpression
 }
 
 // Deprecated: Parse is provided for backward compatibility only and is scheduled for
@@ -394,17 +437,26 @@ func (p *Parser) preprocess(tokens []models.TokenWithSpan) []models.TokenWithSpa
 	// previous stream so a shorter one cannot leave stale strings in the tail.
 	clear(p.tokenBuf)
 	p.tokenBuf = preprocessTokensInto(p.tokenBuf, tokens)
+	p.oracleExecuteLines("")
 	return p.tokenBuf
 }
 
 // parseTokens is the core parsing routine. It takes a preprocessed
 // []models.TokenWithSpan (already normalised by preprocessTokens or p.preprocess) and returns
-// the parsed AST.
+// the parsed AST. Its stackgrow.Reserve call is a backstop for low-level
+// callers; see internal/stackgrow for the frame budget.
 func (p *Parser) parseTokens(tokens []models.TokenWithSpan) (*ast.AST, error) {
+	// Reserve is a no-op after an earlier reservation.
+	stackgrow.Reserve()
 	p.tokens = tokens
 	p.currentPos = 0
+	p.implicitEnd = 0
+	p.openBlockWork = 0
+	p.pooledDraws = 0
 	if len(tokens) > 0 {
-		p.currentToken = tokens[0]
+		p.currentToken = &tokens[0]
+	} else {
+		p.currentToken = &p.eof
 	}
 
 	// Get a pre-allocated AST from the pool
@@ -420,30 +472,24 @@ func (p *Parser) parseTokens(tokens []models.TokenWithSpan) (*ast.AST, error) {
 	} else {
 		result.Statements = result.Statements[:0]
 	}
+	result.StatementStarts = result.StatementStarts[:0]
+	result.StatementEnds = result.StatementEnds[:0]
 
 	// Parse statements using Type (int) comparisons for speed
 	for p.currentPos < len(tokens) && !p.isType(models.TokenTypeEOF) {
 		// Skip semicolons between statements
 		if p.isType(models.TokenTypeSemicolon) {
-			if err := p.checkStrictEmptySemicolon(); err != nil {
+			if err := p.checkStrictEmptySemicolon(); !p.markExecuteSlash(result) && err != nil {
 				ast.ReleaseAST(result)
 				return nil, err
 			}
 			p.advance()
 			continue
 		}
-
-		stmt, err := p.parseStatement()
-		if err != nil {
+		if err := p.parseScriptItem(result); err != nil {
 			// Clean up the AST on error
 			ast.ReleaseAST(result)
 			return nil, err
-		}
-		result.Statements = append(result.Statements, stmt)
-
-		// Optionally consume semicolon after statement
-		if p.isType(models.TokenTypeSemicolon) {
-			p.advance()
 		}
 	}
 
@@ -456,7 +502,53 @@ func (p *Parser) parseTokens(tokens []models.TokenWithSpan) (*ast.AST, error) {
 		return nil, goerrors.IncompleteStatementError(models.Location{}, "")
 	}
 
+	if result.ExecuteSlash != nil {
+		result.ExecuteSlash = append(result.ExecuteSlash, make([]bool, len(result.Statements)-len(result.ExecuteSlash))...)
+		result.ExecuteSlashPositions = append(result.ExecuteSlashPositions, make([]models.Location, len(result.Statements)-len(result.ExecuteSlashPositions))...)
+	}
+	astrelease.MarkParserBuilt(result, p.pooledDraws)
 	return result, nil
+}
+
+// parseScriptItem parses the T-SQL GO line or the statement at the current
+// token, appends it to result and consumes the ';' after a statement; it is
+// the loop body of parseTokens and parseContextTokens. In SQL Server a
+// statement that ran across a GO line is an error (see batchLineError).
+// When no ';' follows, noteStatementEnd decides whether the next token may
+// start a statement.
+func (p *Parser) parseScriptItem(result *ast.AST) error {
+	start := p.currentToken.Start
+	if separator, ok := p.parseBatchSeparator(); ok {
+		result.Statements = append(result.Statements, separator)
+		result.StatementStarts = append(result.StatementStarts, start)
+		result.StatementEnds = append(result.StatementEnds, p.tokens[p.currentPos-1].End)
+		return nil
+	}
+	startPos := p.currentPos
+	stmt, err := p.parseStatement()
+	if err == nil {
+		result.Statements = append(result.Statements, stmt)
+		result.StatementStarts = append(result.StatementStarts, start)
+		p.recordUnicodeIdentifiers(result, startPos, p.currentPos)
+	}
+	if p.IsSQLServer() { // batchLineError returns err unchanged elsewhere
+		_, err = p.batchLineError(startPos, err)
+	}
+	if err != nil {
+		return err
+	}
+	end := p.tokens[p.currentPos-1].End
+	// Optionally consume semicolon after statement
+	if p.isType(models.TokenTypeSemicolon) {
+		if !p.markExecuteSlash(result) {
+			end = p.currentToken.End
+		}
+		p.advance()
+	} else if !p.isType(models.TokenTypeEOF) { // noteStatementEnd has nothing to do at the end
+		p.noteStatementEnd()
+	}
+	result.StatementEnds = append(result.StatementEnds, end)
+	return nil
 }
 
 // ParseFromModelTokens parses tokenizer output ([]models.TokenWithSpan) directly into an AST.
@@ -580,7 +672,10 @@ func (p *Parser) ParseContext(ctx context.Context, tokens []token.Token) (*ast.A
 
 // parseContextTokens is the core context-aware parsing routine. It takes
 // a preprocessed []models.TokenWithSpan and respects ctx for cancellation.
+// Its stackgrow.Reserve call is a backstop for low-level callers.
 func (p *Parser) parseContextTokens(ctx context.Context, tokens []models.TokenWithSpan) (*ast.AST, error) {
+	// Reserve is a no-op after an earlier reservation.
+	stackgrow.Reserve()
 	// Check context before starting
 	if err := ctx.Err(); err != nil {
 		return nil, err
@@ -592,8 +687,13 @@ func (p *Parser) parseContextTokens(ctx context.Context, tokens []models.TokenWi
 
 	p.tokens = tokens
 	p.currentPos = 0
+	p.implicitEnd = 0
+	p.openBlockWork = 0
+	p.pooledDraws = 0
 	if len(tokens) > 0 {
-		p.currentToken = tokens[0]
+		p.currentToken = &tokens[0]
+	} else {
+		p.currentToken = &p.eof
 	}
 
 	// Get a pre-allocated AST from the pool
@@ -609,6 +709,8 @@ func (p *Parser) parseContextTokens(ctx context.Context, tokens []models.TokenWi
 	} else {
 		result.Statements = result.Statements[:0]
 	}
+	result.StatementStarts = result.StatementStarts[:0]
+	result.StatementEnds = result.StatementEnds[:0]
 
 	// Parse statements using Type (int) comparisons for speed
 	for p.currentPos < len(tokens) && !p.isType(models.TokenTypeEOF) {
@@ -623,21 +725,14 @@ func (p *Parser) parseContextTokens(ctx context.Context, tokens []models.TokenWi
 
 		// Skip semicolons between statements
 		if p.isType(models.TokenTypeSemicolon) {
+			p.markExecuteSlash(result)
 			p.advance()
 			continue
 		}
-
-		stmt, err := p.parseStatement()
-		if err != nil {
+		if err := p.parseScriptItem(result); err != nil {
 			// Clean up the AST on error
 			ast.ReleaseAST(result)
 			return nil, err
-		}
-		result.Statements = append(result.Statements, stmt)
-
-		// Optionally consume semicolon after statement
-		if p.isType(models.TokenTypeSemicolon) {
-			p.advance()
 		}
 	}
 
@@ -647,8 +742,16 @@ func (p *Parser) parseContextTokens(ctx context.Context, tokens []models.TokenWi
 		return nil, goerrors.IncompleteStatementError(p.currentLocation(), "")
 	}
 
+	if result.ExecuteSlash != nil {
+		result.ExecuteSlash = append(result.ExecuteSlash, make([]bool, len(result.Statements)-len(result.ExecuteSlash))...)
+		result.ExecuteSlashPositions = append(result.ExecuteSlashPositions, make([]models.Location, len(result.Statements)-len(result.ExecuteSlashPositions))...)
+	}
+	astrelease.MarkParserBuilt(result, p.pooledDraws)
 	return result, nil
 }
+
+// notePooledDraw records one node drawn from an ast pool; see Parser.pooledDraws.
+func (p *Parser) notePooledDraw() { p.pooledDraws++ }
 
 // Release releases any resources held by the parser
 func (p *Parser) Release() {
@@ -656,7 +759,7 @@ func (p *Parser) Release() {
 	p.tokens = nil
 	p.tokenBuf = nil
 	p.currentPos = 0
-	p.currentToken = models.TokenWithSpan{}
+	p.currentToken = &p.eof
 	p.depth = 0
 	p.ctx = nil
 }
@@ -764,6 +867,14 @@ func (p *Parser) parseStatement() (ast.Statement, error) {
 			ss.Pos = stmtPos
 		}
 		return stmt, nil
+	case models.TokenTypeValues:
+		// Stand-alone table value constructor: VALUES (1, 'a'), (2, 'b'),
+		// optionally combined with set operations.
+		v, err := p.parseValuesQuery()
+		if err != nil {
+			return nil, err
+		}
+		return p.parseSetOperationChain(v, false)
 	case models.TokenTypeInsert:
 		stmtPos := p.currentLocation()
 		p.advance()
@@ -778,6 +889,13 @@ func (p *Parser) parseStatement() (ast.Statement, error) {
 		}
 		return stmt, nil
 	case models.TokenTypeUpdate:
+		// SQL Server UPDATE STATISTICS table [index | (stats, ...)] [WITH ...]
+		// is a maintenance command, not a DML statement.
+		if p.dialect == string(keywords.DialectSQLServer) && p.atStatementBoundary() &&
+			p.utilityWord(p.currentPos+1) == "STATISTICS" {
+			stmt, _, err := p.parseVerbatimStatement("UPDATE STATISTICS")
+			return stmt, err
+		}
 		stmtPos := p.currentLocation()
 		p.advance()
 		stmt, err := p.parseUpdateStatement()
@@ -848,13 +966,13 @@ func (p *Parser) parseStatement() (ast.Statement, error) {
 		p.advance()
 		return p.parseTruncateStatement()
 	case models.TokenTypeShow:
-		p.advance()
-		return p.parseShowStatement()
+		return p.parseShowOrUtility()
 	case models.TokenTypeDescribe, models.TokenTypeExplain, models.TokenTypeDesc:
 		// DESC is the ORDER-BY sort-direction token but also a synonym for
 		// DESCRIBE at statement position (Oracle, Snowflake, MySQL).
+		keyword := strings.ToUpper(p.currentToken.Token.Value)
 		p.advance()
-		return p.parseDescribeStatement()
+		return p.parseDescribeStatement(keyword)
 	case models.TokenTypeReplace:
 		p.advance()
 		return p.parseReplaceStatement()
@@ -862,7 +980,7 @@ func (p *Parser) parseStatement() (ast.Statement, error) {
 		// Handle keyword-type tokens that have dedicated parsers.
 		// PRAGMA is a SQLite statement keyword tokenized as TokenTypeKeyword
 		// when the SQLite dialect keyword set is active.
-		if strings.EqualFold(p.currentToken.Token.Value, "PRAGMA") {
+		if strings.EqualFold(p.currentToken.Token.Value, "PRAGMA") && p.alterDialect(dialectSQLite) {
 			p.advance()
 			return p.parsePragmaStatement()
 		}
@@ -878,16 +996,11 @@ func (p *Parser) parseStatement() (ast.Statement, error) {
 	case models.TokenTypeIdentifier:
 		// PRAGMA may be tokenized as IDENTIFIER when no dialect-specific keyword
 		// set is active (e.g. when using the default PostgreSQL tokenizer dialect).
-		// Support it as a statement keyword regardless of tokenizer dialect.
-		if strings.EqualFold(p.currentToken.Token.Value, "PRAGMA") {
+		// Support it as a statement keyword regardless of tokenizer dialect;
+		// only SQLite (and a parser without a dialect) has the statement.
+		if strings.EqualFold(p.currentToken.Token.Value, "PRAGMA") && p.alterDialect(dialectSQLite) {
 			p.advance()
 			return p.parsePragmaStatement()
-		}
-		// Snowflake session-context switches: USE [WAREHOUSE|DATABASE|SCHEMA|ROLE] <name>.
-		// USE is not tokenized as a keyword; dispatch by value in the Snowflake dialect.
-		if p.dialect == string(keywords.DialectSnowflake) &&
-			strings.EqualFold(p.currentToken.Token.Value, "USE") {
-			return p.parseSnowflakeUseStatement()
 		}
 		// Snowflake stage operations: COPY INTO, PUT, GET, LIST, REMOVE.
 		// All tokenize as identifiers; parse-only stubs that consume the
@@ -900,38 +1013,15 @@ func (p *Parser) parseStatement() (ast.Statement, error) {
 			}
 		}
 	}
+	// Utility statements (BEGIN, COMMIT, SET, USE, CALL, GRANT, ...) are
+	// dispatched by value, after every typed statement has been ruled out.
+	if stmt, ok, err := p.parseUtilityStatement(); ok {
+		return stmt, err
+	}
 	return nil, p.expectedError("statement")
 }
 
-// parseSnowflakeUseStatement parses:
-//
-//	USE [WAREHOUSE | DATABASE | SCHEMA | ROLE] <name>
-//
-// The object-kind keyword is optional (plain "USE <name>" switches the current
-// database). Returned as an UnsupportedStatement until a dedicated UseStatement
-// node is introduced.
-func (p *Parser) parseSnowflakeUseStatement() (ast.Statement, error) {
-	p.advance() // Consume USE
-	var rawParts []string
-	rawParts = append(rawParts, "USE")
-	// Optional object kind.
-	switch strings.ToUpper(p.currentToken.Token.Value) {
-	case "WAREHOUSE", "DATABASE", "SCHEMA", "ROLE":
-		rawParts = append(rawParts, strings.ToUpper(p.currentToken.Token.Value))
-		p.advance()
-	}
-	name, err := p.parseQualifiedName()
-	if err != nil {
-		return nil, p.qualifiedNameError(err, "name after USE")
-	}
-	rawParts = append(rawParts, name)
-	stmt := ast.GetUnsupportedStatement()
-	stmt.Kind = "USE"
-	stmt.RawSQL = strings.Join(rawParts, " ")
-	return stmt, nil
-}
-
-// parseSnowflakeStageStatement parses Snowflake stage operations as stubs:
+// parseSnowflakeStageStatement parses Snowflake stage operations:
 //
 //	COPY INTO <target> FROM <source> [options]
 //	PUT file://<path> @<stage>
@@ -939,50 +1029,17 @@ func (p *Parser) parseSnowflakeUseStatement() (ast.Statement, error) {
 //	LIST @<stage>   (or LS)
 //	REMOVE @<stage>/<path>
 //
-// The statement is consumed token-by-token (tracking balanced parens) until
-// ';' or EOF and returned as an UnsupportedStatement tagged with the
-// operation kind. No full AST modeling yet; follow-up work.
+// The statement is kept verbatim as a UtilityStatement tagged with the
+// operation kind; its text re-parses to the same statement.
 func (p *Parser) parseSnowflakeStageStatement(kind string) (ast.Statement, error) {
-	p.advance() // Consume leading kind token
-
-	var rawParts []string
-	rawParts = append(rawParts, kind)
-
-	// COPY INTO: consume the INTO keyword if present.
-	if kind == "COPY" && p.isType(models.TokenTypeInto) {
-		rawParts = append(rawParts, "INTO")
-		p.advance()
-	}
-
-	// Consume the rest of the statement body, capturing tokens for RawSQL.
-	depth := 0
-	for {
-		t := p.currentToken.Token.Type
-		if t == models.TokenTypeEOF {
-			break
-		}
-		if t == models.TokenTypeSemicolon && depth == 0 {
-			break
-		}
-		if p.currentToken.Token.Value != "" {
-			rawParts = append(rawParts, p.currentToken.Token.Value)
-		}
-		if t == models.TokenTypeLParen {
-			depth++
-		} else if t == models.TokenTypeRParen {
-			depth--
-		}
-		p.advance()
-	}
-	stub := ast.GetUnsupportedStatement()
-	stub.Kind = kind
-	stub.RawSQL = strings.Join(rawParts, " ")
-	return stub, nil
+	stmt, _, err := p.parseVerbatimStatement(kind)
+	return stmt, err
 }
 
 // NewParser creates a new parser with optional configuration.
 func NewParser(opts ...ParserOption) *Parser {
 	p := &Parser{}
+	p.currentToken = &p.eof
 	p.resetDialectState()
 	for _, opt := range opts {
 		opt(p)
@@ -1026,20 +1083,23 @@ func (p *Parser) checkStrictEmptySemicolon() error {
 func (p *Parser) advance() {
 	p.currentPos++
 	if p.currentPos < len(p.tokens) {
-		p.currentToken = p.tokens[p.currentPos]
+		p.currentToken = &p.tokens[p.currentPos]
 	} else {
-		p.currentToken = models.TokenWithSpan{} // EOF sentinel
+		p.currentToken = &p.eof // EOF sentinel
 	}
 }
 
 // peekToken returns the next token without advancing the parser position.
 // Returns an empty TokenWithSpan if at the end of input.
-func (p *Parser) peekToken() models.TokenWithSpan {
+//
+// The result points into p.tokens (or at the parser's zero EOF sentinel) and
+// is read-only.
+func (p *Parser) peekToken() *models.TokenWithSpan {
 	nextPos := p.currentPos + 1
 	if nextPos < len(p.tokens) {
-		return p.tokens[nextPos]
+		return &p.tokens[nextPos]
 	}
-	return models.TokenWithSpan{}
+	return &p.eof
 }
 
 // =============================================================================
@@ -1137,7 +1197,8 @@ func (p *Parser) parseIdent() *ast.Identifier {
 		return nil
 	}
 	pos := p.currentLocation()
-	ident := &ast.Identifier{Name: p.currentToken.Token.Value, Pos: pos, Quoted: p.isType(models.TokenTypeDoubleQuotedString)}
+	q := p.currentIdentQuote()
+	ident := &ast.Identifier{Name: p.currentToken.Token.Value, Pos: pos, Quoted: q == '"', QuoteStyle: q, Quotes: p.appendNamePartQuoted(0, q)}
 	p.advance()
 	return ident
 }
@@ -1149,6 +1210,16 @@ func (p *Parser) parseIdentAsString() string {
 		return ""
 	}
 	return ident.Name
+}
+
+// parseIdentAsStringQuoted is parseIdentAsString that also returns how the
+// name was delimited (see ast.NameQuote).
+func (p *Parser) parseIdentAsStringQuoted() (string, ast.NameQuote) {
+	ident := p.parseIdent()
+	if ident == nil {
+		return "", 0
+	}
+	return ident.Name, ident.Quotes
 }
 
 // parseBareWordAsString parses any word-like token (identifier or keyword) and
@@ -1173,15 +1244,6 @@ func (p *Parser) parseBareWordAsString() string {
 	val := p.currentToken.Token.Value
 	p.advance()
 	return val
-}
-
-// parseObjectName parses an object name (possibly qualified)
-func (p *Parser) parseObjectName() ast.ObjectName {
-	ident := p.parseIdent()
-	if ident == nil {
-		return ast.ObjectName{}
-	}
-	return ast.ObjectName{Name: ident.Name}
 }
 
 // parseStringLiteral parses a string literal
@@ -1228,42 +1290,17 @@ func (p *Parser) qualifiedNameError(err error, expected string) error {
 // linear in the input, and names with more than maxQualifiedNameParts parts
 // are rejected with E2004.
 func (p *Parser) parseQualifiedName() (string, error) {
-	if !p.isIdentifier() && !p.isNonReservedKeyword() {
-		return "", p.expectedError("identifier")
-	}
-	var parts [maxQualifiedNameParts]string
-	parts[0] = p.currentToken.Token.Value
-	n := 1
-	p.advance()
-
-	// Check for schema.table or db.schema.table
-	for p.isType(models.TokenTypePeriod) {
-		p.advance() // Consume .
-		if n == maxQualifiedNameParts {
-			return "", goerrors.InvalidSyntaxError(
-				fmt.Sprintf("qualified name has more than %d parts", maxQualifiedNameParts),
-				p.currentLocation(),
-				"",
-			).WithCause(errQualifiedNameTooLong)
-		}
-		if !p.isIdentifier() && !p.isNonReservedKeyword() {
-			return "", p.expectedError("identifier after .")
-		}
-		parts[n] = p.currentToken.Token.Value
-		n++
-		p.advance()
-	}
-
-	return strings.Join(parts[:n], "."), nil
+	name, _, err := p.parseQualifiedNameQuoted()
+	return name, err
 }
 
 // Accepts IDENT or non-reserved keywords that can be used as table names
 func (p *Parser) parseTableReference() (*ast.TableReference, error) {
-	name, err := p.parseQualifiedName()
+	name, q, err := p.parseTableNameQuoted()
 	if err != nil {
 		return nil, err
 	}
-	return &ast.TableReference{Name: name}, nil
+	return &ast.TableReference{Name: name, NameQuote: q}, nil
 }
 
 // isNonReservedKeyword checks if current token is a non-reserved keyword
@@ -1274,6 +1311,13 @@ func (p *Parser) isNonReservedKeyword() bool {
 	// the generic TokenTypeKeyword.
 	switch p.currentToken.Token.Type {
 	case models.TokenTypeTarget, models.TokenTypeSource, models.TokenTypeMatched:
+		return true
+	case models.TokenTypeOwner, models.TokenTypeUrl, models.TokenTypeMember,
+		models.TokenTypeConnector, models.TokenTypePolicy, models.TokenTypeUntil,
+		models.TokenTypeValid, models.TokenTypeDcproperties, models.TokenTypeNologin,
+		models.TokenTypeNocreatedb, models.TokenTypeNocreaterole, models.TokenTypeNosuperuser:
+		// Role-option words (ALTER ... OWNER TO, VALID UNTIL) are keyword
+		// tokens only so those statements can match them by type.
 		return true
 	case models.TokenTypeTable, models.TokenTypeIndex, models.TokenTypeView,
 		models.TokenTypeKey, models.TokenTypeColumn, models.TokenTypeDatabase,
@@ -1289,6 +1333,10 @@ func (p *Parser) isNonReservedKeyword() bool {
 		case "TARGET", "SOURCE", "MATCHED", "VALUE", "NAME", "TYPE", "STATUS",
 			"TABLES", "DATABASES":
 			return true
+		case "FINAL":
+			// A table modifier only in ClickHouse; a plain name elsewhere
+			// (dbt's WITH final AS (...) SELECT * FROM final).
+			return !p.IsClickHouse()
 		}
 	}
 	return false
@@ -1313,6 +1361,11 @@ func (p *Parser) isOraclePseudoColumn2(name string) bool {
 // keyword that starts a named window clause (SQL:2003). Must not be consumed
 // as a table alias.
 func (p *Parser) isWindowClauseKeyword() bool {
+	return len(p.currentToken.Token.Value) >= len("WINDOW") && p.isWindowClauseKeywordAt()
+}
+
+// isWindowClauseKeywordAt is isWindowClauseKeyword past its inline screen (a matching word is at least as long as WINDOW).
+func (p *Parser) isWindowClauseKeywordAt() bool {
 	return p.isIdentifier() && strings.EqualFold(p.currentToken.Token.Value, "WINDOW")
 }
 
@@ -1327,6 +1380,12 @@ func (p *Parser) isSettingsKeyword() bool {
 // RETURNING keyword (any case). Quoted identifiers named returning are names,
 // not the keyword: quoting is the only way to use a keyword as an identifier.
 func (p *Parser) isReturningKeyword() bool {
+	t := p.currentToken.Token.Type
+	return (t == models.TokenTypeReturning || t == models.TokenTypeIdentifier) && p.isReturningKeywordAt()
+}
+
+// isReturningKeywordAt is isReturningKeyword past its inline screen (RETURNING is a keyword or identifier token).
+func (p *Parser) isReturningKeywordAt() bool {
 	if p.isType(models.TokenTypeReturning) {
 		return true
 	}
@@ -1359,6 +1418,11 @@ func (p *Parser) isQuotedIdentifierToken() bool {
 // alias (FROM s JOIN r returning ON ..., FROM s returning LEFT JOIN ...), as
 // it is in dialects that do not reserve the word.
 func (p *Parser) isDMLReturningKeyword() bool {
+	return p.dmlReturning && p.isDMLReturningKeywordAt()
+}
+
+// isDMLReturningKeywordAt is isDMLReturningKeyword past its inline screen (only inside an INSERT source or UPDATE FROM).
+func (p *Parser) isDMLReturningKeywordAt() bool {
 	if !p.dmlReturning || !p.isReturningKeyword() {
 		return false
 	}
@@ -1404,7 +1468,15 @@ func (p *Parser) nextStartsTableClause() bool {
 // but NOT contextual clause keywords that would be consumed as aliases by mistake
 // (e.g. MINUS in Snowflake/Oracle, QUALIFY in Snowflake/BigQuery, WINDOW).
 func (p *Parser) canBeAlias() bool {
-	if p.isMinusSetOp() || p.isQualifyKeyword() || p.isWindowClauseKeyword() || p.isSettingsKeyword() || p.isDMLReturningKeyword() {
+	if p.isReservedTopName() {
+		return false
+	}
+	// Neither isIdentifier nor isNonReservedKeyword holds at an operand end,
+	// such as the "," or FROM after a select item.
+	if p.atOperandEnd() {
+		return false
+	}
+	if p.isMinusSetOp() || p.isQualifyKeyword() || p.isWindowClauseKeyword() || p.isSettingsKeyword() || p.isDMLReturningKeyword() || p.isSelectExtClauseStart() || p.isTSQLStatementStart() {
 		return false
 	}
 	return p.isIdentifier() || p.isNonReservedKeyword()
@@ -1447,7 +1519,7 @@ func (p *Parser) isJoinKeyword() bool {
 		(p.isType(models.TokenTypeAny) || p.isType(models.TokenTypeAll)) {
 		return true
 	}
-	return false
+	return p.isExtJoinStart()
 }
 
 // parseWithStatement parses a WITH statement (Common Table Expression).

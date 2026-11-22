@@ -105,7 +105,7 @@ func TestLint_ConcurrentMatchesSerial(t *testing.T) {
 	}
 	want := make([][]linter.Violation, len(inputs))
 	for i, in := range inputs {
-		res, err := Lint(in)
+		res, err := lintTolerant(in)
 		if err != nil {
 			t.Fatalf("serial Lint(%q): %v", in, err)
 		}
@@ -124,7 +124,7 @@ func TestLint_ConcurrentMatchesSerial(t *testing.T) {
 			defer wg.Done()
 			for i := 0; i < iterations; i++ {
 				idx := (g + i) % len(inputs)
-				res, err := Lint(inputs[idx])
+				res, err := lintTolerant(inputs[idx])
 				if err != nil {
 					mu.Lock()
 					errs = append(errs, fmt.Sprintf("Lint(%q): %v", inputs[idx], err))
@@ -191,7 +191,7 @@ func TestLint_DeterministicL006L009(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			for i := 0; i < 100; i++ {
-				res, err := Lint(tt.sql)
+				res, err := lintTolerant(tt.sql)
 				if err != nil {
 					t.Fatalf("iteration %d: Lint: %v", i, err)
 				}

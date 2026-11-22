@@ -392,6 +392,8 @@ Many applications use PostgreSQL's JSON features extensively...
 
 ## Pull Request Checklist
 
+For each user-facing change, add a `changelog.d/<slug>.<section>.md` fragment containing Markdown list items instead of editing `CHANGELOG.md`. A PR may add several fragments, typically one per section; see `changelog.d/README.md` for names and examples, and run `task changelog:check`. Release finalization runs `task changelog:collect` to merge fragments into the published changelog.
+
 ### Before Submitting
 - [ ] **Git Hooks**: Pre-commit hooks installed and passing (`task hooks:install`)
 - [ ] **Tests**: All tests pass with `go test -race ./...`
@@ -424,7 +426,7 @@ Why is this change needed?
 ## Documentation
 - [ ] API documentation updated
 - [ ] Examples added/updated
-- [ ] CHANGELOG.md updated (if applicable)
+- [ ] `changelog.d/` fragment added (if applicable)
 
 ## Security
 - [ ] No sensitive information exposed

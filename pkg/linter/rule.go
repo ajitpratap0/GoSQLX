@@ -72,6 +72,10 @@ type Violation struct {
 // Rules check SQL content at various levels (text, tokens, AST) and report
 // violations. Rules can optionally support automatic fixing of violations.
 //
+// When invoked by LintString or its wrappers, rules borrow the context's AST,
+// nodes and tokens only for the duration of Check, for every rule set. See
+// Check for the lifetime contract and migration guidance.
+//
 // Implementing a custom rule:
 //
 //	type MyRule struct {
@@ -124,6 +128,21 @@ type Rule interface {
 	// The context provides access to SQL text, tokens (if available), and
 	// AST (if available). Rules should handle missing tokenization/parsing
 	// gracefully by checking ctx.Tokens and ctx.AST for nil.
+	//
+	// During LintString and its wrappers, ctx.AST, all reachable nodes,
+	// ctx.Nodes() slices and elements, ctx.Tokens slices and elements, and
+	// their Word pointers are borrowed and must not survive this Check call.
+	// Do not retain ctx or a copy of it as an alias to these resources, or save
+	// visitors, closures or background work that can access them after return.
+	// Join all goroutines using borrowed resources before Check returns.
+	//
+	// To migrate rules that retain data, materialize strings (for example,
+	// tok.Token.Value or tok.Token.Word.Value after checking Word != nil),
+	// scalar values and value locations inside Check, or make independently
+	// owned deep copies. Copying a token struct or slice is insufficient when
+	// it retains Word or node pointers. Returned violations and state used by
+	// Fix must contain only independently owned values; Fix should use its SQL
+	// argument and materialized violations instead of saved context resources.
 	//
 	// Returns a slice of violations (empty if none found) and any error
 	// encountered during checking. Errors should indicate rule implementation

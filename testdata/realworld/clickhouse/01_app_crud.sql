@@ -1,0 +1,26 @@
+-- ORM / application-style CRUD against ClickHouse tables (users, orders, sessions)
+SELECT id, email, created_at FROM users WHERE id = 42;
+SELECT id, email FROM users WHERE email = 'a@example.com' LIMIT 1;
+SELECT * FROM users WHERE id IN (1, 2, 3) ORDER BY id;
+SELECT id, name FROM users WHERE name LIKE 'Jo%' AND is_active = 1 ORDER BY created_at DESC LIMIT 20 OFFSET 40;
+SELECT count() FROM users;
+SELECT count(*) AS total, countIf(is_active = 1) AS active FROM users;
+INSERT INTO users (id, email, name, created_at) VALUES (1, 'a@example.com', 'Alice', now());
+INSERT INTO users (id, email, name) VALUES (2, 'b@example.com', 'Bob'), (3, 'c@example.com', 'Carol');
+INSERT INTO users_archive SELECT * FROM users WHERE created_at < '2020-01-01';
+INSERT INTO events (ts, user_id, name) SELECT now(), id, 'migrated' FROM users WHERE is_active = 0;
+ALTER TABLE users UPDATE name = 'Alicia' WHERE id = 1;
+ALTER TABLE users UPDATE is_active = 0, updated_at = now() WHERE last_login < now() - INTERVAL 1 YEAR;
+ALTER TABLE users DELETE WHERE id = 1;
+ALTER TABLE events DELETE WHERE ts < now() - INTERVAL 90 DAY;
+DELETE FROM users WHERE id = 3;
+TRUNCATE TABLE tmp_staging;
+SELECT o.id, o.total, u.email FROM orders AS o INNER JOIN users AS u ON o.user_id = u.id WHERE o.status = 'paid' LIMIT 100;
+SELECT u.id, count() AS cnt FROM users u LEFT JOIN orders o ON o.user_id = u.id GROUP BY u.id HAVING cnt > 5 ORDER BY cnt DESC;
+SELECT id FROM orders WHERE user_id = {user_id:UInt64} AND created_at >= {since:DateTime};
+SELECT * FROM orders WHERE status NOT IN ('cancelled', 'refunded') AND total BETWEEN 10 AND 500;
+SELECT DISTINCT country FROM users WHERE country != '' ORDER BY country;
+SELECT id, if(is_active = 1, 'active', 'inactive') AS state FROM users;
+SELECT id, multiIf(total < 10, 'small', total < 100, 'medium', 'large') AS bucket FROM orders;
+SELECT id, CASE WHEN total > 100 THEN 'big' ELSE 'small' END AS size FROM orders;
+SELECT id, coalesce(nickname, name, 'unknown') AS display FROM users;

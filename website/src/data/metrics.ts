@@ -35,7 +35,7 @@ export const DIALECT_NAMES = [
 /** Project facts (not performance). */
 export const PROJECT = {
   /** Latest released tag. */
-  version: 'v1.16.0',
+  version: 'v1.17.0',
   /** Dialects supported (PostgreSQL, MySQL, MariaDB, SQL Server, Oracle, SQLite, Snowflake, ClickHouse). */
   dialectCount: DIALECT_NAMES.length,
   /** Built-in linter rules L001-L030. */
@@ -57,16 +57,62 @@ export const QA_CORPUS = {
   clickhouse: { pass: 83, total: 83 },
 } as const;
 
+/**
+ * Real-world dialect corpus (testdata/realworld/<dialect>/*.sql), added in
+ * PR #866 and brought to zero known failures in PR #867; released in v1.17.0
+ * (CHANGELOG.md [1.17.0], Added). Every statement goes through split, parse,
+ * format, reparse, format idempotency and a dropped-word check;
+ * TestRealWorldCorpus (pkg/gosqlx/realworld_corpus_test.go) enforces it in CI
+ * against testdata/realworld/known_failures.txt as a ratchet.
+ *
+ * Counts were taken from `go run ./scripts/dialect-audit` at `sourceCommit`
+ * (each run printed failed=0). While `released` is false, every place that
+ * shows these figures must say they are not in a release yet.
+ */
+const REALWORLD_PER_DIALECT = {
+  postgresql: { pass: 305, total: 305 },
+  mysql: { pass: 414, total: 414 },
+  mariadb: { pass: 380, total: 380 },
+  sqlserver: { pass: 277, total: 277 },
+  oracle: { pass: 368, total: 368 },
+  sqlite: { pass: 348, total: 348 },
+  snowflake: { pass: 327, total: 327 },
+  clickhouse: { pass: 394, total: 394 },
+} as const;
+
+const realworldSum = (field: 'pass' | 'total') =>
+  Object.values(REALWORLD_PER_DIALECT).reduce((n, d) => n + d[field], 0);
+
+export const REALWORLD_CORPUS = {
+  released: true,
+  /** origin/main commit the counts were measured on. */
+  sourceCommit: 'fda9a5ef',
+  /** Passing and total statements per dialect; keys are the parser dialect strings. */
+  perDialect: REALWORLD_PER_DIALECT,
+  /** 2,813 at sourceCommit (sum of perDialect). */
+  total: realworldSum('total'),
+  /** Every corpus statement passes; known_failures.txt is empty. */
+  passing: realworldSum('pass'),
+  failing: realworldSum('total') - realworldSum('pass'),
+  /** Reproduce one dialect's figure from a repo checkout; replace <d> with a dialect key. */
+  command: 'go run ./scripts/dialect-audit -dialect <d> testdata/realworld/<d>/*.sql',
+} as const;
+
+export type RealWorldDialect = keyof typeof REALWORLD_CORPUS.perDialect;
+
+/** Qualifier shown next to corpus figures until they ship in a tagged release. */
+export const REALWORLD_STATUS = REALWORLD_CORPUS.released ? '' : 'on main, next release';
+
 export const BENCH_ENV = {
   hardware: 'Apple M4',
   goVersion: 'Go 1.27',
   stage: 'parse stage',
   /** Date the PARSE_BENCHMARKS figures were re-measured (ISO). */
-  measuredOn: '2026-10-22',
+  measuredOn: '2026-11-02',
   /** Parse-stage benchmark source file and CI baseline file, as repo paths. */
   benchFile: 'pkg/sql/parser/performance_regression_test.go',
   baselinesFile: 'performance_baselines.json',
-  source: 'BenchmarkPerformanceBaseline, median of 20 runs, re-measured 2026-10-22',
+  source: 'BenchmarkPerformanceBaseline, median of 20 runs, re-measured 2026-11-02',
   /** Command that reproduces PARSE_BENCHMARKS from a repo checkout (summarise the 20 runs with benchstat). */
   command: "go test -run='^$' -bench=BenchmarkPerformanceBaseline -benchmem -count=20 ./pkg/sql/parser/",
 } as const;
@@ -82,11 +128,11 @@ export interface ParseBenchmark {
 }
 
 export const PARSE_BENCHMARKS: ParseBenchmark[] = [
-  { name: 'Simple SELECT', query: 'SELECT id, name FROM users', nsPerOp: 349, ciBaselineNs: 800 },
-  { name: 'INSERT', query: 'Simple INSERT statement', nsPerOp: 406, ciBaselineNs: 950 },
-  { name: 'CTE', query: 'WITH clause', nsPerOp: 644, ciBaselineNs: 1400 },
-  { name: 'Window Function', query: 'ROW_NUMBER() OVER (PARTITION BY ... ORDER BY ...)', nsPerOp: 631, ciBaselineNs: 1500 },
-  { name: 'Complex Query', query: 'JOIN, WHERE, ORDER BY, LIMIT', nsPerOp: 1234, ciBaselineNs: 2900 },
+  { name: 'Simple SELECT', query: 'SELECT id, name FROM users', nsPerOp: 363, ciBaselineNs: 800 },
+  { name: 'INSERT', query: 'Simple INSERT statement', nsPerOp: 433, ciBaselineNs: 950 },
+  { name: 'CTE', query: 'WITH clause', nsPerOp: 683, ciBaselineNs: 1400 },
+  { name: 'Window Function', query: 'ROW_NUMBER() OVER (PARTITION BY ... ORDER BY ...)', nsPerOp: 648, ciBaselineNs: 1500 },
+  { name: 'Complex Query', query: 'JOIN, WHERE, ORDER BY, LIMIT', nsPerOp: 1296, ciBaselineNs: 2900 },
 ];
 
 export function opsPerSec(nsPerOp: number): number {

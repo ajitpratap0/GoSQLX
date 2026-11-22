@@ -32,6 +32,8 @@ var (
 	formatCheck      bool
 	formatMaxLine    int
 	formatDialect    string
+
+	formatNoUppercase bool
 )
 
 // formatCmd represents the format command
@@ -44,7 +46,7 @@ Examples:
   gosqlx format query.sql                    # Format to stdout
   gosqlx format -i query.sql                 # Format in-place
   gosqlx format --indent 4 query.sql         # Use 4-space indentation
-  gosqlx format --no-uppercase query.sql     # Keep original keyword case
+  gosqlx format --no-uppercase query.sql     # Write keywords in lower case
   gosqlx format --compact query.sql          # Compact format (minimal whitespace)
   gosqlx format --check query.sql            # Check if formatting is needed (CI mode)
   gosqlx format "*.sql"                      # Format all SQL files
@@ -64,8 +66,18 @@ Performance: 100x faster than SQLFluff for equivalent operations`,
 
 func formatRun(cmd *cobra.Command, args []string) error {
 	// Reject unknown dialect names early before any parsing.
-	if err := validateDialectName(formatDialect); err != nil {
+	if err := normalizeDialectFlag(&formatDialect); err != nil {
 		return err
+	}
+
+	if err := rejectGlobalFormat(cmd); err != nil {
+		return err
+	}
+	if err := resolveUppercaseFlags(cmd); err != nil {
+		return err
+	}
+	if outputFile != "" && len(args) > 1 {
+		return fmt.Errorf("-o/--output writes one file but %d inputs were given; format them one at a time or use -i", len(args))
 	}
 
 	// Handle stdin input
@@ -251,6 +263,19 @@ func init() {
 	formatCmd.Flags().IntVar(&formatMaxLine, "max-line", 80, "maximum line length (config: format.max_line_length)")
 	formatCmd.Flags().StringVar(&formatDialect, "dialect", "", dialectFlagUsage("default: postgresql"))
 
-	// Add negation flags
-	formatCmd.Flags().BoolVar(&formatUppercase, "no-uppercase", false, "keep original keyword case")
+	// Negation flag. It has its own variable: sharing formatUppercase made
+	// --no-uppercase set uppercase to true.
+	formatCmd.Flags().BoolVar(&formatNoUppercase, "no-uppercase", false, "write keywords in lower case, including keyword operators and built-in function keywords; raw JSON_TABLE/XMLTABLE clauses retain source case (opposite of --uppercase)")
+}
+
+// resolveUppercaseFlags folds --no-uppercase into formatUppercase.
+func resolveUppercaseFlags(cmd *cobra.Command) error {
+	if !formatNoUppercase {
+		return nil
+	}
+	if flagSet(cmd, "uppercase") && formatUppercase {
+		return fmt.Errorf("--uppercase and --no-uppercase cannot be used together")
+	}
+	formatUppercase = false
+	return nil
 }

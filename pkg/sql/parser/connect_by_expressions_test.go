@@ -120,8 +120,8 @@ func TestParser_ConnectByPriorColumnName(t *testing.T) {
 }
 
 // TestParser_ConnectByQuotedPriorIsIdentifier verifies a double-quoted
-// "PRIOR" is a plain identifier operand, not the PRIOR operator. Only the
-// tree is checked: SQL() does not re-quote identifiers.
+// "PRIOR" is a plain identifier operand, not the PRIOR operator. SQL() keeps
+// its quotes, so the rendering does not turn it into the operator.
 func TestParser_ConnectByQuotedPriorIsIdentifier(t *testing.T) {
 	for _, d := range []keywords.SQLDialect{keywords.DialectOracle, keywords.DialectMariaDB} {
 		t.Run(string(d), func(t *testing.T) {
@@ -135,7 +135,7 @@ func TestParser_ConnectByQuotedPriorIsIdentifier(t *testing.T) {
 				t.Fatalf("expected *ast.SelectStatement, got %T", tree.Statements[0])
 			}
 			got := rhs596Shape(t, stmt.ConnectBy.Condition)
-			want := "(AND (= (PRIOR id) parent_id) (= (+ PRIOR 1) b))"
+			want := `(AND (= (PRIOR id) parent_id) (= (+ "PRIOR" 1) b))`
 			if got != want {
 				t.Fatalf("shape = %s, want %s", got, want)
 			}

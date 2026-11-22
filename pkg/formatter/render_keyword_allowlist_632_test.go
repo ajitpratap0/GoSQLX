@@ -241,7 +241,7 @@ func TestKeywordFieldsKnownValuesRoundTrip_PR632(t *testing.T) {
 		want string
 	}{
 		{keywords.DialectGeneric, "SELECT a FROM t INTERSECT ALL SELECT b FROM u", "INTERSECT ALL"},
-		{keywords.DialectOracle, "SELECT a FROM t MINUS SELECT b FROM u", "EXCEPT"},
+		{keywords.DialectOracle, "SELECT a FROM t MINUS SELECT b FROM u", "MINUS"},
 		{keywords.DialectGeneric, "SELECT a FROM t NATURAL JOIN u", "NATURAL JOIN"},
 		{keywords.DialectGeneric, "SELECT a FROM t NATURAL FULL JOIN u", "NATURAL FULL JOIN"},
 		{keywords.DialectGeneric, "DROP INDEX i", "DROP INDEX i"},

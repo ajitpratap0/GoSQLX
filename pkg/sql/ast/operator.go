@@ -83,6 +83,9 @@ const (
 	BangNot
 	// Prior represents MariaDB CONNECT BY parent reference operator, e.g. PRIOR id
 	Prior
+	// MySQLBinary represents the MySQL / MariaDB BINARY prefix operator, which
+	// casts its operand to a binary string, e.g. BINARY name
+	MySQLBinary
 )
 
 // String returns the string representation of the unary operator
@@ -110,6 +113,8 @@ func (op UnaryOperator) String() string {
 		return "!"
 	case Prior:
 		return "PRIOR"
+	case MySQLBinary:
+		return "BINARY"
 	default:
 		return "UNKNOWN"
 	}

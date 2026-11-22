@@ -1,0 +1,23 @@
+-- ORM-generated CRUD for an e-commerce app on Snowflake
+SELECT id, email, first_name, last_name, created_at FROM users WHERE id = 42;
+SELECT "id", "email", "created_at" FROM "PUBLIC"."USERS" WHERE "email" = 'a@example.com' LIMIT 1;
+SELECT * FROM orders WHERE user_id = 42 AND status IN ('pending', 'paid') ORDER BY created_at DESC LIMIT 20 OFFSET 40;
+INSERT INTO users (id, email, first_name, last_name, created_at) VALUES (1001, 'jane@example.com', 'Jane', 'Doe', CURRENT_TIMESTAMP());
+INSERT INTO order_items (order_id, product_id, quantity, unit_price) VALUES (1, 10, 2, 19.99), (1, 11, 1, 5.50), (1, 12, 3, 7.25);
+INSERT INTO audit_log (event, payload, created_at) SELECT 'login', OBJECT_CONSTRUCT('user', 42, 'ip', '10.0.0.1'), CURRENT_TIMESTAMP();
+UPDATE users SET last_login_at = CURRENT_TIMESTAMP(), login_count = login_count + 1 WHERE id = 42;
+UPDATE orders SET status = 'shipped', shipped_at = CURRENT_TIMESTAMP() WHERE id IN (SELECT order_id FROM shipments WHERE carrier = 'UPS');
+UPDATE products SET price = products.price * 1.05 FROM categories c WHERE products.category_id = c.id AND c.name = 'Books';
+DELETE FROM sessions WHERE expires_at < DATEADD(day, -7, CURRENT_TIMESTAMP());
+DELETE FROM cart_items USING carts WHERE cart_items.cart_id = carts.id AND carts.abandoned = TRUE;
+SELECT u.id, u.email, COUNT(o.id) AS order_count FROM users u LEFT JOIN orders o ON o.user_id = u.id GROUP BY u.id, u.email HAVING COUNT(o.id) > 5 ORDER BY order_count DESC;
+SELECT p.id, p.name, c.name AS category FROM products p INNER JOIN categories c ON c.id = p.category_id WHERE p.active AND p.price BETWEEN 10 AND 100;
+SELECT * FROM users WHERE email ILIKE '%@example.com' AND deleted_at IS NULL;
+SELECT COUNT(*) FROM orders WHERE created_at >= '2024-01-01'::date AND created_at < '2025-01-01'::date;
+SELECT id, COALESCE(nickname, first_name, 'anonymous') AS display_name FROM users;
+SELECT id, CASE WHEN total > 1000 THEN 'large' WHEN total > 100 THEN 'medium' ELSE 'small' END AS size_bucket FROM orders;
+SELECT DISTINCT country FROM addresses WHERE country IS NOT NULL ORDER BY 1;
+SELECT TOP 10 id, email FROM users ORDER BY created_at DESC;
+INSERT OVERWRITE INTO daily_snapshot SELECT * FROM staging_snapshot;
+TRUNCATE TABLE staging_events;
+SELECT * FROM products WHERE NOT (price < 5 OR stock = 0) AND name NOT LIKE 'tmp%';

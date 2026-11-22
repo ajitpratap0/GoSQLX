@@ -17,6 +17,9 @@ package ast
 // ObjectName represents a qualified or unqualified object name
 type ObjectName struct {
 	Name string
+	// Quote records the delimiters of Name's parts when they must be kept
+	// (see NameQuote).
+	Quote NameQuote
 }
 
 // TokenLiteral implements Node and returns the object name string.

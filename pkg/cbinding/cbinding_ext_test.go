@@ -188,6 +188,39 @@ func TestDialectVariants_EmptyAndInvalidInput(t *testing.T) {
 	}
 }
 
+func TestValidateDialectBlankInputStructuredErrors(t *testing.T) {
+	cases := []struct {
+		name, sql, code, cause string
+	}{
+		{name: "empty", sql: "", code: "E2005"},
+		{name: "ASCII whitespace", sql: " \t\r\n", code: "E2005"},
+		{name: "byte order mark", sql: "\uFEFF", code: "E2005"},
+		{name: "vertical tab", sql: "\v", code: "E2004", cause: "E1001"},
+		{name: "form feed", sql: "\f", code: "E2004", cause: "E1001"},
+		{name: "no-break space", sql: "\u00a0", code: "E2004", cause: "E1001"},
+		{name: "em space", sql: "\u2003", code: "E2004", cause: "E1001"},
+		{name: "next line", sql: "\u0085", code: "E2004", cause: "E1001"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			m := decodeMap(t, callDialectRaw(exportValidate, strPtr(tc.sql), strPtr("postgresql")))
+			if ok, _ := m["valid"].(bool); ok {
+				t.Fatalf("blank input was accepted: %v", m)
+			}
+			msg := errorOf(m)
+			if !strings.Contains(msg, tc.code) {
+				t.Errorf("error %q does not include %s", msg, tc.code)
+			}
+			if tc.cause != "" && !strings.Contains(msg, tc.cause) {
+				t.Errorf("error %q does not include nested cause %s", msg, tc.cause)
+			}
+			if strings.Contains(msg, "empty input") {
+				t.Errorf("error %q retained the legacy empty-input text", msg)
+			}
+		})
+	}
+}
+
 func TestDialectVariants_ParseErrorPosition(t *testing.T) {
 	m := decodeMap(t, callDialectRaw(exportParse, strPtr("SELECT *\nFROM users WHERE"), strPtr("mysql")))
 	if ok, _ := m["success"].(bool); ok {

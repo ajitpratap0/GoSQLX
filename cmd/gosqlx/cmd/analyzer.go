@@ -85,7 +85,10 @@ func (a *Analyzer) Analyze(input string) (*AnalyzerResult, error) {
 		return result, result.Error
 	}
 
-	// Convert TokenWithSpan to Token using centralized converter
+	if !hasStatementTokens(tokens) {
+		result.Error = errNoStatements
+		return result, result.Error
+	}
 
 	// Parse with proper error handling for memory management
 	p := parserForDialect(a.Opts.Dialect)

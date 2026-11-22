@@ -67,13 +67,35 @@ type Result struct {
 ### `FileResult`
 ```go
 type FileResult struct {
-    Filename   string
-    Violations []Violation
-    Error      error
+    Filename      string
+    Violations    []Violation
+    Error         error // File read or rule execution failure
+    TokenizeError error // SQL could not be tokenized
+    ParseError    error // Tokenized SQL could not be parsed
 }
 ```
 
 ## Functions
+
+### `(r FileResult) SyntaxError() error`
+Returns `TokenizeError` when present, otherwise `ParseError`; returns nil when
+the input tokenized and parsed. Empty, whitespace-only and comment-only input
+is not a syntax error.
+
+`Error` reports a failed lint operation and may accompany partial violations.
+Syntax errors are recorded separately: applicable text and token rules still
+run and report violations. Check both operation and syntax errors when using
+linting as a validation gate.
+
+```go
+result := l.LintString(sql, "query.sql")
+if result.Error != nil {
+    log.Fatal(result.Error)
+}
+if err := result.SyntaxError(); err != nil {
+    log.Fatal(err)
+}
+```
 
 ### `New(rules ...Rule) *Linter`
 Create linter with specified rules.

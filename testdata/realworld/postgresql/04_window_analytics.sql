@@ -1,0 +1,23 @@
+-- Window function analytics: frames, GROUPS, EXCLUDE, named windows
+SELECT id, SUM(amount) OVER (ORDER BY created_at ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS running FROM payments;
+SELECT id, AVG(amount) OVER (ORDER BY created_at ROWS BETWEEN 6 PRECEDING AND CURRENT ROW) AS ma7 FROM payments;
+SELECT id, SUM(amount) OVER (ORDER BY created_at RANGE BETWEEN INTERVAL '1 day' PRECEDING AND CURRENT ROW) FROM payments;
+SELECT id, SUM(amount) OVER (ORDER BY grp GROUPS BETWEEN 1 PRECEDING AND 1 FOLLOWING) FROM t;
+SELECT id, SUM(amount) OVER (ORDER BY id ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING EXCLUDE CURRENT ROW) FROM t;
+SELECT id, SUM(amount) OVER (ORDER BY id RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW EXCLUDE TIES) FROM t;
+SELECT id, SUM(amount) OVER (ORDER BY id ROWS UNBOUNDED PRECEDING EXCLUDE NO OTHERS) FROM t;
+SELECT id, ROW_NUMBER() OVER w AS rn, RANK() OVER w AS rk, DENSE_RANK() OVER w AS drk FROM t WINDOW w AS (PARTITION BY dept ORDER BY salary DESC);
+SELECT id, SUM(x) OVER (w ORDER BY id) FROM t WINDOW w AS (PARTITION BY grp);
+SELECT id, LAG(price, 1, 0) OVER (PARTITION BY product_id ORDER BY ts) AS prev_price, LEAD(price) OVER (PARTITION BY product_id ORDER BY ts) AS next_price FROM prices;
+SELECT id, FIRST_VALUE(price) OVER (PARTITION BY product_id ORDER BY ts) AS first_p, LAST_VALUE(price) OVER (PARTITION BY product_id ORDER BY ts ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS last_p, NTH_VALUE(price, 2) OVER (PARTITION BY product_id ORDER BY ts) AS second_p FROM prices;
+SELECT id, NTILE(4) OVER (ORDER BY score) AS quartile, PERCENT_RANK() OVER (ORDER BY score) AS pr, CUME_DIST() OVER (ORDER BY score) AS cd FROM scores;
+SELECT id, COUNT(*) FILTER (WHERE status = 'ok') OVER (PARTITION BY host ORDER BY ts ROWS BETWEEN 9 PRECEDING AND CURRENT ROW) FROM checks;
+SELECT user_id, ts, ts - LAG(ts) OVER (PARTITION BY user_id ORDER BY ts) AS gap FROM events;
+SELECT * FROM (SELECT *, ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY created_at DESC) AS rn FROM sessions) s WHERE rn = 1;
+WITH ranked AS (SELECT *, ROW_NUMBER() OVER (PARTITION BY email ORDER BY id) AS rn FROM users) DELETE FROM users WHERE id IN (SELECT id FROM ranked WHERE rn > 1);
+SELECT DISTINCT ON (user_id) user_id, id, created_at FROM orders ORDER BY user_id, created_at DESC;
+SELECT DISTINCT ON (customer_id, date_trunc('day', created_at)) customer_id, created_at, total_cents FROM orders ORDER BY customer_id, date_trunc('day', created_at), total_cents DESC;
+SELECT SUM(x) OVER (PARTITION BY a, b ORDER BY c DESC NULLS LAST) FROM t;
+SELECT id, SUM(amount) OVER (ORDER BY id RANGE BETWEEN 5 PRECEDING AND 5 FOLLOWING) FROM t;
+SELECT array_agg(x ORDER BY y) OVER (PARTITION BY z) FROM t;
+SELECT id, SUM(amount) OVER (PARTITION BY dept) / SUM(amount) OVER () AS share FROM t;

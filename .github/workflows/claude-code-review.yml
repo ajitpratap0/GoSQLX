@@ -11,9 +11,13 @@ permissions:
 jobs:
   claude-review:
     # Fork PRs get a read-only GITHUB_TOKEN and no secrets, so the action fails
-    # with 403 when posting its comment. Skip them; maintainers can still
-    # request a review with an @claude comment.
-    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.head.repo.full_name == github.repository
+    # with 403 when posting its comment. Dependabot PRs likewise run without
+    # repository secrets (no CLAUDE_CODE_OAUTH_TOKEN). Skip both; maintainers
+    # review them by hand or request a review with an @claude comment.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.pull_request.head.repo.full_name == github.repository &&
+       github.event.pull_request.user.login != 'dependabot[bot]')
 
     runs-on: ubuntu-latest
     permissions:

@@ -30,7 +30,16 @@ import (
 // upper-case to a single ASCII byte, so the comparison is made on the mapped
 // runes rather than on byte lengths. Invalid UTF-8 bytes become U+FFFD under
 // ToUpper and so never match an ASCII upper.
+//
+// It is called for many keyword probes on the hot path, so a necessary
+// condition is screened inline: every rune of s, at least one byte long,
+// must map to one byte of upper, so s is at least as long as upper.
 func equalsUpper(s, upper string) bool {
+	return len(s) >= len(upper) && equalsUpperRunes(s, upper)
+}
+
+// equalsUpperRunes is equalsUpper without the screens.
+func equalsUpperRunes(s, upper string) bool {
 	j := 0
 	for i := 0; i < len(s); {
 		var u rune

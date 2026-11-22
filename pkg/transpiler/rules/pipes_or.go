@@ -17,6 +17,7 @@ package rules
 import (
 	"reflect"
 
+	"github.com/ajitpratap0/GoSQLX/pkg/internal/reflplan"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
 )
 
@@ -33,7 +34,8 @@ func PipesOrToKeywordOr(stmt ast.Statement) error {
 	if stmt == nil {
 		return nil
 	}
-	clearPipesOr(reflect.ValueOf(stmt), make(map[uintptr]struct{}))
+	v := reflect.ValueOf(stmt)
+	clearPipesOr(v, reflplan.Of(v.Type()), make(map[uintptr]struct{}))
 	return nil
 }
 
@@ -42,8 +44,13 @@ var binaryExprType = reflect.TypeOf(ast.BinaryExpression{})
 // clearPipesOr walks every exported field reachable from v and clears
 // PipesOr on each BinaryExpression. Reflection reaches expressions stored in
 // value structs and slices that ast.Walk does not visit; seen guards against
-// revisiting shared pointers.
-func clearPipesOr(v reflect.Value, seen map[uintptr]struct{}) {
+// revisiting shared pointers. Parts whose type cannot hold an interface are
+// skipped (reflplan): a BinaryExpression is only ever reached through one.
+// Pruned interface-free pointers no longer enter the address-only seen set.
+// This can only visit more, never fewer; output could differ from an unpruned
+// walk only if a pruned value aliased a rewrite node's address, which the
+// parser does not produce. Reachable slot order is unchanged.
+func clearPipesOr(v reflect.Value, p *reflplan.Plan, seen map[uintptr]struct{}) {
 	switch v.Kind() {
 	case reflect.Pointer:
 		if v.IsNil() {
@@ -54,26 +61,27 @@ func clearPipesOr(v reflect.Value, seen map[uintptr]struct{}) {
 			return
 		}
 		seen[ptr] = struct{}{}
-		clearPipesOr(v.Elem(), seen)
+		clearPipesOr(v.Elem(), p.Elem, seen)
 	case reflect.Interface:
 		if !v.IsNil() {
-			clearPipesOr(v.Elem(), seen)
+			e := v.Elem()
+			clearPipesOr(e, reflplan.Of(e.Type()), seen)
 		}
 	case reflect.Struct:
-		if v.Type() == binaryExprType && v.CanAddr() {
+		if p.Type == binaryExprType && v.CanAddr() {
 			if bin, ok := v.Addr().Interface().(*ast.BinaryExpression); ok {
 				bin.PipesOr = false
 			}
 		}
-		t := v.Type()
-		for i := 0; i < v.NumField(); i++ {
-			if t.Field(i).IsExported() {
-				clearPipesOr(v.Field(i), seen)
-			}
+		for _, f := range p.Fields {
+			clearPipesOr(v.Field(f.Index), f.Plan, seen)
 		}
 	case reflect.Slice, reflect.Array:
+		if !p.Elem.Reach {
+			return
+		}
 		for i := 0; i < v.Len(); i++ {
-			clearPipesOr(v.Index(i), seen)
+			clearPipesOr(v.Index(i), p.Elem, seen)
 		}
 	}
 }

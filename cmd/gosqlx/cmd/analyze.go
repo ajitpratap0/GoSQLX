@@ -67,7 +67,7 @@ This is a basic implementation for CLI foundation.`,
 
 func analyzeRun(cmd *cobra.Command, args []string) error {
 	// Reject unknown dialect names early before any parsing.
-	if err := validateDialectName(analyzeDialect); err != nil {
+	if err := normalizeDialectFlag(&analyzeDialect); err != nil {
 		return err
 	}
 

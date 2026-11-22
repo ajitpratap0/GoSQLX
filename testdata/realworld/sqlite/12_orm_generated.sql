@@ -1,0 +1,21 @@
+-- Scenario: typical ORM (Django/Rails/SQLAlchemy/Prisma-like) generated SQL against SQLite
+SELECT "auth_user"."id", "auth_user"."password", "auth_user"."last_login", "auth_user"."username" FROM "auth_user" WHERE "auth_user"."username" = 'bob' LIMIT 21;
+SELECT COUNT(*) AS "__count" FROM "blog_post" WHERE "blog_post"."published" = 1;
+SELECT "blog_post"."id", "blog_post"."title" FROM "blog_post" INNER JOIN "auth_user" ON ("blog_post"."author_id" = "auth_user"."id") WHERE ("auth_user"."is_staff" AND NOT ("blog_post"."draft")) ORDER BY "blog_post"."created" DESC LIMIT 10;
+INSERT INTO "blog_post" ("title", "body", "author_id", "created") VALUES ('t', 'b', 1, '2024-01-01 00:00:00') RETURNING "id";
+UPDATE "blog_post" SET "title" = 'new', "modified" = '2024-02-02 00:00:00' WHERE "blog_post"."id" = 1;
+DELETE FROM "blog_post" WHERE "blog_post"."id" IN (1, 2, 3);
+CREATE TABLE "django_session" ("session_key" varchar(40) NOT NULL PRIMARY KEY, "session_data" text NOT NULL, "expire_date" datetime NOT NULL);
+CREATE INDEX "django_session_expire_date_a5c62663" ON "django_session" ("expire_date");
+CREATE TABLE "blog_post" ("id" integer NOT NULL PRIMARY KEY AUTOINCREMENT, "title" varchar(200) NOT NULL, "author_id" integer NOT NULL REFERENCES "auth_user" ("id") DEFERRABLE INITIALLY DEFERRED);
+CREATE TABLE "new__blog_post" ("id" integer NOT NULL PRIMARY KEY AUTOINCREMENT, "title" varchar(100) NOT NULL);
+CREATE TABLE "t_dec" ("price" decimal NOT NULL, "n" bigint NOT NULL, "f" real NULL, "b" bool NOT NULL, "d" date NULL, "ts" datetime NOT NULL, "bl" blob NULL, "ch" char(3) NOT NULL, "sm" smallint unsigned NOT NULL CHECK ("sm" >= 0));
+CREATE TABLE knex_migrations (id integer not null primary key autoincrement, name varchar(255), batch integer, migration_time datetime);
+CREATE TABLE `users` (`id` integer not null primary key autoincrement, `name` varchar(255));
+SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?;
+SELECT "t0"."id", "t0"."name", "t1"."id" AS "t1_id" FROM "users" AS "t0" LEFT JOIN "profiles" AS "t1" ON "t1"."user_id" = "t0"."id" WHERE "t0"."id" IN (?, ?, ?) ORDER BY "t0"."id" ASC LIMIT ? OFFSET ?;
+SELECT `User`.`id` AS `User.id`, `User`.`name` FROM `Users` AS `User` WHERE (`User`.`deletedAt` IS NULL AND `User`.`id` = 1);
+INSERT INTO `Users` (`id`, `name`, `createdAt`) VALUES (NULL, ?1, ?2);
+SELECT count(*) AS "count" FROM (SELECT 1 FROM "orders" GROUP BY "customer_id") AS "sub";
+SELECT * FROM "users" WHERE "id" = ? AND "deleted_at" IS NULL;
+PRAGMA foreign_key_check;

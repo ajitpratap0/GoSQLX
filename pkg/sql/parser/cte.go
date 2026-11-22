@@ -68,6 +68,12 @@ func (p *Parser) parseWithStatement() (ast.Statement, error) {
 		Pos:       withPos,
 	}
 
+	// A parenthesized query after the WITH clause: WITH c AS (...) (A UNION B)
+	// INTERSECT C. The clause scopes over the whole query expression.
+	if p.isType(models.TokenTypeLParen) {
+		return p.parseWithParenthesizedQuery(withClause)
+	}
+
 	// Parse the main statement that follows the WITH clause
 	mainStmt, err := p.parseMainStatementAfterWith()
 	if err != nil {
@@ -138,7 +144,7 @@ func (p *Parser) parseCommonTableExpr() (*ast.CommonTableExpr, error) {
 	// ClickHouse scalar CTE: WITH <expr> AS <name>, ...
 	// Detected when the token after WITH is not an identifier, or is an
 	// identifier not followed by AS/( (which would be a standard CTE).
-	if p.dialect == string(keywords.DialectClickHouse) && !p.isIdentifier() {
+	if p.dialect == string(keywords.DialectClickHouse) && !p.isIdentifier() && !p.isCTENameStart() {
 		scalarExpr, err := p.parseExpression()
 		if err != nil {
 			return nil, err
@@ -152,24 +158,32 @@ func (p *Parser) parseCommonTableExpr() (*ast.CommonTableExpr, error) {
 		}
 		scalarName := p.currentToken.Token.Value
 		scalarPos := p.currentLocation()
+		scalarQuote := p.currentNameQuote()
 		p.advance()
 		return &ast.CommonTableExpr{
 			Name:       scalarName,
 			ScalarExpr: scalarExpr,
 			Pos:        scalarPos,
+			NameQuote:  scalarQuote,
 		}, nil
 	}
 
-	// Parse CTE name (supports double-quoted identifiers)
-	if !p.isIdentifier() {
+	// Parse CTE name (supports double-quoted identifiers and keywords
+	// used as names: WITH source AS (...), WITH final AS (...))
+	if !p.isIdentifier() && !p.isCTENameStart() {
 		return nil, p.expectedError("CTE name")
 	}
 	cteNamePos := p.currentLocation()
 	name := p.currentToken.Token.Value
+	var nameQuote ast.NameQuote
+	if quote := p.currentIdentQuote(); p.nameQuoteRelevant(quote) {
+		nameQuote = p.appendNamePartQuoted(0, quote)
+	}
 	p.advance()
 
 	// Parse optional column list
 	var columns []string
+	var columnQuotes []ast.NameQuote
 	if p.isType(models.TokenTypeLParen) {
 		// "name (SELECT ...)" is a CTE missing its AS keyword, not a column
 		// list; report the missing AS instead of "expected column name" (#537).
@@ -182,6 +196,7 @@ func (p *Parser) parseCommonTableExpr() (*ast.CommonTableExpr, error) {
 			if !p.isIdentifier() {
 				return nil, p.expectedError("column name")
 			}
+			columnQuotes = nameQuoteList(columnQuotes, len(columns), p.currentNameQuote())
 			columns = append(columns, p.currentToken.Token.Value)
 			p.advance()
 
@@ -241,6 +256,10 @@ func (p *Parser) parseCommonTableExpr() (*ast.CommonTableExpr, error) {
 		// For SELECT statements, use parseSelectWithSetOperations to support UNION, EXCEPT, INTERSECT
 		p.advance() // Consume SELECT
 		stmt, err = p.parseSelectWithSetOperations()
+	} else if p.isAnyType(models.TokenTypeValues, models.TokenTypeLParen) {
+		// VALUES body or a parenthesized query expression:
+		// WITH c AS (VALUES (1), (2)), WITH c AS ((SELECT 1) UNION SELECT 2)
+		stmt, err = p.parseQueryExpression("CTE query")
 	} else {
 		// For other statement types (INSERT, UPDATE, DELETE, WITH), use parseStatement
 		stmt, err = p.parseStatement()
@@ -259,13 +278,22 @@ func (p *Parser) parseCommonTableExpr() (*ast.CommonTableExpr, error) {
 	}
 	p.advance() // Consume )
 
-	return &ast.CommonTableExpr{
+	cte := &ast.CommonTableExpr{
 		Name:         name,
 		Columns:      columns,
 		Statement:    stmt,
 		Materialized: materialized,
 		Pos:          cteNamePos,
-	}, nil
+		NameQuote:    nameQuote,
+		ColumnQuotes: columnQuotes,
+	}
+	// SQL:1999 SEARCH / CYCLE clauses of a recursive CTE.
+	if p.isTokenMatch("SEARCH") || p.isTokenMatch("CYCLE") {
+		if err := p.parseCTESearchCycle(cte); err != nil {
+			return nil, err
+		}
+	}
+	return cte, nil
 }
 
 // parseMainStatementAfterWith parses the main statement after WITH clause.
@@ -286,4 +314,68 @@ func (p *Parser) parseMainStatementAfterWith() (ast.Statement, error) {
 		return p.parseDeleteStatement()
 	}
 	return nil, p.expectedError("SELECT, INSERT, UPDATE, or DELETE after WITH")
+}
+
+// parseWithParenthesizedQuery parses the query expression after a WITH clause
+// when it starts with "(", as in
+//
+//	WITH c AS (SELECT 1 AS a) (SELECT a FROM c UNION SELECT a FROM c) INTERSECT SELECT a FROM c
+//
+// The WITH clause is attached to the first SELECT of the query expression, as
+// for an unparenthesized one, and the set operation that owns the
+// parenthesized operand records that the clause was written outside the
+// parentheses (SetOperation.LeftWithHoisted), so that renderers keep it in
+// scope of the other operands. A first SELECT that has a WITH clause of its
+// own is rejected.
+func (p *Parser) parseWithParenthesizedQuery(with *ast.WithClause) (ast.Statement, error) {
+	wrap := func(err error) error {
+		return goerrors.InvalidCTEError(
+			fmt.Sprintf("error parsing statement after WITH clause: %v", err),
+			p.currentLocation(),
+			"",
+		)
+	}
+	q, err := p.parseParenthesizedQuery("SELECT after WITH")
+	if err != nil {
+		return nil, wrap(err)
+	}
+	stmt, err := p.parseSetOperationChain(q, true)
+	if err != nil {
+		return nil, wrap(err)
+	}
+
+	// The first SELECT of the whole expression takes the WITH clause.
+	var first ast.Statement = stmt
+	for {
+		op, ok := first.(*ast.SetOperation)
+		if !ok || op == nil {
+			break
+		}
+		first = op.Left
+	}
+	sel, ok := first.(*ast.SelectStatement)
+	if !ok || sel == nil || sel.With != nil {
+		return nil, goerrors.UnsupportedFeatureError(
+			"WITH clause before a parenthesized query that is not a SELECT or already has its own WITH clause",
+			p.currentLocation(),
+			"",
+		)
+	}
+	sel.With = with
+
+	// The operation whose left operand is the parenthesized query is the
+	// outermost one of the left spine that was written with parentheses;
+	// levels below it are parenthesized inside that query.
+	for cur := stmt; ; {
+		op, ok := cur.(*ast.SetOperation)
+		if !ok || op == nil {
+			break
+		}
+		if op.LeftParenthesized {
+			op.LeftWithHoisted = true
+			break
+		}
+		cur = op.Left
+	}
+	return stmt, nil
 }

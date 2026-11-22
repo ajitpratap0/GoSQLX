@@ -42,8 +42,10 @@ func TestQuotedIdentifier_FormatAST_Issue611(t *testing.T) {
 			"CREATE VIEW v (\"select\") AS\nSELECT 1"},
 		{"select_reserved", `SELECT "select" FROM t`, "",
 			"SELECT \"select\"\nFROM t"},
-		{"select_space_case_table_space", `SELECT "a b", "Mixed" FROM "my table"`, `SELECT "a b", Mixed FROM "my table"`,
-			"SELECT \"a b\", Mixed\nFROM \"my table\""},
+		// Quotes kept for letter case depend on the dialect's folding; see
+		// TestNameQuote_FormatKeepsCaseQuotes.
+		{"select_space_table_space", `SELECT "a b", "c d" FROM "my table"`, "",
+			"SELECT \"a b\", \"c d\"\nFROM \"my table\""},
 		{"mview_column_reserved", `CREATE MATERIALIZED VIEW mv ("select") AS SELECT 1`, "",
 			"CREATE MATERIALIZED VIEW mv (\"select\") AS\nSELECT 1"},
 		{"cte_name_reserved", `WITH "select" AS (SELECT 1) SELECT * FROM "select"`, "",

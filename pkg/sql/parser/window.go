@@ -23,6 +23,7 @@ import (
 
 	"github.com/ajitpratap0/GoSQLX/pkg/models"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
+	"github.com/ajitpratap0/GoSQLX/pkg/sql/dialect"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/keywords"
 )
 
@@ -47,22 +48,47 @@ func (p *Parser) parseFunctionCall(funcName string) (*ast.FunctionCall, error) {
 	}
 
 	// Parse arguments if not empty
-	if !p.isType(models.TokenTypeRParen) {
+	var separator *ast.LiteralValue
+	var funcCall *ast.FunctionCall
+	if form := specialFormOf(funcName); form != formNone && !p.isType(models.TokenTypeRParen) {
+		// Keyword-introduced arguments: SUBSTRING(s FROM 1 FOR 2), TRIM(BOTH ' ' FROM s), ...
+		args, err := p.parseSpecialFormArgs(form)
+		if err != nil {
+			return nil, err
+		}
+		arguments = args
+	} else if !p.isType(models.TokenTypeRParen) {
+		// Arguments are collected on the parser's scratch stack and copied once
+		// into the call's co-allocated storage (see newFunctionCall). Every
+		// error return in the loop drops the stack back to argBase first: a
+		// caller that swallows the error and carries on must find the stack as
+		// it left it.
+		argBase := p.exprMark()
+		// A few functions take arguments with their own syntax (CURSOR(SELECT
+		// ...), JSON_OBJECT(k VALUE v), XMLTABLE(... COLUMNS ...)); every other
+		// call skips those checks.
+		quirky := hasQuirkyArgs(funcName)
 		for !p.isType(models.TokenTypeOrder) {
 			// Named argument form: `name => expr` (Snowflake FLATTEN,
 			// BigQuery, Oracle, PostgreSQL procedural calls). Detect by a
-			// bare identifier immediately followed by =>.
-			if p.isIdentifier() &&
-				p.peekToken().Token.Type == models.TokenTypeRArrow {
+			// bare identifier or keyword (FLATTEN's outer => / recursive =>)
+			// immediately followed by =>. PostgreSQL also accepts the older
+			// `name := expr`, read as the same NamedArgument (and written
+			// back with =>).
+			if (p.isIdentifier() || p.isWordToken()) &&
+				(p.peekToken().Token.Type == models.TokenTypeRArrow ||
+					p.peekToken().Token.Type == models.TokenTypeAssignment && p.alterDialect(txnPostgres) &&
+						(p.isIdentifier() || p.isNonReservedKeyword())) {
 				namePos := p.currentLocation()
 				argName := p.currentToken.Token.Value
 				p.advance() // name
 				p.advance() // =>
 				value, err := p.parseExpression()
 				if err != nil {
+					p.exprDrop(argBase)
 					return nil, err
 				}
-				arguments = append(arguments, &ast.NamedArgument{
+				p.exprPushOutOfLine(&ast.NamedArgument{
 					Name:  argName,
 					Value: value,
 					Pos:   namePos,
@@ -74,33 +100,87 @@ func (p *Parser) parseFunctionCall(funcName string) (*ast.FunctionCall, error) {
 				if p.isType(models.TokenTypeRParen) {
 					break
 				}
+				p.exprDrop(argBase)
 				return nil, p.expectedError(", or )")
 			}
 
-			arg, err := p.parseExpression()
-			if err != nil {
+			var arg ast.Expression
+			var err error
+			if quirky && p.isBareSubqueryArg(funcName) {
+				// Oracle CURSOR(SELECT ...) / MULTISET(SELECT ...): the query is
+				// the argument, with no parentheses of its own.
+				pos := p.currentLocation()
+				sub, err := p.parseSubquery()
+				if err != nil {
+					p.exprDrop(argBase)
+					return nil, err
+				}
+				p.exprPushOutOfLine(&ast.SubqueryExpression{Subquery: sub, Pos: pos, Bare: true})
+				if p.isType(models.TokenTypeRParen) {
+					break
+				}
+				p.exprDrop(argBase)
+				return nil, p.expectedError(")")
+			}
+			if quirky && p.isJSONObjectFunc(funcName) {
+				if arg, err = p.parseJSONObjectArg(); err != nil {
+					p.exprDrop(argBase)
+					return nil, err
+				}
+			} else if quirky && p.isOpenRowsetBulk(funcName) {
+				// SQL Server OPENROWSET(BULK 'path', options): BULK introduces
+				// the file name.
+				ka := &ast.KeywordArgument{Keyword: "BULK", Pos: p.currentLocation()}
+				p.advance() // Consume BULK
+				if ka.Value, err = p.parseExpression(); err != nil {
+					p.exprDrop(argBase)
+					return nil, err
+				}
+				arg = ka
+			} else if arg, err = p.parseExpression(); err != nil {
+				p.exprDrop(argBase)
 				return nil, err
 			}
-			arguments = append(arguments, arg)
+			if quirky && p.isType(models.TokenTypeAs) && isXMLNamedArgFunc(funcName) {
+				// XMLATTRIBUTES(col AS "name") / XMLFOREST(col AS name)
+				p.advance() // Consume AS
+				if !p.isAliasAfterAS() {
+					p.exprDrop(argBase)
+					return nil, p.expectedError("name after AS")
+				}
+				arg = &ast.AliasedExpression{Expr: arg, Alias: p.currentToken.Token.Value, AliasQuote: p.currentNameQuote()}
+				p.advance()
+			}
+			p.exprPushOutOfLine(arg)
 
 			// Check for comma or end of arguments
 			if p.isType(models.TokenTypeComma) {
 				p.advance() // Consume comma
 			} else if p.isType(models.TokenTypeRParen) || p.isType(models.TokenTypeOrder) {
 				break
-			} else if strings.ToUpper(p.currentToken.Token.Value) == "SEPARATOR" {
-				// MySQL GROUP_CONCAT SEPARATOR clause
-				p.advance() // Consume SEPARATOR
-				sepArg, err := p.parseExpression()
+			} else if p.isWord("SEPARATOR") {
+				// MySQL GROUP_CONCAT SEPARATOR clause; parsed below.
+				break
+			} else if quirky && p.isClauseArgument(funcName) {
+				// JSON_TABLE(doc, path COLUMNS (...)), XMLTABLE(xpath PASSING x
+				// COLUMNS ...): the argument and its clause words are one
+				// argument.
+				last, err := p.parseClauseArgument(funcName, arg)
 				if err != nil {
+					p.exprDrop(argBase)
 					return nil, err
 				}
-				arguments = append(arguments, sepArg)
+				p.exprScratch[len(p.exprScratch)-1] = last
 				break
 			} else {
+				p.exprDrop(argBase)
 				return nil, p.expectedError(", or )")
 			}
 		}
+		// The arguments move into the call's own storage now, so no later
+		// return has anything to unwind on the scratch stack.
+		funcCall = newFunctionCall(p.exprScratch[argBase:])
+		p.exprDrop(argBase)
 	}
 
 	// Parse ORDER BY clause inside aggregate functions (STRING_AGG, ARRAY_AGG, etc.)
@@ -152,7 +232,7 @@ func (p *Parser) parseFunctionCall(funcName string) (*ast.FunctionCall, error) {
 				p.advance() // Consume comma
 			} else if p.isType(models.TokenTypeRParen) {
 				break
-			} else if strings.EqualFold(p.currentToken.Token.Value, "SEPARATOR") {
+			} else if p.isWord("SEPARATOR") {
 				break // Let SEPARATOR be handled below
 			} else {
 				return nil, p.expectedError(", or )")
@@ -160,14 +240,15 @@ func (p *Parser) parseFunctionCall(funcName string) (*ast.FunctionCall, error) {
 		}
 	}
 
-	// Handle MySQL SEPARATOR clause (GROUP_CONCAT)
-	if strings.EqualFold(p.currentToken.Token.Value, "SEPARATOR") {
+	// Handle MySQL SEPARATOR clause (GROUP_CONCAT). It is kept apart from the
+	// arguments: GROUP_CONCAT(a SEPARATOR '|') is not GROUP_CONCAT(a, '|').
+	if p.isWord("SEPARATOR") {
 		p.advance() // Consume SEPARATOR
-		sepExpr, err := p.parseExpression()
+		sep, err := p.parseSeparatorLiteral()
 		if err != nil {
 			return nil, err
 		}
-		arguments = append(arguments, sepExpr)
+		separator = sep
 	}
 
 	// Expect closing parenthesis
@@ -177,11 +258,14 @@ func (p *Parser) parseFunctionCall(funcName string) (*ast.FunctionCall, error) {
 	p.advance() // Consume )
 
 	// Create function call
-	funcCall := &ast.FunctionCall{
-		Name:      funcName,
-		Arguments: arguments,
-		Distinct:  distinct,
-		OrderBy:   orderByExprs,
+	if funcCall == nil {
+		funcCall = &ast.FunctionCall{Arguments: arguments}
+	}
+	funcCall.Name = funcName
+	funcCall.Distinct = distinct
+	funcCall.OrderBy = orderByExprs
+	if separator != nil {
+		funcCall.EnsureExtras().Separator = separator
 	}
 
 	// ClickHouse parametric aggregates: funcName(params)(args).
@@ -193,6 +277,15 @@ func (p *Parser) parseFunctionCall(funcName string) (*ast.FunctionCall, error) {
 		if err := p.parseClickHouseParametricArgs(funcCall, distinctPos); err != nil {
 			return nil, err
 		}
+	}
+
+	// Oracle KEEP (DENSE_RANK FIRST|LAST ORDER BY ...) aggregate modifier.
+	if p.isKeepClause() {
+		keep, err := p.parseKeepClause()
+		if err != nil {
+			return nil, err
+		}
+		funcCall.EnsureExtras().Keep = keep
 	}
 
 	// Check for IGNORE NULLS / RESPECT NULLS (SQL:2016 null treatment).
@@ -344,7 +437,7 @@ func (p *Parser) parseWindowSpec() (*ast.WindowSpec, error) {
 	// This must be checked before the '(' path so that e.g. OVER w is not
 	// mistakenly rejected.
 	if p.isIdentifier() {
-		spec := &ast.WindowSpec{Name: p.currentToken.Token.Value}
+		spec := &ast.WindowSpec{Name: p.currentToken.Token.Value, NameQuote: p.currentNameQuote()}
 		p.advance()
 		return spec, nil
 	}
@@ -362,6 +455,7 @@ func (p *Parser) parseWindowSpec() (*ast.WindowSpec, error) {
 	// have dedicated token types, so a leading identifier can only be a name.
 	if p.isIdentifier() {
 		windowSpec.BaseWindow = p.currentToken.Token.Value
+		windowSpec.BaseWindowQuote = p.currentNameQuote()
 		p.advance()
 	}
 
@@ -609,3 +703,148 @@ func (p *Parser) parseNullsClause() (*bool, error) {
 }
 
 // parseGroupingExpressionList parses a parenthesized, comma-separated list of expressions
+
+// isOpenRowsetBulk reports whether the current tokens are the BULK 'file' that
+// starts the arguments of a SQL Server OPENROWSET call named funcName.
+func (p *Parser) isOpenRowsetBulk(funcName string) bool {
+	if !p.IsSQLServer() || !p.isUnquotedWord("BULK") || !equalsUpper(funcName, "OPENROWSET") {
+		return false
+	}
+	t := p.peekToken().Token.Type
+	return t == models.TokenTypeString || t == models.TokenTypeSingleQuotedString
+}
+
+// isBareSubqueryArg reports whether the current token starts the query that
+// is the argument of an Oracle CURSOR(...) or MULTISET(...) call.
+func (p *Parser) isBareSubqueryArg(funcName string) bool {
+	if !p.IsOracle() || !p.isAnyType(models.TokenTypeSelect, models.TokenTypeWith) {
+		return false
+	}
+	return equalsUpper(funcName, "CURSOR") || equalsUpper(funcName, "MULTISET")
+}
+
+// isJSONObjectFunc reports whether funcName is a JSON_OBJECT / JSON_OBJECTAGG
+// call whose arguments may use the KEY ... VALUE ... and name: value forms.
+func (p *Parser) isJSONObjectFunc(funcName string) bool {
+	if !p.dialectAllows(dialect.Oracle, dialect.SQLServer, dialect.PostgreSQL) {
+		return false
+	}
+	return equalsUpper(funcName, "JSON_OBJECT") || equalsUpper(funcName, "JSON_OBJECTAGG")
+}
+
+// parseJSONObjectArg parses one argument of JSON_OBJECT: a plain expression,
+// or a pair written [KEY] name VALUE value or name : value.
+func (p *Parser) parseJSONObjectArg() (ast.Expression, error) {
+	pos := p.currentLocation()
+	keyword := false
+	if p.isUnquotedWord("KEY") {
+		switch p.peekToken().Token.Type {
+		case models.TokenTypeComma, models.TokenTypeRParen, models.TokenTypeColon, models.TokenTypePeriod, models.TokenTypeLParen:
+		default:
+			keyword = !p.peekValueIs(1, "VALUE")
+		}
+	}
+	if keyword {
+		p.advance() // Consume KEY
+	}
+	key, err := p.parseExpression()
+	if err != nil {
+		return nil, err
+	}
+	colon := false
+	switch {
+	case p.isUnquotedWord("VALUE"):
+		p.advance() // Consume VALUE
+	case p.isType(models.TokenTypeColon):
+		colon = true
+		p.advance() // Consume :
+	default:
+		if keyword {
+			return nil, p.expectedError("VALUE or : after the JSON_OBJECT key")
+		}
+		return key, nil
+	}
+	value, err := p.parseExpression()
+	if err != nil {
+		return nil, err
+	}
+	return &ast.JSONObjectEntry{Key: key, Value: value, KeyKeyword: keyword, Colon: colon, Pos: pos}, nil
+}
+
+// isXMLNamedArgFunc reports whether funcName is an SQL/XML constructor whose
+// arguments are named with AS: XMLATTRIBUTES(a AS "x"), XMLFOREST(a AS x).
+func isXMLNamedArgFunc(funcName string) bool {
+	return equalsUpper(funcName, "XMLATTRIBUTES") || equalsUpper(funcName, "XMLFOREST")
+}
+
+// hasQuirkyArgs reports whether funcName is one of the functions whose
+// arguments have syntax of their own: CURSOR, MULTISET, XMLTABLE, XMLFOREST,
+// OPENROWSET, JSON_TABLE, JSON_OBJECT, XMLATTRIBUTES and JSON_OBJECTAGG. It
+// looks at the name length first so ordinary calls pay almost nothing.
+func hasQuirkyArgs(funcName string) bool {
+	switch len(funcName) {
+	case 6:
+		return equalsUpper(funcName, "CURSOR")
+	case 8:
+		return equalsUpper(funcName, "MULTISET") || equalsUpper(funcName, "XMLTABLE")
+	case 9:
+		return equalsUpper(funcName, "XMLFOREST")
+	case 10:
+		return equalsUpper(funcName, "OPENROWSET") || equalsUpper(funcName, "JSON_TABLE")
+	case 11:
+		return equalsUpper(funcName, "JSON_OBJECT")
+	case 13:
+		return equalsUpper(funcName, "XMLATTRIBUTES")
+	case 14:
+		return equalsUpper(funcName, "JSON_OBJECTAGG")
+	}
+	return false
+}
+
+// Co-allocation blocks: a FunctionCall and its argument array in one object.
+// Most calls take one or two arguments (COUNT(*), SUM(x), COALESCE(a, b)).
+// The blocks are 200, 216 and 232 bytes (size classes 208, 224 and 240);
+// TestCoallocBlockSizes pins them. As with the SELECT blocks (select.go), a
+// caller that keeps only a call's Arguments slice pins the whole block.
+type functionCall1 struct {
+	fc ast.FunctionCall
+	a  [1]ast.Expression
+}
+
+type functionCall2 struct {
+	fc ast.FunctionCall
+	a  [2]ast.Expression
+}
+
+type functionCall3 struct {
+	fc ast.FunctionCall
+	a  [3]ast.Expression
+}
+
+// newFunctionCall returns a FunctionCall whose Arguments is a copy of args
+// with len == cap. Up to three arguments live in the same allocation as the
+// call; a call with no arguments has a nil Arguments slice.
+func newFunctionCall(args []ast.Expression) *ast.FunctionCall {
+	switch len(args) {
+	case 0:
+		return &ast.FunctionCall{}
+	case 1:
+		b := &functionCall1{}
+		b.a[0] = args[0]
+		b.fc.Arguments = b.a[:1:1]
+		return &b.fc
+	case 2:
+		b := &functionCall2{}
+		b.a[0], b.a[1] = args[0], args[1]
+		b.fc.Arguments = b.a[:2:2]
+		return &b.fc
+	case 3:
+		b := &functionCall3{}
+		b.a[0], b.a[1], b.a[2] = args[0], args[1], args[2]
+		b.fc.Arguments = b.a[:3:3]
+		return &b.fc
+	}
+	fc := &ast.FunctionCall{Arguments: make([]ast.Expression, len(args))}
+	copy(fc.Arguments, args)
+	return fc
+}

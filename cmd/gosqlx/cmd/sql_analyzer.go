@@ -73,7 +73,7 @@ func (a *SQLAnalyzer) Analyze(astObj *ast.AST, sqlArgs ...string) (*AnalysisRepo
 
 	// Run security scanner for injection patterns (tautologies, UNION-based, time-based, etc.)
 	securityScanner := security.NewScanner()
-	securityResult := securityScanner.Scan(astObj)
+	securityResult := mergeSecurityFindings(securityScanner.Scan(astObj), securityScanner.ScanSQL(sql))
 	a.convertSecurityFindings(securityResult)
 
 	// Calculate final metrics and scores
@@ -507,6 +507,9 @@ func (a *SQLAnalyzer) buildQueryInfo(astObj *ast.AST, sql string) QueryInfo {
 
 	for _, stmt := range astObj.Statements {
 		switch stmt.(type) {
+		case *ast.BatchSeparator:
+			// A GO line is a client directive, not a statement.
+			continue
 		case *ast.SelectStatement:
 			stmtTypes = append(stmtTypes, "SELECT")
 		case *ast.InsertStatement:
@@ -535,7 +538,7 @@ func (a *SQLAnalyzer) buildQueryInfo(astObj *ast.AST, sql string) QueryInfo {
 	return QueryInfo{
 		Size:           size,
 		Lines:          lines,
-		StatementCount: len(astObj.Statements),
+		StatementCount: len(stmtTypes),
 		StatementTypes: stmtTypes,
 	}
 }
@@ -587,4 +590,38 @@ func (a *SQLAnalyzer) convertSecurityFindings(result *security.ScanResult) {
 		a.Issues = append(a.Issues, issue)
 		a.adjustSecurityScore(sev)
 	}
+}
+
+// mergeSecurityFindings combines AST and raw SQL scans, preserving distinct
+// descriptions while avoiding duplicate reports from the two scan paths.
+func mergeSecurityFindings(results ...*security.ScanResult) *security.ScanResult {
+	merged := &security.ScanResult{}
+	type findingKey struct {
+		pattern     security.PatternType
+		severity    security.Severity
+		description string
+	}
+	seen := make(map[findingKey]bool)
+	for _, result := range results {
+		for _, finding := range result.Findings {
+			key := findingKey{finding.Pattern, finding.Severity, finding.Description}
+			if seen[key] {
+				continue
+			}
+			seen[key] = true
+			merged.Findings = append(merged.Findings, finding)
+			merged.TotalCount++
+			switch finding.Severity {
+			case security.SeverityCritical:
+				merged.CriticalCount++
+			case security.SeverityHigh:
+				merged.HighCount++
+			case security.SeverityMedium:
+				merged.MediumCount++
+			case security.SeverityLow:
+				merged.LowCount++
+			}
+		}
+	}
+	return merged
 }

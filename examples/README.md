@@ -1,6 +1,6 @@
 # GoSQLX Examples
 
-**Version**: v1.16.0
+**Version**: v1.17.0
 
 This directory contains various examples demonstrating how to use the GoSQLX SQL parsing SDK.
 

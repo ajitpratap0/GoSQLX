@@ -83,3 +83,30 @@ func TestLooksLikeSQL(t *testing.T) {
 		}
 	}
 }
+
+func TestDetectAndReadInputSQLWithSlashes(t *testing.T) {
+	for _, sql := range []string{"SELECT 1 UNION/**/SELECT 2", "SELECT 4 / 2", "SELECT '/tmp/query.sql'"} {
+		result, err := DetectAndReadInput(sql)
+		if err != nil {
+			t.Fatalf("DetectAndReadInput(%q): %v", sql, err)
+		}
+		if result.Type != InputTypeSQL || string(result.Content) != sql {
+			t.Fatalf("unexpected input: %+v", result)
+		}
+	}
+	// An existing file remains a file even when its name looks like SQL.
+	path := filepath.Join(t.TempDir(), "SELECT query.sql")
+	if err := os.WriteFile(path, []byte("SELECT 7"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	result, err := DetectAndReadInput(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Type != InputTypeFile || string(result.Content) != "SELECT 7" {
+		t.Fatalf("unexpected file input: %+v", result)
+	}
+	if _, err := DetectAndReadInput(filepath.Join(t.TempDir(), "missing.sql")); err == nil {
+		t.Fatal("missing file should fail")
+	}
+}

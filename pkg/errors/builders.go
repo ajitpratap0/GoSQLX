@@ -255,7 +255,7 @@ func TokenLimitReachedError(count, maxTokens int, location models.Location, sql 
 		ErrCodeTokenLimitReached,
 		fmt.Sprintf("token count %d exceeds limit of %d tokens", count, maxTokens),
 		location,
-	).WithContext(sql, 1).WithHint(fmt.Sprintf("Simplify query or adjust MaxTokens limit (currently %d)", maxTokens))
+	).WithContext(sql, 1).WithHint(fmt.Sprintf("Split the input into smaller statements; the limit is fixed at %d tokens per input", maxTokens))
 }
 
 // TokenizerPanicError creates an E1008 error for a panic that was recovered inside

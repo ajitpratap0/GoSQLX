@@ -584,3 +584,28 @@ func TestDialect_ConcurrentConfigurationChange(t *testing.T) {
 	// Every message written concurrently is still a well-formed frame.
 	s.frames(t)
 }
+
+// TestDialect_DocumentSymbolsWithGO checks the SQL Server outline of a script
+// with GO batch separators: the separators get no symbol, and each statement
+// ends before the GO line that follows it instead of running to the end of
+// the file.
+func TestDialect_DocumentSymbolsWithGO(t *testing.T) {
+	const uri = "file:///batches.sql"
+	const sql = "SELECT a FROM t\nGO\nUPDATE u SET b = 1\nGO 2\nDELETE FROM v WHERE c = 1"
+	s := newDialectServer(t, dialectOpts("sqlserver"), false)
+	s.Documents().Open(uri, "sql", 1, sql)
+	symbols := s.symbols(t, uri)
+	if len(symbols) != 3 {
+		t.Fatalf("symbols = %d (%+v), want 3", len(symbols), symbols)
+	}
+	wantLines := [][2]int{{0, 0}, {2, 2}, {4, 4}} // start and end line of each statement
+	for i, sym := range symbols {
+		if strings.HasPrefix(sym.Name, "GO") || strings.HasPrefix(sym.Name, "Statement #") {
+			t.Errorf("symbol %d is %q, want a statement symbol", i, sym.Name)
+		}
+		if sym.Range.Start.Line != wantLines[i][0] || sym.Range.End.Line != wantLines[i][1] {
+			t.Errorf("symbol %d (%s) spans lines %d-%d, want %d-%d", i, sym.Name,
+				sym.Range.Start.Line, sym.Range.End.Line, wantLines[i][0], wantLines[i][1])
+		}
+	}
+}

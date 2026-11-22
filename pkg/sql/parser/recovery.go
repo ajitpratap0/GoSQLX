@@ -17,6 +17,7 @@ package parser
 import (
 	"fmt"
 
+	"github.com/ajitpratap0/GoSQLX/internal/stackgrow"
 	"github.com/ajitpratap0/GoSQLX/pkg/models"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/token"
@@ -100,6 +101,11 @@ func (p *Parser) isStatementStartingKeyword() bool {
 // either past a semicolon or to a statement-starting keyword.
 func (p *Parser) synchronize() {
 	for p.currentPos < len(p.tokens) && !p.isType(models.TokenTypeEOF) {
+		// Leave GO for the statement loop so recovery preserves batch scope
+		// even when the statement immediately before it was malformed.
+		if _, ok := p.batchSeparatorEnd(p.currentPos); ok {
+			return
+		}
 		// If we hit a semicolon, consume it and stop
 		if p.isType(models.TokenTypeSemicolon) {
 			p.advance()
@@ -178,10 +184,15 @@ func (p *Parser) ParseWithRecoveryFromModelTokens(tokens []models.TokenWithSpan)
 // It expects a preprocessed []models.TokenWithSpan (output of preprocessTokens or the parser-owned preprocess buffer;
 // nothing may retain p.tokens beyond the call).
 func (p *Parser) parseWithRecovery(tokens []models.TokenWithSpan) ([]ast.Statement, []error) {
+	stackgrow.Reserve()
 	p.tokens = tokens
 	p.currentPos = 0
+	p.implicitEnd = 0
+	p.openBlockWork = 0
 	if len(tokens) > 0 {
-		p.currentToken = tokens[0]
+		p.currentToken = &tokens[0]
+	} else {
+		p.currentToken = &p.eof
 	}
 
 	statements := make([]ast.Statement, 0, 8)
@@ -193,9 +204,22 @@ func (p *Parser) parseWithRecovery(tokens []models.TokenWithSpan) ([]ast.Stateme
 			p.advance()
 			continue
 		}
+		if separator, ok := p.parseBatchSeparator(); ok {
+			statements = append(statements, separator)
+			continue
+		}
 
 		stmtStartPos := p.currentPos
 		stmt, err := p.parseStatement()
+		if err == nil {
+			// A statement that ran across a GO line is reported, and parsing
+			// resumes at that line so the batch boundary is kept.
+			if at, gerr := p.batchLineError(stmtStartPos, nil); gerr != nil {
+				errors = append(errors, gerr)
+				p.seek(at)
+				continue
+			}
+		}
 		if err != nil {
 			// Create a ParseError with position info, preserving original error
 			loc := p.currentLocation()
@@ -222,6 +246,8 @@ func (p *Parser) parseWithRecovery(tokens []models.TokenWithSpan) ([]ast.Stateme
 			// Optionally consume semicolon after statement
 			if p.isType(models.TokenTypeSemicolon) {
 				p.advance()
+			} else {
+				p.noteStatementEnd()
 			}
 		}
 	}

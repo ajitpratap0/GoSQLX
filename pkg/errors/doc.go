@@ -304,7 +304,7 @@
 //	// Token count limits
 //	err := errors.TokenLimitReachedError(15000, 10000, location, sqlSource)
 //	// Message: "token count 15000 exceeds limit of 10000 tokens"
-//	// Hint: "Simplify query or adjust MaxTokens limit (currently 10000)"
+//	// Hint: "Split the input into smaller statements; the limit is fixed at 10000 tokens per input"
 //
 // Panic Recovery:
 //

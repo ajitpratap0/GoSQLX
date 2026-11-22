@@ -15,7 +15,7 @@ Pick one of three setups:
 Install a specific release so that a new GoSQLX version cannot change your CI results overnight:
 
 ```bash
-go install github.com/ajitpratap0/GoSQLX/cmd/gosqlx@v1.16.0
+go install github.com/ajitpratap0/GoSQLX/cmd/gosqlx@v1.17.0
 ```
 
 Bump the version deliberately, in its own pull request, the same way you would bump any other linter.
@@ -44,7 +44,7 @@ jobs:
         with:
           go-version: '1.26'
       - name: Install gosqlx
-        run: go install github.com/ajitpratap0/GoSQLX/cmd/gosqlx@v1.16.0
+        run: go install github.com/ajitpratap0/GoSQLX/cmd/gosqlx@v1.17.0
       - name: Validate and lint SQL
         run: gosqlx action --files '**/*.sql' --severity warning
       - name: Check formatting
@@ -179,7 +179,7 @@ To apply only some rules or change their settings, build a linter from `pkg/lint
 Turning on every rule at once on a large SQL directory usually produces hundreds of findings. A gradual path:
 
 1. Start with validation only (`gosqlx validate`). Broken SQL is never intentional.
-2. Add `gosqlx format --check` after one pull request that runs `gosqlx format -i` over the whole tree. Note that the formatter drops SQL comments; see [Format SQL in Go](format-sql-in-go.md#comments-are-not-preserved).
+2. Add `gosqlx format --check` after one pull request that runs `gosqlx format -i` over the whole tree. Releases before v1.17.0 drop SQL comments when formatting; v1.17.0 keeps them. See [Format SQL in Go](format-sql-in-go.md#comments-and-optimizer-hints).
 3. Enable lint rules a few at a time with `--rules`, fixing existing findings as you go. `gosqlx lint --auto-fix` fixes the whitespace and keyword-case rules automatically.
 
 ## Next steps

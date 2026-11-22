@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { PROJECT, QA_CORPUS } from '@/data/metrics';
+import { PROJECT, QA_CORPUS, REALWORLD_CORPUS, REALWORLD_STATUS, type RealWorldDialect } from '@/data/metrics';
 import { FadeIn } from '@/components/ui/FadeIn';
 
 const COMPAT_PATH = '/docs/reference/sql-compatibility/';
@@ -7,7 +7,7 @@ const COMPAT_PATH = '/docs/reference/sql-compatibility/';
 interface Dialect {
   name: string;
   /** The dialect string passed to the parser (docs/SQL_COMPATIBILITY.md, "Supported Dialects"). */
-  key: string;
+  key: RealWorldDialect;
   /**
    * Heading slug of this dialect's "Known Gaps by Dialect" section in
    * docs/SQL_COMPATIBILITY.md (github-slugger of the "####" heading).
@@ -64,7 +64,14 @@ export function DialectShowcase() {
                   </span>
                   <h3 className="text-sm font-semibold text-fg">{dialect.name}</h3>
                   <code className="mt-1 text-xs text-fg-subtle">&quot;{dialect.key}&quot;</code>
-                  <span className="mt-3 text-xs text-accent">
+                  <span className="mt-3 text-xs text-fg">
+                    Production-style corpus:{' '}
+                    {REALWORLD_CORPUS.perDialect[dialect.key].pass}/{REALWORLD_CORPUS.perDialect[dialect.key].total}
+                    {REALWORLD_STATUS && (
+                      <span className="block text-fg-muted">{REALWORLD_STATUS}</span>
+                    )}
+                  </span>
+                  <span className="mt-2 text-xs text-accent">
                     {dialect.qa
                       ? `QA corpus pass ${dialect.qa.pass}/${dialect.qa.total} (${QA_CORPUS.release})`
                       : 'Coverage notes'}

@@ -18,8 +18,10 @@ import (
 	"bytes"
 	"sync"
 
+	"github.com/ajitpratap0/GoSQLX/internal/poolstats"
 	"github.com/ajitpratap0/GoSQLX/pkg/metrics"
 	"github.com/ajitpratap0/GoSQLX/pkg/models"
+	sqldialect "github.com/ajitpratap0/GoSQLX/pkg/sql/dialect"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/keywords"
 )
 
@@ -38,6 +40,12 @@ const maxRetainedComments = 1024
 // that scanned an input with many lines drops the slice instead of holding it
 // for later callers; load re-grows it for the next large input.
 const maxRetainedLineStarts = 8 << 10
+
+// maxRetainedTokBuf is the largest scratch token slice capacity (in tokens,
+// about 288 KiB at 72 B per token) Reset keeps, matching the parser's
+// maxPooledTokenBuf. A larger slice is dropped so one huge query does not pin
+// memory in the tokenizer pool.
+const maxRetainedTokBuf = 4096
 
 // tokenizerPool provides object pooling for Tokenizer instances.
 // This dramatically reduces allocations in high-throughput scenarios.
@@ -87,7 +95,7 @@ func GetTokenizer() *Tokenizer {
 
 	// Record pool metrics
 	metrics.RecordPoolGet(true) // Assume from pool (New() creates if empty)
-	metrics.RecordNamedPoolGet("tokenizer")
+	poolstats.Tokenizer.Get()
 
 	return t
 }
@@ -128,12 +136,13 @@ func PutTokenizer(t *Tokenizer) {
 		// Tokenize call where the configured dialect must persist. The dialect
 		// is a plain field, so restoring it is a single assignment.
 		t.dialect = keywords.DialectPostgreSQL
+		t.strEscape = sqldialect.StringEscapeStrict
 
 		tokenizerPool.Put(t)
 
 		// Record pool return
 		metrics.RecordPoolPut()
-		metrics.RecordNamedPoolPut("tokenizer")
+		poolstats.Tokenizer.Put()
 	}
 }
 
@@ -213,6 +222,7 @@ func (t *Tokenizer) Reset() {
 	// Invalidate the toSQLPosition line hint: it is only valid for the
 	// input and lineStarts it was built on.
 	t.posCacheLine = 0
+	t.curLi, t.curLS, t.nextLS = 0, 0, 0
 	t.tokStart = models.Location{}
 	t.inlLine, t.inlScan, t.inlCode = 0, 0, false
 
@@ -234,4 +244,17 @@ func (t *Tokenizer) Reset() {
 		t.Comments = t.Comments[:0]
 	}
 	t.emitted = 0
+
+	// Zero the scratch tokens and the Words handed out from the scratch slab
+	// (their strings belong to the previous input) and keep the backing
+	// arrays unless the token slice has grown large. useWordSlab never grows
+	// wordSlab past maxRetainedWordSlab.
+	if cap(t.tokBuf) > maxRetainedTokBuf {
+		t.tokBuf = nil
+	} else {
+		clear(t.tokBuf)
+		t.tokBuf = t.tokBuf[:0]
+	}
+	clear(t.wordSlab[:t.wordSlabUsed])
+	t.wordSlabUsed = 0
 }

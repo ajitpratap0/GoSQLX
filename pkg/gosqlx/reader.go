@@ -98,9 +98,10 @@ func ParseReader(ctx context.Context, r io.Reader, opts ...Option) (*Tree, error
 // splitting or parsing work begins.
 //
 // Empty segments (whitespace between consecutive semicolons, trailing
-// whitespace after the last ';', etc.) are skipped. The first segment that
-// fails to parse short-circuits the call and returns its error wrapped in
-// the usual ParseTree sentinels, prefixed with the 1-based statement index.
+// whitespace after the last ';', a trailing comment, etc.) are skipped. The
+// first segment that fails to parse short-circuits the call and returns its
+// error wrapped in the usual ParseTree sentinels, prefixed with the 1-based
+// statement index.
 //
 // Example:
 //
@@ -136,7 +137,7 @@ func ParseReaderMultiple(ctx context.Context, r io.Reader, opts ...Option) ([]*T
 	trees := make([]*Tree, 0, len(segments))
 	for i, seg := range segments {
 		seg = strings.TrimSpace(seg)
-		if seg == "" {
+		if seg == "" || commentsOnly(seg) {
 			continue
 		}
 		tree, err := ParseTree(ctx, seg, opts...)

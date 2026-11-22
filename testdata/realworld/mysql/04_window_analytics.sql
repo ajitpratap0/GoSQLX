@@ -1,0 +1,23 @@
+-- Analytics with window functions and CTE chains (MySQL 8.0)
+SELECT id, customer_id, total, ROW_NUMBER() OVER (PARTITION BY customer_id ORDER BY created_at) AS rn FROM orders;
+SELECT id, RANK() OVER (ORDER BY total DESC) AS r, DENSE_RANK() OVER (ORDER BY total DESC) AS dr FROM orders;
+SELECT id, SUM(total) OVER (PARTITION BY customer_id ORDER BY created_at ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS running FROM orders;
+SELECT day, revenue, AVG(revenue) OVER (ORDER BY day ROWS BETWEEN 6 PRECEDING AND CURRENT ROW) AS ma7 FROM daily_revenue;
+SELECT id, LAG(total, 1, 0) OVER (PARTITION BY customer_id ORDER BY created_at) AS prev_total, LEAD(total) OVER (PARTITION BY customer_id ORDER BY created_at) AS next_total FROM orders;
+SELECT id, NTILE(4) OVER (ORDER BY total) AS quartile, PERCENT_RANK() OVER (ORDER BY total) AS pr, CUME_DIST() OVER (ORDER BY total) AS cd FROM orders;
+SELECT id, FIRST_VALUE(total) OVER w AS f, LAST_VALUE(total) OVER (w ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS l, NTH_VALUE(total, 2) OVER w AS n FROM orders WINDOW w AS (PARTITION BY customer_id ORDER BY created_at);
+SELECT id, SUM(total) OVER (ORDER BY created_at RANGE BETWEEN INTERVAL 7 DAY PRECEDING AND CURRENT ROW) FROM orders;
+WITH recent AS (SELECT * FROM orders WHERE created_at >= NOW() - INTERVAL 7 DAY) SELECT customer_id, COUNT(*) FROM recent GROUP BY customer_id;
+WITH a AS (SELECT 1 AS x), b AS (SELECT x + 1 AS y FROM a), c AS (SELECT y * 2 AS z FROM b) SELECT * FROM c;
+WITH RECURSIVE seq (n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM seq WHERE n < 10) SELECT n FROM seq;
+WITH RECURSIVE tree AS (SELECT id, parent_id, name, 0 AS depth FROM categories WHERE parent_id IS NULL UNION ALL SELECT c.id, c.parent_id, c.name, t.depth + 1 FROM categories c JOIN tree t ON c.parent_id = t.id) SELECT * FROM tree ORDER BY depth, name;
+WITH ranked AS (SELECT p.*, ROW_NUMBER() OVER (PARTITION BY category_id ORDER BY sales DESC) AS rn FROM products p) SELECT * FROM ranked WHERE rn <= 3;
+WITH monthly AS (SELECT DATE_FORMAT(created_at, '%Y-%m-01') AS m, SUM(total) AS rev FROM orders GROUP BY 1) SELECT m, rev, rev - LAG(rev) OVER (ORDER BY m) AS delta FROM monthly;
+WITH t AS (SELECT * FROM a) UPDATE b JOIN t ON b.id = t.id SET b.v = t.v;
+WITH dup AS (SELECT id, ROW_NUMBER() OVER (PARTITION BY email ORDER BY id) AS rn FROM users) DELETE FROM users WHERE id IN (SELECT id FROM dup WHERE rn > 1);
+SELECT * FROM (SELECT customer_id, total, ROW_NUMBER() OVER (PARTITION BY customer_id ORDER BY total DESC) AS rn FROM orders) x WHERE x.rn = 1;
+SELECT customer_id, SUM(total) AS s, SUM(SUM(total)) OVER () AS grand, ROUND(100 * SUM(total) / SUM(SUM(total)) OVER (), 2) AS pct FROM orders GROUP BY customer_id;
+SELECT COUNT(*) OVER () AS total_rows, id FROM users LIMIT 10;
+SELECT * FROM orders o JOIN LATERAL (SELECT * FROM order_items i WHERE i.order_id = o.id ORDER BY qty DESC LIMIT 1) li ON TRUE;
+SELECT a.n FROM (VALUES ROW(1), ROW(2), ROW(3)) AS a (n);
+TABLE users ORDER BY id LIMIT 5;

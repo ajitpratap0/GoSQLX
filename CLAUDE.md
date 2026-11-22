@@ -8,11 +8,52 @@ GoSQLX is a **production-ready**, **race-free**, high-performance SQL parsing SD
 
 **Requirements**: Go 1.26+ (upgraded from 1.23 to fix stdlib vulnerabilities; `mark3labs/mcp-go` requires 1.23)
 
-**Production Status**: ✅ Validated for production deployment (v1.6.0+, current: v1.16.0)
+**Production Status**: ✅ Validated for production deployment (v1.6.0+, current: v1.17.0)
 - Thread-safe with zero race conditions (20,000+ concurrent operations tested)
 - 1.38M+ ops/sec sustained, 1.5M peak with memory-efficient object pooling
 - ~80-85% SQL-99 compliance (window functions, CTEs, set operations, MERGE, etc.)
 - Multi-dialect support: PostgreSQL, MySQL, MariaDB, SQL Server, Oracle, SQLite, Snowflake, ClickHouse (8 dialects with dedicated grammar); `--dialect` also accepts `generic`, `bigquery`, `redshift` (11 names)
+
+## Engineering Principles (maintainer rules)
+
+- **Fix the root cause, the right way.** Prefer the correct fix over a
+  workaround, even when it is a larger refactor or changes public API or
+  behaviour. Never relax a test, threshold or timeout to hide a problem.
+- **Breaking changes are allowed when they are the right fix.** Ship them in
+  the current release (no separate major version or `/v2` module path) with
+  an explicit migration entry in a `changelog.d/<slug>.breaking-changes.md`
+  fragment and the PR body. Do not substitute an opt-in flag or compatibility shim for the right
+  design unless the maintainer asks for one.
+- **Nothing is deferred to a future major ("2.0", "v-next").** Work planned for
+  a later major ships in the current release. An idea with weak evidence is
+  prototyped and measured now, then shipped or closed with the numbers.
+- **Measure, don't assume.** Performance changes are judged by the amd64 perf
+  gate (`.github/workflows/perf-gate.yml`); missing a target is reported, not
+  hidden.
+
+## Agent Routing (AI-assisted work in this repo)
+
+- **Implementation and grunt work go to Codex** via `~/.claude/scripts/codex-implement`
+  (fast service tier). Use `--model gpt-6.1-sol` for hard or cross-cutting
+  changes, `gpt-6.1-terra` for standard tasks, and `gpt-6-luna` for mechanical
+  edits, docs and bulk fixes.
+- **When the work has to be done in Claude**, use Sonnet 5.5 for implementation and
+  review and Haiku 5.5 for extraction, docs and simple checks.
+- **Opus 5.5 plans and orchestrates.** It writes each change's plan and the
+  Codex brief, coordinates the work through dynamic workflows and makes
+  decisions. **Opus reviews every plan before Codex implements it and every
+  PR before it merges**, with no exceptions for earlier approvals. It does
+  not do bulk implementation. Use it
+  only when it is needed, to save usage limits.
+- **Cleanup is part of every task.** When a task finishes (merged, closed or
+  skipped), remove its worktree and its local and remote branches, its Codex
+  run directories and per-run `GOCACHE` dirs, any probe or throwaway branches,
+  scratch builds, and leftover background processes. Never delete
+  `~/Library/Caches/go-build` or another task's files. An open PR keeps its
+  worktree as the handoff, with build junk removed.
+- Codex never commits or pushes. The orchestrator reviews the diff and runs the
+  full gate (`task check`, `task test:cbinding`, `go test ./pkg/compatibility/...`,
+  staticcheck) before any commit.
 
 ## Architecture
 
@@ -58,7 +99,7 @@ metrics    → (no deps)
 keywords   → (no deps)
 token      → (no deps)
 tokenizer  → models, errors, metrics, keywords
-ast        → models, metrics
+ast        → models, metrics, internal/reflplan
 parser     → models, errors, keywords, token, tokenizer, ast
 
 # Higher-level / product packages
@@ -191,8 +232,7 @@ go test -bench=. -benchmem -cpuprofile=cpu.prof ./pkg/...    # With profiling
 ```
 
 ### Performance Regression Tests
-- Baselines defined in `performance_baselines.json` at project root
-- CI environment variability may require baseline adjustments (tolerance %)
+- `TestPerformanceRegression` is a smoke test only (loose ceilings in `performance_baselines.json`); the real gate is `task bench:gate` plus `task bench:baseline` (`benchmarks/baselines/<arch>.json`), see `docs/PERFORMANCE_METHODOLOGY.md`
 - Run locally: `go test -run TestPerformanceRegression ./pkg/sql/parser/`
 - Skip with race detector (adds 3-5x overhead): automatically skipped
 
@@ -205,7 +245,7 @@ go test -bench=. -benchmem -cpuprofile=cpu.prof ./pkg/...    # With profiling
 4. Add parsing logic in `pkg/sql/parser/parser.go`
 5. Write comprehensive tests
 6. Run: `task test:race && task bench`
-7. Update CHANGELOG.md
+7. Add a `changelog.d/<slug>.<section>.md` fragment with Markdown list items (see `changelog.d/README.md`), then run `task changelog:check`.
 
 ### Debugging Parsing Issues
 ```bash
@@ -222,7 +262,7 @@ Use the visitor pattern in `pkg/sql/ast/visitor.go` to traverse and inspect AST.
 ```bash
 # 1. Develop in feature branch
 git checkout -b feature/branch-name
-# ... make changes, update CHANGELOG.md as [Unreleased] ...
+# ... make changes, add a changelog.d/<slug>.<section>.md fragment ...
 git push origin feature/branch-name
 
 # 2. Create PR and get it merged
@@ -230,6 +270,7 @@ git push origin feature/branch-name
 # 3. After merge, create docs PR for release finalization
 git checkout main && git pull
 git checkout -b docs/vX.Y.Z-release
+task changelog:collect
 # Update CHANGELOG.md with version and date
 git push origin docs/vX.Y.Z-release
 
@@ -240,7 +281,22 @@ git push origin vX.Y.Z
 
 # 5. Create GitHub release
 gh release create vX.Y.Z --title "vX.Y.Z: Title" --notes "..."
+
+# 6. Post-tag refresh (same day)
+gh run list --workflow bench-compare.yml --branch vX.Y.Z
+git checkout -b docs/vX.Y.Z-post-tag
+# Run on a quiet machine; refresh benchmark results and print parse medians.
+task release:refresh-benchmarks TAG=vX.Y.Z
+# Hand-copy printed medians into performance_baselines.json and website/src/data/metrics.ts.
+# Update the llms.txt performance line, then sync README banners and pins.
+task docs:metrics
+git push origin docs/vX.Y.Z-post-tag
+gh pr create --fill
+# After the PR merges, run:
+gh workflow run claims-drift.yml
 ```
+
+Why: the tag push runs bench-compare automatically, but publishing its results is a PR; claims-drift fails weekly until that PR lands.
 
 ## Pre-commit Hooks
 

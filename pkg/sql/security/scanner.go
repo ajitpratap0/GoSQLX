@@ -145,8 +145,8 @@
 //
 // The scanner uses pre-compiled regex patterns (initialized once at package load)
 // for optimal performance. Scanning is thread-safe and suitable for concurrent use.
-// Regex groups are guarded by case-fold-aware literal prefilters derived from each
-// pattern at init, so clean input rarely reaches the regex engine.
+// Regex groups use derived literal filters checked with one case-fold-aware
+// automaton pass per input, so clean input rarely reaches the regex engine.
 //
 // # Production Integration
 //
@@ -194,7 +194,6 @@ package security
 
 import (
 	"fmt"
-	"regexp"
 	"strings"
 	"sync"
 
@@ -241,24 +240,44 @@ type commentPattern struct {
 	severity    Severity
 }
 
-// Pre-compiled regex patterns for performance (compiled once at package init)
+// Pattern tables and the literal matcher are initialized together and read-only
+// afterwards, so concurrent scans share no mutable state.
 var (
-	// regexGroups is built once by initCompiledPatterns under compiledPatternsOnce
-	// and is read-only afterwards, so it is safe for concurrent use.
-	regexGroups          map[PatternType]*patternGroup
-	compiledPatternsOnce sync.Once
-
-	// Comment detection patterns (pre-compiled)
-	commentPatterns     []commentPattern
-	commentPatternsOnce sync.Once
+	patternsOnce    sync.Once
+	literalMatcher  *litMatcher
+	regexGroups     map[PatternType]*patternGroup
+	commentPatterns []commentPattern
 
 	// tautologyCapturePatterns are used by detectTautologyInSQL to find candidate
 	// equality pairs. Each pattern captures a left-hand value; the caller verifies
 	// that the right-hand value matches. Go RE2 does not support backreferences so
 	// the two-step approach is used instead.
 	tautologyCapturePatterns []compiledPattern
-	tautologyCaptureOnce     sync.Once
 )
+
+func initPatterns() {
+	initCompiledPatterns()
+	initCommentPatterns()
+	initTautologyCapturePatterns()
+	var patterns []*compiledPattern
+	for _, pt := range []PatternType{
+		PatternTautology, PatternTimeBased, PatternOutOfBand, PatternDangerousFunc,
+		PatternUnionInjection, PatternUnionGeneric, PatternStackedQuery,
+	} {
+		group := regexGroups[pt]
+		for i := range group.patterns {
+			patterns = append(patterns, &group.patterns[i])
+		}
+	}
+	patterns = append(patterns, &stackedPrefilter)
+	for i := range commentPatterns {
+		patterns = append(patterns, &commentPatterns[i].compiledPattern)
+	}
+	for i := range tautologyCapturePatterns {
+		patterns = append(patterns, &tautologyCapturePatterns[i])
+	}
+	literalMatcher = buildLiteralMatcher(patterns)
+}
 
 // initCompiledPatterns initializes all regex patterns once at package level.
 func initCompiledPatterns() {
@@ -266,11 +285,11 @@ func initCompiledPatterns() {
 		// Time-based blind injection functions
 		PatternTimeBased: {
 			patterns: []compiledPattern{
-				compilePattern(`(?i)\bSLEEP\s*\(`),
-				compilePattern(`(?i)\bWAITFOR\s+DELAY\b`),
-				compilePattern(`(?i)\bpg_sleep\s*\(`),
-				compilePattern(`(?i)\bBENCHMARK\s*\(`),
-				compilePattern(`(?i)\bDBMS_LOCK\.SLEEP\s*\(`),
+				compilePattern(`(?i)\bSLEEP[\s\v]*\(`),
+				compilePattern(`(?i)\bWAITFOR[\s\v]+DELAY\b`),
+				compilePattern(`(?i)\bpg_sleep[\s\v]*\(`),
+				compilePattern(`(?i)\bBENCHMARK[\s\v]*\(`),
+				compilePattern(`(?i)\bDBMS_LOCK\.SLEEP[\s\v]*\(`),
 			},
 			severity:   SeverityHigh,
 			risk:       "Time-based blind SQL injection",
@@ -281,16 +300,16 @@ func initCompiledPatterns() {
 		PatternOutOfBand: {
 			patterns: []compiledPattern{
 				compilePattern(`(?i)\bxp_cmdshell\b`),
-				compilePattern(`(?i)\bLOAD_FILE\s*\(`),
-				compilePattern(`(?i)\bINTO\s+OUTFILE\b`),
-				compilePattern(`(?i)\bINTO\s+DUMPFILE\b`),
+				compilePattern(`(?i)\bLOAD_FILE[\s\v]*\(`),
+				compilePattern(`(?i)\bINTO[\s\v]+OUTFILE\b`),
+				compilePattern(`(?i)\bINTO[\s\v]+DUMPFILE\b`),
 				compilePattern(`(?i)\bUTL_HTTP\b`),
 				compilePattern(`(?i)\bDBMS_LDAP\b`),
-				compilePattern(`(?i)\bEXEC\s+master\b`),
+				compilePattern(`(?i)\bEXEC[\s\v]+master\b`),
 				compilePattern(`(?i)\bsp_oacreate\b`),
 				// ClickHouse table functions that reach files, URLs, object
 				// stores, other servers or external programs.
-				compilePattern(`(?i)\b(?:FROM|JOIN)\s+(?:url|urlCluster|file|fileCluster|remote|remoteSecure|s3|s3Cluster|gcs|azureBlobStorage|hdfs|hdfsCluster|jdbc|odbc|mysql|postgresql|mongodb|redis|sqlite|executable)\s*\(`),
+				withGuard(compilePattern(`(?i)\b(?:FROM|JOIN)[\s\v]+(?:url|urlCluster|file|fileCluster|remote|remoteSecure|s3|s3Cluster|gcs|azureBlobStorage|hdfs|hdfsCluster|jdbc|odbc|mysql|postgresql|mongodb|redis|sqlite|executable)[\s\v]*\(`), hasTableFnCandidate),
 			},
 			severity:   SeverityCritical,
 			risk:       "Out-of-band data exfiltration or command execution",
@@ -300,10 +319,10 @@ func initCompiledPatterns() {
 		// Dangerous functions that might indicate injection
 		PatternDangerousFunc: {
 			patterns: []compiledPattern{
-				compilePattern(`(?i)\bEXEC\s*\(`),
-				compilePattern(`(?i)\bEXECUTE\s+IMMEDIATE\b`),
+				compilePattern(`(?i)\bEXEC[\s\v]*\(`),
+				compilePattern(`(?i)\bEXECUTE[\s\v]+IMMEDIATE\b`),
 				compilePattern(`(?i)\bsp_executesql\b`),
-				compilePattern(`(?i)\bPREPARE\s+\w+\s+FROM\b`),
+				compilePattern(`(?i)\bPREPARE[\s\v]+\w+[\s\v]+FROM\b`),
 			},
 			severity:   SeverityMedium,
 			risk:       "Dynamic SQL execution vulnerability",
@@ -317,10 +336,10 @@ func initCompiledPatterns() {
 		PatternTautology: {
 			patterns: []compiledPattern{
 				// OR TRUE
-				compilePattern(`(?i)\bOR\s+TRUE\b`),
+				compilePattern(`(?i)\bOR[\s\v]+TRUE\b`),
 				// || TRUE: || is logical OR in MySQL and MariaDB (#781), so
 				// ' || TRUE -- is the same bypass as ' OR TRUE --.
-				compilePattern(`(?i)\|\|\s*TRUE\b`),
+				compilePattern(`(?i)\|\|[\s\v]*TRUE\b`),
 			},
 			severity:   SeverityCritical,
 			risk:       "Authentication bypass via always-true condition",
@@ -333,9 +352,9 @@ func initCompiledPatterns() {
 		PatternUnionInjection: {
 			patterns: []compiledPattern{
 				// System table access via UNION (injection fingerprint)
-				compilePattern(`(?i)UNION\s+(ALL\s+)?SELECT.*\b(information_schema|pg_catalog|mysql\b|sys\.)\b`),
+				compilePattern(`(?i)UNION[\s\v]+(ALL[\s\v]+)?SELECT.*\b(information_schema|pg_catalog|mysql\b|sys\.)\b`),
 				// NULL-padded columns (classic injection to match column count)
-				compilePattern(`(?i)UNION\s+(ALL\s+)?SELECT\s+(?:NULL,?\s*){2,}`),
+				compilePattern(`(?i)UNION[\s\v]+(ALL[\s\v]+)?SELECT[\s\v]+(?:NULL,?[\s\v]*){2,}`),
 				// Bare system catalog references (schema enumeration fingerprint)
 				compilePattern(`(?i)\binformation_schema\b`),
 			},
@@ -347,7 +366,7 @@ func initCompiledPatterns() {
 		// Generic UNION SELECT (HIGH): may be legitimate or injection
 		PatternUnionGeneric: {
 			patterns: []compiledPattern{
-				compilePattern(`(?i)\bUNION\s+(ALL\s+)?SELECT\b`),
+				compilePattern(`(?i)\bUNION[\s\v]+(ALL[\s\v]+)?SELECT\b`),
 			},
 			severity:   SeverityHigh,
 			risk:       "Possible UNION-based data extraction; review for legitimacy",
@@ -356,11 +375,6 @@ func initCompiledPatterns() {
 
 		// Stacked query injection patterns (destructive statements after semicolon)
 		PatternStackedQuery: {
-			patterns: []compiledPattern{
-				compilePattern(`;\s*(?i)(DROP|DELETE|TRUNCATE|UPDATE|INSERT|ALTER)\b`),
-				compilePattern(`;\s*(?i)EXEC\b`),
-				compilePattern(`;\s*(?i)EXECUTE\b`),
-			},
 			severity:   SeverityCritical,
 			risk:       "Stacked query injection with destructive operations",
 			suggestion: "Block semicolons in user input or use parameterized queries",
@@ -371,32 +385,18 @@ func initCompiledPatterns() {
 // initCommentPatterns initializes comment detection patterns once.
 func initCommentPatterns() {
 	commentPatterns = []commentPattern{
-		{compilePattern(`--\s*$`), "Trailing SQL comment may indicate injection", SeverityMedium},
-		{compilePattern(`--\s*['")\]]`), "Comment after quote/bracket (potential bypass)", SeverityHigh},
-		{compilePattern(`/\*[^*]*\*+(?:[^/*][^*]*\*+)*/\s*$`), "Unclosed or trailing block comment may indicate injection", SeverityMedium},
-		{compilePattern(`/\*!.*\*/`), "MySQL conditional comment (version-specific execution)", SeverityMedium},
-		{compilePattern(`#\s*$`), "Hash comment at end (MySQL)", SeverityMedium},
-		{compilePattern(`;\s*--`), "Statement terminator followed by comment", SeverityHigh},
+		{compilePattern(`--[\s\v]*$`), "Trailing SQL comment may indicate injection", SeverityMedium},
+		{compilePattern(`--[\s\v]*['")\]]`), "Comment after quote/bracket (potential bypass)", SeverityHigh},
+		{compilePattern(`/\*[^*]*\*+(?:[^/*][^*]*\*+)*/[\s\v]*$`), "Unclosed or trailing block comment may indicate injection", SeverityMedium},
+		{compilePattern(`(?is)/\*(?:M)?!.*\*/`), "MySQL conditional comment (version-specific execution)", SeverityMedium},
+		{compilePattern(`#[\s\v]*$`), "Hash comment at end (MySQL)", SeverityMedium},
+		{compilePattern(`;[\s\v]*--`), "Statement terminator followed by comment", SeverityHigh},
 	}
 }
 
-// maxRegexInputLen guards against ReDoS by limiting the input length
-// fed to regexes with nested quantifiers (e.g. the block-comment pattern).
-//
-// The cap applies to the comment and tautology groups only; the other regex
-// groups remain uncapped exactly as before, so findings on inputs longer than
-// 10_000 bytes are unchanged. The literal prefilters always see the whole
-// (dollar-quote-stripped) input, so a prefilter can never hide a match that lies
-// beyond byte 10_000. Go's RE2 engine is linear-time, so this cap is a
-// constant-factor guard rather than a catastrophic-backtracking fix.
-const maxRegexInputLen = 10_000
-
-func safeRegexMatch(re *regexp.Regexp, s string) bool {
-	if len(s) > maxRegexInputLen {
-		s = s[:maxRegexInputLen]
-	}
-	return re.MatchString(s)
-}
+// MaxScanInputSize matches tokenizer.MaxInputSize (10 MiB). Larger inputs are
+// rejected with an unconditional CRITICAL finding before lexical processing or regex matching.
+const MaxScanInputSize = 10 * 1024 * 1024
 
 // initTautologyCapturePatterns initializes patterns used to detect raw-SQL tautologies.
 // Because Go's RE2 engine does not support backreferences, each pattern captures both
@@ -405,11 +405,11 @@ func safeRegexMatch(re *regexp.Regexp, s string) bool {
 func initTautologyCapturePatterns() {
 	tautologyCapturePatterns = []compiledPattern{
 		// Numeric: two identical digit sequences around '=' (bounded to prevent ReDoS)
-		compilePattern(`(?i)\b(\d{1,6})\s*=\s*(\d{1,6})\b`),
+		compilePattern(`(?i)\b(\d{1,6})[\s\v]*=[\s\v]*(\d{1,6})\b`),
 		// String literal: 'value' = 'value' (max 50 chars per side, no backtracking risk)
-		compilePattern(`(?i)('[^']{0,50}')\s*=\s*('[^']{0,50}')`),
+		compilePattern(`(?i)('[^']{0,50}')[\s\v]*=[\s\v]*('[^']{0,50}')`),
 		// Identifier: col = col (bounded length, word chars + dots)
-		compilePattern(`(?i)\b([a-z_][a-z0-9_.]{0,50})\s*=\s*([a-z_][a-z0-9_.]{0,50})\b`),
+		compilePattern(`(?i)\b([a-z_][a-z0-9_.]{0,50})[\s\v]*=[\s\v]*([a-z_][a-z0-9_.]{0,50})\b`),
 	}
 }
 
@@ -438,6 +438,9 @@ var systemTableNames = []string{
 type PatternType string
 
 const (
+	// PatternInputTooLarge indicates input that was not scanned due to its size.
+	PatternInputTooLarge PatternType = "INPUT_TOO_LARGE"
+
 	// PatternTautology detects always-true conditions (1=1, 'a'='a') used to bypass authentication
 	PatternTautology PatternType = "TAUTOLOGY"
 
@@ -555,9 +558,7 @@ type Scanner struct {
 //	results := scanner.Scan(ast)
 func NewScanner() *Scanner {
 	// Initialize package-level patterns once
-	compiledPatternsOnce.Do(initCompiledPatterns)
-	commentPatternsOnce.Do(initCommentPatterns)
-	tautologyCaptureOnce.Do(initTautologyCapturePatterns)
+	patternsOnce.Do(initPatterns)
 
 	return &Scanner{
 		MinSeverity: SeverityLow,
@@ -600,6 +601,7 @@ func isValidSeverity(severity Severity) bool {
 // tautologies, dangerous functions, UNION-based injection, and other attack vectors.
 //
 // The method is safe for concurrent use as it does not modify the Scanner state.
+// Walk state is drawn from a pool and exclusively owned for each call.
 //
 // Returns a ScanResult containing all detected findings that meet the MinSeverity
 // threshold, along with summary statistics by severity level.
@@ -627,9 +629,12 @@ func (s *Scanner) Scan(tree *ast.AST) *ScanResult {
 		return result
 	}
 
-	for _, stmt := range tree.Statements {
-		s.scanStatement(stmt, result)
-	}
+	w := acquireScanWalker(s, result)
+	// scanWalker.Visit never returns an error, so the Walk result is ignored.
+	_ = ast.Walk(w, tree)
+	// release is deliberately not deferred: if the walk panics, the walker
+	// (possibly holding dirty ancestor slots) is dropped instead of pooled.
+	w.release()
 
 	// Update counts
 	s.updateCounts(result)
@@ -676,46 +681,59 @@ func (s *Scanner) scanSQL(sql string, prefilter bool) *ScanResult {
 		Findings: make([]Finding, 0),
 	}
 
+	if len(sql) > MaxScanInputSize {
+		result.Findings = append(result.Findings, Finding{
+			Severity:    SeverityCritical,
+			Pattern:     PatternInputTooLarge,
+			Description: fmt.Sprintf("input exceeds maximum scannable size (%d bytes > %d bytes); not scanned", len(sql), MaxScanInputSize),
+			Risk:        "SQL could not be checked for injection",
+			Suggestion:  "Reject oversized SQL or reduce it below the scanning limit",
+		})
+		s.updateCounts(result)
+		return result
+	}
+
 	// Strip dollar-quoted string content to prevent false positives
 	sql = stripDollarQuotedStrings(sql)
 
-	// Case-fold the whole stripped input once for the literal prefilters. A nil
-	// folded slice disables prefiltering.
-	var folded []byte
+	// Scan the stripped input once; the zero value disables filters and guards.
+	var pf scanPrefilter
 	if prefilter {
-		bp := getFoldBuf()
-		defer putFoldBuf(bp)
-		folded = foldASCII((*bp)[:0], sql)
-		*bp = folded
+		patternsOnce.Do(initPatterns)
+		pf = scanPrefilter{on: true, present: literalMatcher.scan(sql)}
 	}
 
 	// Check for comment-based bypass patterns in raw SQL
-	s.detectCommentPatterns(sql, folded, result)
+	s.detectCommentPatterns(sql, pf, result)
+
+	// Normalized views only add matches. Required prefilter literals contain no
+	// whitespace, so removing comments cannot introduce a literal absent in raw.
+	views := append([]string{sql}, commentViews(sql)...)
 
 	// Check for tautology patterns (OR 1=1, 'a'='a', etc.)
 	// detectRegexPatterns handles the simple OR TRUE pattern; detectTautologyInSQL
 	// handles equality-based tautologies using a two-step capture approach (RE2
 	// does not support backreferences, so equality is verified programmatically).
-	s.detectRegexPatterns(sql, folded, PatternTautology, result)
-	s.detectTautologyInSQL(sql, folded, result)
+	s.detectRegexPatterns(views, pf, PatternTautology, result)
+	s.detectTautologyInSQL(views, pf, result)
 
 	// Check for time-based patterns
-	s.detectRegexPatterns(sql, folded, PatternTimeBased, result)
+	s.detectRegexPatterns(views, pf, PatternTimeBased, result)
 
 	// Check for out-of-band patterns
-	s.detectRegexPatterns(sql, folded, PatternOutOfBand, result)
+	s.detectRegexPatterns(views, pf, PatternOutOfBand, result)
 
 	// Check for dangerous function patterns
-	s.detectRegexPatterns(sql, folded, PatternDangerousFunc, result)
+	s.detectRegexPatterns(views, pf, PatternDangerousFunc, result)
 
 	// Check for UNION injection fingerprints (CRITICAL: system tables, NULL-padding)
-	s.detectRegexPatterns(sql, folded, PatternUnionInjection, result)
+	s.detectRegexPatterns(views, pf, PatternUnionInjection, result)
 
 	// Check for generic UNION SELECT (HIGH: may be legitimate, but warrants review)
-	s.detectRegexPatterns(sql, folded, PatternUnionGeneric, result)
+	s.detectRegexPatterns(views, pf, PatternUnionGeneric, result)
 
 	// Check for stacked query patterns
-	s.detectRegexPatterns(sql, folded, PatternStackedQuery, result)
+	detectStackedQueries(s, views, pf, result)
 
 	// Update counts
 	s.updateCounts(result)
@@ -723,54 +741,19 @@ func (s *Scanner) scanSQL(sql string, prefilter bool) *ScanResult {
 	return result
 }
 
-// scanStatement analyzes a single statement for injection patterns.
-func (s *Scanner) scanStatement(stmt ast.Statement, result *ScanResult) {
-	switch st := stmt.(type) {
-	case *ast.SelectStatement:
-		s.scanSelectStatement(st, result)
-	case *ast.InsertStatement:
-		s.scanInsertStatement(st, result)
-	case *ast.UpdateStatement:
-		s.scanUpdateStatement(st, result)
-	case *ast.DeleteStatement:
-		s.scanDeleteStatement(st, result)
-	case *ast.SetOperation:
-		s.scanSetOperation(st, result)
-	}
-}
-
-// scanSelectStatement analyzes SELECT for injection patterns.
-func (s *Scanner) scanSelectStatement(stmt *ast.SelectStatement, result *ScanResult) {
-	// Check WHERE clause for tautologies
-	if stmt.Where != nil {
-		s.scanExpression(stmt.Where, result, "WHERE clause")
-	}
-
-	// Check HAVING clause
-	if stmt.Having != nil {
-		s.scanExpression(stmt.Having, result, "HAVING clause")
-	}
-
-	// Check for suspicious function calls in columns
-	for _, col := range stmt.Columns {
-		s.scanExpressionForDangerousFunctions(col, result)
-	}
-
-	// Check table-function references in FROM and JOIN. Joins[i].Left
-	// repeats a reference already in From or an earlier join, so only the
-	// right side is scanned.
-	for i := range stmt.From {
-		s.scanTableReference(&stmt.From[i], result)
-	}
-	for i := range stmt.Joins {
-		s.scanTableReference(&stmt.Joins[i].Right, result)
-	}
+// scanStatementText covers statements whose bodies are retained as text rather
+// than expression nodes, including PREPARE/EXECUTE, T-SQL blocks and CREATE
+// POLICY/TRIGGER. These nodes take only the text path, so AST and text checks
+// cannot report the same occurrence twice. Counts are updated once by Scan.
+func (s *Scanner) scanStatementText(text string, result *ScanResult) {
+	findings := s.ScanSQL(text)
+	result.Findings = append(result.Findings, findings.Findings...)
 }
 
 // scanTableReference checks a function-call table reference such as
 // ClickHouse FROM url(...) or PostgreSQL FROM generate_series(...): the
-// function name against the out-of-band table functions, and the call and
-// its arguments against the dangerous function lists.
+// function name is checked against the out-of-band table functions. Inspect
+// separately visits the FunctionCall and its arguments.
 func (s *Scanner) scanTableReference(ref *ast.TableReference, result *ScanResult) {
 	if ref == nil || ref.TableFunc == nil {
 		return
@@ -787,94 +770,23 @@ func (s *Scanner) scanTableReference(ref *ast.TableReference, result *ScanResult
 			result.Findings = append(result.Findings, finding)
 		}
 	}
-	s.scanFunctionCall(ref.TableFunc, result)
 }
 
-// scanInsertStatement analyzes INSERT for injection patterns.
-func (s *Scanner) scanInsertStatement(stmt *ast.InsertStatement, result *ScanResult) {
-	// Check values for suspicious patterns (multi-row support)
-	for _, row := range stmt.Values {
-		for _, val := range row {
-			s.scanExpressionForDangerousFunctions(val, result)
-		}
-	}
-}
-
-// scanUpdateStatement analyzes UPDATE for injection patterns.
-func (s *Scanner) scanUpdateStatement(stmt *ast.UpdateStatement, result *ScanResult) {
-	// Check WHERE clause
-	if stmt.Where != nil {
-		s.scanExpression(stmt.Where, result, "WHERE clause")
-	}
-
-	// Check SET values
-	for _, assignment := range stmt.Assignments {
-		s.scanExpressionForDangerousFunctions(assignment.Value, result)
-	}
-}
-
-// scanDeleteStatement analyzes DELETE for injection patterns.
-func (s *Scanner) scanDeleteStatement(stmt *ast.DeleteStatement, result *ScanResult) {
-	// Check WHERE clause
-	if stmt.Where != nil {
-		s.scanExpression(stmt.Where, result, "WHERE clause")
-	}
-}
-
-// scanSetOperation analyzes UNION/EXCEPT/INTERSECT for injection patterns.
-//
-// Parenthesized operands produce nested SetOperation trees on either side
-// (e.g. "a UNION (b UNION c)"), so the whole tree is walked once for UNION
-// operands and once for the per-statement checks of each leaf.
-func (s *Scanner) scanSetOperation(stmt *ast.SetOperation, result *ScanResult) {
-	// UNION-based injection detection over the whole set-operation tree.
-	s.checkUnionInjection(stmt, false, result)
-
-	// Scan every leaf statement of the tree.
-	s.scanSetOperationLeaves(stmt, result)
-}
-
-// scanSetOperationLeaves runs the per-statement checks on each non-set-operation
-// operand of stmt, descending into nested set operations.
-func (s *Scanner) scanSetOperationLeaves(stmt *ast.SetOperation, result *ScanResult) {
-	for _, operand := range [2]ast.Statement{stmt.Left, stmt.Right} {
-		switch op := operand.(type) {
-		case nil:
-		case *ast.SetOperation:
-			s.scanSetOperationLeaves(op, result)
-		default:
-			s.scanStatement(op, result)
-		}
-	}
-}
-
-// scanExpression analyzes an expression for injection patterns.
-func (s *Scanner) scanExpression(expr ast.Expression, result *ScanResult, context string) {
-	if expr == nil {
-		return
-	}
-
+// scanCondition checks tautologies through boolean expression structure only.
+// Inspect separately handles functions and nested statements.
+func (s *Scanner) scanCondition(expr ast.Expression, result *ScanResult) {
 	switch e := expr.(type) {
 	case *ast.BinaryExpression:
-		s.scanBinaryExpression(e, result, context)
-	case *ast.FunctionCall:
-		s.scanFunctionCall(e, result)
+		s.scanBinaryExpression(e, result)
 	case *ast.UnaryExpression:
-		if e.Expr != nil {
-			s.scanExpression(e.Expr, result, context)
-		}
+		s.scanCondition(e.Expr, result)
 	case *ast.ParenthesizedExpression:
-		s.scanExpression(e.Expr, result, context)
-	case *ast.FieldAccessExpression:
-		s.scanExpression(e.Expr, result, context)
-	case *ast.ArraySubscriptExpression, *ast.ArraySliceExpression:
-		// A subscript or slice on a call result, such as pg_sleep(5)[1].
-		s.scanExpressionForDangerousFunctions(e, result)
+		s.scanCondition(e.Expr, result)
 	}
 }
 
 // scanBinaryExpression checks for tautologies and suspicious patterns.
-func (s *Scanner) scanBinaryExpression(expr *ast.BinaryExpression, result *ScanResult, context string) {
+func (s *Scanner) scanBinaryExpression(expr *ast.BinaryExpression, result *ScanResult) {
 	if expr == nil {
 		return
 	}
@@ -899,8 +811,8 @@ func (s *Scanner) scanBinaryExpression(expr *ast.BinaryExpression, result *ScanR
 	}
 
 	// Recursively check sub-expressions
-	s.scanExpression(expr.Left, result, context)
-	s.scanExpression(expr.Right, result, context)
+	s.scanCondition(expr.Left, result)
+	s.scanCondition(expr.Right, result)
 }
 
 // isTautology checks if an expression is always true.
@@ -933,7 +845,7 @@ func (s *Scanner) isTautology(expr *ast.BinaryExpression) bool {
 	rightIdent, rightIsIdent := right.(*ast.Identifier)
 
 	if leftIsIdent && rightIsIdent {
-		if leftIdent.Name == rightIdent.Name {
+		if leftIdent.Name == rightIdent.Name && leftIdent.Table == rightIdent.Table {
 			return true
 		}
 	}
@@ -1015,8 +927,15 @@ func (s *Scanner) checkUnionSelect(rightSelect *ast.SelectStatement, result *Sca
 	// Check for NULL placeholders (common in UNION injection)
 	nullCount := 0
 	for _, col := range rightSelect.Columns {
-		if ident, ok := col.(*ast.Identifier); ok {
-			if strings.ToUpper(ident.Name) == "NULL" {
+		if alias, ok := col.(*ast.AliasedExpression); ok && alias != nil {
+			col = alias.Expr
+		}
+		if literal, ok := col.(*ast.LiteralValue); ok && literal != nil {
+			if strings.EqualFold(literal.Type, "null") {
+				nullCount++
+			}
+		} else if ident, ok := col.(*ast.Identifier); ok && ident != nil {
+			if strings.EqualFold(ident.Name, "NULL") {
 				nullCount++
 			}
 		}
@@ -1126,15 +1045,22 @@ var outOfBandTableFuncNames = map[string]string{
 	"EXECUTABLE":       "Command execution",
 }
 
-// scanFunctionCall checks for dangerous function usage.
+// scanFunctionCall checks only this call name; Inspect visits its children.
 func (s *Scanner) scanFunctionCall(fn *ast.FunctionCall, result *ScanResult) {
 	if fn == nil {
 		return
 	}
 
 	funcName := strings.ToUpper(fn.Name)
+	// A schema- or package-qualified call (pg_catalog.pg_sleep(5),
+	// DBMS_LOCK.SLEEP(5), UTL_HTTP.REQUEST(...)) is matched on its last part,
+	// and on its qualifiers for the package-level dangerous names.
+	baseName, qualifiers := funcName, ""
+	if i := strings.LastIndexByte(funcName, '.'); i >= 0 {
+		baseName, qualifiers = funcName[i+1:], funcName[:i]
+	}
 
-	if timeBasedFuncNames[funcName] {
+	if timeBasedFuncNames[baseName] {
 		finding := Finding{
 			Severity:    SeverityHigh,
 			Pattern:     PatternTimeBased,
@@ -1147,7 +1073,17 @@ func (s *Scanner) scanFunctionCall(fn *ast.FunctionCall, result *ScanResult) {
 		}
 	}
 
-	if risk, found := dangerousFuncNames[funcName]; found {
+	risk, found := dangerousFuncNames[baseName]
+	for q := qualifiers; !found && q != ""; {
+		part := q
+		if i := strings.IndexByte(q, '.'); i >= 0 {
+			part, q = q[:i], q[i+1:]
+		} else {
+			q = ""
+		}
+		risk, found = dangerousFuncNames[part]
+	}
+	if found {
 		finding := Finding{
 			Severity:    SeverityCritical,
 			Pattern:     PatternOutOfBand,
@@ -1160,53 +1096,19 @@ func (s *Scanner) scanFunctionCall(fn *ast.FunctionCall, result *ScanResult) {
 		}
 	}
 
-	// Recursively check function arguments
-	for _, arg := range fn.Arguments {
-		s.scanExpressionForDangerousFunctions(arg, result)
-	}
 }
 
-// scanExpressionForDangerousFunctions recursively checks for dangerous functions.
-func (s *Scanner) scanExpressionForDangerousFunctions(expr ast.Expression, result *ScanResult) {
-	if expr == nil {
-		return
-	}
-
-	switch e := expr.(type) {
-	case *ast.FunctionCall:
-		s.scanFunctionCall(e, result)
-	case *ast.BinaryExpression:
-		s.scanExpressionForDangerousFunctions(e.Left, result)
-		s.scanExpressionForDangerousFunctions(e.Right, result)
-	case *ast.UnaryExpression:
-		s.scanExpressionForDangerousFunctions(e.Expr, result)
-	case *ast.ParenthesizedExpression:
-		s.scanExpressionForDangerousFunctions(e.Expr, result)
-	case *ast.FieldAccessExpression:
-		s.scanExpressionForDangerousFunctions(e.Expr, result)
-	case *ast.ArraySubscriptExpression:
-		s.scanExpressionForDangerousFunctions(e.Array, result)
-		for _, idx := range e.Indices {
-			s.scanExpressionForDangerousFunctions(idx, result)
-		}
-	case *ast.ArraySliceExpression:
-		s.scanExpressionForDangerousFunctions(e.Array, result)
-		s.scanExpressionForDangerousFunctions(e.Start, result)
-		s.scanExpressionForDangerousFunctions(e.End, result)
-	}
-}
-
-// detectCommentPatterns checks raw SQL for comment-based injection. folded is the
-// case-folded input used for literal prefiltering; nil disables prefiltering.
-func (s *Scanner) detectCommentPatterns(sql string, folded []byte, result *ScanResult) {
+// detectCommentPatterns checks raw SQL for comment-based injection. pf carries
+// the literal presence set; its zero value disables prefiltering.
+func (s *Scanner) detectCommentPatterns(sql string, pf scanPrefilter, result *ScanResult) {
 	// Ensure patterns are initialized
-	commentPatternsOnce.Do(initCommentPatterns)
+	patternsOnce.Do(initPatterns)
 
 	for _, p := range commentPatterns {
-		if folded != nil && !containsAll(folded, p.lits) {
+		if pf.on && !p.filter.pass(pf.present) {
 			continue
 		}
-		if safeRegexMatch(p.re, sql) {
+		if p.re.MatchString(sql) {
 			finding := Finding{
 				Severity:    p.severity,
 				Pattern:     PatternComment,
@@ -1221,50 +1123,137 @@ func (s *Scanner) detectCommentPatterns(sql string, folded []byte, result *ScanR
 	}
 }
 
-// detectTautologyInSQL checks raw SQL for tautology patterns (e.g. OR 1=1, 'a'='a').
+// detectTautologyInSQL checks raw and normalized views for tautology patterns (e.g. OR 1=1, 'a'='a').
 // Because Go's RE2 engine does not support backreferences, equality of the two sides
-// is verified programmatically after the regex captures both groups. folded is the
-// case-folded input used for literal prefiltering; nil disables prefiltering.
-func (s *Scanner) detectTautologyInSQL(sql string, folded []byte, result *ScanResult) {
+// is verified programmatically after the regex captures both groups. pf carries
+// the literal presence set; its zero value disables prefiltering.
+func (s *Scanner) detectTautologyInSQL(views []string, pf scanPrefilter, result *ScanResult) {
 	// Ensure patterns are initialized
-	tautologyCaptureOnce.Do(initTautologyCapturePatterns)
+	patternsOnce.Do(initPatterns)
 
-	// Guard against very long inputs (ReDoS mitigation)
-	input := sql
-	if len(input) > maxRegexInputLen {
-		input = input[:maxRegexInputLen]
-	}
-
-	for _, p := range tautologyCapturePatterns {
-		if folded != nil && !containsAll(folded, p.lits) {
+	for patternIndex, p := range tautologyCapturePatterns {
+		if pf.on && !p.filter.pass(pf.present) {
 			continue
 		}
-		matches := p.re.FindAllStringSubmatch(input, -1)
-		for _, m := range matches {
-			if len(m) == 3 && strings.EqualFold(m[1], m[2]) {
-				finding := Finding{
-					Severity:    SeverityCritical,
-					Pattern:     PatternTautology,
-					Description: "Always-true condition detected (tautology): " + m[0],
-					Risk:        "Authentication bypass via always-true condition",
-					Suggestion:  "Use parameterized queries to prevent tautology injection",
+	viewsLoop:
+		for _, input := range views {
+			// Pattern zero captures whole numeric operands. Reject unequal
+			// digit runs before invoking RE2 repeatedly: under race detection,
+			// sync.Pool intentionally drops regex machines on frequent calls.
+			// The unfiltered path remains the equivalence-test reference.
+			if patternIndex == 0 && pf.on && !hasEqualNumericPair(input) {
+				continue
+			}
+			if patternIndex == 2 && pf.on && isASCII(input) && !hasEqualIdentPair(input) {
+				continue
+			}
+			for rest := input; rest != ""; {
+				// FindString uses a stack capture buffer; SubmatchIndex allocates
+				// an index slice for every unequal pair on large inputs.
+				m := p.re.FindString(rest)
+				if m == "" {
+					break
 				}
-				if s.shouldInclude(finding.Severity) {
-					result.Findings = append(result.Findings, finding)
+				if equalSQLPair(m) {
+					finding := Finding{
+						Severity:    SeverityCritical,
+						Pattern:     PatternTautology,
+						Description: "Always-true condition detected (tautology): " + m,
+						Risk:        "Authentication bypass via always-true condition",
+						Suggestion:  "Use parameterized queries to prevent tautology injection",
+					}
+					if s.shouldInclude(finding.Severity) {
+						result.Findings = append(result.Findings, finding)
+					}
+					// Report at most one tautology finding per pattern across all views.
+					break viewsLoop
 				}
-				// Report at most one tautology finding per pattern to avoid noise
-				break
+				rest = rest[sqlPairMatchEnd(rest, m):]
 			}
 		}
 	}
 }
 
+// sqlPairMatchEnd locates the exact capture-pattern match without allocating an
+// index slice. Numeric/identifier patterns require ASCII word boundaries; an
+// earlier occurrence of the same text inside an identifier is not that match.
+// The quoted pattern has no boundary assertions. All patterns match nonempty
+// text, and advancing to its actual end preserves the next match's boundary.
+func sqlPairMatchEnd(sql, match string) int {
+	for offset := 0; offset < len(sql); {
+		relative := strings.Index(sql[offset:], match)
+		if relative < 0 {
+			break
+		}
+		start := offset + relative
+		end := start + len(match)
+		if match[0] == '\'' || sqlWordBoundary(sql, start) && sqlWordBoundary(sql, end) {
+			return end
+		}
+		offset = start + 1
+	}
+	// FindString guarantees an occurrence satisfying these same boundaries.
+	return len(sql)
+}
+
+// hasEqualNumericPair is a necessary condition for the numeric capture pattern
+// to report a tautology. Ignoring word boundaries and operand length only adds
+// candidates. Digit and whitespace runs are visited at most twice, so it is O(n).
+func hasEqualNumericPair(sql string) bool {
+	for offset := 0; offset < len(sql); {
+		relative := strings.IndexByte(sql[offset:], '=')
+		if relative < 0 {
+			return false
+		}
+		eq := offset + relative
+		offset = eq + 1
+		left, right := eq, eq+1
+		for left > 0 && sqlWhitespace(sql[left-1]) {
+			left--
+		}
+		for right < len(sql) && sqlWhitespace(sql[right]) {
+			right++
+		}
+		start, end := left, right
+		for start > 0 && sql[start-1] >= '0' && sql[start-1] <= '9' {
+			start--
+		}
+		for end < len(sql) && sql[end] >= '0' && sql[end] <= '9' {
+			end++
+		}
+		if start < left && right < end && sql[start:left] == sql[right:end] {
+			return true
+		}
+	}
+	return false
+}
+
+// equalSQLPair compares the two operands in a capture-pattern match without
+// allocating. The string-literal pattern permits '=' inside either operand;
+// its first closing quote identifies where to start looking for the separator.
+func equalSQLPair(match string) bool {
+	start := 0
+	if len(match) > 0 && match[0] == '\'' {
+		end := strings.IndexByte(match[1:], '\'')
+		if end < 0 {
+			return false
+		}
+		start = end + 2
+	}
+	eq := strings.IndexByte(match[start:], '=')
+	if eq < 0 {
+		return false
+	}
+	eq += start
+	const whitespace = " \t\r\n\f\v"
+	return strings.EqualFold(strings.Trim(match[:eq], whitespace), strings.Trim(match[eq+1:], whitespace))
+}
+
 // detectRegexPatterns checks SQL against the compiled regex group for patternType.
-// folded is the case-folded input used for literal prefiltering; nil disables
-// prefiltering.
-func (s *Scanner) detectRegexPatterns(sql string, folded []byte, patternType PatternType, result *ScanResult) {
+// pf carries the literal presence set; its zero value disables prefiltering.
+func (s *Scanner) detectRegexPatterns(views []string, pf scanPrefilter, patternType PatternType, result *ScanResult) {
 	// Ensure patterns are initialized
-	compiledPatternsOnce.Do(initCompiledPatterns)
+	patternsOnce.Do(initPatterns)
 
 	group, ok := regexGroups[patternType]
 	if !ok {
@@ -1272,23 +1261,29 @@ func (s *Scanner) detectRegexPatterns(sql string, folded []byte, patternType Pat
 	}
 
 	for _, p := range group.patterns {
-		if folded != nil && !containsAll(folded, p.lits) {
+		if pf.on && !p.filter.pass(pf.present) {
 			continue
 		}
 		// Every pattern requires a non-empty literal (asserted by
 		// TestCompiledPatterns_AllHaveLiterals), so FindString returning "" means
 		// no match, and a non-empty result is the same leftmost-first match that
 		// FindStringSubmatch(sql)[0] would return.
-		if m := p.re.FindString(sql); m != "" {
-			finding := Finding{
-				Severity:    group.severity,
-				Pattern:     patternType,
-				Description: "Pattern detected: " + m,
-				Risk:        group.risk,
-				Suggestion:  group.suggestion,
+		for _, sql := range views {
+			if p.guard != nil && pf.on && isASCII(sql) && !p.guard(sql) {
+				continue
 			}
-			if s.shouldInclude(finding.Severity) {
-				result.Findings = append(result.Findings, finding)
+			if m := p.re.FindString(sql); m != "" {
+				finding := Finding{
+					Severity:    group.severity,
+					Pattern:     patternType,
+					Description: "Pattern detected: " + m,
+					Risk:        group.risk,
+					Suggestion:  group.suggestion,
+				}
+				if s.shouldInclude(finding.Severity) {
+					result.Findings = append(result.Findings, finding)
+				}
+				break
 			}
 		}
 	}

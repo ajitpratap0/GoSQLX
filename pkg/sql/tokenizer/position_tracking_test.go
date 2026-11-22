@@ -104,7 +104,8 @@ func tokenByteBounds(t *testing.T, tkz *Tokenizer, input []byte) [][2]int {
 			break
 		}
 		start := skipTriviaBytes(input, tkz.pos.Index)
-		if _, err := tkz.nextToken(); err != nil {
+		var tok models.Token
+		if err := tkz.nextToken(&tok); err != nil {
 			t.Fatalf("replay nextToken: %v", err)
 		}
 		bounds = append(bounds, [2]int{start, tkz.pos.Index})

@@ -1,0 +1,178 @@
+[
+  {
+    "findings": [
+      {
+        "severity": "CRITICAL",
+        "pattern": "STACKED_QUERY",
+        "description": "Pattern detected: ; DROP",
+        "risk": "Stacked query injection with destructive operations",
+        "suggestion": "Block semicolons in user input or use parameterized queries"
+      },
+      {
+        "severity": "CRITICAL",
+        "pattern": "STACKED_QUERY",
+        "description": "Pattern detected: ; EXEC",
+        "risk": "Stacked query injection with destructive operations",
+        "suggestion": "Block semicolons in user input or use parameterized queries"
+      },
+      {
+        "severity": "CRITICAL",
+        "pattern": "STACKED_QUERY",
+        "description": "Pattern detected: ; EXECUTE",
+        "risk": "Stacked query injection with destructive operations",
+        "suggestion": "Block semicolons in user input or use parameterized queries"
+      }
+    ],
+    "total_count": 3,
+    "critical_count": 3,
+    "high_count": 0,
+    "medium_count": 0,
+    "low_count": 0
+  },
+  {
+    "findings": [
+      {
+        "severity": "CRITICAL",
+        "pattern": "STACKED_QUERY",
+        "description": "Pattern detected: ;\u000b\fInſert",
+        "risk": "Stacked query injection with destructive operations",
+        "suggestion": "Block semicolons in user input or use parameterized queries"
+      },
+      {
+        "severity": "CRITICAL",
+        "pattern": "STACKED_QUERY",
+        "description": "Pattern detected: ; EXEC",
+        "risk": "Stacked query injection with destructive operations",
+        "suggestion": "Block semicolons in user input or use parameterized queries"
+      },
+      {
+        "severity": "CRITICAL",
+        "pattern": "STACKED_QUERY",
+        "description": "Pattern detected: ; EXECUTE",
+        "risk": "Stacked query injection with destructive operations",
+        "suggestion": "Block semicolons in user input or use parameterized queries"
+      }
+    ],
+    "total_count": 3,
+    "critical_count": 3,
+    "high_count": 0,
+    "medium_count": 0,
+    "low_count": 0
+  },
+  {
+    "findings": [
+      {
+        "severity": "CRITICAL",
+        "pattern": "STACKED_QUERY",
+        "description": "Pattern detected: ; DROP",
+        "risk": "Stacked query injection with destructive operations",
+        "suggestion": "Block semicolons in user input or use parameterized queries"
+      }
+    ],
+    "total_count": 1,
+    "critical_count": 1,
+    "high_count": 0,
+    "medium_count": 0,
+    "low_count": 0
+  },
+  {
+    "findings": [
+      {
+        "severity": "HIGH",
+        "pattern": "COMMENT_BYPASS",
+        "description": "Statement terminator followed by comment",
+        "risk": "SQL injection via comment-based bypass",
+        "suggestion": "Sanitize input to remove SQL comments"
+      },
+      {
+        "severity": "CRITICAL",
+        "pattern": "STACKED_QUERY",
+        "description": "Pattern detected: ; \nUPDATE",
+        "risk": "Stacked query injection with destructive operations",
+        "suggestion": "Block semicolons in user input or use parameterized queries"
+      }
+    ],
+    "total_count": 2,
+    "critical_count": 1,
+    "high_count": 1,
+    "medium_count": 0,
+    "low_count": 0
+  },
+  {
+    "findings": [
+      {
+        "severity": "CRITICAL",
+        "pattern": "STACKED_QUERY",
+        "description": "Pattern detected: ; ALTER",
+        "risk": "Stacked query injection with destructive operations",
+        "suggestion": "Block semicolons in user input or use parameterized queries"
+      }
+    ],
+    "total_count": 1,
+    "critical_count": 1,
+    "high_count": 0,
+    "medium_count": 0,
+    "low_count": 0
+  },
+  {
+    "findings": [
+      {
+        "severity": "CRITICAL",
+        "pattern": "STACKED_QUERY",
+        "description": "Pattern detected: ; DROP",
+        "risk": "Stacked query injection with destructive operations",
+        "suggestion": "Block semicolons in user input or use parameterized queries"
+      },
+      {
+        "severity": "CRITICAL",
+        "pattern": "STACKED_QUERY",
+        "description": "Pattern detected: ; EXEC",
+        "risk": "Stacked query injection with destructive operations",
+        "suggestion": "Block semicolons in user input or use parameterized queries"
+      }
+    ],
+    "total_count": 2,
+    "critical_count": 2,
+    "high_count": 0,
+    "medium_count": 0,
+    "low_count": 0
+  },
+  {
+    "findings": [],
+    "total_count": 0,
+    "critical_count": 0,
+    "high_count": 0,
+    "medium_count": 0,
+    "low_count": 0
+  },
+  {
+    "findings": [
+      {
+        "severity": "CRITICAL",
+        "pattern": "STACKED_QUERY",
+        "description": "Pattern detected: ; DELETE",
+        "risk": "Stacked query injection with destructive operations",
+        "suggestion": "Block semicolons in user input or use parameterized queries"
+      },
+      {
+        "severity": "CRITICAL",
+        "pattern": "STACKED_QUERY",
+        "description": "Pattern detected: ; EXEC",
+        "risk": "Stacked query injection with destructive operations",
+        "suggestion": "Block semicolons in user input or use parameterized queries"
+      },
+      {
+        "severity": "CRITICAL",
+        "pattern": "STACKED_QUERY",
+        "description": "Pattern detected: ; EXECUTE",
+        "risk": "Stacked query injection with destructive operations",
+        "suggestion": "Block semicolons in user input or use parameterized queries"
+      }
+    ],
+    "total_count": 3,
+    "critical_count": 3,
+    "high_count": 0,
+    "medium_count": 0,
+    "low_count": 0
+  }
+]

@@ -72,9 +72,8 @@ type InputResult struct {
 // Detection logic:
 //  1. Check if input is a valid file path (os.Stat succeeds)
 //  2. If file exists, validate security and read content
-//  3. If not a file, check if it looks like a file path (.sql extension, path separators)
-//  4. If looks like file path, return file not found error
-//  5. Otherwise treat as direct SQL query
+//  3. If not a file, accept input that looks like SQL
+//  4. Otherwise report missing file paths or invalid input
 //
 // Security measures:
 //   - File path validation (path traversal prevention)
@@ -140,9 +139,9 @@ func DetectAndReadInput(input string) (*InputResult, error) {
 		}, nil
 	}
 
-	// If stat failed, check if it looks like a file path that doesn't exist
-	// (contains path separators or has .sql extension)
-	if strings.Contains(input, string(filepath.Separator)) || strings.HasSuffix(strings.ToLower(input), ".sql") {
+	// SQL can contain path separators in comments, division, or string literals.
+	// Only report a missing path when the input does not look like SQL.
+	if !looksLikeSQL(input) && (strings.Contains(input, string(filepath.Separator)) || strings.HasSuffix(strings.ToLower(input), ".sql")) {
 		// Looks like a file path but doesn't exist - return the original stat error
 		return nil, fmt.Errorf("invalid file path: %w", statErr)
 	}

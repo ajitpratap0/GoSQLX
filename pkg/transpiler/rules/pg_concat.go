@@ -17,6 +17,7 @@ package rules
 import (
 	"reflect"
 
+	"github.com/ajitpratap0/GoSQLX/pkg/internal/reflplan"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
 )
 
@@ -36,7 +37,8 @@ func PgConcatToMySQLConcat(stmt ast.Statement) error {
 	if stmt == nil || !containsConcat(stmt) {
 		return nil
 	}
-	rewriteConcatIn(reflect.ValueOf(stmt), make(map[uintptr]struct{}))
+	v := reflect.ValueOf(stmt)
+	rewriteConcatIn(v, reflplan.Of(v.Type()), make(map[uintptr]struct{}))
 	return nil
 }
 
@@ -75,7 +77,11 @@ var funcCallType = reflect.TypeOf((*ast.FunctionCall)(nil))
 // call. Expressions are stored in interface-typed fields, slices and value
 // structs (e.g. JoinClause), which ast.Walk cannot replace in place, hence
 // reflection. seen guards against revisiting shared pointers.
-func rewriteConcatIn(v reflect.Value, seen map[uintptr]struct{}) {
+// Pruned interface-free pointers no longer enter the address-only seen set.
+// This can only visit more, never fewer; output could differ from an unpruned
+// walk only if a pruned value aliased a rewrite node's address, which the
+// parser does not produce. Reachable slot order is unchanged.
+func rewriteConcatIn(v reflect.Value, p *reflplan.Plan, seen map[uintptr]struct{}) {
 	switch v.Kind() {
 	case reflect.Pointer:
 		if v.IsNil() {
@@ -86,29 +92,29 @@ func rewriteConcatIn(v reflect.Value, seen map[uintptr]struct{}) {
 			return
 		}
 		seen[ptr] = struct{}{}
-		rewriteConcatIn(v.Elem(), seen)
+		rewriteConcatIn(v.Elem(), p.Elem, seen)
 	case reflect.Interface:
 		if !v.IsNil() {
-			rewriteConcatIn(v.Elem(), seen)
+			e := v.Elem()
+			rewriteConcatIn(e, reflplan.Of(e.Type()), seen)
 		}
 	case reflect.Struct:
-		t := v.Type()
-		for i := 0; i < v.NumField(); i++ {
-			if !t.Field(i).IsExported() {
-				continue
-			}
-			rewriteConcatSlot(v.Field(i), seen)
+		for _, f := range p.Fields {
+			rewriteConcatSlot(v.Field(f.Index), f.Plan, seen)
 		}
 	case reflect.Slice, reflect.Array:
+		if !p.Elem.Reach {
+			return
+		}
 		for i := 0; i < v.Len(); i++ {
-			rewriteConcatSlot(v.Index(i), seen)
+			rewriteConcatSlot(v.Index(i), p.Elem, seen)
 		}
 	}
 }
 
 // rewriteConcatSlot replaces slot with CONCAT(...) when it is a settable
 // interface slot holding a concatenation; otherwise it descends into it.
-func rewriteConcatSlot(slot reflect.Value, seen map[uintptr]struct{}) {
+func rewriteConcatSlot(slot reflect.Value, p *reflplan.Plan, seen map[uintptr]struct{}) {
 	if slot.Kind() == reflect.Interface && !slot.IsNil() && slot.CanSet() &&
 		funcCallType.AssignableTo(slot.Type()) {
 		if e, ok := slot.Interface().(ast.Expression); ok {
@@ -118,15 +124,17 @@ func rewriteConcatSlot(slot reflect.Value, seen map[uintptr]struct{}) {
 			}
 		}
 	}
-	rewriteConcatIn(slot, seen)
+	rewriteConcatIn(slot, p, seen)
 }
+
+var expressionPlan = reflplan.Of(reflect.TypeOf((*ast.Expression)(nil)).Elem())
 
 // buildConcatCall flattens a || chain into CONCAT(args...), rewriting any
 // concatenation nested inside the operands as well.
 func buildConcatCall(bin *ast.BinaryExpression, seen map[uintptr]struct{}) *ast.FunctionCall {
 	args := flattenConcat(bin, nil)
 	for i := range args {
-		rewriteConcatSlot(reflect.ValueOf(&args[i]).Elem(), seen)
+		rewriteConcatSlot(reflect.ValueOf(&args[i]).Elem(), expressionPlan, seen)
 	}
 	return &ast.FunctionCall{Name: "CONCAT", Arguments: args}
 }

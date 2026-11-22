@@ -3,7 +3,7 @@ module github.com/ajitpratap0/GoSQLX/integrations/gorm
 go 1.26.1
 
 require (
-	github.com/ajitpratap0/GoSQLX v1.16.0
+	github.com/ajitpratap0/GoSQLX v1.17.0
 	gorm.io/driver/sqlite v1.5.6
 	gorm.io/gorm v1.25.10
 )

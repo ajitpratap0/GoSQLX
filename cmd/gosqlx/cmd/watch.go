@@ -27,6 +27,8 @@ import (
 	"time"
 
 	"github.com/fsnotify/fsnotify"
+
+	"github.com/ajitpratap0/GoSQLX/cmd/gosqlx/internal/config"
 )
 
 // WatchMode represents the operation mode for file watching
@@ -62,6 +64,16 @@ type FileWatcher struct {
 
 // NewFileWatcher creates a new file watcher instance
 func NewFileWatcher(opts WatchOptions) (*FileWatcher, error) {
+	if opts.Mode == "" {
+		opts.Mode = WatchModeValidate
+	}
+	if opts.ValidatorOpts == nil {
+		opts.ValidatorOpts = &ValidatorOptions{}
+	}
+	if opts.FormatterOpts == nil {
+		defaults := FormatterOptionsFromConfig(config.DefaultConfig(), nil, FormatterFlags{})
+		opts.FormatterOpts = &defaults
+	}
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
 		return nil, fmt.Errorf("failed to create file watcher: %w", err)
@@ -83,6 +95,7 @@ func (fw *FileWatcher) Watch(args []string) error {
 	defer cancel()
 
 	sigChan := make(chan os.Signal, 1)
+	defer signal.Stop(sigChan)
 	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
 
 	// Expand and add files/directories to watch
@@ -226,21 +239,24 @@ func (fw *FileWatcher) formatFile(filename string, timestamp string) {
 		return
 	}
 
-	formatter := NewFormatter(fw.opts.Out, fw.opts.Err, *fw.opts.FormatterOpts)
-	fileResult := formatter.formatFile(filename)
-
-	if fileResult.Error != nil {
-		fmt.Fprintf(fw.opts.Err, "[%s] %s %s - %v\n",
-			timestamp, colorRed("✗"), filename, fileResult.Error)
+	// Use the same formatting, verification and write path as format -i.
+	opts := *fw.opts.FormatterOpts
+	opts.InPlace = true
+	opts.Check = false
+	opts.Output = ""
+	formatter := NewFormatter(fw.opts.Out, fw.opts.Err, opts)
+	result, err := formatter.Format([]string{filename})
+	if err != nil {
+		fmt.Fprintf(fw.opts.Err, "[%s] %s %s - %v\n", timestamp, colorRed("✗"), filename, err)
 		return
 	}
-
-	if fileResult.Changed {
-		fmt.Fprintf(fw.opts.Out, "[%s] %s %s - Formatted\n",
-			timestamp, colorGreen("✓"), filename)
+	if result.FailedFiles > 0 {
+		return // Formatter.Format has already reported the error.
+	}
+	if result.FormattedFiles > 0 {
+		fmt.Fprintf(fw.opts.Out, "[%s] %s %s - Formatted\n", timestamp, colorGreen("✓"), filename)
 	} else {
-		fmt.Fprintf(fw.opts.Out, "[%s] %s %s - No changes needed\n",
-			timestamp, colorCyan("→"), filename)
+		fmt.Fprintf(fw.opts.Out, "[%s] %s %s - No changes needed\n", timestamp, colorCyan("→"), filename)
 	}
 }
 

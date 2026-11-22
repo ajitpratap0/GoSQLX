@@ -47,43 +47,40 @@ func (r *DropWithoutConditionRule) Check(ctx *linter.Context) ([]linter.Violatio
 		return nil, nil
 	}
 	var violations []linter.Violation
-	for _, stmt := range ctx.AST.Statements {
-		ast.Inspect(stmt, func(n ast.Node) bool {
-			switch drop := n.(type) {
-			case *ast.DropStatement:
-				if !drop.IfExists {
-					objType := strings.ToUpper(drop.ObjectType)
-					name := ""
-					if len(drop.Names) > 0 {
-						name = drop.Names[0]
-					}
-					violations = append(violations, linter.Violation{
-						Rule:       r.ID(),
-						RuleName:   r.Name(),
-						Severity:   r.Severity(),
-						Message:    "DROP " + objType + " " + name + " is missing IF EXISTS",
-						Location:   models.Location{Line: 1, Column: 1},
-						Suggestion: "Use DROP " + objType + " IF EXISTS " + name,
-					})
+	for _, n := range ctx.Nodes() {
+		switch drop := n.(type) {
+		case *ast.DropStatement:
+			if !drop.IfExists {
+				objType := strings.ToUpper(drop.ObjectType)
+				name := ""
+				if len(drop.Names) > 0 {
+					name = drop.Names[0]
 				}
-			case *ast.DropSequenceStatement:
-				if !drop.IfExists {
-					name := ""
-					if drop.Name != nil {
-						name = drop.Name.Name
-					}
-					violations = append(violations, linter.Violation{
-						Rule:       r.ID(),
-						RuleName:   r.Name(),
-						Severity:   r.Severity(),
-						Message:    "DROP SEQUENCE " + name + " is missing IF EXISTS",
-						Location:   drop.Pos,
-						Suggestion: "Use DROP SEQUENCE IF EXISTS " + name,
-					})
-				}
+				violations = append(violations, linter.Violation{
+					Rule:       r.ID(),
+					RuleName:   r.Name(),
+					Severity:   r.Severity(),
+					Message:    "DROP " + objType + " " + name + " is missing IF EXISTS",
+					Location:   models.Location{Line: 1, Column: 1},
+					Suggestion: "Use DROP " + objType + " IF EXISTS " + name,
+				})
 			}
-			return true
-		})
+		case *ast.DropSequenceStatement:
+			if !drop.IfExists {
+				name := ""
+				if drop.Name != nil {
+					name = drop.Name.Name
+				}
+				violations = append(violations, linter.Violation{
+					Rule:       r.ID(),
+					RuleName:   r.Name(),
+					Severity:   r.Severity(),
+					Message:    "DROP SEQUENCE " + name + " is missing IF EXISTS",
+					Location:   drop.Pos,
+					Suggestion: "Use DROP SEQUENCE IF EXISTS " + name,
+				})
+			}
+		}
 	}
 	return violations, nil
 }

@@ -1,0 +1,28 @@
+-- ETL and data modification CTEs, MERGE, MATERIALIZED hints
+WITH moved AS (DELETE FROM queue WHERE created_at < now() - interval '1 day' RETURNING *) INSERT INTO queue_archive SELECT * FROM moved;
+WITH ins AS (INSERT INTO users (email) VALUES ('x@y.z') RETURNING id) INSERT INTO profiles (user_id) SELECT id FROM ins;
+WITH upd AS (UPDATE accounts SET balance = balance - 100 WHERE id = 1 RETURNING id) UPDATE accounts SET balance = balance + 100 WHERE id = 2 AND EXISTS (SELECT 1 FROM upd);
+WITH a AS MATERIALIZED (SELECT * FROM big_table WHERE x > 1), b AS NOT MATERIALIZED (SELECT * FROM a WHERE y < 5) SELECT * FROM b JOIN a USING (id);
+WITH s AS (SELECT id, ROW_NUMBER() OVER () AS rn FROM t) SELECT * FROM s WHERE rn BETWEEN 10 AND 20;
+WITH RECURSIVE r AS (SELECT 1 AS n UNION SELECT n + 1 FROM r WHERE n < 5) CYCLE n SET is_cycle USING path SELECT * FROM r;
+WITH RECURSIVE r(n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM r WHERE n < 5) SEARCH DEPTH FIRST BY n SET ordercol SELECT * FROM r ORDER BY ordercol;
+INSERT INTO target (id, name) SELECT id, name FROM source WHERE NOT EXISTS (SELECT 1 FROM target WHERE target.id = source.id);
+INSERT INTO target DEFAULT VALUES;
+INSERT INTO target (id, name) OVERRIDING SYSTEM VALUE VALUES (1, 'x');
+INSERT INTO t (a) SELECT x FROM generate_series(1, 1000) AS x ON CONFLICT DO NOTHING;
+UPDATE t SET (a, b) = (1, 2) WHERE id = 5;
+UPDATE t SET (a, b) = (SELECT x, y FROM u WHERE u.id = t.id) WHERE EXISTS (SELECT 1 FROM u WHERE u.id = t.id);
+UPDATE t SET data = jsonb_set(data, '{count}', ((data->>'count')::int + 1)::text::jsonb) WHERE id = 7;
+UPDATE t AS x SET val = y.val FROM (SELECT id, val FROM src) AS y WHERE x.id = y.id;
+UPDATE t SET tags = array_append(tags, 'new'), n = n + 1, updated_at = DEFAULT WHERE 'old' <> ALL(tags);
+UPDATE ONLY t SET x = 1 WHERE CURRENT_DATE > d;
+DELETE FROM t WHERE id IN (SELECT id FROM t ORDER BY created_at LIMIT 1000);
+DELETE FROM t AS x WHERE x.created_at < now() - interval '1 year' RETURNING x.id AS deleted_id;
+MERGE INTO inventory AS i USING shipments AS s ON i.sku = s.sku WHEN MATCHED THEN UPDATE SET qty = i.qty + s.qty WHEN NOT MATCHED THEN INSERT (sku, qty) VALUES (s.sku, s.qty);
+MERGE INTO customers c USING staging s ON c.id = s.id WHEN MATCHED AND s.deleted THEN DELETE WHEN MATCHED THEN UPDATE SET name = s.name WHEN NOT MATCHED THEN INSERT VALUES (s.id, s.name);
+MERGE INTO t USING s ON t.id = s.id WHEN NOT MATCHED BY SOURCE THEN DELETE;
+MERGE INTO t USING s ON t.id = s.id WHEN MATCHED THEN DO NOTHING WHEN NOT MATCHED THEN INSERT (id) VALUES (s.id) RETURNING merge_action(), t.*;
+SELECT * FROM t1 WHERE id IN (WITH x AS (SELECT 1 AS id) SELECT id FROM x);
+SELECT * FROM (SELECT * FROM (SELECT * FROM (SELECT id FROM t) a) b) c;
+WITH a AS (SELECT 1 AS x), b AS (SELECT x + 1 AS x FROM a), c AS (SELECT x + 1 AS x FROM b), d AS (SELECT x + 1 AS x FROM c), e AS (SELECT x FROM d UNION ALL SELECT x FROM c) SELECT e.x, a.x FROM e CROSS JOIN a;
+WITH t AS (SELECT * FROM generate_series(1, 5) AS n) SELECT n, (SELECT SUM(n) FROM t t2 WHERE t2.n <= t.n) FROM t;

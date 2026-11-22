@@ -347,6 +347,7 @@
 //	    Right              Statement  // Right statement
 //	    All                bool       // ALL modifier (UNION ALL vs UNION)
 //	    LeftParenthesized  bool       // Left was written as "(query)"
+//	    LeftWithHoisted    bool       // WITH was written before the parenthesized Left
 //	    RightParenthesized bool       // Right was written as "(query)"
 //	}
 //

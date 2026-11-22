@@ -101,8 +101,8 @@ func TestQuotedIdentifier_Format_ConsistentWithDefinitions_PR632(t *testing.T) {
 		sql  string
 		want string
 	}{
-		{"order_by_alias", `SELECT amount AS "Total" FROM t ORDER BY "Total"`, "SELECT amount AS Total\nFROM t\nORDER BY Total"},
-		{"cte_column", `WITH cte (a, "B") AS (SELECT 1, 2) SELECT "B" FROM cte`, "WITH cte (a, B) AS (SELECT 1, 2)\nSELECT B\nFROM cte"},
+		{"order_by_alias", `SELECT amount AS "Total" FROM t ORDER BY "Total"`, "SELECT amount AS \"Total\"\nFROM t\nORDER BY \"Total\""},
+		{"cte_column", `WITH cte (a, "B") AS (SELECT 1, 2) SELECT "B" FROM cte`, "WITH cte (a, \"B\") AS (SELECT 1, 2)\nSELECT \"B\"\nFROM cte"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

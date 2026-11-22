@@ -121,14 +121,14 @@ func TestFormatSQLInternal_InvalidSQL(t *testing.T) {
 // --- parseSQLInternal ---
 
 func TestParseSQLInternal_EmptySQL(t *testing.T) {
-	_, err := parseSQLInternal("")
+	_, err := parseSQLInternal("", "")
 	if err == nil {
 		t.Fatal("expected error for empty sql")
 	}
 }
 
 func TestParseSQLInternal_SingleStatement(t *testing.T) {
-	data, err := parseSQLInternal("SELECT id FROM users")
+	data, err := parseSQLInternal("SELECT id FROM users", "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -145,7 +145,7 @@ func TestParseSQLInternal_SingleStatement(t *testing.T) {
 }
 
 func TestParseSQLInternal_MultipleStatements(t *testing.T) {
-	data, err := parseSQLInternal("SELECT 1; INSERT INTO t VALUES (1); DELETE FROM t")
+	data, err := parseSQLInternal("SELECT 1; INSERT INTO t VALUES (1); DELETE FROM t", "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -159,7 +159,7 @@ func TestParseSQLInternal_MultipleStatements(t *testing.T) {
 }
 
 func TestParseSQLInternal_InvalidSQL(t *testing.T) {
-	_, err := parseSQLInternal(")))((( @@@ !!!")
+	_, err := parseSQLInternal(")))((( @@@ !!!", "")
 	if err == nil {
 		t.Fatal("expected parse error for invalid SQL")
 	}

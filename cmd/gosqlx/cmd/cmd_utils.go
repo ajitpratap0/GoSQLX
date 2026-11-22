@@ -15,12 +15,14 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
+	"github.com/ajitpratap0/GoSQLX/pkg/models"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/keywords"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/parser"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/tokenizer"
@@ -57,7 +59,7 @@ func trackChangedFlags(cmd *cobra.Command) map[string]bool {
 // Names are matched case-sensitively, as keywords.IsValidDialect does.
 func validateDialectName(dialect string) error {
 	if dialect != "" && !keywords.IsValidDialect(dialect) {
-		return fmt.Errorf("unknown SQL dialect %q; valid dialects: %s", dialect, validDialectsText())
+		return fmt.Errorf("unknown SQL dialect %q; valid dialects: %s (aliases: %s)", dialect, validDialectsText(), dialectAliasText())
 	}
 	return nil
 }
@@ -104,4 +106,20 @@ func parserForDialect(dialect string) *parser.Parser {
 		return parser.NewParser()
 	}
 	return parser.NewParser(parser.WithDialect(dialect))
+}
+
+// errNoStatements is returned by commands that need a statement to work on
+// (parse, analyze) when the input is empty, whitespace or only comments.
+var errNoStatements = errors.New("no SQL statements found (input is empty or contains only comments)")
+
+// hasStatementTokens reports whether tokens holds anything besides the
+// end-of-input marker. Empty, whitespace-only and comment-only input has no
+// statements; every command treats it the same way.
+func hasStatementTokens(tokens []models.TokenWithSpan) bool {
+	for i := range tokens {
+		if tokens[i].Token.Type != models.TokenTypeEOF {
+			return true
+		}
+	}
+	return false
 }

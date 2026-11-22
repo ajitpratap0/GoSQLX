@@ -24,9 +24,15 @@
 // which bridgeContract.check.ts type-checks against those TS types during the
 // website's typecheck. Changing a tag is a breaking change for the website and
 // must be mirrored there.
+//
+// ParseJSON supports legacy JSON and the versioned AST JSON v1 contract
+// specified by internal/astjson.
 package bridge
 
 import (
+	"errors"
+	"fmt"
+
 	"github.com/ajitpratap0/GoSQLX/pkg/advisor"
 	"github.com/ajitpratap0/GoSQLX/pkg/gosqlx"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
@@ -53,6 +59,62 @@ func Parse(sql, dialect string) (*ast.AST, error) {
 	return gosqlx.Parse(sql)
 }
 
+// TextResponse is the result of Format and Transpile: the rewritten SQL, or
+// the reason there is none.
+//
+// Exactly one of Result and Error is set. Parse-error positions are reported
+// separately by Lint and Analyze through their ParseErrorSpan fields.
+type TextResponse struct {
+	Result string `json:"result"`
+	Error  string `json:"error,omitempty"`
+}
+
+func textResponse(result string, err error) TextResponse {
+	if err != nil {
+		return TextResponse{Error: err.Error()}
+	}
+	return TextResponse{Result: result}
+}
+
+// Format formats sql with gosqlx.FormatWithDialect and the default format
+// options, tokenizing, parsing and rendering it for the selected playground
+// dialect ("generic", empty or unknown names use the generic rules).
+// Comments and optimizer hints are kept; SQL whose comments cannot be placed
+// faithfully is refused with an error wrapping formatter.ErrUnplaceableComment.
+func Format(sql, dialect string) TextResponse {
+	out, err := gosqlx.FormatWithDialect(sql, gosqlx.DefaultFormatOptions(), Dialect(dialect))
+	return textResponse(out, err)
+}
+
+// transpileDialect resolves a transpile source or target. Unlike Dialect, an
+// unknown name is an error: silently transpiling for a different dialect than
+// the one asked for would show a misleading result. Empty means generic.
+func transpileDialect(role, name string) (sqlkeywords.SQLDialect, error) {
+	if name == "" {
+		return sqlkeywords.DialectGeneric, nil
+	}
+	if !sqlkeywords.IsValidDialect(name) {
+		return "", fmt.Errorf("unsupported %s dialect %q", role, name)
+	}
+	return sqlkeywords.SQLDialect(name), nil
+}
+
+// Transpile rewrites sql from one playground dialect to another with
+// gosqlx.Transpile. SQL that does not parse in the source dialect, or that
+// uses a construct the target cannot express, yields an error.
+func Transpile(sql, from, to string) TextResponse {
+	src, err := transpileDialect("source", from)
+	if err != nil {
+		return textResponse("", err)
+	}
+	dst, err := transpileDialect("target", to)
+	if err != nil {
+		return textResponse("", err)
+	}
+	out, err := gosqlx.Transpile(sql, src, dst)
+	return textResponse(out, err)
+}
+
 // LintViolation is one lint finding as the playground renders it.
 type LintViolation struct {
 	Rule       string `json:"rule"`
@@ -70,6 +132,8 @@ type LintViolation struct {
 // ParseErrorSpan locates it when the error carries a position. The
 // violations from rules that can still run (text- and token-level rules) are
 // reported alongside it, but the SQL must never be presented as clean.
+// SQL with no statements has no ParseError, matching gosqlx.Lint. Tokenizer
+// failures use gosqlx's tokenize-error text for every dialect.
 type LintResponse struct {
 	ParseError     string          `json:"parse_error,omitempty"`
 	ParseErrorSpan *ErrorSpan      `json:"parse_error_span,omitempty"`
@@ -80,18 +144,20 @@ type LintResponse struct {
 // Lint runs the full built-in rule set that gosqlx.Lint ships (L001-L030)
 // with the selected dialect, so AST-level rules see dialect-specific syntax,
 // and reports whether the SQL parses in that dialect.
+// It parses once. SQL with no statements is treated as nothing to lint;
+// tokenizer errors use the same tokenize-error text in every dialect.
 func Lint(sql, dialect string) LintResponse {
 	resp := LintResponse{Violations: []LintViolation{}}
 
-	if _, err := Parse(sql, dialect); err != nil {
-		resp.ParseError = err.Error()
-		resp.ParseErrorSpan = errorSpan(sql, err)
-	}
-
 	result, err := gosqlx.LintWithDialect(sql, Dialect(dialect))
 	if err != nil {
-		resp.Error = err.Error()
-		return resp
+		invalidSQL := errors.Is(err, gosqlx.ErrSyntax) || errors.Is(err, gosqlx.ErrTokenize)
+		if result == nil || !invalidSQL {
+			resp.Error = err.Error()
+			return resp
+		}
+		resp.ParseError = err.Error()
+		resp.ParseErrorSpan = errorSpan(sql, err)
 	}
 	for _, v := range result.Violations {
 		resp.Violations = append(resp.Violations, LintViolation{

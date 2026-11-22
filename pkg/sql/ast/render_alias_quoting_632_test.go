@@ -210,7 +210,7 @@ func TestAliasRendering_BenignAndReserved_PR632(t *testing.T) {
 		{"", `SELECT amount AS total FROM t`, `SELECT amount AS total FROM t`},
 		{"", `SELECT * FROM t AS u`, `SELECT * FROM t u`},
 		{"", `SELECT * FROM t u JOIN v AS w ON u.id = w.id`, `SELECT * FROM t u INNER JOIN v w ON u.id = w.id`},
-		{"", `SELECT amount AS "Total" FROM t ORDER BY "Total"`, `SELECT amount AS Total FROM t ORDER BY Total`},
+		{"", `SELECT amount AS "Total" FROM t ORDER BY "Total"`, `SELECT amount AS "Total" FROM t ORDER BY "Total"`},
 		{"", `SELECT amount AS "select" FROM t ORDER BY "select"`, `SELECT amount AS "select" FROM t ORDER BY "select"`},
 		{"", `SELECT * FROM t AS "from"`, `SELECT * FROM t "from"`},
 		{"", `SELECT SUM(x) OVER w FROM t WINDOW w AS (ORDER BY x)`, `SELECT SUM(x) OVER w FROM t WINDOW w AS (ORDER BY x)`},

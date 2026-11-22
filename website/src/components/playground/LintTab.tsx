@@ -1,5 +1,6 @@
 'use client';
-import { useState, useCallback } from "react";
+import { useCopyFeedback } from "./useCopyFeedback";
+import { useCallback } from "react";
 import { formatPosition, type LintData, type LintViolation } from "./bridgeTypes";
 import { ErrorNotice, Position, SeverityBadge } from "./ResultParts";
 
@@ -12,8 +13,7 @@ interface LintTabProps {
 }
 
 export default function LintTab({ data }: LintTabProps) {
-  const [copied, setCopied] = useState(false);
-  const [copyFailed, setCopyFailed] = useState(false);
+  const { copied, copyFailed, flash } = useCopyFeedback();
 
   const violations = data?.violations ?? NO_VIOLATIONS;
 
@@ -22,13 +22,11 @@ export default function LintTab({ data }: LintTabProps) {
       `[${(v.severity || 'info').toUpperCase()}] ${v.rule} ${formatPosition(v.line, v.column) ?? ''} ${v.message}`.replace(/\s+/g, ' ')
     ).join('\n');
     navigator.clipboard.writeText(text).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+      flash("copied");
     }).catch(() => {
-      setCopyFailed(true);
-      setTimeout(() => setCopyFailed(false), 2000);
+      flash("failed");
     });
-  }, [violations]);
+  }, [violations, flash]);
 
   if (!data) {
     return (

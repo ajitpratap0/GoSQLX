@@ -34,9 +34,9 @@ func TestTableFunctionAliasSQL(t *testing.T) {
 		{"quoted aliases", TableReference{Name: "unnest", TableFunc: call(), Alias: "g", ColumnAliases: &ColumnAliasList{Names: []string{"order", `x"); DROP TABLE t; --`}}}, `unnest(arr) g("order", "x""); DROP TABLE t; --")`},
 		// The list belongs to an alias; without one there is nothing to attach it to.
 		{"alias list without alias", TableReference{Name: "unnest", TableFunc: call(), ColumnAliases: &ColumnAliasList{Names: []string{"a"}}}, "unnest(arr)"},
-		// The parser reads neither modifier for a plain table, so SQL() does
-		// not write them there either.
-		{"plain table", TableReference{Name: "t", Alias: "x", ColumnAliases: &ColumnAliasList{Names: []string{"a"}}, WithOrdinality: true}, "t x"},
+		// WITH ORDINALITY belongs to a table function only; a column alias
+		// list is valid on any aliased table factor (t AS x(a)).
+		{"plain table", TableReference{Name: "t", Alias: "x", ColumnAliases: &ColumnAliasList{Names: []string{"a"}}, WithOrdinality: true}, "t x(a)"},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			if got := tableRefSQL(&tt.ref); got != tt.want {

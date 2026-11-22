@@ -58,7 +58,7 @@ const serverInstructions = `GoSQLX parses, validates, formats, lints, and securi
 Pick the narrowest tool for the request:
 - analyze_sql: one-shot review of a query (validity, statement types, tables/columns/functions, security findings, lint violations, formatted SQL). Prefer it when the user asks to "review", "check", or "analyze" SQL; hosts that support MCP Apps render it as an interactive report.
 - validate_sql: is the SQL syntactically valid, optionally for a specific dialect (postgresql, mysql, mariadb, sqlserver, oracle, sqlite, snowflake, clickhouse).
-- format_sql: pretty-print SQL, one clause per line. Options: uppercase_keywords=true upper-cases all keywords, but not data type names (default false: clause keywords upper-case, other keywords such as and/or may keep their input case); indent_size=0 puts each statement on one line, larger values only indent nested blocks such as CREATE TABLE columns; add_semicolon appends ";".
+- format_sql: pretty-print SQL, one clause per line. Options: uppercase_keywords=true upper-cases all keywords, but not data type names (default false: clause keywords upper-case, other keywords such as like may keep their input case); indent_size=0 puts each statement on one line, larger values only indent nested blocks such as CREATE TABLE columns; add_semicolon appends ";".
 - parse_sql: statement count and AST statement types.
 - extract_metadata: tables, columns, and functions referenced.
 - security_scan: SQL-injection pattern detection (tautologies, UNION-based, stacked queries, comment bypass, ...), with severities.
@@ -298,8 +298,8 @@ func newTool(name, title, description string, meta *mcp.Meta, opts ...mcp.ToolOp
 	return mcp.NewTool(name, all...)
 }
 
-// supportedDialects lists the dialect values accepted by validate_sql. It is
-// derived from keywords.DialectNames, the single source of truth, and each
+// supportedDialects lists the dialect values accepted by validate_sql and parse_sql.
+// It is derived from keywords.DialectNames, the single source of truth, and each
 // one is accepted by gosqlx.ParseWithDialect.
 var supportedDialects = sqlkeywords.DialectNames()
 
@@ -327,7 +327,8 @@ func (s *Server) registerTools() {
 	s.mcpSrv.AddTool(
 		newTool("format_sql", "Format SQL",
 			"Use this when the user wants SQL pretty-printed or reformatted: one clause per line, "+
-				"optional upper-case keywords and trailing semicolon. Comments are not kept. "+
+				"optional upper-case keywords and trailing semicolon. Comments are preserved; "+
+				"unplaceable optimizer hints are refused. "+
 				"Returns {formatted_sql, options}.",
 			toolMeta(cfg, "Formatting SQL…", "Formatted SQL", false),
 			mcp.WithString("sql",
@@ -341,7 +342,7 @@ func (s *Server) registerTools() {
 			mcp.WithBoolean("uppercase_keywords",
 				mcp.Description("true upper-cases all SQL keywords (AND, IN, CASE, ...), but not data type names. "+
 					"false keeps the formatter's casing: clause keywords (SELECT, FROM, WHERE, ...) "+
-					"upper-case, other keywords (e.g. and, or) may keep their input case (default: false)"),
+					"upper-case, other keywords (e.g. like) may keep their input case (default: false)"),
 			),
 			mcp.WithBoolean("add_semicolon",
 				mcp.Description("Append a trailing semicolon (default: false)"),
@@ -353,11 +354,16 @@ func (s *Server) registerTools() {
 	s.mcpSrv.AddTool(
 		newTool("parse_sql", "Parse SQL",
 			"Use this when the user wants to know how SQL parses: returns an AST summary with "+
-				"the statement count and the type of each statement.",
+				"the statement count and the type of each statement, optionally for a specific dialect. "+
+				"GO batch separators are excluded from the count.",
 			toolMeta(cfg, "Parsing SQL…", "Parsed SQL", false),
 			mcp.WithString("sql",
 				mcp.Required(),
 				mcp.Description("The SQL string to parse"),
+			),
+			mcp.WithString("dialect",
+				mcp.Description("SQL dialect: "+strings.Join(supportedDialects, ", ")),
+				mcp.Enum(supportedDialects...),
 			),
 		),
 		handleParseSQL,

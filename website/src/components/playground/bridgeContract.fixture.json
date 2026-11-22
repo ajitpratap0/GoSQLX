@@ -76,5 +76,13 @@
         "category": "keyword"
       }
     ]
+  },
+  "format": {
+    "result": "SELECT 1",
+    "error": "format error"
+  },
+  "transpile": {
+    "result": "SELECT 1",
+    "error": "transpile error"
   }
 }

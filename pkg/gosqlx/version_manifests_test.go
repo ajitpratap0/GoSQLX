@@ -58,6 +58,7 @@ func TestVersionManifestsMatchVersion(t *testing.T) {
 		version func(*testing.T) string
 	}{
 		{"glama.json", jsonVersion("glama.json", topLevel)},
+		{"server.json", jsonVersion("server.json", topLevel)},
 		{"vscode-extension/package.json", jsonVersion("vscode-extension/package.json", topLevel)},
 		{"plugins/gosqlx/.claude-plugin/plugin.json", jsonVersion("plugins/gosqlx/.claude-plugin/plugin.json", topLevel)},
 		{"performance_baselines.json", jsonVersion("performance_baselines.json", topLevel)},

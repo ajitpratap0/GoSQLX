@@ -1,0 +1,22 @@
+-- WordPress core / WooCommerce style queries
+SELECT option_value FROM wp_options WHERE option_name = 'siteurl' LIMIT 1;
+SELECT autoload, option_name, option_value FROM wp_options WHERE autoload = 'yes';
+INSERT INTO wp_options (option_name, option_value, autoload) VALUES ('transient_x', 'v', 'no') ON DUPLICATE KEY UPDATE option_name = VALUES(option_name), option_value = VALUES(option_value), autoload = VALUES(autoload);
+SELECT SQL_CALC_FOUND_ROWS wp_posts.ID FROM wp_posts WHERE 1=1 AND wp_posts.post_type = 'post' AND ((wp_posts.post_status = 'publish')) ORDER BY wp_posts.post_date DESC LIMIT 0, 10;
+SELECT wp_posts.* FROM wp_posts WHERE ID IN (1, 2, 3);
+SELECT p.ID FROM wp_posts p INNER JOIN wp_term_relationships tr ON (p.ID = tr.object_id) INNER JOIN wp_term_taxonomy tt ON (tr.term_taxonomy_id = tt.term_taxonomy_id) WHERE tt.taxonomy = 'category' AND tt.term_id IN (4) GROUP BY p.ID ORDER BY p.post_date DESC;
+SELECT post_id, meta_key, meta_value FROM wp_postmeta WHERE post_id IN (10, 11, 12) ORDER BY meta_id ASC;
+SELECT wp_posts.ID FROM wp_posts INNER JOIN wp_postmeta ON (wp_posts.ID = wp_postmeta.post_id) INNER JOIN wp_postmeta AS mt1 ON (wp_posts.ID = mt1.post_id) WHERE 1=1 AND (wp_postmeta.meta_key = '_price' AND CAST(wp_postmeta.meta_value AS SIGNED) > 10) AND (mt1.meta_key = '_stock' AND mt1.meta_value != '0') GROUP BY wp_posts.ID;
+SELECT * FROM wp_users WHERE user_login = 'admin' OR user_email = 'a@b.c' LIMIT 1;
+SELECT user_id, meta_key, meta_value FROM wp_usermeta WHERE user_id = 1;
+UPDATE wp_posts SET post_content = REPLACE(post_content, 'http://old.com', 'https://new.com');
+UPDATE wp_postmeta SET meta_value = REPLACE(meta_value, 'old', 'new') WHERE meta_key = '_x';
+DELETE FROM wp_options WHERE option_name LIKE '\_transient\_%';
+DELETE a, b FROM wp_posts a LEFT JOIN wp_postmeta b ON b.post_id = a.ID WHERE a.post_type = 'revision';
+SELECT COUNT(*) FROM wp_comments WHERE comment_approved = '1' AND comment_post_ID = 5;
+SELECT comment_approved, COUNT(*) AS num_comments FROM wp_comments GROUP BY comment_approved;
+SELECT t.*, tt.* FROM wp_terms AS t INNER JOIN wp_term_taxonomy AS tt ON t.term_id = tt.term_id WHERE tt.taxonomy IN ('category') ORDER BY t.name ASC;
+SELECT DISTINCT YEAR(post_date) AS year, MONTH(post_date) AS month, count(ID) as posts FROM wp_posts WHERE post_type = 'post' AND post_status = 'publish' GROUP BY YEAR(post_date), MONTH(post_date) ORDER BY post_date DESC;
+SELECT order_id, SUM(meta_value) FROM wp_woocommerce_order_itemmeta m INNER JOIN wp_woocommerce_order_items i ON m.order_item_id = i.order_item_id WHERE meta_key = '_line_total' GROUP BY order_id;
+SHOW TABLES LIKE 'wp_options';
+CREATE TABLE wp_example (id bigint(20) unsigned NOT NULL AUTO_INCREMENT, name varchar(191) NOT NULL DEFAULT '', data longtext, PRIMARY KEY (id), KEY name (name(191))) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_520_ci;

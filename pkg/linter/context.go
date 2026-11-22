@@ -16,12 +16,21 @@ package linter
 
 import (
 	"strings"
+	"sync/atomic"
+	"unsafe"
 
 	"github.com/ajitpratap0/GoSQLX/pkg/models"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
 )
 
 // Context provides all information needed for linting at multiple levels.
+//
+// In LintString and its wrappers, AST, Tokens and Nodes results are borrowed
+// only for the duration of each Rule.Check call. Rules must not retain them,
+// including through a saved Context, context copy, visitor, closure or goroutine.
+// Materialize independent values or deep copies and finish asynchronous work
+// before Check returns. See Rule.Check for migration guidance. Callers that
+// construct a Context themselves retain responsibility for their own resources.
 //
 // Context is passed to every rule's Check method and contains:
 //   - Text level: Raw SQL and line-by-line access
@@ -64,10 +73,13 @@ type Context struct {
 	// SQL split into lines for line-by-line analysis (preserves original content)
 	Lines []string
 
-	// Tokenization results (nil if tokenization failed)
+	// Tokenization results (nil if tokenization failed). In LintString these
+	// slices, elements and Word pointers are borrowed until Check returns;
+	// shallow token or slice copies do not extend that lifetime.
 	Tokens []models.TokenWithSpan
 
-	// Parsing results (nil if parsing failed)
+	// Parsing results (nil if parsing failed). In LintString the tree and all
+	// reachable nodes are borrowed until Check returns and must not be retained.
 	AST *ast.AST
 
 	// Parse error (non-nil if parsing failed, nil if successful or not attempted)
@@ -75,6 +87,14 @@ type Context struct {
 
 	// File metadata for violation reporting
 	Filename string
+
+	// nodesCache holds an immutable *nodeCollector snapshot for Nodes(), read and
+	// published with atomic pointer operations (no shared lock). A snapshot whose
+	// root differs from c.AST is stale. It is an unsafe.Pointer rather than
+	// atomic.Pointer[nodeCollector] because atomic.Pointer embeds noCopy, and
+	// Context is a public struct that callers copy by value (go vet copylocks
+	// would then flag every such copy).
+	nodesCache unsafe.Pointer
 }
 
 // NewContext creates a new linting context from SQL content and filename.
@@ -123,6 +143,7 @@ func (c *Context) WithTokens(tokens []models.TokenWithSpan) *Context {
 func (c *Context) WithAST(astObj *ast.AST, err error) *Context {
 	c.AST = astObj
 	c.ParseErr = err
+	atomic.StorePointer(&c.nodesCache, nil)
 	return c
 }
 
@@ -152,4 +173,53 @@ func (c *Context) GetLine(lineNum int) string {
 // (e.g., overall structure, ending newlines).
 func (c *Context) GetLineCount() int {
 	return len(c.Lines)
+}
+
+// nodeCollector appends every visited node in preorder; it never prunes.
+type nodeCollector struct {
+	nodes []ast.Node
+	root  *ast.AST // AST the snapshot was built for; a changed c.AST invalidates it
+}
+
+// Visit implements ast.Visitor.
+func (c *nodeCollector) Visit(n ast.Node) (ast.Visitor, error) {
+	if n != nil {
+		c.nodes = append(c.nodes, n)
+	}
+	return c, nil
+}
+
+// Nodes returns every node of every AST statement in preorder, matching
+// ast.Inspect. The list is built on first use and cached for this Context's AST.
+// It is safe to call from several goroutines at once (rules may Check one shared
+// Context concurrently) without any process-wide lock; concurrent first calls
+// may each walk the tree, and one result is kept. Rules must not mutate the returned slice or the AST. Replacing
+// c.AST (directly or via WithAST) invalidates the cache; mutating the tree in
+// place does not. Separate Contexts have independent caches. Returns nil when no
+// AST is available.
+//
+// In LintString and its wrappers, the returned slice and its nodes are borrowed
+// until the calling Rule.Check returns. Do not save the slice or node aliases,
+// including in a visitor or closure; copying the slice does not copy the nodes.
+// Join any goroutines using the result before Check returns, and materialize
+// independent values or deep copies for later use.
+func (c *Context) Nodes() []ast.Node {
+	if p := (*nodeCollector)(atomic.LoadPointer(&c.nodesCache)); p != nil && p.root == c.AST {
+		return p.nodes
+	}
+
+	root := c.AST
+	// A Visitor (one allocation) instead of an ast.Inspect closure per statement:
+	// the walk order is identical and no state is captured by reference.
+	col := &nodeCollector{root: root}
+	if root != nil {
+		col.nodes = make([]ast.Node, 0, 64)
+		for _, stmt := range root.Statements {
+			_ = ast.Walk(col, stmt)
+		}
+	}
+	// Last writer wins; concurrent snapshots have identical contents. The
+	// collector is never mutated after this point.
+	atomic.StorePointer(&c.nodesCache, unsafe.Pointer(col))
+	return col.nodes
 }

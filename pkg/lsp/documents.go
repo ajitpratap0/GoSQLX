@@ -15,8 +15,10 @@
 package lsp
 
 import (
+	"log"
 	"strings"
 	"sync"
+	"unicode/utf8"
 )
 
 // DocumentManager manages open SQL documents in a thread-safe manner.
@@ -63,6 +65,7 @@ import (
 type DocumentManager struct {
 	mu        sync.RWMutex
 	documents map[string]*Document
+	logger    *log.Logger // Set by NewServer before the manager is shared.
 }
 
 // Document represents an open SQL document with its current state.
@@ -214,6 +217,12 @@ func (dm *DocumentManager) Update(uri string, version int, changes []TextDocumen
 			doc.Lines = splitLines(change.Text)
 		} else {
 			// Incremental sync
+			if hasNegativePosition(change.Range) {
+				if dm.logger != nil {
+					dm.logger.Printf("Rejected document change: negative line or character in range %+v", *change.Range)
+				}
+				continue
+			}
 			doc.Content = applyChange(doc.Content, doc.Lines, change)
 			doc.Lines = splitLines(doc.Content)
 		}
@@ -320,9 +329,16 @@ func applyChange(content string, lines []string, change TextDocumentContentChang
 	if change.Range == nil {
 		return change.Text
 	}
+	if hasNegativePosition(change.Range) {
+		return content
+	}
 
-	startOffset := positionToOffset(lines, change.Range.Start)
-	endOffset := positionToOffset(lines, change.Range.End)
+	startOffset := min(positionToOffset(lines, change.Range.Start), len(content))
+	endOffset := min(positionToOffset(lines, change.Range.End), len(content))
+	// Be lenient with reversed ranges: replace the span between the endpoints.
+	if startOffset > endOffset {
+		startOffset, endOffset = endOffset, startOffset
+	}
 
 	// Build new content
 	var result strings.Builder
@@ -335,21 +351,47 @@ func applyChange(content string, lines []string, change TextDocumentContentChang
 	return result.String()
 }
 
-// positionToOffset converts a Position to a byte offset
+func hasNegativePosition(r *Range) bool {
+	return r.Start.Line < 0 || r.Start.Character < 0 || r.End.Line < 0 || r.End.Character < 0
+}
+
+// positionToOffset converts an LSP UTF-16 position to a byte offset. Positions
+// inside a surrogate pair round to the end of the rune. Out-of-range positions
+// clamp to the line/document end, excluding CRLF terminators. Negative positions
+// return zero; applyChange and Update reject them before calling this helper.
 func positionToOffset(lines []string, pos Position) int {
+	if pos.Line < 0 || pos.Character < 0 {
+		return 0
+	}
 	offset := 0
 	for i := 0; i < pos.Line && i < len(lines); i++ {
-		offset += len(lines[i]) + 1 // +1 for newline
-	}
-	if pos.Line < len(lines) {
-		lineLen := len(lines[pos.Line])
-		if pos.Character < lineLen {
-			offset += pos.Character
-		} else {
-			offset += lineLen
+		offset += len(lines[i])
+		if i < len(lines)-1 {
+			offset++ // Newline separators exist only between cached lines.
 		}
 	}
-	return offset
+	if pos.Line >= len(lines) {
+		return offset
+	}
+	line := lines[pos.Line]
+	if len(line) > 0 && line[len(line)-1] == '\r' {
+		line = line[:len(line)-1]
+	}
+	index, units := 0, 0
+	for index < len(line) && units < pos.Character {
+		if line[index] < utf8.RuneSelf {
+			index++
+			units++
+			continue
+		}
+		r, size := utf8.DecodeRuneInString(line[index:])
+		index += size
+		units++
+		if r >= 0x10000 {
+			units++
+		}
+	}
+	return offset + index
 }
 
 // GetWordAtPosition returns the word at the given position.

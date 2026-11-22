@@ -18,6 +18,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"sync"
 	"testing"
@@ -45,6 +46,34 @@ func find(t *testing.T, src string, spans []Span, text string) Category {
 	}
 	t.Fatalf("no span with text %q in: %s", text, render(src, spans))
 	return Plain
+}
+
+func TestLastUnclosedHashComments(t *testing.T) {
+	tests := []struct {
+		name      string
+		sql       string
+		wantMySQL int
+		wantOther int
+	}{
+		{"quote in trailing comment", "SELECT 1 # '", -1, 11},
+		{"block opener in trailing comment", "SELECT 1 # /*", -1, 11},
+		{"unclosed quote after comment", "# ' ignored\nSELECT '", 19, -1},
+		{"hash inside string", "SELECT '#', '", 12, 12},
+	}
+	for _, d := range []keywords.SQLDialect{keywords.DialectMySQL, keywords.DialectMariaDB, keywords.DialectPostgreSQL, keywords.DialectGeneric} {
+		for _, tt := range tests {
+			t.Run(string(d)+"/"+tt.name, func(t *testing.T) {
+				want := tt.wantOther
+				if d == keywords.DialectMySQL || d == keywords.DialectMariaDB {
+					want = tt.wantMySQL
+				}
+				h := classifier{src: tt.sql, dialect: d}
+				if got := h.lastUnclosed(len(tt.sql)); got != want {
+					t.Errorf("lastUnclosed(%q) = %d, want %d", tt.sql, got, want)
+				}
+			})
+		}
+	}
 }
 
 func TestSpans_Classification(t *testing.T) {
@@ -433,6 +462,45 @@ func FuzzSpans(f *testing.F) {
 	})
 }
 
+// TestSpansUnicodeCaseFolding pins Unicode-aware folding alongside mixed-case ASCII twins.
+func TestSpansUnicodeCaseFolding(t *testing.T) {
+	tests := []struct {
+		sql      string
+		want     []Span
+		complete bool
+	}{
+		{"ſelect 1", []Span{{Start: 0, End: 7, Category: Keyword}, {Start: 8, End: 9, Category: Number}}, true},
+		{"Select 1", []Span{{Start: 0, End: 6, Category: Keyword}, {Start: 7, End: 8, Category: Number}}, true},
+		{"CREATE TABLE t (c ınt)", []Span{{Start: 18, End: 22, Category: DataType}}, false},
+		{"create table t (c Int)", []Span{{Start: 18, End: 21, Category: DataType}}, false},
+		{"SELECT cast(x aſ int)", []Span{{Start: 14, End: 17, Category: Keyword}, {Start: 18, End: 21, Category: DataType}}, false},
+		{"select CAST(x As int)", []Span{{Start: 14, End: 16, Category: Keyword}, {Start: 17, End: 20, Category: DataType}}, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.sql, func(t *testing.T) {
+			got := Spans(tt.sql)
+			if tt.complete {
+				if !reflect.DeepEqual(got, tt.want) {
+					t.Fatalf("Spans(%q) = %v, want %v", tt.sql, got, tt.want)
+				}
+				return
+			}
+			for _, want := range tt.want {
+				found := false
+				for _, span := range got {
+					if span == want {
+						found = true
+						break
+					}
+				}
+				if !found {
+					t.Errorf("Spans(%q) = %v, missing %v", tt.sql, got, want)
+				}
+			}
+		})
+	}
+}
+
 func BenchmarkSpans(b *testing.B) {
 	sql := strings.Repeat("SELECT u.id, u.name, COUNT(o.id) AS orders FROM users u "+
 		"LEFT JOIN orders o ON o.user_id = u.id WHERE u.created_at > $1 -- recent\n"+
@@ -441,6 +509,21 @@ func BenchmarkSpans(b *testing.B) {
 	b.SetBytes(int64(len(sql)))
 	for i := 0; i < b.N; i++ {
 		_ = Spans(sql)
+	}
+}
+
+func TestSpansAllocs(t *testing.T) {
+	if raceEnabled {
+		t.Skip("race runtime may discard pooled values")
+	}
+	query := strings.Repeat("SELECT u.id, u.name, COUNT(o.id) AS orders FROM users u "+
+		"LEFT JOIN orders o ON o.user_id = u.id WHERE u.created_at > $1 -- recent\n"+
+		"GROUP BY u.id, u.name HAVING COUNT(o.id) > 5 ORDER BY orders DESC LIMIT 10;\n", 10)
+	for _, sql := range []string{query, "select a from t"} {
+		Spans(sql)
+		if got := testing.AllocsPerRun(200, func() { Spans(sql) }); got > 4 {
+			t.Errorf("length %d: got %g allocs, want at most 4", len(sql), got)
+		}
 	}
 }
 

@@ -47,6 +47,11 @@ func FuzzSplitStatements(f *testing.F) {
 		{"E'", "postgresql"},
 		{"'", ""},
 		{"--", ""},
+		{"SELECT 1\nGO\nSELECT 2", "sqlserver"},
+		{"DELIMITER //\nSELECT 1;SELECT 2//\nDELIMITER ;\n", "mysql"},
+		{"BEGIN SELECT 1; END; BEGIN; COMMIT", "sqlite"},
+		{"DECLARE x NUMBER; BEGIN NULL; END;\n/\n", "oracle"},
+		{"CREATE PROCEDURE p() BEGIN IF a THEN SELECT 1; END IF; END", "mysql"},
 	}
 	for _, s := range seeds {
 		f.Add(s.sql, s.dialect)
@@ -54,7 +59,7 @@ func FuzzSplitStatements(f *testing.F) {
 
 	f.Fuzz(func(t *testing.T, src, dialect string) {
 		segs := SplitStatements(src, dialect)
-		if msg, ok := checkTiling(src, segs); !ok {
+		if msg, ok := checkTilingFor(src, segs, dialect); !ok {
 			t.Fatalf("SplitStatements(%q, %q) = %q: %s", src, dialect, segs, msg)
 		}
 	})

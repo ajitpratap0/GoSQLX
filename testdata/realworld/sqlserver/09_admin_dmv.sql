@@ -1,0 +1,21 @@
+-- DBA / admin / monitoring queries against catalog views and DMVs
+SELECT t.name AS TableName, s.name AS SchemaName, p.rows AS RowCounts FROM sys.tables t JOIN sys.schemas s ON s.schema_id = t.schema_id JOIN sys.partitions p ON p.object_id = t.object_id AND p.index_id IN (0, 1) ORDER BY p.rows DESC;
+SELECT TOP (20) qs.total_elapsed_time / qs.execution_count AS AvgElapsed, qs.execution_count, SUBSTRING(st.text, (qs.statement_start_offset / 2) + 1, ((CASE qs.statement_end_offset WHEN -1 THEN DATALENGTH(st.text) ELSE qs.statement_end_offset END - qs.statement_start_offset) / 2) + 1) AS StatementText FROM sys.dm_exec_query_stats AS qs CROSS APPLY sys.dm_exec_sql_text(qs.sql_handle) AS st ORDER BY AvgElapsed DESC;
+SELECT r.session_id, r.status, r.wait_type, r.blocking_session_id, DB_NAME(r.database_id) AS DbName FROM sys.dm_exec_requests r WHERE r.session_id > 50 AND r.blocking_session_id <> 0;
+SELECT c.name AS ColumnName, ty.name AS TypeName, c.max_length, c.is_nullable FROM sys.columns c JOIN sys.types ty ON ty.user_type_id = c.user_type_id WHERE c.object_id = OBJECT_ID(N'dbo.Customers');
+SELECT i.name, i.type_desc, ips.avg_fragmentation_in_percent FROM sys.dm_db_index_physical_stats(DB_ID(), NULL, NULL, NULL, N'LIMITED') ips JOIN sys.indexes i ON i.object_id = ips.object_id AND i.index_id = ips.index_id WHERE ips.avg_fragmentation_in_percent > 30;
+SELECT name, database_id, create_date, compatibility_level, recovery_model_desc FROM sys.databases WHERE state = 0 ORDER BY name;
+SELECT SERVERPROPERTY('ProductVersion') AS Ver, SERVERPROPERTY('Edition') AS Ed;
+SELECT * FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = N'dbo' AND TABLE_NAME = N'Customers' ORDER BY ORDINAL_POSITION;
+SELECT * FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_TYPE = 'BASE TABLE';
+SELECT OBJECT_SCHEMA_NAME(object_id) + N'.' + OBJECT_NAME(object_id) AS FullName FROM sys.objects WHERE type IN ('U', 'V');
+SELECT login_name, COUNT(*) AS Sessions FROM sys.dm_exec_sessions WHERE is_user_process = 1 GROUP BY login_name HAVING COUNT(*) > 5;
+SELECT DB_NAME(database_id) AS DatabaseName, SUM(size) * 8 / 1024 AS SizeMB FROM sys.master_files GROUP BY database_id;
+SELECT fk.name, OBJECT_NAME(fk.parent_object_id) AS ParentTable, OBJECT_NAME(fk.referenced_object_id) AS RefTable FROM sys.foreign_keys fk;
+SELECT TOP (50) wait_type, wait_time_ms, waiting_tasks_count FROM sys.dm_os_wait_stats WHERE wait_type NOT LIKE N'SLEEP%' ORDER BY wait_time_ms DESC;
+SELECT * FROM sys.dm_db_missing_index_details;
+DBCC CHECKDB (N'Northwind') WITH NO_INFOMSGS;
+ALTER INDEX ALL ON dbo.Orders REBUILD WITH (ONLINE = ON);
+ALTER INDEX IX_Orders_Status ON dbo.Orders REORGANIZE;
+ALTER DATABASE CURRENT SET RECOVERY SIMPLE;
+KILL 55;

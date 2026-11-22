@@ -20,6 +20,7 @@ import (
 	goerrors "github.com/ajitpratap0/GoSQLX/pkg/errors"
 	"github.com/ajitpratap0/GoSQLX/pkg/models"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
+	"github.com/ajitpratap0/GoSQLX/pkg/sql/keywords"
 )
 
 // parseCompositeIndirection consumes field selections and array subscripts
@@ -33,6 +34,36 @@ func (p *Parser) parseCompositeIndirection(expr ast.Expression) (ast.Expression,
 	fields := 0
 	for {
 		switch {
+		case p.isType(models.TokenTypePeriod) && p.isTupleElementAccess():
+			// ClickHouse tuple element by position: (1, 'a').1
+			pos := p.currentLocation()
+			p.advance() // Consume .
+			expr = &ast.FieldAccessExpression{Expr: expr, Field: p.currentToken.Token.Value, Pos: pos}
+			p.advance() // Consume the element number
+		case p.isType(models.TokenTypePeriod) && p.isSQLServerMethodCall():
+			// SQL Server method call on a value: (subquery).value('.', 'type')
+			pos := p.currentLocation()
+			p.advance() // Consume .
+			name := p.currentToken.Token.Value
+			p.advance() // Consume the method name
+			p.advance() // Consume (
+			call := &ast.FieldAccessExpression{Expr: expr, Field: name, IsCall: true, Pos: pos}
+			for !p.isType(models.TokenTypeRParen) {
+				arg, err := p.parseExpression()
+				if err != nil {
+					return nil, err
+				}
+				call.Args = append(call.Args, arg)
+				if !p.isType(models.TokenTypeComma) {
+					break
+				}
+				p.advance() // Consume ,
+			}
+			if !p.isType(models.TokenTypeRParen) {
+				return nil, p.expectedError(") after method arguments")
+			}
+			p.advance() // Consume )
+			expr = call
 		case p.isType(models.TokenTypePeriod):
 			if !p.Capabilities().SupportsCompositeFieldAccess {
 				return nil, goerrors.UnsupportedFeatureError(
@@ -108,4 +139,33 @@ func isBareWord(s string) bool {
 		}
 	}
 	return true
+}
+
+// isTupleElementAccess reports whether the current '.' selects a ClickHouse
+// tuple element by its 1-based position: (1, 'a').1.
+func (p *Parser) isTupleElementAccess() bool {
+	if p.dialect != string(keywords.DialectClickHouse) {
+		return false
+	}
+	next := p.peekToken().Token
+	if next.Type != models.TokenTypeNumber || next.Value == "" {
+		return false
+	}
+	for i := 0; i < len(next.Value); i++ {
+		if next.Value[i] < '0' || next.Value[i] > '9' {
+			return false
+		}
+	}
+	return true
+}
+
+// isSQLServerMethodCall reports whether the current '.' starts a SQL Server
+// method call on the value before it: .name( with a bare method name.
+func (p *Parser) isSQLServerMethodCall() bool {
+	if !p.IsSQLServer() {
+		return false
+	}
+	name := p.peekToken().Token
+	return name.Quote == 0 && isBareWord(name.Value) && p.peekTypeAt(2) == models.TokenTypeLParen &&
+		p.peekTypeAt(1) != models.TokenTypeNumber
 }

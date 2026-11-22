@@ -45,7 +45,7 @@ func isBareTableHint(h string) bool {
 // in a hand-built AST) is double-quoted with embedded quotes doubled so it
 // cannot end the hint list or the statement.
 func QuoteTableHint(h string) string {
-	if isBareTableHint(h) {
+	if isTableHintText(h) {
 		return h
 	}
 	buf := getBuf()
@@ -66,7 +66,7 @@ func writeTableHints(buf *bytes.Buffer, hints []string) {
 		if i > 0 {
 			buf.WriteString(", ")
 		}
-		if isBareTableHint(h) {
+		if isTableHintText(h) {
 			buf.WriteString(h)
 		} else {
 			writeQuotedIdentifier(buf, h)
@@ -155,21 +155,12 @@ func QuotePivotItem(item string) string {
 	return buf.String()
 }
 
-func writePivotItem(buf *bytes.Buffer, item string) {
-	if isWellFormedPivotItem(item) {
-		buf.WriteString(item)
-		return
-	}
-	writeQuotedIdentifier(buf, item)
-}
-
 // isWellFormedPivotItem reports whether item is "atom" or "atom AS atom"
-// (see QuotePivotItem), where the first atom may also be a parenthesized
-// column set "(atom, atom, ...)" as in a multi-column UNPIVOT.
+// (see QuotePivotItem).
 func isWellFormedPivotItem(item string) bool {
 	n := pivotAtomLen(item)
 	if n == 0 {
-		n = pivotColumnSetLen(item)
+		n = pivotTupleLen(item)
 	}
 	if n == 0 {
 		return false
@@ -184,30 +175,6 @@ func isWellFormedPivotItem(item string) bool {
 	}
 	rest = rest[len(as):]
 	return pivotAtomLen(rest) == len(rest)
-}
-
-// pivotColumnSetLen returns the length of the "(atom, atom, ...)" column set
-// at the start of s, or 0 if s does not start with one. Sets do not nest.
-func pivotColumnSetLen(s string) int {
-	if s == "" || s[0] != '(' {
-		return 0
-	}
-	i := 1
-	for {
-		n := pivotAtomLen(s[i:])
-		if n == 0 {
-			return 0
-		}
-		i += n
-		switch {
-		case i < len(s) && s[i] == ')':
-			return i + 1
-		case len(s)-i > 2 && s[i] == ',' && s[i+1] == ' ':
-			i += 2
-		default:
-			return 0
-		}
-	}
 }
 
 // pivotAtomLen returns the length of the atom at the start of s, or 0 if s
@@ -268,79 +235,24 @@ func pivotAtomLen(s string) int {
 	return i
 }
 
-// writePivotClause writes " PIVOT (agg [AS alias][, ...] FOR col IN (v1, v2))".
-// The pivot column is quoted when it is not a plain name. Aggregate aliases
-// retain source quoting or are quoted like table aliases. Each IN value is
-// written in its stored source form (e.g. [Q1], 'JAN', 1 AS one) when well
-// formed, otherwise double-quoted (see QuotePivotItem).
+// writePivotClause writes " PIVOT (agg FOR col IN (v1, v2))". The pivot
+// column is quoted when it is not a plain name, and each IN value is written
+// in its stored source form (e.g. [Q1], 'JAN', 1 AS one) when well formed,
+// otherwise double-quoted (see QuotePivotItem).
 func writePivotClause(buf *bytes.Buffer, p *PivotClause) {
 	if p == nil {
 		return
 	}
-	buf.WriteString(" PIVOT (")
-	writeExpr(buf, p.AggregateFunction)
-	writePivotAggregateAlias(buf, p.AggregateAlias)
-	for _, a := range p.ExtraAggregates {
-		buf.WriteString(", ")
-		writeExpr(buf, a.Function)
-		writePivotAggregateAlias(buf, a.Alias)
-	}
-	buf.WriteString(" FOR ")
-	writePivotColumn(buf, p.PivotColumn)
-	buf.WriteString(" IN (")
-	for i, v := range p.InValues {
-		if i > 0 {
-			buf.WriteString(", ")
-		}
-		writePivotItem(buf, v)
-	}
-	buf.WriteString("))")
+	writePivot(buf, p, identityKeyword)
 }
 
-func writePivotAggregateAlias(buf *bytes.Buffer, alias string) {
-	if alias == "" {
-		return
-	}
-	buf.WriteString(" AS ")
-	buf.WriteString(QuotePivotAggregateAlias(alias))
-}
-
-// writeUnpivotClause writes
-// " UNPIVOT [INCLUDE NULLS | EXCLUDE NULLS] (val FOR name IN (c1, c2))", or
-// with a parenthesized value column set in the multi-column form, quoting
+// writeUnpivotClause writes " UNPIVOT (val FOR name IN (c1, c2))", quoting
 // names and IN columns the same way as writePivotClause.
 func writeUnpivotClause(buf *bytes.Buffer, u *UnpivotClause) {
 	if u == nil {
 		return
 	}
-	buf.WriteString(" UNPIVOT ")
-	if nh := UnpivotNullHandling(u.NullHandling); nh != "" {
-		buf.WriteString(nh)
-		buf.WriteByte(' ')
-	}
-	buf.WriteByte('(')
-	if len(u.ValueColumns) > 0 {
-		buf.WriteByte('(')
-		for i, c := range u.ValueColumns {
-			if i > 0 {
-				buf.WriteString(", ")
-			}
-			buf.WriteString(QuoteUnpivotValueColumn(c))
-		}
-		buf.WriteByte(')')
-	} else {
-		buf.WriteString(QuoteUnpivotValueColumn(u.ValueColumn))
-	}
-	buf.WriteString(" FOR ")
-	writePivotColumn(buf, u.NameColumn)
-	buf.WriteString(" IN (")
-	for i, c := range u.InColumns {
-		if i > 0 {
-			buf.WriteString(", ")
-		}
-		writePivotItem(buf, c)
-	}
-	buf.WriteString("))")
+	writeUnpivot(buf, u, identityKeyword)
 }
 
 // UnpivotNullHandling normalizes an UnpivotClause.NullHandling value to

@@ -16,6 +16,21 @@ package gosqlx
 
 import "errors"
 
+// wrapErr is the lazy equivalent of fmt.Errorf("%w: %w", sentinel, err).
+// Both errors must be non-nil. Keeping the pair inline lets errors.Is and
+// errors.As traverse it without allocating a slice on every Unwrap call.
+type wrapErr struct {
+	errs [2]error
+}
+
+func newWrap(sentinel, err error) *wrapErr {
+	return &wrapErr{errs: [2]error{sentinel, err}}
+}
+
+func (w *wrapErr) Error() string { return w.errs[0].Error() + ": " + w.errs[1].Error() }
+
+func (w *wrapErr) Unwrap() []error { return w.errs[:] }
+
 // Sentinel error values returned (wrapped) by the new ParseTree / ParseReader
 // entry points. Callers can test specific failure classes with errors.Is:
 //

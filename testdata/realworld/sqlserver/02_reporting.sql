@@ -1,0 +1,27 @@
+-- Dashboards and ERP style reporting queries
+SELECT YEAR(o.OrderDate) AS Yr, MONTH(o.OrderDate) AS Mo, SUM(od.Quantity * od.UnitPrice) AS Revenue FROM Sales.Orders o JOIN Sales.OrderDetails od ON od.OrderId = o.OrderId GROUP BY YEAR(o.OrderDate), MONTH(o.OrderDate) ORDER BY Yr, Mo;
+SELECT c.CustomerName, COUNT(DISTINCT o.OrderId) AS Orders, SUM(od.Quantity * od.UnitPrice * (1 - od.Discount)) AS NetRevenue FROM Sales.Customers c LEFT JOIN Sales.Orders o ON o.CustomerId = c.CustomerId LEFT JOIN Sales.OrderDetails od ON od.OrderId = o.OrderId GROUP BY c.CustomerName HAVING SUM(od.Quantity * od.UnitPrice) > 1000 ORDER BY NetRevenue DESC;
+SELECT TOP (10) PERCENT p.ProductName, p.ListPrice FROM Production.Product p ORDER BY p.ListPrice DESC;
+SELECT TOP (3) WITH TIES e.Name, e.Salary FROM HR.Employees e ORDER BY e.Salary DESC;
+SELECT TOP 5 PERCENT WITH TIES Name, Score FROM dbo.Players ORDER BY Score DESC;
+SELECT Region, SUM(Amount) AS Total FROM dbo.Sales GROUP BY ROLLUP (Region);
+SELECT Region, Product, SUM(Amount) AS Total FROM dbo.Sales GROUP BY CUBE (Region, Product);
+SELECT Region, Product, SUM(Amount) AS Total, GROUPING(Region) AS gr FROM dbo.Sales GROUP BY GROUPING SETS ((Region, Product), (Region), ());
+SELECT Region, SUM(Amount) FROM dbo.Sales GROUP BY Region WITH ROLLUP;
+SELECT d.DepartmentName, STRING_AGG(e.LastName, N', ') WITHIN GROUP (ORDER BY e.LastName) AS Employees FROM HR.Departments d JOIN HR.Employees e ON e.DepartmentId = d.DepartmentId GROUP BY d.DepartmentName;
+SELECT STRING_AGG(CAST(Id AS NVARCHAR(20)), ',') FROM dbo.Orders WHERE Status = N'Open';
+SELECT CONVERT(VARCHAR(10), OrderDate, 120) AS OrderDay, COUNT(*) AS Cnt FROM dbo.Orders GROUP BY CONVERT(VARCHAR(10), OrderDate, 120);
+SELECT FORMAT(OrderDate, 'yyyy-MM') AS Period, SUM(Total) AS Total FROM dbo.Orders GROUP BY FORMAT(OrderDate, 'yyyy-MM');
+SELECT DATEDIFF(DAY, OrderDate, ShippedDate) AS DaysToShip, AVG(Total) FROM dbo.Orders WHERE ShippedDate IS NOT NULL GROUP BY DATEDIFF(DAY, OrderDate, ShippedDate);
+SELECT DATEADD(MONTH, DATEDIFF(MONTH, 0, OrderDate), 0) AS MonthStart, COUNT(*) FROM dbo.Orders GROUP BY DATEADD(MONTH, DATEDIFF(MONTH, 0, OrderDate), 0);
+SELECT EOMONTH(GETDATE()) AS MonthEnd, EOMONTH(GETDATE(), -1) AS PrevMonthEnd;
+SELECT DATEPART(QUARTER, OrderDate) AS Q, DATENAME(MONTH, OrderDate) AS MonthName FROM dbo.Orders;
+SELECT IIF(Total > 1000, N'Large', N'Small') AS Size, COUNT(*) FROM dbo.Orders GROUP BY IIF(Total > 1000, N'Large', N'Small');
+SELECT ISNULL(Region, N'Unknown') AS Region, COALESCE(Manager, Supervisor, N'None') AS Boss, NULLIF(Qty, 0) AS Q FROM dbo.Sales;
+SELECT TRY_CAST(Amount AS DECIMAL(18, 2)) AS Amt, TRY_CONVERT(DATE, DateText, 103) AS D, TRY_PARSE(N'2024-01-01' AS DATE) AS P FROM dbo.Import;
+SELECT CHOOSE(MONTH(GETDATE()), N'Jan', N'Feb', N'Mar', N'Apr', N'May', N'Jun', N'Jul', N'Aug', N'Sep', N'Oct', N'Nov', N'Dec');
+SELECT * FROM (SELECT Region, Quarter, Amount FROM dbo.Sales) AS src PIVOT (SUM(Amount) FOR Quarter IN ([Q1], [Q2], [Q3], [Q4])) AS pvt;
+SELECT CustomerId, Metric, Value FROM dbo.CustomerStats UNPIVOT (Value FOR Metric IN (Orders, Returns, Visits)) AS u;
+SELECT s.Name FROM sys.schemas s WHERE s.name <> N'sys';
+SELECT SUM(CASE WHEN Status = N'Open' THEN 1 ELSE 0 END) AS OpenCnt, SUM(CASE WHEN Status = N'Closed' THEN 1 ELSE 0 END) AS ClosedCnt FROM dbo.Tickets;
+SELECT a.AccountId, a.Balance, b.Balance AS Prior FROM dbo.Accounts a INNER JOIN dbo.AccountSnapshots b ON a.AccountId = b.AccountId AND b.SnapshotDate = CAST(GETDATE() - 1 AS DATE) WHERE a.Balance <> b.Balance;

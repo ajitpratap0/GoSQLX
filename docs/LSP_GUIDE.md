@@ -170,11 +170,20 @@ Markdown documentation for 70+ SQL keywords including:
 }
 ```
 
+Formatting keeps comments and optimizer hints, in the configured dialect as
+well as the default one: a comment inside a statement moves to the line above
+it, and a `/*+ ... */` hint after a statement's first keyword stays in place.
+When the AST formatter cannot place a document's hints, the server falls back to
+the same basic line-by-line formatting it uses for SQL that does not parse.
+
 ### 6. Document Symbols
 
 Lists all SQL statements with categorization:
 - Method (DML: SELECT, INSERT, UPDATE, DELETE)
 - Struct (DDL: CREATE, DROP, ALTER)
+
+SQL Server `GO` batch separators do not appear in the outline, and a statement
+before a `GO` line ends at that line instead of running to the end of the file.
 
 ### 7. Signature Help
 
@@ -448,7 +457,7 @@ Using eglot:
 ```json
 {
   "capabilities": {
-    "textDocumentSyncOptions": {
+    "textDocumentSync": {
       "openClose": true,
       "change": 2,
       "save": {"includeText": true}
@@ -468,6 +477,18 @@ Using eglot:
   }
 }
 ```
+
+### Protocol Error Handling
+
+Unknown request methods return JSON-RPC error `-32601` (`MethodNotFound`).
+The server logs malformed `Content-Length` headers and invalid JSON, then
+continues processing subsequent well-framed messages. Invalid input does not
+require restarting the server.
+
+Incremental `textDocument/didChange` ranges use UTF-16 positions. Negative
+positions are rejected; positions beyond a line or the document are clamped
+to its end, and reversed ranges have their endpoints swapped. The server
+continues serving requests after these changes.
 
 ### Server Limits
 

@@ -33,14 +33,11 @@ func TestFormatSQL_RefusesLostQuotes(t *testing.T) {
 		dialect string
 		in      string
 	}{
-		{name: "alter mixed case", in: `ALTER TABLE t ADD COLUMN "Mixed" INT`},
-		// Refused by checkMySQLDoubleQuotes: in ALTER, `select` would render as
-		// "select". (In a SELECT list checkQuotedTokens refuses it first.)
-		{name: "alter mysql backtick keyword", dialect: "mysql", in: "ALTER TABLE `Users` ADD COLUMN `select` INT"},
-		{name: "select mixed case", in: `SELECT "Mixed" FROM t`},
-		{name: "select mixed case table", in: `SELECT a FROM "Mixed"`},
-		{name: "create table quoted", in: `CREATE TABLE "Mixed" ("order" INT)`},
-		{name: "oracle lowercase quoted", dialect: "oracle", in: `SELECT "abc" FROM t`},
+		// Names the AST does not record quoting for (a TABLESPACE name, for
+		// example) still render bare, so the CLI must refuse. (CREATE
+		// SEQUENCE and ALTER POLICY names are recorded, so their quotes
+		// survive.)
+		{name: "tablespace mixed case", in: `CREATE TABLE t (a INT) TABLESPACE "Ts"`},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -70,15 +67,20 @@ func TestFormatSQL_AllowsHarmlessQuotes(t *testing.T) {
 		want    string
 	}{
 		{name: "lowercase quoted", in: `SELECT "users_id" FROM "users"`, want: "SELECT users_id FROM users"},
+		{name: "alter policy mixed case", in: `ALTER POLICY "Pol" ON "Tbl" RENAME TO "Q"`, want: `ALTER POLICY "Pol" ON "Tbl" RENAME TO "Q"`},
 		{name: "alter plain", in: "ALTER TABLE t ADD COLUMN c INT", want: "ALTER TABLE t ADD COLUMN c INT"},
 		// Reserved words keep their quotes on render (#632), so these format.
 		{name: "alter reserved word", in: `ALTER TABLE t ADD COLUMN "order" INT`, want: `ALTER TABLE t ADD COLUMN "order" INT`},
 		{name: "alter reserved word postgresql", dialect: "postgresql", in: `ALTER TABLE t ADD COLUMN "order" INT`, want: `ALTER TABLE t ADD COLUMN "order" INT`},
 		{name: "mysql backtick plain", dialect: "mysql", in: "ALTER TABLE `Users` ADD COLUMN `c` INT", want: "ALTER TABLE Users ADD COLUMN c INT"},
-		{name: "sqlserver bracket kept quoted", dialect: "sqlserver", in: "SELECT [Mixed Name] FROM t", want: `SELECT "Mixed Name" FROM t`},
+		{name: "sqlserver bracket kept quoted", dialect: "sqlserver", in: "SELECT [Mixed Name] FROM t", want: "SELECT [Mixed Name] FROM t"},
 		{name: "oracle uppercase quoted", dialect: "oracle", in: `SELECT "ABC" FROM t`, want: "SELECT ABC FROM t"},
 		{name: "string literal kept", in: "SELECT a FROM t WHERE b = 'it''s'", want: "SELECT a FROM t WHERE b = 'it''s'"},
 		{name: "mysql escaped literal", dialect: "mysql", in: `SELECT 'a\nb'`, want: `SELECT 'a\nb'`},
+		{name: "mysql adjacent literals", dialect: "mysql", in: "SELECT 'a' 'b'", want: "SELECT 'ab'"},
+		{name: "postgresql adjacent literals", dialect: "postgresql", in: "SELECT 'a' 'b' || 'c'", want: "SELECT 'ab' || 'c'"},
+		{name: "mysql string alias", dialect: "mysql", in: "SELECT a AS 'alias with space', b AS 'plain', 'lit' FROM t", want: "SELECT a AS `alias with space`, b AS plain, 'lit' FROM t"},
+		{name: "sqlite string alias", dialect: "sqlite", in: "SELECT a AS 'x y' FROM t", want: `SELECT a AS "x y" FROM t`},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -93,19 +95,37 @@ func TestFormatSQL_AllowsHarmlessQuotes(t *testing.T) {
 	}
 }
 
-// TestFormatSQL_RefusesBackslashLiteralChange checks that string literals
-// with backslashes are never rewritten in dialects where backslash is not an
-// escape character (the renderer doubles them); the CLI must refuse.
-func TestFormatSQL_RefusesBackslashLiteralChange(t *testing.T) {
-	for _, d := range []string{"sqlserver", "oracle", "sqlite", "snowflake", "clickhouse"} {
-		t.Run(d, func(t *testing.T) {
-			in := `SELECT 'C:\temp\x'`
-			out, err := formatWith(in, CLIFormatterOptions{Compact: true, Uppercase: true, Dialect: d})
-			if err == nil {
-				t.Fatalf("formatSQL(%q, %s) = %q, want an error", in, d, out)
+// TestFormatSQL_KeepsBackslashLiteral checks that a string literal with
+// backslashes is written back with the rules of its dialect: untouched where
+// the backslash is an ordinary character, re-escaped (and so equal after
+// tokenizing) where it escapes. The renderer used to double every backslash,
+// so the guard refused these inputs.
+func TestFormatSQL_KeepsBackslashLiteral(t *testing.T) {
+	const in = `SELECT 'C:\temp\x'`
+	for _, tt := range []struct {
+		dialect string
+		want    string // literal text expected in the output
+	}{
+		{"sqlserver", `'C:\temp\x'`},
+		{"oracle", `'C:\temp\x'`},
+		{"sqlite", `'C:\temp\x'`},
+		{"postgresql", `'C:\temp\x'`},
+		// \t is a tab; \x keeps its backslash, which the output doubles.
+		// (Snowflake refuses an incomplete \x escape; see
+		// format_string_escape_test.go.)
+		{"clickhouse", "'C:\temp\\\\x'"},
+	} {
+		t.Run(tt.dialect, func(t *testing.T) {
+			out, err := formatWith(in, CLIFormatterOptions{Compact: true, Uppercase: true, Dialect: tt.dialect})
+			if err != nil {
+				t.Fatalf("formatSQL(%q, %s): %v", in, tt.dialect, err)
 			}
-			if !strings.Contains(err.Error(), "string literal") {
-				t.Fatalf("error %q does not name the changed string literal", err)
+			if !strings.Contains(out, tt.want) {
+				t.Fatalf("formatSQL(%q, %s) = %q, want it to contain %q", in, tt.dialect, out, tt.want)
+			}
+			again, err := formatWith(out, CLIFormatterOptions{Compact: true, Uppercase: true, Dialect: tt.dialect})
+			if err != nil || again != out {
+				t.Fatalf("not idempotent: %q then %q (err %v)", out, again, err)
 			}
 		})
 	}

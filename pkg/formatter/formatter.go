@@ -93,8 +93,10 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/ajitpratap0/GoSQLX/internal/tokscratch"
 	"github.com/ajitpratap0/GoSQLX/pkg/models"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
+	"github.com/ajitpratap0/GoSQLX/pkg/sql/keywords"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/parser"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/tokenizer"
 )
@@ -126,10 +128,19 @@ func (f *Formatter) Format(sql string) (string, error) {
 		return "", nil
 	}
 
+	// The dialect selects the tokenizer and parser rules (string escapes,
+	// quoting, dialect-only syntax) as well as the rendering. An unknown
+	// dialect name is ignored for tokenizing and parsing, as before.
+	dialect := keywords.SQLDialect(strings.ToLower(f.opts.Dialect))
+	useDialect := dialect != "" && keywords.IsValidDialect(string(dialect))
+
 	tkz := tokenizer.GetTokenizer()
 	defer tokenizer.PutTokenizer(tkz)
+	if useDialect {
+		tkz.SetDialect(dialect)
+	}
 
-	tokens, err := tkz.TokenizeString(sql)
+	tokens, err := tokscratch.String(tkz, sql)
 	if err != nil {
 		return "", fmt.Errorf("tokenization failed: %w", err)
 	}
@@ -143,7 +154,15 @@ func (f *Formatter) Format(sql string) (string, error) {
 
 	p := parser.GetParser()
 	defer parser.PutParser(p)
-	parsedAST, err := p.ParseFromModelTokens(tokens)
+	if useDialect {
+		p.ApplyOptions(parser.WithDialect(string(dialect)))
+	}
+	var parsedAST *ast.AST
+	if useDialect && dialect == keywords.DialectOracle {
+		parsedAST, err = parser.ParseWithDialect(sql, dialect)
+	} else {
+		parsedAST, err = p.ParseFromModelTokens(tokens)
+	}
 	if err != nil {
 		return "", fmt.Errorf("parsing failed: %w", err)
 	}
@@ -168,7 +187,7 @@ func (f *Formatter) Format(sql string) (string, error) {
 	}
 	style.Dialect = f.opts.Dialect
 
-	return FormatAST(parsedAST, style), nil
+	return formatASTCheckedWithTokens(parsedAST, style, tokens)
 }
 
 // FormatString is a convenience function that formats SQL with default options.

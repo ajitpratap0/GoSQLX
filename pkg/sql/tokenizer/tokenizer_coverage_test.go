@@ -383,10 +383,10 @@ func TestNumberFormats(t *testing.T) {
 			wantErr:   false,
 		},
 		{
-			name:      "Invalid decimal - no digit after point",
+			name:      "Trailing decimal point",
 			input:     "123.",
-			wantValue: "",
-			wantErr:   true,
+			wantValue: "123.",
+			wantErr:   false,
 		},
 		{
 			name:      "Invalid scientific - no digit in exponent",

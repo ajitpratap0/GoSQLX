@@ -44,24 +44,21 @@ func (r *UpdateWithoutWhereRule) Check(ctx *linter.Context) ([]linter.Violation,
 		return nil, nil
 	}
 	var violations []linter.Violation
-	for _, stmt := range ctx.AST.Statements {
-		ast.Inspect(stmt, func(n ast.Node) bool {
-			upd, ok := n.(*ast.UpdateStatement)
-			if !ok {
-				return true
-			}
-			if upd.Where == nil {
-				violations = append(violations, linter.Violation{
-					Rule:       r.ID(),
-					RuleName:   r.Name(),
-					Severity:   r.Severity(),
-					Message:    "UPDATE statement has no WHERE clause",
-					Location:   upd.Pos,
-					Suggestion: "Add a WHERE clause to restrict which rows are updated",
-				})
-			}
-			return true
-		})
+	for _, n := range ctx.Nodes() {
+		upd, ok := n.(*ast.UpdateStatement)
+		if !ok {
+			continue
+		}
+		if upd.Where == nil {
+			violations = append(violations, linter.Violation{
+				Rule:       r.ID(),
+				RuleName:   r.Name(),
+				Severity:   r.Severity(),
+				Message:    "UPDATE statement has no WHERE clause",
+				Location:   upd.Pos,
+				Suggestion: "Add a WHERE clause to restrict which rows are updated",
+			})
+		}
 	}
 	return violations, nil
 }

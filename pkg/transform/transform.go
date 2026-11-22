@@ -17,6 +17,7 @@ package transform
 import (
 	"fmt"
 
+	"github.com/ajitpratap0/GoSQLX/internal/tokscratch"
 	"github.com/ajitpratap0/GoSQLX/pkg/formatter"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/keywords"
@@ -115,7 +116,7 @@ func parseSQL(sql string) (ast.Statement, error) {
 	tkz := tokenizer.GetTokenizer()
 	defer tokenizer.PutTokenizer(tkz)
 
-	tokens, err := tkz.TokenizeString(sql)
+	tokens, err := tokscratch.String(tkz, sql)
 	if err != nil {
 		return nil, fmt.Errorf("tokenize: %w", err)
 	}
@@ -210,7 +211,7 @@ func ParseSQL(sql string) (*ast.AST, error) {
 	tkz := tokenizer.GetTokenizer()
 	defer tokenizer.PutTokenizer(tkz)
 
-	tokens, err := tkz.TokenizeString(sql)
+	tokens, err := tokscratch.String(tkz, sql)
 	if err != nil {
 		return nil, fmt.Errorf("tokenize: %w", err)
 	}
@@ -232,13 +233,20 @@ func ParseSQL(sql string) (*ast.AST, error) {
 //
 // The output uses compact style with minimal whitespace. Use this after applying
 // transforms to obtain the final SQL to execute or log.
+// It returns an empty string on rendering errors; use FormatSQLChecked to handle errors.
 //
 // Example:
 //
 //	sql := transform.FormatSQL(stmt)
 //	// "SELECT id, name FROM users WHERE active = true LIMIT 10"
 func FormatSQL(stmt ast.Statement) string {
-	return formatter.FormatStatement(stmt, ast.CompactStyle())
+	out, _ := FormatSQLChecked(stmt)
+	return out
+}
+
+// FormatSQLChecked is FormatSQL with semantic rendering errors returned to the caller.
+func FormatSQLChecked(stmt ast.Statement) (string, error) {
+	return formatter.FormatStatementChecked(stmt, ast.CompactStyle())
 }
 
 // FormatSQLWithDialect converts an AST statement back into a compact SQL string
@@ -246,16 +254,24 @@ func FormatSQL(stmt ast.Statement) string {
 // FETCH FIRST for Oracle, LIMIT for PostgreSQL/MySQL/etc.).
 //
 // Pass keywords.DialectGeneric or an empty SQLDialect for generic behavior
-// identical to FormatSQL.
+// identical to FormatSQL. It returns an empty string on rendering errors; use
+// FormatSQLWithDialectChecked to handle errors.
 //
 // Example:
 //
 //	sql := transform.FormatSQLWithDialect(stmt, keywords.DialectSQLServer)
 //	// "SELECT TOP 100 * FROM users"
 func FormatSQLWithDialect(stmt ast.Statement, dialect keywords.SQLDialect) string {
+	out, _ := FormatSQLWithDialectChecked(stmt, dialect)
+	return out
+}
+
+// FormatSQLWithDialectChecked is FormatSQLWithDialect with semantic rendering
+// errors returned to the caller when the target cannot express the source tree.
+func FormatSQLWithDialectChecked(stmt ast.Statement, dialect keywords.SQLDialect) (string, error) {
 	opts := ast.CompactStyle()
 	opts.Dialect = string(dialect)
-	return formatter.FormatStatement(stmt, opts)
+	return formatter.FormatStatementChecked(stmt, opts)
 }
 
 // ParseSQLWithDialect parses a SQL string using dialect-specific tokenization and
@@ -279,7 +295,7 @@ func ParseSQLWithDialect(sql string, dialect keywords.SQLDialect) (*ast.AST, err
 		tkz.SetDialect(dialect)
 	}
 
-	tokens, err := tkz.TokenizeString(sql)
+	tokens, err := tokscratch.String(tkz, sql)
 	if err != nil {
 		return nil, fmt.Errorf("tokenize: %w", err)
 	}

@@ -211,8 +211,9 @@ type literalGoldenFile struct {
 // TestLiteralGolden is a differential test of quoted-literal scanning against
 // the reference tree that generated the golden file. Each input is tokenized
 // under every dialect through Tokenize and TokenizeString, and a digest of
-// the full result (tokens, words, spans, comments, structured errors) must
-// match the stored one.
+// the semantic result (tokens, words, spans, comments, structured errors) must
+// match the stored one. Optional U& identifier spelling metadata is tested
+// separately and excluded, preserving the reference's decoded-name contract.
 func TestLiteralGolden(t *testing.T) {
 	if *updateLiteralGolden {
 		writeLiteralGolden(t)
@@ -317,6 +318,13 @@ func serializeLiteralResult(sb *strings.Builder, tokens []models.TokenWithSpan, 
 	}
 	for _, tw := range tokens {
 		tok := tw.Token
+		// U& identifiers gained optional source spelling without changing the
+		// reference token's decoded value, delimiter, kind or span. Normalize
+		// only that new metadata; all ordinary Word metadata remains pinned.
+		if tok.Type == models.TokenTypeIdentifier && tok.Quote == '"' &&
+			tok.Word != nil && tok.Word.QuoteStyle == 'U' && tok.Word.Keyword == nil {
+			tok.Word = nil
+		}
 		fmt.Fprintf(sb, "%d|%q|%d|%t|", tok.Type, tok.Value, tok.Quote, tok.Long)
 		if tok.Word == nil {
 			sb.WriteString("nil")

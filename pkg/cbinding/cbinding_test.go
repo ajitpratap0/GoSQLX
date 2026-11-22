@@ -482,3 +482,33 @@ func TestMetadataResultJSON(t *testing.T) {
 		t.Errorf("expected columns_qualified with u.name, got %v", decoded.ColumnsQualified)
 	}
 }
+
+// TestParseResultCountsExcludeGO checks that GO batch separators are not
+// counted or typed as statements in the parse result.
+func TestParseResultCountsExcludeGO(t *testing.T) {
+	tests := []struct {
+		sql       string
+		wantCount int
+		wantTypes []string
+	}{
+		{"SELECT 1\nGO\nSELECT 2\nGO 3", 2, []string{"SELECT", "SELECT"}},
+		{"GO\nGO", 0, []string{}},
+		{"SELECT 1", 1, []string{"SELECT"}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.sql, func(t *testing.T) {
+			r := parseResultFor(tc.sql, "sqlserver")
+			if !r.Success {
+				t.Fatalf("parse failed: %s", r.Error)
+			}
+			if r.StmtCount != tc.wantCount || len(r.StmtTypes) != len(tc.wantTypes) {
+				t.Fatalf("count = %d, types = %v; want %d, %v", r.StmtCount, r.StmtTypes, tc.wantCount, tc.wantTypes)
+			}
+			for i := range tc.wantTypes {
+				if r.StmtTypes[i] != tc.wantTypes[i] {
+					t.Errorf("types = %v, want %v", r.StmtTypes, tc.wantTypes)
+				}
+			}
+		})
+	}
+}

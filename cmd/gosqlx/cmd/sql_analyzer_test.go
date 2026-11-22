@@ -18,7 +18,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ajitpratap0/GoSQLX/pkg/gosqlx"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
+	"github.com/ajitpratap0/GoSQLX/pkg/sql/keywords"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/parser"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/tokenizer"
 )
@@ -834,4 +836,22 @@ func getIssueIDs(issues []AnalysisIssue) []string {
 		ids[i] = issue.ID
 	}
 	return ids
+}
+
+// TestBuildQueryInfoExcludesGO checks that GO batch separators are not
+// counted or typed as statements in the analysis report.
+func TestBuildQueryInfoExcludesGO(t *testing.T) {
+	const sql = "SELECT 1\nGO\nUPDATE t SET a = 1\nGO 2"
+	tree, err := gosqlx.ParseWithDialect(sql, keywords.DialectSQLServer)
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	defer ast.ReleaseAST(tree)
+	info := NewSQLAnalyzer().buildQueryInfo(tree, sql)
+	if info.StatementCount != 2 {
+		t.Errorf("StatementCount = %d, want 2", info.StatementCount)
+	}
+	if got := strings.Join(info.StatementTypes, ","); got != "SELECT,UPDATE" {
+		t.Errorf("StatementTypes = %s, want SELECT,UPDATE", got)
+	}
 }

@@ -1,0 +1,35 @@
+-- Scenario: stress with deep nesting and long expressions
+SELECT ((((1 + 2) * 3) - 4) / 5) AS x;
+SELECT a FROM t WHERE ((a > 1 AND b < 2) OR (c = 3 AND (d = 4 OR (e = 5 AND f = 6)))) AND NOT (g = 7 OR h = 8);
+SELECT 1 + 2 * 3 - 4 / 2 % 3;
+SELECT -(-1), - -1, +-+1;
+SELECT a FROM t WHERE a = 1 OR b = 2 AND c = 3;
+SELECT a FROM t WHERE NOT a = 1 AND b = 2;
+SELECT a || 'x' = b || 'y' FROM t;
+SELECT a IN (1, 2) = 1, b BETWEEN 1 AND 2 = 1 FROM t;
+SELECT CASE WHEN a THEN CASE WHEN b THEN 1 ELSE 2 END ELSE CASE WHEN c THEN 3 ELSE 4 END END FROM t;
+SELECT coalesce(nullif(trim(lower(replace(substr(name, 1, 10), ' ', '_'))), ''), 'unknown') FROM t;
+SELECT (SELECT (SELECT (SELECT 1)));
+SELECT * FROM t WHERE a IN (SELECT b FROM u WHERE c IN (SELECT d FROM v WHERE e IN (SELECT f FROM w)));
+SELECT * FROM a JOIN b ON a.id = b.a_id JOIN c ON c.id = b.c_id JOIN d ON d.id = c.d_id LEFT JOIN e ON e.id = d.e_id LEFT JOIN f ON f.id = e.f_id JOIN g USING (id) WHERE a.x > 0;
+SELECT * FROM (a JOIN b ON a.id = b.id) JOIN c ON c.id = a.id;
+SELECT * FROM a LEFT JOIN (b JOIN c ON b.id = c.id) ON a.id = b.id;
+SELECT x FROM (SELECT x FROM (SELECT x FROM (SELECT 1 AS x) AS t1) AS t2) AS t3;
+SELECT * FROM t WHERE a = (SELECT max(a) FROM t WHERE b < (SELECT avg(b) FROM t));
+SELECT a, b FROM t1 UNION SELECT a, b FROM (SELECT a, b FROM t2 UNION ALL SELECT a, b FROM t3) ORDER BY a;
+SELECT count(*), sum(CASE WHEN status = 'a' THEN 1 ELSE 0 END), sum(CASE WHEN status = 'b' THEN 1 ELSE 0 END) FROM t GROUP BY (a), (b);
+SELECT * FROM t WHERE a = 'a''b' AND b = "c" AND c LIKE '%\_%' ESCAPE '\';
+SELECT max(a, b) AS m, min(a, b) AS n FROM t WHERE a IS NOT NULL;
+SELECT a.*, b.* FROM a, b;
+SELECT t.* FROM t;
+SELECT ABS(x) AS Abs, Count(*) FROM T GROUP BY ABS(x);
+SELECT a /* inline */ FROM t -- trailing
+WHERE b = 1;
+SELECT CURRENT_DATE, CURRENT_TIME, CURRENT_TIMESTAMP;
+SELECT TRUE, FALSE, NULL;
+SELECT * FROM t WHERE flag = TRUE;
+SELECT a FROM t WHERE (a) = (1);
+SELECT 5 BETWEEN 1 AND 10 AND 6 NOT IN (1, 2);
+SELECT a FROM t WHERE b = x'00' OR c = X'ff';
+SELECT 9223372036854775807, -9223372036854775808, 0.5, .5, 5., 1E-3;
+SELECT a FROM t EXCEPT SELECT a FROM u UNION SELECT a FROM v;

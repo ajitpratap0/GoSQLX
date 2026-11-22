@@ -169,18 +169,19 @@ func TestIssue613_PartLimitErrorDialectPaths(t *testing.T) {
 }
 
 // TestIssue613_SnowflakeCreateStubKeepsName guards the success path of the
-// Snowflake CREATE <kind> stub: an in-limit name is kept whole in RawSQL.
+// Snowflake CREATE <kind> statements, kept verbatim: an in-limit name is kept
+// whole in the statement text.
 func TestIssue613_SnowflakeCreateStubKeepsName(t *testing.T) {
 	tree, err := gosqlx.ParseWithDialect("CREATE STAGE a.b.c URL='s3://bucket/x'", keywords.DialectSnowflake)
 	if err != nil {
 		t.Fatalf("ParseWithDialect failed: %v", err)
 	}
-	stub, ok := tree.Statements[0].(*ast.UnsupportedStatement)
+	stmt, ok := tree.Statements[0].(*ast.UtilityStatement)
 	if !ok {
-		t.Fatalf("expected UnsupportedStatement, got %T", tree.Statements[0])
+		t.Fatalf("expected UtilityStatement, got %T", tree.Statements[0])
 	}
-	if !strings.HasPrefix(stub.RawSQL, "CREATE STAGE a.b.c ") {
-		t.Fatalf("RawSQL = %q, want prefix %q", stub.RawSQL, "CREATE STAGE a.b.c ")
+	if stmt.Kind != "CREATE STAGE" || !strings.HasPrefix(stmt.Text, "CREATE STAGE a.b.c ") {
+		t.Fatalf("Kind = %q, Text = %q, want CREATE STAGE with prefix %q", stmt.Kind, stmt.Text, "CREATE STAGE a.b.c ")
 	}
 }
 

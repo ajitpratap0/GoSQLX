@@ -15,6 +15,7 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -24,6 +25,8 @@ import (
 
 	"github.com/ajitpratap0/GoSQLX/cmd/gosqlx/internal/config"
 	"github.com/ajitpratap0/GoSQLX/cmd/gosqlx/internal/output"
+	pkgerrors "github.com/ajitpratap0/GoSQLX/pkg/errors"
+	"github.com/ajitpratap0/GoSQLX/pkg/gosqlx"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/keywords"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/parser"
@@ -242,14 +245,79 @@ func (v *Validator) validateFile(filename string) output.FileValidationResult {
 		return result
 	}
 
-	data := inputResult.Content
-	result.Size = int64(len(data))
+	return v.validateData(filename, inputResult.Content)
+}
 
+// ValidateInput validates in-memory content (for example stdin) and reports
+// it under the display name name instead of a file path.
+func (v *Validator) ValidateInput(name string, data []byte) *output.ValidationResult {
+	start := time.Now()
+	fileResult := v.validateData(name, data)
+	result := &output.ValidationResult{
+		Files:      []output.FileValidationResult{fileResult},
+		TotalFiles: 1,
+		TotalBytes: fileResult.Size,
+	}
+	switch {
+	case fileResult.Error != nil:
+		if !v.Opts.Quiet {
+			fmt.Fprintf(v.Err, "❌ %s: %v\n", name, fileResult.Error) // #nosec G705
+		}
+		result.InvalidFiles++
+	case fileResult.Valid:
+		if !v.Opts.Quiet {
+			fmt.Fprintf(v.Out, "✅ %s: Valid SQL\n", name) // #nosec G705
+		}
+		result.ValidFiles++
+	default:
+		if !v.Opts.Quiet {
+			fmt.Fprintf(v.Out, "❌ %s: Invalid SQL\n", name) // #nosec G705
+		}
+		result.InvalidFiles++
+	}
+	result.Duration = time.Since(start)
+	if v.Opts.ShowStats {
+		v.displayStats(result)
+	}
+	return result
+}
+
+// validateData validates the content of one input. Content with no
+// statements (empty, whitespace or only comments) is valid.
+//
+// The whole content is parsed first, so errors carry exact positions. Only
+// when that fails is the content split into statements (SplitStatements: GO
+// batches, DELIMITER scripts, procedural bodies) and each statement checked
+// on its own: a script the parser accepts statement by statement is valid, and
+// a file past the tokenizer's token limit is validated without it.
+func (v *Validator) validateData(name string, data []byte) output.FileValidationResult {
+	result := output.FileValidationResult{Path: name, Size: int64(len(data))}
 	if len(data) == 0 {
 		result.Valid = true
-		return result // Empty inputs are considered valid
+		return result
 	}
 
+	empty, wholeErr := v.checkSQL(string(data))
+	if empty || wholeErr == nil {
+		result.Valid = true
+		return result
+	}
+
+	if ok, stmtErr := v.checkStatements(string(data)); ok {
+		result.Valid = true
+		return result
+	} else if stmtErr != nil && isTokenLimitError(wholeErr) {
+		// The whole-file error only says the file is too big to read at once.
+		result.Error = stmtErr
+		return result
+	}
+	result.Error = wholeErr
+	return result
+}
+
+// checkSQL tokenizes and parses src as one unit. empty reports that src holds
+// no statements.
+func (v *Validator) checkSQL(src string) (empty bool, err error) {
 	// Use pooled tokenizer for performance with dialect support
 	tkz := tokenizer.GetTokenizer()
 	defer tokenizer.PutTokenizer(tkz)
@@ -259,35 +327,60 @@ func (v *Validator) validateFile(filename string) output.FileValidationResult {
 		tkz.SetDialect(keywords.SQLDialect(v.Opts.Dialect))
 	}
 
-	// Tokenize
-	tokens, err := tkz.Tokenize(data)
+	tokens, err := tkz.TokenizeString(src)
 	if err != nil {
-		result.Error = fmt.Errorf("tokenization failed: %w", err)
-		return result
+		return false, fmt.Errorf("tokenization failed: %w", err)
 	}
-
-	if len(tokens) == 0 {
-		result.Valid = true
-		return result
+	if !hasStatementTokens(tokens) {
+		return true, nil
 	}
-
-	// Convert TokenWithSpan to Token using centralized converter
 
 	// Parse to validate syntax with proper error handling for memory management
 	p := parser.NewParser(parser.WithDialect(v.Opts.Dialect))
 	astObj, err := p.ParseFromModelTokens(tokens)
 	if err != nil {
-		result.Error = fmt.Errorf("parsing failed: %w", err)
-		return result
+		return false, fmt.Errorf("parsing failed: %w", err)
 	}
 
 	// CRITICAL: Always release AST
-	defer func() {
-		ast.ReleaseAST(astObj)
-	}()
+	ast.ReleaseAST(astObj)
+	return false, nil
+}
 
-	result.Valid = true
-	return result
+// checkStatements validates src statement by statement. ok is true when src
+// holds at least one statement and every statement is valid. Otherwise err is
+// the first failing statement's error, prefixed with its number and start
+// line.
+func (v *Validator) checkStatements(src string) (ok bool, err error) {
+	segments := gosqlx.SplitStatements(src, v.Opts.Dialect)
+	checked := 0
+	cursor := 0
+	for _, seg := range segments {
+		trimmed := strings.TrimSpace(seg)
+		if trimmed == "" {
+			continue
+		}
+		at := strings.Index(src[cursor:], seg)
+		line := 1
+		if at >= 0 {
+			line = 1 + strings.Count(src[:cursor+at], "\n")
+			cursor += at + len(seg)
+		}
+		empty, segErr := v.checkSQL(seg)
+		if segErr != nil {
+			return false, fmt.Errorf("statement %d (starting at line %d): %w", checked+1, line, segErr)
+		}
+		if !empty {
+			checked++
+		}
+	}
+	return checked > 0, nil
+}
+
+// isTokenLimitError reports whether err is the tokenizer's token-limit error.
+func isTokenLimitError(err error) bool {
+	var e *pkgerrors.Error
+	return errors.As(err, &e) && e.Code == pkgerrors.ErrCodeTokenLimitReached
 }
 
 // expandFileArgs expands file arguments (glob patterns, directories) into a list of files

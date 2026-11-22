@@ -15,10 +15,11 @@
 package formatter_test
 
 import (
+	"fmt"
 	"math/rand"
+	"runtime"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/ajitpratap0/GoSQLX/pkg/formatter"
 	"github.com/ajitpratap0/GoSQLX/pkg/gosqlx"
@@ -29,8 +30,9 @@ import (
 // render(Left) + sep + op + sep + render(Right), recursing on both sides with
 // operands rendered without ";", and a single trailing ";" after the whole
 // top-level set operation when AddSemicolon is set (#602). An operand is
-// wrapped in parentheses when its Parenthesized flag is set or, for Right,
-// when it is a non-nil *SetOperation (#612).
+// wrapped in parentheses when its Parenthesized flag is set or when it is a
+// non-nil *SetOperation that standard precedence would not group as the
+// tree does (#612); see ast.SetOperandNeedsParens.
 func setOpReference(s *ast.SetOperation, opts ast.FormatOptions) string {
 	if s == nil {
 		return ""
@@ -60,8 +62,9 @@ func setOpReferenceBody(s *ast.SetOperation, opts ast.FormatOptions) string {
 		}
 		return "(" + render(st) + ")"
 	}
-	rightSetOp, ok := s.Right.(*ast.SetOperation)
-	rightParens := s.RightParenthesized || (ok && rightSetOp != nil)
+	// A right set operation is parenthesized unless standard precedence
+	// already groups it (A UNION B INTERSECT C).
+	rightParens := ast.SetOperandNeedsParens(s, true, opts.Dialect)
 	sep := " "
 	if opts.NewlinePerClause {
 		sep = "\n"
@@ -78,7 +81,7 @@ func setOpReferenceBody(s *ast.SetOperation, opts ast.FormatOptions) string {
 	}
 	var sb strings.Builder
 	if s.Left != nil {
-		sb.WriteString(operand(s.Left, s.LeftParenthesized))
+		sb.WriteString(operand(s.Left, ast.SetOperandNeedsParens(s, false, opts.Dialect)))
 	}
 	sb.WriteString(sep + op + sep)
 	if s.Right != nil {
@@ -147,26 +150,86 @@ func TestFormatStatement_SetOperationMatchesReference(t *testing.T) {
 	}
 }
 
-// TestFormatAST_SetOperationChainLinearTime checks that a long UNION chain
-// (a left-deep tree) is formatted in time linear in its length. Re-copying
-// the rendered left side at every level takes seconds for this input; the
-// linear rendering takes milliseconds, so the bound below is generous.
-func TestFormatAST_SetOperationChainLinearTime(t *testing.T) {
+// TestFormatAST_SetOperationChainLinearGrowth catches repeated copying of
+// the rendered prefix: four times as many UNIONs must allocate substantially
+// less than the sixteen-fold growth of quadratic copying. Byte growth, rather
+// than a wall-clock limit, also works under race and atomic coverage overhead.
+// The full 80,000-UNION output must still match exactly. Allocation-free CPU
+// regressions can be measured separately with BenchmarkFormatAST_SetOperationChain.
+func TestFormatAST_SetOperationChainLinearGrowth(t *testing.T) {
+	const small, large = 1024, 4096
+	const noiseAllowance = 1 << 20
+	var smallBytes uint64
+	for _, n := range []int{small, large} {
+		sql := "SELECT 1" + strings.Repeat(" UNION SELECT 1", n)
+		tree, err := gosqlx.Parse(sql)
+		if err != nil {
+			t.Fatalf("Parse %d UNIONs: %v", n, err)
+		}
+		defer ast.ReleaseAST(tree)
+		out, allocated := setOperationFormatBytes(tree)
+		if out != sql {
+			t.Fatalf("formatted %d UNIONs differ from input", n)
+		}
+		t.Logf("%d UNIONs: %d allocated bytes", n, allocated)
+		// This permits well over the current per-node cost while rejecting
+		// repeated prefix copies at these bounded sizes, before the big case.
+		if budget := uint64(n)*2048 + noiseAllowance; allocated > budget {
+			t.Fatalf("formatting %d UNIONs allocated %d bytes, limit %d", n, allocated, budget)
+		}
+		if n == small {
+			smallBytes = allocated
+		} else if budget := 8*smallBytes + noiseAllowance; allocated > budget {
+			t.Fatalf("fourfold UNION growth allocated %d -> %d bytes, limit %d", smallBytes, allocated, budget)
+		}
+	}
+
 	const n = 80000
 	sql := "SELECT 1" + strings.Repeat(" UNION SELECT 1", n)
 	tree, err := gosqlx.Parse(sql)
 	if err != nil {
 		t.Fatalf("Parse: %v", err)
 	}
+	defer ast.ReleaseAST(tree)
 
-	start := time.Now()
 	out := formatter.FormatAST(tree, ast.FormatOptions{})
-	elapsed := time.Since(start)
 
 	if out != sql {
 		t.Fatalf("formatted output differs from input (len %d vs %d)", len(out), len(sql))
 	}
-	if elapsed > 2*time.Second {
-		t.Fatalf("formatting %d UNIONs took %v, want well under 2s", n, elapsed)
+}
+
+// The caller runs sequentially: TotalAlloc includes every goroutine in this
+// process. Parsing and a warm-up render are excluded from the measurement.
+func setOperationFormatBytes(tree *ast.AST) (string, uint64) {
+	opts := ast.FormatOptions{}
+	_ = formatter.FormatAST(tree, opts)
+	var before, after runtime.MemStats
+	runtime.ReadMemStats(&before)
+	out := formatter.FormatAST(tree, opts)
+	runtime.ReadMemStats(&after)
+	runtime.KeepAlive(out)
+	return out, after.TotalAlloc - before.TotalAlloc
+}
+
+func BenchmarkFormatAST_SetOperationChain(b *testing.B) {
+	for _, n := range []int{1024, 4096, 80000} {
+		b.Run(fmt.Sprint(n), func(b *testing.B) {
+			sql := "SELECT 1" + strings.Repeat(" UNION SELECT 1", n)
+			tree, err := gosqlx.Parse(sql)
+			if err != nil {
+				b.Fatal(err)
+			}
+			defer ast.ReleaseAST(tree)
+			b.SetBytes(int64(len(sql)))
+			b.ReportAllocs()
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				if out := formatter.FormatAST(tree, ast.FormatOptions{}); len(out) != len(sql) {
+					b.Fatalf("formatted length %d, want %d", len(out), len(sql))
+				}
+			}
+			b.StopTimer()
+		})
 	}
 }

@@ -510,7 +510,7 @@ func convertStatementToJSON(stmt ast.Statement) JSONStatement {
 		result.Details["has_where"] = s.Where != nil
 		result.Details["has_group_by"] = len(s.GroupBy) > 0
 		result.Details["has_order_by"] = len(s.OrderBy) > 0
-		result.Details["has_limit"] = s.Limit != nil
+		result.Details["has_limit"] = s.HasLimit()
 		result.Details["has_distinct"] = s.Distinct
 		if s.With != nil {
 			result.Details["has_with"] = true

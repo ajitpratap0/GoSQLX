@@ -37,7 +37,7 @@
     "github-slugger": "^2.0.0",
     "gray-matter": "^4.0.3",
     "motion": "^12.36.0",
-    "next": "16.4.3",
+    "next": "16.4.6",
     "next-mdx-remote": "^6.0.0",
     "react": "19.2.3",
     "react-dom": "19.2.3",
@@ -64,6 +64,9 @@
   "overrides": {
     "@tailwindcss/typography": {
       "postcss-selector-parser": "^7.1.6"
+    },
+    "@sentry/bundler-plugins": {
+      "glob": "^14.0.6"
     }
   }
 }

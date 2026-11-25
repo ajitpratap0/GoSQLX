@@ -1,7 +1,5 @@
 import * as assert from 'assert';
-import * as path from 'path';
-import * as os from 'os';
-import { spawn, ChildProcess, SpawnOptions } from 'child_process';
+import { spawn } from 'child_process';
 
 /**
  * Integration Tests with GoSQLX Binary for VSCode extension.
@@ -326,7 +324,6 @@ suite('GoSQLX LSP Mode Tests', function() {
         const proc = spawn(GOSQLX_PATH, ['lsp'], { stdio: 'pipe' });
 
         return new Promise<void>((resolve, reject) => {
-            let output = '';
             let responded = false;
 
             const timeout = setTimeout(() => {
@@ -337,9 +334,8 @@ suite('GoSQLX LSP Mode Tests', function() {
                 }
             }, 2000);
 
-            proc.stderr?.on('data', (data) => {
-                output += data.toString();
-            });
+            // Drain stderr so a chatty server cannot block on a full pipe.
+            proc.stderr?.resume();
 
             proc.on('error', (err) => {
                 clearTimeout(timeout);
@@ -402,19 +398,13 @@ suite('GoSQLX LSP Mode Tests', function() {
         const proc = spawn(GOSQLX_PATH, ['lsp'], { stdio: 'pipe' });
 
         return new Promise<void>((resolve) => {
-            let receivedResponse = false;
-
             const timeout = setTimeout(() => {
                 proc.kill();
                 resolve(); // Consider it passed if it didn't crash
             }, 3000);
 
-            proc.stdout?.on('data', (data) => {
-                const output = data.toString();
-                if (output.includes('result')) {
-                    receivedResponse = true;
-                }
-            });
+            // Drain stdout; this test only checks that the server exits cleanly.
+            proc.stdout?.resume();
 
             proc.on('close', () => {
                 clearTimeout(timeout);

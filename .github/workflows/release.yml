@@ -9,17 +9,11 @@ permissions:
   contents: read
 
 jobs:
-  release:
-    name: Release
+  version-check:
+    name: Check tag matches gosqlx.Version
     runs-on: ubuntu-latest
-    permissions:
-      contents: write # GoReleaser creates the GitHub release and uploads assets
-      actions: write  # dispatch downstream workflows (GITHUB_TOKEN release events start no workflows)
-    
     steps:
     - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
-      with:
-        fetch-depth: 0
 
     # The CLI's unstamped --version and the LSP report gosqlx.Version, so a
     # tag must match the Version const in pkg/gosqlx. Fail before building.
@@ -38,6 +32,51 @@ jobs:
         fi
         echo "tag ${TAG} matches gosqlx.Version ${src}"
 
+  # Same sharding as the Race Detector job in test.yml (scripts/race-shard.sh):
+  # one unsharded `task test:race` on a 4-vCPU runner starves the heavy race
+  # packages and can cross the 120s per-package timeout, which would stop the
+  # release after the tag is pushed.
+  race-shard:
+    name: Race Detector (shard ${{ matrix.shard }}/4)
+    needs: version-check
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3]
+    steps:
+    - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+    - name: Set up Go
+      uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
+      with:
+        go-version: '1.26'
+        check-latest: true
+
+    - name: Get dependencies
+      shell: bash
+      run: for i in 1 2 3; do go mod download && exit 0; echo "go mod download failed (attempt $i), retrying"; sleep $((i * 15)); done; exit 1
+
+    - name: Install Task
+      run: go install github.com/go-task/task/v3/cmd/task@v3.54.0
+
+    # pkg/cbinding is excluded (CGO); the release job runs it.
+    - name: Run tests with race detector
+      run: task test:race:shard SHARD=${{ matrix.shard }} SHARDS=4
+
+  release:
+    name: Release
+    needs: race-shard
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # GoReleaser creates the GitHub release and uploads assets
+      actions: write  # dispatch downstream workflows (GITHUB_TOKEN release events start no workflows)
+    
+    steps:
+    - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      with:
+        fetch-depth: 0
+
     - name: Set up Go
       uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
       with:
@@ -47,12 +86,8 @@ jobs:
     - name: Install Task
       run: go install github.com/go-task/task/v3/cmd/task@v3.54.0
 
-    # Runs the pure-Go test suite via Taskfile (test:race excludes pkg/cbinding
-    # because it requires CGO). We run cbinding tests separately below with
-    # CGO_ENABLED=1 so the tagged release is validated against both build modes.
-    - name: Run tests (race, no CGO)
-      run: task test:race
-
+    # The pure-Go race suite ran in the race-shard jobs; cbinding needs CGO
+    # and is validated here so the tagged release covers both build modes.
     - name: Run cbinding tests (CGO)
       env:
         CGO_ENABLED: '1'

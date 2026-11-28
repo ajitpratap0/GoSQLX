@@ -6,6 +6,9 @@ on:
     paths:
       - 'cmd/gosqlx-mcp/**'
       - 'pkg/mcp/**'
+      # The server reports gosqlx.Version; publish-mcp.yml waits for /health to
+      # show the tagged version, so a release version bump must redeploy.
+      - 'pkg/gosqlx/gosqlx.go'
       - 'Dockerfile'
       - 'render.yaml'
   workflow_dispatch:

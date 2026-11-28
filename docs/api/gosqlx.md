@@ -173,6 +173,14 @@ _ = res
 
 The lower-level `linter.FileResult` (package `pkg/linter`) gains the fields `TokenizeError` and `ParseError` and the method `SyntaxError()`, which returns whichever of the two is set.
 
+## Normalization and Fingerprints
+
+### `Normalize(sql string) (string, error)`
+Returns the normalized form of a query, with literals replaced by `?`. Since v1.18.0 this is the token-stream normal form (version 2) from `pkg/fingerprint`.
+
+### `Fingerprint(sql string) (string, error)`
+Returns a stable fingerprint of the normalized query: `"v2:"` followed by 64 lowercase hex characters (67 bytes). Queries that differ only in literal values share a fingerprint. For v1.17-compatible values, use `fingerprint.FingerprintWithOptions(sql, fingerprint.Options{Mode: fingerprint.ModeLegacy})`; `fingerprint.VersionOf` reports which version a stored value is.
+
 ## Script Splitting
 
 ### `SplitStatements(sql, dialect string) []string`

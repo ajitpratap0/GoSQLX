@@ -2,7 +2,7 @@
 
 This page walks through short examples of GoSQLX features: PostgreSQL extensions, security scanning, linting, formatting that keeps comments, transforms, fingerprinting and transpilation. Install GoSQLX first by following [Getting Started](GETTING_STARTED.md).
 
-The formatting, transform, fingerprinting and transpilation examples show behaviour released in v1.17.0.
+The formatting, transform and transpilation examples show behaviour released in v1.17.0; the fingerprinting examples show v1.18.0.
 
 ## Feature Examples
 
@@ -259,6 +259,47 @@ Output:
 ```text
 true
 SELECT "A" FROM "T" WHERE id = ?
+```
+
+Since v1.18.0 the default normal form is built from the token stream (version 2). It upper-cases keywords, drops optional words such as alias `AS`, join `INNER`/`OUTER` and default `ASC`, redacts `LIMIT`/`OFFSET` values, and collapses repeated IN-list elements and `VALUES` rows. Fingerprints carry a `v2:` prefix and are 67 bytes long. `fingerprint.Options{Mode: fingerprint.ModeLegacy}` reproduces v1.17 fingerprints exactly, and `fingerprint.VersionOf` tells the two apart, which helps when stored fingerprints are migrated (see [MIGRATION.md](MIGRATION.md)).
+
+```go
+package main
+
+import (
+	"fmt"
+	"log"
+
+	"github.com/ajitpratap0/GoSQLX/pkg/fingerprint"
+)
+
+func main() {
+	const q = `SELECT id FROM users AS u WHERE id IN (1, 2, 3) LIMIT 10`
+	normalized, err := fingerprint.Normalize(q)
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Println(normalized)
+
+	fp, err := fingerprint.Fingerprint(q)
+	if err != nil {
+		log.Fatal(err)
+	}
+	legacy, err := fingerprint.FingerprintWithOptions(q, fingerprint.Options{Mode: fingerprint.ModeLegacy})
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Println(fp[:3], len(fp), fingerprint.VersionOf(fp))
+	fmt.Println(len(legacy), fingerprint.VersionOf(legacy))
+}
+```
+
+Output:
+
+```text
+SELECT id FROM users u WHERE id IN (?) LIMIT ?
+v2: 67 2
+64 1
 ```
 
 ### Transpilation

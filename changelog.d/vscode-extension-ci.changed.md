@@ -1,1 +1,0 @@
-- VS Code extension: add a CI workflow that compiles, lints and runs the unit tests, and fix the lint errors and stale unit tests it surfaced.

@@ -1,1 +1,0 @@
-- `gosqlxValidate` now honours its dialect argument. [W8-04]

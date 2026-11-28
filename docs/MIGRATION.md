@@ -1,5 +1,51 @@
 # Migration Guide
 
+## v1.17.0 → v1.18.0 (2026-11-28)
+
+**Source-compatible upgrade**: exported signatures are unchanged apart from additions, so code that compiled against v1.17.0 compiles against v1.18.0. Three contracts change (query fingerprints, pool statistics and linter rule resource lifetime) and some error positions and outputs move. Work through the checklist below; the [CHANGELOG](../CHANGELOG.md) has the full list.
+
+### Why upgrade
+
+- **Faster across the board**: against v1.17.0 on the same machine, time per operation is 24% lower on geometric mean over 290 benchmarks, with none more than 5% slower. Parsing is 21-28% faster on the baseline queries, `gosqlx.Lint` 58-62% faster, `ScanSQL` 80% faster and `fingerprint.Fingerprint` 58% faster (1 allocation instead of 84).
+- **Parser fixes**: `INSERT INTO t AS u ...` target aliases, `FOR UPDATE ... LIMIT n` (PostgreSQL order), `CREATE OR REPLACE FUNCTION ... AS $$ ... $$` without a dialect, and table functions in FROM and the `<->` operator in the dialect-free parser, so `gosqlx.Lint`, fingerprinting and default LSP diagnostics stop reporting errors on valid PostgreSQL.
+- **Fingerprint v2**: a token-stream normal form that groups more queries that differ only in literals, aliases, optional keywords and repeated IN-list or VALUES rows.
+
+### New APIs to adopt
+
+- `fingerprint.Options`, `fingerprint.Mode` (`ModeTokens`, `ModeLegacy`), `fingerprint.NormalizeWithOptions`, `fingerprint.FingerprintWithOptions`, `fingerprint.VersionOf`, `fingerprint.Version`, `fingerprint.VersionPrefix` and `fingerprint.ErrEmpty`.
+- `(*linter.Context).Nodes()` for rules that walk the cached preorder node list.
+- `dialect.Capabilities.SupportsTableFunction` and `SupportsDistanceOp`; `ast.InsertDialectFields.TableAlias` / `TableAliasQuote`; `ast.BinaryExpression.Lambda`.
+- Callers that build `dialect.Capabilities` or `ast.InsertDialectFields` with unkeyed composite literals must switch to keyed fields.
+
+### Breaking changes to act on
+
+- [ ] **Fingerprints** are `"v2:"` plus 64 hex characters (67 bytes) and use a different normal form. Widen `CHAR(64)` columns, then recompute stored values or key on both versions while migrating. `fingerprint.FingerprintWithOptions(sql, fingerprint.Options{Mode: fingerprint.ModeLegacy})` reproduces v1.17 values exactly, and `fingerprint.VersionOf` tells them apart.
+- [ ] **Pool statistics**: `metrics.GetPoolStats` counts only while metrics are enabled. Call `metrics.Enable()` before the workload you want measured; tests asserting pool balance should enable metrics and restore the previous state in cleanup. `gosqlx stats` in a fresh process prints zeros.
+- [ ] **Custom linter rules**: AST nodes, `Context.Nodes()`, token slices and `Word` pointers are borrowed only during `Rule.Check`. Copy the strings and positions you need during `Check`, join any goroutines before returning, and have `Fix` work from its SQL argument and the reported violations.
+- [ ] **Claude Code plugin**: the `GOSQLX_MCP_URL` override is gone. For a local or self-hosted server, add `gosqlx-mcp` as its own MCP server.
+
+### Behavior changes to check
+
+- [ ] **Error positions**: errors at the second word of a compound keyword (`BY` of `GROUP BY` / `ORDER BY`, `JOIN` of `LEFT JOIN`, ...) point at that word. Update tests that assert line and column.
+- [ ] **Blank input**: `parser.ValidateWithDialect` and `ValidateBytesWithDialect` return E2005 for empty or whitespace-only input, and `gosqlx.Validate` wraps it in `ErrSyntax`. Match with `errors.Is(err, gosqlx.ErrSyntax)`, not the old "empty input" text.
+- [ ] **`DetectDialect`** breaks ties in a fixed order (Oracle, Snowflake, PostgreSQL, MySQL, SQL Server, MariaDB, SQLite) instead of map order.
+- [ ] **AST slices** `Columns`, `GroupBy`, `OrderBy` and `FunctionCall.Arguments` have `len == cap`; appending reallocates. Retaining one slice of a released tree keeps its co-allocated block (up to 600 B) alive.
+- [ ] **Goroutine stacks**: a goroutine that has parsed keeps a stack of at least 16 KiB (32 KiB on Windows) until it exits or the GC shrinks it.
+- [ ] **Dialect acceptance**: the dialect-free parser accepts table functions in FROM and `<->`; `generic` accepts table functions but still rejects `<->`. MySQL, MariaDB and SQLite no longer split `CREATE OR REPLACE ...` headers at `REPLACE`. `GRANT ... TO GROUP by` grantee handling changed per dialect (see the CHANGELOG).
+- [ ] **LSP**: document outline ranges use exact statement spans.
+- [ ] **Linter L010**: columns on lines with invalid UTF-8 are byte positions.
+
+### Companion release versions
+
+| Component | v1.17.0 | v1.18.0 |
+|-----------|---------|---------|
+| Library (`github.com/ajitpratap0/GoSQLX`) | 1.17.0 | **1.18.0** |
+| CLI, MCP server and LSP `serverInfo.version` | 1.17.0 | **1.18.0** |
+| VS Code extension and Claude Code plugin | 1.17.0 | **1.18.0** |
+| C binding (`libgosqlx`) | 1.17.0 exports | **1.18.0**: same exports |
+| Python bindings (`pygosqlx`) | 1.17.0 | **1.18.0** |
+| Integrations (`integrations/gorm`, `integrations/opentelemetry`) | 1.17.0 | updated to **1.18.0** after the tag |
+
 ## v1.16.0 → v1.17.0 (2026-10-31)
 
 **Source-compatible upgrade**: exported signatures are unchanged apart from additions, so code that compiled against v1.16.0 compiles against v1.17.0. Parse acceptance, rendered SQL, security findings, transpiler errors and some CLI and LSP behaviour change. Work through the checklist below; the [CHANGELOG](../CHANGELOG.md) has the full list.

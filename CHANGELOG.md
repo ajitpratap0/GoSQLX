@@ -7,6 +7,84 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.18.0] - 2026-11-28 — Performance Overhaul, Fingerprint v2 & Parser Fixes
+
+Covers everything merged since v1.17.0, mostly the November 2026 performance
+overhaul: an allocation-light tokenizer, parser and AST, pooled linting and
+scanning, a single-pass dialect detector, a token-stream query fingerprint
+(version 2) and a CI perf gate that measures every change across randomized
+code layouts. It also fixes parser gaps users hit in real queries: `INSERT`
+target aliases, locking clauses before `LIMIT`, `CREATE OR REPLACE FUNCTION`
+without a dialect, and table functions and `<->` in the dialect-free parser.
+Measured against v1.17.0 on the same machine (Apple M4, Go 1.27, 5 interleaved
+rounds, 290 benchmarks common to both releases), time per operation is 24%
+lower on geometric mean and no benchmark is more than 5% slower. Highlights:
+parsing 21-28% faster on the baseline queries, `gosqlx.Lint` 58-62% faster
+with 73-77% fewer allocations, `ScanSQL` 80% faster, and fingerprinting a
+join query 58% faster with 1 allocation instead of 84.
+The release is source-compatible: exported Go signatures are unchanged apart
+from additions. Three contracts change (fingerprint format, pool statistics,
+linter rule resource lifetime) and the Claude Code plugin drops its
+`GOSQLX_MCP_URL` override, so read **Breaking Changes**, **Behavior changes**
+and [docs/MIGRATION.md](docs/MIGRATION.md) before upgrading.
+
+### Breaking Changes
+- **Claude Code plugin (`plugins/gosqlx`)**: the `GOSQLX_MCP_URL` environment
+  override is removed; the plugin always points at `https://mcp.gosqlx.dev/mcp`,
+  as Anthropic's plugin directory requires literal server URLs.
+  - **Migration:** to use a local or self-hosted server, add `gosqlx-mcp` as
+    its own MCP server in your Claude Code configuration (see the plugin README)
+    instead of setting `GOSQLX_MCP_URL`.
+- **Pool statistics [W1-07]**: Get/Put operations are counted only while metrics are enabled. While disabled, `metrics.GetPoolStats` returns zero values for the three standard pools and omits custom pools. Counts collected earlier remain available when metrics are enabled again. The `gosqlx stats` command never enables metrics, so a fresh process prints zeros (as it effectively did before); call `metrics.Enable()` before the work you want counted.
+  - **Migration:** Call `metrics.Enable()` before the workload to be measured, for example at process start. Tests asserting pool balance through `GetPoolStats` deltas should enable metrics first and restore the previous state in cleanup. Counts are not retroactive.
+- **Version-2 query normalisation [W5-08]**: `fingerprint.Normalize`,
+  `fingerprint.Fingerprint`, `gosqlx.Normalize` and `gosqlx.Fingerprint` now
+  use the token-stream normal form. Fingerprints are `"v2:"` plus 64 lowercase
+  hex characters (67 bytes); storage limited to `CHAR(64)` must be widened.
+  Normalized text upper-cases keywords, drops alias
+  `AS`, join `INNER`/`OUTER` and default `ASC`, redacts LIMIT/OFFSET, FETCH/TOP,
+  typed literals and utility-statement literals, and collapses repeated normalized
+  IN-list elements and VALUES rows, including question-mark placeholders.
+  Keyword name parts next to a dot retain their source case, including `ASC`;
+  other `ASC` tokens are dropped. With `Options.Dialect` set to `mysql`,
+  `mariadb` or `bigquery`, double-quoted tokens follow the string-literal rules,
+  including redaction and existing literal-alias exceptions. This deliberately
+  coarsens MySQL/MariaDB `ANSI_QUOTES` identifiers. Default and `postgresql`
+  dialects retain double-quoted identifier handling; legacy mode is unchanged.
+  Session variables retain their spelling: `@@version` and `@@session.sql_mode`
+  render without a space after `@@`.
+  Tokenizable SQL with invalid syntax is accepted; call `gosqlx.Validate` first
+  when syntax validation is required. Normalized text is a grouping key, not
+  guaranteed to be parseable SQL. Parser limitations include implicit aliases
+  without `AS` in RETURNING, projections, subqueries and view queries, redacted
+  `SRID ?` values and transaction batches without statement separators.
+  `AS` is retained in XMLATTRIBUTES and XMLFOREST.
+  Grouping also differs for cast spelling,
+  `IS TRUE` versus `IS FALSE`, quoted keyword names, clause order, redundant
+  parentheses and content omitted by the legacy formatter. Version 2 also
+  preserves the source case of bare identifier tokens in contextual grammar
+  positions that the legacy formatter upper-cases: `SHOW server_version` and
+  `SHOW SERVER_VERSION`, for example, produce different version-2 fingerprints
+  but the same legacy fingerprint.
+  - **Migration:** widen fingerprint columns to at least 67 bytes. Reproduce
+    stored v1.17 fingerprints exactly with
+    `fingerprint.FingerprintWithOptions(sql, fingerprint.Options{Mode: fingerprint.ModeLegacy})`
+    and use `fingerprint.VersionOf` to tell versions apart. Recompute stored
+    values, or key on both versions while migrating.
+- **Linter rule resource lifetime**: `LintString` and all convenience wrappers
+  now release the parsed AST and recycle token storage after checking every rule
+  set, including custom, configured, subset and empty sets. AST nodes,
+  `Context.Nodes()` slices/elements, token slices/elements and `Word` pointers
+  are borrowed only during each `Rule.Check`. Retaining them through a saved
+  context, visitor, closure, background goroutine or state later used by `Fix`
+  is no longer supported; Go signatures and violation outputs are unchanged.
+  - **Migration:** materialize strings such as `tok.Token.Value` or
+    `tok.Token.Word.Value` (after a nil check), scalars and value locations
+    during `Check`, or make independently owned deep copies. Shallow token or
+    slice copies can retain pooled pointers. Join all goroutines using borrowed
+    resources before `Check` returns. Have `Fix` use its SQL argument and
+    materialized violations instead of references saved by `Check`.
+
 ### Added
 - `pkg/formatter`: width-scaling regression guard for `BenchmarkRenderScale/wide` (exact output, time ratio and bytes per output byte over compact/lower/readable/semicolon/postgresql modes); test-only, no behaviour change (#958, W5-13).
 - **Benchmark and perf-gate infrastructure (performance overhaul, wave 0)**:
@@ -59,6 +137,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     Benjamini-Hochberg level at all (matrix mode). Gate timeouts are now
     35 minutes for the step and 45 for the job (worst case measured at
     21.7 minutes on an EPYC 7763).
+- **Parser**: the PostgreSQL distance operator `<->` now parses when no dialect is set, in every clause position (`WHERE a <-> b`, `ORDER BY a <-> b`, the select list, `GROUP BY`). PostgreSQL already accepted it; the named dialects, including `generic`, still reject it.
+- **Parser**: SELECT now accepts a limit clause after the locking clause, the PostgreSQL order `SELECT ... ORDER BY x FOR UPDATE SKIP LOCKED LIMIT n`. After `FOR UPDATE` each of `LIMIT` / `OFFSET` / `FETCH FIRST` may appear at most once, in any order; `OFFSET` combines with either, but `LIMIT` and `FETCH` are mutually exclusive, and a limit-clause token on both sides of the locking clause is invalid — all verified against libpg_query. The SQL-standard order `LIMIT ... FOR UPDATE` was already accepted; MySQL keeps its own grammar (`FOR UPDATE ... LIMIT` stays rejected there, as MySQL puts `LIMIT` first). `SQL()` renders the clauses in canonical order, so `SELECT ... FOR UPDATE OFFSET 5 LIMIT 10` comes back as `LIMIT 10 OFFSET 5 FOR UPDATE` — valid and equivalent PostgreSQL.
+- **Parser/AST**: INSERT now accepts the PostgreSQL target-table alias `INSERT INTO t AS u [(cols)] ...`. The alias is stored in `InsertStatement.Extras.TableAlias` (with `TableAliasQuote` for delimited identifiers, mirroring `TableNameQuote`) and rendered back by `SQL()` as `INSERT INTO t AS u`. Only the `AS` form is accepted — a bare alias without `AS` is invalid SQL for an INSERT target (real PostgreSQL rejects `INSERT INTO t u`), so `AS` in that position stays unambiguous across dialects. The MySQL row alias (`VALUES (...) AS r`) and the `INSERT ... SELECT ... FROM s AS x` source alias are unaffected. Verified against libpg_query: `INSERT INTO t AS u (a) VALUES (1)` parses, `INSERT INTO t u (a) VALUES (1)` does not.
+- **Parser**: table-valued function calls in FROM (`SELECT * FROM generate_series(1, 3) AS t(x)`) now parse when no dialect is set or the `generic` dialect is selected. The other named dialects already accepted them. Malformed calls are still rejected in every dialect.
+- **Perf gate**: adaptive layout counts size each benchmark to 80% estimated power
+  for a lone +5% slowdown, using empirical-AUC Noether power instead of
+  the MAD normal model. `-B` sets the extension budget, `-E` the deadline,
+  and `-K` the per-arm cap; `-G` spends up to 600 seconds more by default.
+  Raw files carry `suite-line:` labels; reports add K/power columns and
+  list remaining Low power benchmarks with reasons, separate planned
+  extensions from line warm-ups, show configured power targets and unknown
+  estimates, and say when adaptive layouts were skipped because timings
+  were not judged. Only primary time uses extra layouts; all other
+  rules use stage-1 data. The perf step timeout rises from 35 to 40
+  minutes; the job cap stays at 45 minutes. Library behaviour is
+  unchanged. [W0-16]
+- **Fingerprint modes and dialect options [W5-08]**: `fingerprint.Options`,
+  `Mode`, `NormalizeWithOptions` and `FingerprintWithOptions` support
+  token-stream and legacy normalisation with dialect selection in both modes;
+  `VersionOf`, `Version`, `VersionPrefix` and `ErrEmpty` expose the version and
+  empty-input contract. The `gosqlx` package adds no options
+  entry points; import `pkg/fingerprint` for `ModeLegacy` (the v1.17 output and
+  syntax-error contract) and dialect selection.
+- `gosqlxParse(sql, dialect, version)` accepts version 1 for AST JSON v1 (`version`, `node_type`, zero-valued fields omitted); omitted versions keep the legacy indented output, which the gosqlx.dev playground still uses; the playground switches to version 1 in a later release. [W8-04]
 
 ### Changed
 - **Release process**: add a post-tag benchmark refresh task and require claims to match the release tag.
@@ -112,6 +214,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   against a frozen copy of the old one over the benchmark corpus, the SQL
   fixtures and a generated compound-keyword, Unicode-fold, odd-identifier and
   tokenizer-error matrix in all 11 dialects.
+- Use per-PR changelog fragments in `changelog.d/` to avoid merge conflicts; collect them into `CHANGELOG.md` when preparing a release.
+- Claude Code plugin (`plugins/gosqlx`): prepared for Anthropic's plugin
+  directory. Added a listing icon and `privacyPolicyUrl`, and the MCP server
+  URL is now the literal `https://mcp.gosqlx.dev/mcp` as the directory
+  requires.  The README now states everything the plugin runs and sends.
+- VS Code extension: add a CI workflow that compiles, lints and runs the unit tests, and fix the lint errors and stale unit tests it surfaced.
 
 ### Performance
 - **Semantic tokens**: pooled highlighting scratch and shared case folding cut 30 KB semantic-token allocs/op by 98.9–99.0% (2,039 to 20, 1,863 to 21, 1,953 to 21), B/op by 26.0–26.8% and sec/op by 13.3–14.3% (amd64 layout-randomized gate); the new highlight golden pins output. No behaviour change. [W6-11]
@@ -138,11 +246,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Tokenizer**: token Start/End locations are now computed from a cached current-line window (a range check and a subtraction) instead of two calls to the non-inlinable position lookup per token; out-of-window offsets take the existing lookup. Token positions are identical, including after a UTF-8 BOM and across pooled-tokenizer reuse (guarded by an oracle test). [W2-02]
 - **Tokenizer**: `@param` and SQL Server `@@var` token values are now slices of the input instead of `"@"+name` concatenations, removing one string allocation per parameter (SQL Server real-world allocs/op -90% to -100%, MariaDB/MySQL/Snowflake -50% to -67% on the large cells). Names that `readIdentifier` treats specially (`U&` escapes, a single letter before a quote, compound-keyword starts such as `@group by`, non-ASCII names) keep the previous path, so token types, values and spans are identical (pinned by a golden over 9 dialects). [W2-03]
 - **Tokenizer**: tokens are now built in place. The scanner and its token readers write each token's fields directly into its slot of the output slice instead of returning a 40-byte `models.Token` by value that was then copied into a 72-byte `models.TokenWithSpan` and appended. On amd64 those copies reloaded just-spilled structs with 16-byte loads that cannot be store-forwarded. Token output, spans and errors are identical (token goldens unchanged); no API or behaviour change. [W2-10]
-- **Pools**: the tokenizer, parser and AST pools now count Get/Put through precreated, cache-line padded atomic counters (`internal/poolstats`) instead of an RWMutex-guarded map keyed by pool name, removing a lock, map lookup and string hash from every pool operation. `metrics.GetPoolStats` and `metrics.ResetPoolStats` behave exactly as before; named custom pools keep the map path. [W1-01]
+- **Pools**: the tokenizer, parser and AST pools now count Get/Put through precreated, cache-line padded atomic counters (`internal/poolstats`) instead of an RWMutex-guarded map keyed by pool name, removing a lock, map lookup and string hash from every pool operation. Named custom pools keep the map path; counting is gated on `metrics.Enable()` since W1-07 (see Breaking Changes). [W1-01]
 - **Parser**: token preprocessing now takes a type-gated fast path. Only identifier, keyword, aggregate and compound tokens take the normalisation path; every other token is appended with a single copy. Output is identical (guarded by an old-versus-new differential test); no API or behaviour change.
 - **Parser**: the parser's current token is now a pointer into its token slice (with a per-parser zero EOF sentinel) instead of a 72-byte copy made on every `advance`, and `peekToken` returns a pointer, which removes most GC write-barrier work and struct copying from the parse loop. Parse results, errors and positions are byte-identical (behaviour goldens plus a recovery-path differential); no API change. A zero-value `&Parser{}` keeps working. [W3-02]
 - **Fingerprint, formatter, transform**: `fingerprint.Normalize`/`Fingerprint`, `Formatter.Format` and `transform.ParseSQL`/`ParseSQLWithDialect` tokenize through the internal pooled token scratch instead of the public `TokenizeString`. `Normalize` allocates 42-70% fewer bytes/op and `transform.ParseSQL` 49-78% fewer, with 2-3 fewer allocs/op and no output change. [W5-01]
 - **Formatter**: compact formatting (`ast.CompactStyle()`, no clause newlines, no semicolon, no line width, no target dialect, preserve or upper keyword case) now renders SELECT, INSERT, UPDATE and DELETE through each statement's `SQL()` instead of the visitor renderer, and a single compact statement skips the parts slice and join. `Render/compact/*` is 27-49% faster with 1 alloc/op (was 4-42) and 60-82% fewer bytes/op; `Normalize` and `Fingerprint` are 6-13% faster with 15-39% fewer allocs. Output is byte-identical (differential test over every corpus statement in 9 dialects and all option combinations); lowercase keywords, target-dialect rewrites, set operations and ALTER TABLE keep the visitor path. [W5-02]
+- **Parse stack reservation**: every tokenize-then-parse path reserves goroutine stack once, before tokenizing, through the internal `internal/stackgrow` package (no public API). It covers the gosqlx, parser, formatter, fingerprint, transform, linter and LSP pipelines, plus a backstop in the parser core for low-level callers. A parse on a fresh goroutine now copies its stack once, while its frames are shallow, instead of 2-3 times during the parse; `BenchmarkParseFresh` on the amd64 layout-randomized perf gate: simple_select -58%, join -44% (borderline: -39.7% to -43.9% across six runs, -43.86% in the latest, meets the -40% target in five of six), complex -25% (target missed, -22.7% to -26.1% across six runs, -24.60% in the latest), insert -57%, update -59%, delete -66%; suite geomean -7.95% in the latest run. Results, allocs/op and B/op are unchanged. Memory: a goroutine that parses keeps a stack of at least 16 KiB until it exits or a GC shrinks it (before: 4-16 KiB depending on the statement; Windows lands at 32 KiB); long-lived worker goroutines see no change after their first parse. [W1-04]
+- **Pools [W1-07]**: Skip the atomic pool Get/Put counter updates while metrics are disabled, so the default (metrics off) path pays one predictable branch instead of one locked add per pool Get and per Put (six per Parse). Allocations and bytes per operation are unchanged. Microbenchmark results for `PoolGetPut/serial` are CPU-dependent: Intel Xeon 6975P-C -38.7% to -39.9%, AMD Zen5 (EPYC 9V45) -31.5% to -34.9%, AMD Zen4 (EPYC 9V74) about -5%, and AMD Zen3 (EPYC 7763) +2.9% to +5.4% (a microbenchmark loss). No significant end-to-end change (Zen3 ParseE2E/ParseRW and suite geomean +0.30%, p=0.114; allocs/op and B/op unchanged); see the pull request for the amd64 gate numbers.
+- **Keywords**: case-insensitive lookups avoid allocations for pure-ASCII words up to 64 bytes. No behaviour change. [W2-07]
+- **Parser**: function arguments, the SELECT list, GROUP BY and ORDER BY are now collected on parser-owned scratch stacks and copied once into exact-size slices (previously grown with `append` from a fixed capacity). A `FunctionCall` with up to three arguments shares one allocation with its argument array, and a `SelectStatement` shares one with its single `From` entry and, for up to four columns, its `Columns` array. Parse allocations drop 28% on `aggregate` (18 to 13) and 12% on `complex` (50 to 44), and allocs/op fall on every SELECT-shaped parse row (INSERT, UPDATE, DELETE, tokenizer-error paths and the pool and tokenizer-only benchmarks are unchanged, as they never reach the list builders). In the layout-randomized amd64 CI perf gate (20 layouts per arm, AMD EPYC 7763) the suite geomean moved -0.79% (p=0.004), the parse aggregate -3.24% (p=0.005, not significant after Benjamini-Hochberg correction, low power) and `complex` -1.35% (not significant); instructions/op fell 3.48% on the aggregate and 1.13% on `complex`, and allocs/op on the end-to-end parse fell from 18 to 13 (aggregate) and from 49 to 43 (complex). No gated benchmark regressed in time. Slice capacity and lifetime changes are listed under Behavior changes. No exported API change. [W4-04]
+- **Identifier quoting**: checks names byte by byte with a class table, falling back to the rune loop for non-ASCII names; reserved-name lookup uses a first-letter/length index derived from the word list instead of a map lookup. `AST.SQL()` and formatter output are byte-identical. `BenchmarkRender` is about 10% to 17% faster on `sql` and 4% to 10% on `readable` on the amd64 CI runner, with unchanged allocs/op and B/op (see the PR for the measurement method and its limits).
+- **Token-stream Normalize and Fingerprint [W5-08]**: defaults tokenize once,
+  normalize into a pooled byte buffer and hash its bytes directly for
+  fingerprints. The authoritative final-head layout-randomized amd64 CI run
+  (perf-gate run 43274969051, head 528b38c9, AMD EPYC 9V74, 20 layouts per
+  arm, A/A' 0/52, base 1f828000) reports `Normalize` changes of -67.80%
+  (simple_select, 0.32x of baseline), -53.85% (join, 0.46x) and -53.87%
+  (complex, 0.46x); allocs/op fall from 5/21/62 to 1 and B/op by 95.92%,
+  94.22% and 93.73%; the suite geomean is -5.05% (p<0.001) with no gated
+  regression. No target met the PLAN threshold (<= 0.30x) on the final head.
+  Earlier runs on other runners (AMD EPYC 7763: 0.35x/0.46x/0.44x; AMD EPYC
+  9V45: 0.26x/0.39x/0.375x) are not comparable across CPUs; `simple_select`
+  met the PLAN threshold only on the 9V45 run, and `join` and `complex` missed
+  it on every run. A CPU profile of
+  `Normalize/complex` on arm64 splits the time roughly 37% tokenize,
+  37% `appendNormalV2` and under 5% hashing and
+  pooling, so the remaining cost is the shared tokenizer plus the normal-form
+  writer, not allocation. The legacy mode (`ModeLegacy`) is unchanged within
+  noise (geomean -1.4% vs origin/main, local arm64, indicative).
+- **Security**: `Scanner.Scan` walks the AST with a pooled struct visitor instead of a per-call closure and ancestor slice. On the amd64 layout-randomized perf gate (20 layouts per arm), `BenchmarkScanASTRW` B/op is -53.27% to -58.31% on all eight dialects (target -45% met), allocs/op about -29% to -33%, and time -12.3% to -17.9% (all p<0.001, none worse). Findings are byte-identical (differential test against the previous implementation over the corpus); no API or behaviour change. [W6-02]
+- `LintString` and wrappers tokenize into pooled scratch storage and release the
+  parsed AST after the rules run: `LintRW` B/op -40% to -45% and allocs/op -6% to
+  -7% across all eight dialects, `LintParallel/lint` B/op -41%.
+- **Security**: Replace the stacked-query regex scans with a single matcher per SQL view, preserving finding order and match text, behind the same keyword prefilter as before. On amd64 (layout-randomized CI gate) `ScanSQLStackedScript` is 70-78% faster (1 MiB: -78%) and `ScanSQLParams`/`ScanSQLRW` are 2-4% faster; `ScanSQLLarge` is unchanged within noise. No API or behavior change. [W6-09]
+- **Transpiler**: `Transpile` skips operator retargeting when the source cannot contain a retargetable construct; it runs `ast.RetargetOperators` only when the source contains `^ | & # ~ @ ? ! { $`, `<<`, `>>` or `->` (plus the conservative pairs `<-`, `=>`, `:=`; `U&` is caught by `&`). These are detected in the same single byte pass as the existing prefilters. Plain comparisons, arithmetic, joins and DML skip the reflective walk. Output and error text are unchanged, enforced by `TestPrefilterEquivalence`, `TestTranspileDifferential` and new per-construct and skip-invariant tests. No API change. amd64 CI matrix A/B (20 randomized layouts per arm, 17 complete): `BenchmarkTranspileRW` cross pairs about -14% to -19%, small cross-dialect shapes about -31% to -37%. [W7-01]
+- **Dialect detection [W7-09]**: `DetectDialect` uses a lazily built, compact single-pass matcher with no per-call allocations (1 to 0 allocs/op, 48-80 B/op to 0; 72 KiB to 0 on a 64 KiB input). On the amd64 perf gate (run 43207955894, AMD EPYC 9V45, 20 layouts per arm) every non-empty case is significantly faster (p<0.001), about 3.1x to 5.5x: PostgreSQL 5.5x, MariaDB 4.7x, Snowflake 4.7x, MySQL 4.65x, generic 4.6x, SQL Server 4.8x, Oracle 4.4x, mixed 4.1x, 64 KiB 3.1x. The 2 ns `empty` case moves by layout noise between gate runs (-24.9% here, +0.7% in another) and is not claimed (0 allocs before and after). The 4x PLAN target is met for every case except the 64 KiB input (3.1x), which misses it; earlier runs on other runner CPUs also missed it for generic, MySQL, Oracle and mixed. All rows are reported in the PR body from the CI gate.
+- **C binding [W8-01]**: pooled JSON and result scratch, AST release, typed extraction results, and a bounded linter cache reduce parse allocations by 6/op (about 620–670 B/op), lint by 14/op (about 1.2–1.6 KB/op), metadata extraction by 3/op (about 620–1,420 B/op), and table extraction by 8/op (about 630–690 B/op) in the small/medium/large benchmarks. The C ABI and JSON bytes are unchanged.
+- **Playground**: parse returns compact typed AST JSON v1 on request. amd64 layout-randomized perf gate (20 layouts, p<0.001): parse -76.4/-74.8/-85.6% sec/op and lint -34.5/-26.8/-29.3% sec/op for small/medium/large inputs, with allocs/op and B/op down. Payload bytes -75.7/-73.2/-91.6% (local, deterministic). Playground lint removes a second parse. [W8-04]
 
 ### Behavior changes
 - **Validate blank input**: `parser.Validate` and `parser.ValidateBytes` have
@@ -165,6 +305,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   positions on lines with invalid UTF-8. They were shifted before because
   invalid bytes were replaced with U+FFFD (3 bytes) while scanning. Valid
   UTF-8 is unaffected.
+- LSP documentSymbol outline ranges now use exact parser statement spans; see Fixed. Clients see different (correct) ranges; positions remain byte columns.
+- **Goroutine stack after a parse**: a goroutine that has parsed keeps a stack of at least 16 KiB (32 KiB on Windows, 16-32 KiB under `-race`) until it exits or the GC shrinks it; before it was 4-16 KiB depending on the statement. A Reserve call made deep inside an already-large stack (for example an LSP or JSON-RPC handler) can land the goroutine at 32 KiB, since the frame is added on top of the stack in use. Results are unchanged. [W1-04]
+- Compound keyword parts now have precise per-word spans across source-aware parser and model-token entry points and LSP diagnostics. `INSERT INTO t (group by) VALUES (1)` reports `expected ), got BY` at 1:22 instead of 1:16; `UPDATE t SET order by = 1` reports `expected =, got BY` at 1:20 instead of 1:14. Error codes, messages and hints are unchanged for these INSERT/UPDATE examples.
+- General rule: any error reported at the second word of a merged compound keyword (BY of GROUP BY/ORDER BY, JOIN of INNER/LEFT/RIGHT/OUTER/FULL/CROSS JOIN, SETS of GROUPING SETS) now points at that word instead of the first, with the message unchanged. For example, in postgresql and generic, `REVOKE ALL ON t FROM order\n by` now reports `expected semicolon or end of statement, got BY` at 2:2 instead of 1:22.
+- `parser.ParseBytesWithTokens` returns per-part spans for reconstructable two-word compounds, including multiline separators. Public tokenizer output remains unchanged.
+- Utility grammar changes because the second word of a single-line compound is no longer mistaken for a delimited (quoted) identifier: they now behave like the multiline `GROUP\n by` and `order\n by` forms already did. Quoted grantee names retain their quoting. Specifically:
+  - `GRANT SELECT ON t TO GROUP by` and `REVOKE ALL ON t FROM GROUP by` are now accepted in generic, postgresql, mysql, mariadb, oracle, snowflake, bigquery, redshift and clickhouse; previously they failed with `expected grantee, got GROUP` at 1:22.
+  - In sqlserver, `GRANT SELECT ON t TO GROUP by`, `REVOKE ALL ON t FROM GROUP by` and `REVOKE ALL ON t FROM order by` were accepted and are now rejected with `expected operand after BY, got EOF` at 1:30. BY and GROUP are reserved in T-SQL.
+  - In the other non-SQLite dialects listed above, `REVOKE ALL ON t FROM order by` changes its error from `expected grantee, got ORDER` at 1:22 to `expected semicolon or end of statement, got BY` at 1:28.
+  - SQLite continues to reject all three statements with `expected statement, got IDENTIFIER` at 1:1.
+- **Parser AST slices [W4-04]**: `Columns`, `GroupBy`, `OrderBy` and `FunctionCall.Arguments` now have `len == cap` (they used to carry spare capacity), so a caller that appends to them reallocates instead of writing into spare space; trees are otherwise identical (guarded by the behaviour goldens). Lifetime trade-off: because the blocks are co-allocated, retaining only `Columns`, `From` or `Arguments` of a released tree keeps the whole block (up to 600 B) alive.
+- **Dialect detection [W7-09]**: Tied positive scores now resolve in a fixed order: Oracle, Snowflake, PostgreSQL, MySQL, SQL Server, MariaDB, SQLite; previously the result depended on map iteration order. Input with only `NVL` now always returns Oracle (previously about 86% Oracle), and `TOP` with a backtick now always returns MySQL.
+- **Playground (`gosqlxLint`)**: with a non-generic dialect, a tokenizer error is now reported as `gosqlx: tokenize error: Error E1002 ...` (what the no-dialect path and gosqlx.Lint already report) instead of `gosqlx: syntax error: Error E2004 ... tokenization error: ...`. `parse_error_span` is unchanged (it already resolved to the innermost positioned error). Library `gosqlx.Lint`/`LintWithDialect` are unchanged. [W8-04]
+- **Playground (`gosqlxLint`)**: SQL with no statements (blank, whitespace or comment-only) gets no `parse_error`, matching `gosqlx.Lint` (the linter treats it as "nothing to lint", not a syntax error). No `parse_error` on comment-only input is a maintainer-confirmed behaviour change. Library `gosqlx.Lint`/`LintWithDialect` are unchanged. The AST and Analyze tabs still report the parse error. [W8-04]
 
 ### Fixed
 - Claims checks now verify that published benchmark results were measured at the latest release tag commit.
@@ -203,6 +357,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `U & '...'` and all other dialects are unchanged: in MySQL, MariaDB, SQL
   Server and SQLite `U&'x'` is still `U & 'x'`, and PostgreSQL still reads it
   as a Unicode-escape literal.
+- **Parser**: `CREATE OR REPLACE FUNCTION` with an `AS $$ ... $$` body now parses when no dialect is set. The generic end-of-statement scan, which the default parser and the MySQL, MariaDB and SQLite dialects use, treated the `REPLACE` of the header as a MySQL-family `REPLACE` statement and ended the `CREATE` there; a word following `OR` is now always part of the current statement (`OR REPLACE` / `OR ALTER` headers, and nothing valid ends an expression with a bare `OR`). As a result, `CREATE OR REPLACE <object>` headers are no longer split at `REPLACE` in those dialects either (for example `CREATE OR REPLACE FUNCTION ... AS $$ ... $$` under `mariadb`, which earlier failed with E2002 at `REPLACE`; MySQL and SQLite now also accept `CREATE OR REPLACE` headers for objects they do not define, such as Snowflake streams); `REPLACE INTO` still parses as a statement in the MySQL dialect.
+- **LSP documentSymbol ranges** now come from the parser's statement spans. Statements without positioned children (DROP, TRUNCATE, CREATE TABLE, ALTER TABLE, CREATE INDEX, MERGE) no longer report the range from 0:0 to the first `;`. A statement no longer extends over the statements that follow it on the same line. Range construction no longer rescans the document per statement (O(N²) → O(N) for GO-separated or long-prefix scripts). Behaviour change for LSP clients: outline ranges differ, and are now exact. Positions are still byte columns.
+- `gosqlxValidate` now honours its dialect argument. [W8-04]
+
+### Security
+- Update website and VS Code extension npm dependencies to fix Dependabot alerts: Next.js 16.4.6 (use-cache disclosure), `@azure/msal-node` 7.2 via `@azure/identity` 4.14, `glob` 14 and `minimatch` 11.
 
 ## [1.17.0] - 2026-10-31 — Real-World Dialect Corpus, Dialect-Faithful Round Trips, Security Scanner & LSP Hardening
 
@@ -3304,7 +3464,8 @@ For questions about upgrading or changelog entries:
 - Open an issue: https://github.com/ajitpratap0/GoSQLX/issues
 - Join discussions: https://github.com/ajitpratap0/GoSQLX/discussions
 
-[Unreleased]: https://github.com/ajitpratap0/GoSQLX/compare/v1.17.0...HEAD
+[Unreleased]: https://github.com/ajitpratap0/GoSQLX/compare/v1.18.0...HEAD
+[1.18.0]: https://github.com/ajitpratap0/GoSQLX/compare/v1.17.0...v1.18.0
 [1.17.0]: https://github.com/ajitpratap0/GoSQLX/compare/v1.16.0...v1.17.0
 [1.16.0]: https://github.com/ajitpratap0/GoSQLX/compare/v1.15.0...v1.16.0
 [1.15.0]: https://github.com/ajitpratap0/GoSQLX/compare/v1.14.0...v1.15.0

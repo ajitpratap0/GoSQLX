@@ -15,6 +15,8 @@ Enable metrics collection.
 metrics.Enable()
 ```
 
+Pool statistics (`GetPoolStats`) are also counted only while metrics are enabled (since v1.18.0): call `Enable` before the work you want measured. Counts collected earlier remain visible after `Enable` is called again, but operations performed while disabled are not counted retroactively.
+
 ### `Disable()`
 Disable metrics collection.
 

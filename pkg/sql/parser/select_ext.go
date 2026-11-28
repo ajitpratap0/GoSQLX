@@ -670,6 +670,37 @@ func (p *Parser) parseOffsetValue(s *ast.SelectStatement) error {
 	return nil
 }
 
+// parseLimitClausesAfterLocking parses the LIMIT / OFFSET / FETCH sequence
+// following a locking clause (FOR UPDATE ... LIMIT n). Each kind may appear
+// at most once, in any order; OFFSET combines with either, but LIMIT and
+// FETCH are mutually exclusive (verified against libpg_query). A duplicate
+// or forbidden token is left unconsumed: the statement boundary rejects it,
+// the same way a duplicate LIMIT before the locking clause fails.
+func (p *Parser) parseLimitClausesAfterLocking(s *ast.SelectStatement) error {
+	for {
+		switch {
+		case p.isType(models.TokenTypeLimit) && s.Limit == nil && s.Fetch == nil &&
+			(s.Extras == nil || !s.Extras.LimitAll):
+			if err := p.parseLimitValue(s); err != nil {
+				return err
+			}
+		case p.isType(models.TokenTypeOffset) && s.Offset == nil:
+			if err := p.parseOffsetValue(s); err != nil {
+				return err
+			}
+		case p.isType(models.TokenTypeFetch) && s.Fetch == nil && s.Limit == nil &&
+			(s.Extras == nil || !s.Extras.LimitAll):
+			f, err := p.parseFetchClause()
+			if err != nil {
+				return err
+			}
+			s.Fetch = f
+		default:
+			return nil
+		}
+	}
+}
+
 // isRowsExamined reports whether the current tokens are MariaDB's
 // ROWS EXAMINED, the end of a LIMIT clause.
 func (p *Parser) isRowsExamined() bool {

@@ -1,6 +1,7 @@
 import * as assert from 'assert';
 import * as path from 'path';
 import * as fs from 'fs';
+import * as crypto from 'crypto';
 import { getBinaryPath, resolveBinaryPath, BinaryResolverDeps, clearBinaryPathCache } from '../../utils/binaryResolver';
 
 /**
@@ -399,7 +400,6 @@ suite('resolveBinaryPath - checksum verification', () => {
 
     test('checksumValid is true when sidecar matches', async () => {
         const binaryContent = Buffer.from('fake binary content');
-        const crypto = require('crypto');
         const expectedHash = crypto.createHash('sha256').update(binaryContent).digest('hex');
 
         const deps = makeDeps({

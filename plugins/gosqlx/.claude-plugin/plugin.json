@@ -11,6 +11,8 @@
   "repository": "https://github.com/ajitpratap0/GoSQLX",
   "documentationUrl": "https://github.com/ajitpratap0/GoSQLX/blob/main/plugins/gosqlx/README.md",
   "supportUrl": "https://github.com/ajitpratap0/GoSQLX/issues",
+  "privacyPolicyUrl": "https://gosqlx.dev/privacy/",
   "license": "Apache-2.0",
+  "icon": "./.claude-plugin/icon.png",
   "keywords": ["sql", "parser", "linter", "formatter", "sql-injection", "postgresql", "mysql", "snowflake", "mcp"]
 }

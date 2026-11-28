@@ -266,6 +266,7 @@
     "pretest": "npm run compile && npm run lint",
     "lint": "eslint src --ext ts",
     "test": "node ./out/test/runTest.js",
+    "test:unit": "mocha --ui tdd 'out/test/unit/**/*.test.js'",
     "package": "vsce package",
     "publish": "vsce publish"
   },
@@ -282,7 +283,7 @@
     "@vscode/test-electron": "^2.3.8",
     "@vscode/vsce": "^3.7.1",
     "eslint": "^8.54.0",
-    "glob": "^10.3.10",
+    "glob": "^14.0.6",
     "mocha": "^10.2.0",
     "typescript": "^5.3.2"
   },
@@ -290,16 +291,20 @@
     "brace-expansion": "^5.0.9",
     "serialize-javascript": "^7.0.5",
     "eslint": {
-      "minimatch": "^9.0.9"
+      "minimatch": "^11.0.5"
     },
     "@eslint/eslintrc": {
-      "minimatch": "^9.0.9"
+      "minimatch": "^11.0.5"
     },
     "@humanwhocodes/config-array": {
-      "minimatch": "^9.0.9"
+      "minimatch": "^11.0.5"
     },
     "vscode-languageclient": {
       "minimatch": "^11.0.1"
+    },
+    "@vscode/vsce": {
+      "glob": "^14.0.6",
+      "minimatch": "^11.0.5"
     }
   }
 }

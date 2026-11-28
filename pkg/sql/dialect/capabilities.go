@@ -306,7 +306,7 @@ func (d Dialect) Capabilities() Capabilities {
 
 	case PostgreSQL:
 		return Capabilities{
-			SupportsSample:                true,  // TABLESAMPLE
+			SupportsSample:                true, // TABLESAMPLE
 			SupportsPivotUnpivot:          false,
 			SupportsLimitOffset:           true,
 			SupportsFetchFirst:            true, // SQL:2008 fetch

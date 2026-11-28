@@ -58,6 +58,16 @@ func TestInsertStatementSQL_Forms(t *testing.T) {
 			stmt: &InsertStatement{TableName: "t", DefaultValues: true, Columns: ab(), Values: [][]Expression{{one(), x()}}},
 			want: "INSERT INTO t (a, b) VALUES (1, 'x')",
 		},
+		{
+			name: "target alias",
+			stmt: &InsertStatement{TableName: "t", Extras: &InsertDialectFields{TableAlias: "u"}, Columns: ab(), Values: [][]Expression{{one(), x()}}},
+			want: "INSERT INTO t AS u (a, b) VALUES (1, 'x')",
+		},
+		{
+			name: "quoted target alias",
+			stmt: &InsertStatement{TableName: "t", Extras: &InsertDialectFields{TableAlias: "U", TableAliasQuote: QuotedName('"')}, Columns: ab(), Values: [][]Expression{{one(), x()}}},
+			want: `INSERT INTO t AS "U" (a, b) VALUES (1, 'x')`,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

@@ -91,6 +91,20 @@ func (p *Parser) parseInsertStatement() (ast.Statement, error) {
 		}
 	}
 
+	// PostgreSQL: INSERT INTO t AS u [(cols)] ... — the target-table alias.
+	// AS is required (a bare alias is invalid SQL for INSERT), so AS here is
+	// unambiguous and accepted regardless of dialect.
+	if p.isType(models.TokenTypeAs) {
+		p.advance() // Consume AS
+		if !p.isIdentifier() || p.isReservedTopName() {
+			return nil, p.expectedError("alias after AS")
+		}
+		x := stmt.EnsureExtras()
+		x.TableAlias = p.currentToken.Token.Value
+		x.TableAliasQuote = p.currentNameQuote()
+		p.advance()
+	}
+
 	// Parse column list if present
 	stmt.Columns = make([]ast.Expression, 0)
 	if p.isType(models.TokenTypeLParen) && !p.isInsertQueryParenStart() {

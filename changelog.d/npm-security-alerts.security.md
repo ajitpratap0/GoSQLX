@@ -1,0 +1,1 @@
+- Update website and VS Code extension npm dependencies to fix Dependabot alerts: Next.js 16.4.6 (use-cache disclosure), `@azure/msal-node` 7.2 via `@azure/identity` 4.14, `glob` 14 and `minimatch` 11.

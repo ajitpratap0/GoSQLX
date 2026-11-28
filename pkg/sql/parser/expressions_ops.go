@@ -135,7 +135,10 @@ func (p *Parser) bitwiseOperator() (op string, prec, n int) {
 			return "<=>", 2, 1
 		}
 	case models.TokenTypeCustomBinaryOperator:
-		if p.currentToken.Token.Value == "<->" && p.IsPostgreSQL() {
+		// PostgreSQL's distance operator. The capability flags the split:
+		// PostgreSQL and the permissive no-dialect default accept it, the
+		// generic dialect ("parse standard SQL only") rejects it.
+		if p.currentToken.Token.Value == "<->" && p.Capabilities().SupportsDistanceOp {
 			return "<->", 2, 1
 		}
 	}

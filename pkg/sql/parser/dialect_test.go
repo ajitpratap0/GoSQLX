@@ -18,6 +18,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/keywords"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/tokenizer"
 )
@@ -515,5 +516,122 @@ func TestCreateOrReplaceFunctionDefaultDialect(t *testing.T) {
 	// The MySQL dialect keeps its own grammar: REPLACE stays a statement.
 	if _, err := ParseWithDialect("REPLACE INTO t (a) VALUES (1)", keywords.DialectMySQL); err != nil {
 		t.Fatalf("REPLACE INTO should parse in the MySQL dialect: %v", err)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Default-dialect PostgreSQL compatibility: the dialect-free parser follows
+// the PostgreSQL grammar for constructs every backend shares. The generic
+// dialect keeps to standard SQL ("parse standard SQL only",
+// pkg/sql/dialect/capabilities.go); ILIKE stays default-only.
+// ---------------------------------------------------------------------------
+
+// TestAcceptTableFunctionDefaultAndGenericDialect checks that a table-valued
+// function in FROM (with its column alias) parses when no dialect is set and
+// under the generic dialect, as in PostgreSQL.
+func TestAcceptTableFunctionDefaultAndGenericDialect(t *testing.T) {
+	tests := []string{
+		"SELECT * FROM get_all_albums(127)",
+		"SELECT x FROM generate_series(1, 3) AS t(x)",
+		"SELECT * FROM get_albums(127) AS a JOIN t ON t.id = a.id",
+		"SELECT * FROM t CROSS JOIN generate_series(1, 3) g",
+		"INSERT INTO t SELECT * FROM generate_series(1, 3)",
+		"SELECT (SELECT count(*) FROM get_all_albums(127)) AS n",
+	}
+	for _, dialect := range []keywords.SQLDialect{"", keywords.DialectGeneric} {
+		for _, sql := range tests {
+			t.Run(string(dialect)+"/"+sql, func(t *testing.T) {
+				if _, err := ParseWithDialect(sql, dialect); err != nil {
+					t.Fatalf("table-valued function should parse with dialect %q: %v", dialect, err)
+				}
+			})
+		}
+	}
+}
+
+// TestTableFunctionASTShape pins the AST shape of a FROM table function with
+// its column alias list, in the default and the generic dialect: the function
+// call, the alias and the column names must all survive parsing.
+func TestTableFunctionASTShape(t *testing.T) {
+	const sql = "SELECT x FROM generate_series(1, 10) AS g(n)"
+	for _, dialect := range []keywords.SQLDialect{"", keywords.DialectGeneric} {
+		t.Run(string(dialect), func(t *testing.T) {
+			tree, err := ParseWithDialect(sql, dialect)
+			if err != nil {
+				t.Fatalf("parse: %v", err)
+			}
+			defer func() {
+				if tree != nil {
+					ast.ReleaseAST(tree)
+				}
+			}()
+			stmt, ok := tree.Statements[0].(*ast.SelectStatement)
+			if !ok {
+				t.Fatalf("expected SelectStatement, got %T", tree.Statements[0])
+			}
+			if len(stmt.From) != 1 {
+				t.Fatalf("len(From) = %d, want 1", len(stmt.From))
+			}
+			ref := stmt.From[0]
+			if ref.TableFunc == nil || ref.TableFunc.Name != "generate_series" {
+				t.Fatalf("TableFunc = %+v, want generate_series call", ref.TableFunc)
+			}
+			if ref.Name != "generate_series" || ref.Alias != "g" {
+				t.Fatalf("Name = %q, Alias = %q, want generate_series / g", ref.Name, ref.Alias)
+			}
+			if ref.ColumnAliases == nil || len(ref.ColumnAliases.Names) != 1 || ref.ColumnAliases.Names[0] != "n" {
+				t.Fatalf("ColumnAliases = %+v, want [n]", ref.ColumnAliases)
+			}
+			if len(ref.TableFunc.Arguments) != 2 {
+				t.Fatalf("len(Arguments) = %d, want 2", len(ref.TableFunc.Arguments))
+			}
+		})
+	}
+}
+
+// TestAcceptDistanceOperatorDefaultDialect checks that the PostgreSQL
+// distance operator <-> parses when no dialect is set, in every clause
+// position. The generic dialect keeps rejecting it: it means
+// "parse standard SQL only" (pkg/sql/dialect/capabilities.go).
+func TestAcceptDistanceOperatorDefaultDialect(t *testing.T) {
+	tests := []string{
+		"SELECT a FROM t WHERE a <-> b",
+		"SELECT a <-> b FROM t",
+		"SELECT a FROM t ORDER BY a <-> b",
+		"SELECT a FROM t GROUP BY a <-> b",
+	}
+	for _, sql := range tests {
+		t.Run(sql, func(t *testing.T) {
+			if _, err := ParseWithDialect(sql, ""); err != nil {
+				t.Fatalf("<-> should parse with the default dialect: %v", err)
+			}
+		})
+	}
+}
+
+// TestRejectDistanceOperatorGenericDialect pins the rejection of <-> under
+// the generic dialect, which parses standard SQL only
+// (pkg/sql/dialect/capabilities.go).
+func TestRejectDistanceOperatorGenericDialect(t *testing.T) {
+	for _, sql := range []string{
+		"SELECT a FROM t WHERE a <-> b",
+		"SELECT a <-> b FROM t",
+		"SELECT a FROM t ORDER BY a <-> b",
+		"SELECT a FROM t GROUP BY a <-> b",
+	} {
+		t.Run(sql, func(t *testing.T) {
+			if _, err := ParseWithDialect(sql, keywords.DialectGeneric); err == nil {
+				t.Fatalf("<-> should be rejected under the generic dialect: %q", sql)
+			}
+		})
+	}
+}
+
+// TestRejectDistanceOperatorMySQLDialect pins that a named non-PostgreSQL
+// dialect still rejects <-> (Capability.SupportsDistanceOp is true only for
+// PostgreSQL and the no-dialect default).
+func TestRejectDistanceOperatorMySQLDialect(t *testing.T) {
+	if _, err := ParseWithDialect("SELECT a FROM t WHERE a <-> b", keywords.DialectMySQL); err == nil {
+		t.Fatal("<-> should be rejected under the mysql dialect")
 	}
 }

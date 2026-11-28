@@ -31,6 +31,8 @@ import (
 // rather than emit changed SQL; once the gap is fixed they simply pass.
 var corpusFormatKnownGaps = map[string]string{
 	"realworld/mysql/05_dialect_specific.sql": "DESCRIBE has no renderer, so the CLI refuses the file rather than rewrite it (see TestFormatSQL_RefusesDescribe)",
+	// Parses under the default dialect since table functions in FROM are accepted there (#971).
+	"realworld/snowflake/07_admin.sql": "DESCRIBE has no renderer, so the CLI refuses the file rather than rewrite it (see TestFormatSQL_RefusesDescribe)",
 }
 
 // corpusDialect maps a testdata path to the dialect its SQL is written in.

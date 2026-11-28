@@ -709,16 +709,12 @@ func (p *Parser) parseTableHintArgs() (string, error) {
 }
 
 // acceptsTableFunctionCall reports whether a "(" after a FROM / JOIN table
-// name starts a table-valued function call. Every named dialect has them
-// (PostgreSQL unnest, SQL Server STRING_SPLIT / OPENJSON, SQLite json_each,
-// Oracle TABLE(...), MySQL JSON_TABLE, ClickHouse numbers, Snowflake
-// FLATTEN); the generic dialect keeps the narrower historical gate.
+// name starts a table-valued function call. Every dialect accepts the shape
+// (see Capabilities.SupportsTableFunction): named dialects have their own
+// function families, and the shape is standard SQL (SQL:2003 TABLE(...)),
+// which the generic dialect parses too.
 func (p *Parser) acceptsTableFunctionCall() bool {
-	if p.supportsTableFunction() {
-		return true
-	}
-	return p.IsSQLServer() || p.IsSQLite() || p.IsOracle() || p.IsMySQL() || p.IsMariaDB() ||
-		p.IsRedshift()
+	return p.Capabilities().SupportsTableFunction
 }
 
 // isCTENameStart reports whether the current token can name a CTE: any

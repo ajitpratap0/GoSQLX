@@ -76,11 +76,17 @@ go install github.com/ajitpratap0/GoSQLX/cmd/gosqlx@latest
 
 The CLI validates with its default dialect. Dialect-specific files can produce false positives.
 
-## Privacy
+## Privacy and data flow
 
-By default the plugin uses the hosted server `https://mcp.gosqlx.dev/mcp`. **Any SQL that Claude passes to a GoSQLX tool is sent to that server.** Don't send SQL that contains secrets, credentials or personal data. For proprietary schemas or queries, use local mode.
+What the plugin runs, sends and fetches:
+
+- **MCP server (remote).** The plugin's only network connection is the hosted server `https://mcp.gosqlx.dev/mcp`. **Any SQL that Claude passes to a GoSQLX tool is sent to that server.** It needs no account or API key and the plugin sends no credentials. The server keeps no SQL, results or request data on disk. Don't send SQL that contains secrets, credentials or personal data. For proprietary schemas or queries, use local mode.
+- **Validation hook (local).** The hook runs only the `gosqlx` CLI already installed on your machine, reads only the `.sql` file Claude just wrote, and sends nothing over the network. It downloads and installs nothing.
+- **Skills, commands and the agent** are Markdown instructions. They call the MCP tools above or, when the server isn't available, the local `gosqlx` CLI.
 
 The tools only parse and analyze text. They never connect to or execute anything against a database.
+
+Privacy policy: <https://gosqlx.dev/privacy/>.
 
 ## Local / private mode
 
@@ -90,16 +96,7 @@ Install the MCP server binary:
 go install github.com/ajitpratap0/GoSQLX/cmd/gosqlx-mcp@latest
 ```
 
-**Option A: keep the plugin and point it at a local HTTP server.** The plugin's server URL honours `GOSQLX_MCP_URL`:
-
-```sh
-gosqlx-mcp    # listens on 127.0.0.1:8080 (GOSQLX_MCP_HOST / GOSQLX_MCP_PORT)
-GOSQLX_MCP_URL=http://127.0.0.1:8080/mcp claude
-```
-
-Tool names stay the same, so the skills, commands and agent work unchanged.
-
-**Option B: run the server over stdio.** Add it as a separate MCP server:
+**Run the server over stdio** and add it as a separate MCP server:
 
 ```sh
 claude mcp add gosqlx-local -- gosqlx-mcp --stdio
@@ -118,13 +115,15 @@ Or add it to a project `.mcp.json`:
 }
 ```
 
-With option B, the tools are named `mcp__gosqlx-local__<tool>`. The skills refer to tools by their short names (`analyze_sql` and so on), so Claude still finds them, but you may be asked for permission the first time each one runs. To keep everything local, also disable the plugin's remote server in `/mcp`.
+The local tools are named `mcp__gosqlx-local__<tool>`. The skills refer to tools by their short names (`analyze_sql` and so on), so Claude still finds them, but you may be asked for permission the first time each one runs. To keep everything local, also disable the plugin's remote server (`plugin:gosqlx:gosqlx`) in `/mcp`.
+
+`gosqlx-mcp` without `--stdio` serves HTTP on `127.0.0.1:8080` (`GOSQLX_MCP_HOST` / `GOSQLX_MCP_PORT`); add it with `claude mcp add --transport http gosqlx-local http://127.0.0.1:8080/mcp`.
 
 **CLI only:** with no MCP server at all, every skill, command and the agent fall back to the local `gosqlx` CLI (`validate`, `format`, `lint`, `analyze`).
 
 ## Claude.ai and Claude Desktop (custom connector)
 
-Claude.ai, Claude Desktop and Cowork can't run Claude Code plugins, but they can use the same GoSQLX tools as a remote MCP custom connector.
+Hooks and slash commands run only in Claude Code. In Claude.ai, Claude Desktop and Cowork you can use the same GoSQLX tools as a remote MCP custom connector.
 
 **Pro / Max:**
 

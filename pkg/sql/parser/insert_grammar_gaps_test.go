@@ -726,3 +726,87 @@ func TestDMLReturningNestedScopes(t *testing.T) {
 		ast.ReleaseAST(tree)
 	}
 }
+
+// TestInsertTargetAlias covers the PostgreSQL target-table alias
+// INSERT INTO t AS u: parse shape, SQL() rendering and the re-parse
+// fixpoint. Only the AS form is accepted; real PostgreSQL rejects a
+// bare alias without AS for INSERT targets.
+func TestInsertTargetAlias(t *testing.T) {
+	runGrammarGapCases(t, []grammarGapCase{
+		{
+			name: "plain table", dialect: "postgresql",
+			sql:     "INSERT INTO t AS u (a) VALUES (1) RETURNING u.id",
+			wantSQL: "INSERT INTO t AS u (a) VALUES (1) RETURNING u.id",
+			check: func(t *testing.T, stmt ast.Statement) {
+				alias := asInsert(t, stmt).DialectExtras().TableAlias
+				if alias != "u" {
+					t.Fatalf("TableAlias = %q, want u", alias)
+				}
+			},
+		},
+		{
+			name: "quoted schema target", dialect: "postgresql",
+			sql:     `INSERT INTO core."user" AS u (a) VALUES (1)`,
+			wantSQL: `INSERT INTO core."user" AS u (a) VALUES (1)`,
+			check: func(t *testing.T, stmt ast.Statement) {
+				ins := asInsert(t, stmt)
+				x := ins.DialectExtras()
+				if x.TableAlias != "u" {
+					t.Fatalf("TableAlias = %q, want u", x.TableAlias)
+				}
+				if ins.TableName != "core.user" || ins.DialectExtras().TableNameQuote == 0 {
+					t.Fatalf("TableName = %q, quote = %v, want core.user with quoting", ins.TableName, ins.DialectExtras().TableNameQuote)
+				}
+			},
+		},
+		{
+			name: "no column list", dialect: "",
+			sql:     "INSERT INTO t AS u VALUES (1)",
+			wantSQL: "INSERT INTO t AS u VALUES (1)",
+			check: func(t *testing.T, stmt ast.Statement) {
+				if alias := asInsert(t, stmt).DialectExtras().TableAlias; alias != "u" {
+					t.Fatalf("TableAlias = %q, want u", alias)
+				}
+			},
+		},
+		{
+			name: "alias before insert select", dialect: "postgresql",
+			sql:     "INSERT INTO t AS u (a) SELECT a FROM s",
+			wantSQL: "INSERT INTO t AS u (a) SELECT a FROM s",
+			check: func(t *testing.T, stmt ast.Statement) {
+				if alias := asInsert(t, stmt).DialectExtras().TableAlias; alias != "u" {
+					t.Fatalf("TableAlias = %q, want u", alias)
+				}
+			},
+		},
+	})
+}
+
+// TestInsertTargetAliasErrors pins that only the AS form is accepted.
+func TestInsertTargetAliasErrors(t *testing.T) {
+	tests := []struct {
+		name    string
+		dialect string
+		sql     string
+		wantErr string
+	}{
+		{"alias must be an identifier", "postgresql", "INSERT INTO t AS 1 VALUES (1)", "alias after AS"},
+		{"as without alias", "", "INSERT INTO t AS (a) VALUES (1)", "alias after AS"},
+		{"reserved word as alias", "postgresql", "INSERT INTO t AS VALUES (1)", "alias after AS"},
+		{"bare alias without as", "postgresql", "INSERT INTO t u VALUES (1)", "VALUES, SELECT, or WITH"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tree, err := parseInsertCTEWithDialect(t, tt.sql, tt.dialect)
+			if tree != nil {
+				defer ast.ReleaseAST(tree)
+			}
+			if err == nil {
+				t.Fatalf("parse(%q): expected error %q, got none", tt.sql, tt.wantErr)
+			}
+			if tt.wantErr != "" && !strings.Contains(err.Error(), tt.wantErr) {
+				t.Fatalf("parse(%q): error = %q, want containing %q", tt.sql, err.Error(), tt.wantErr)
+			}
+		})
+	}
+}

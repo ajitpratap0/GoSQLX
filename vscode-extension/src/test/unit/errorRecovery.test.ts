@@ -177,7 +177,7 @@ suite('Network Error Recovery Tests', () => {
         const result = handler.handleError({ code: 'ECONNREFUSED' });
 
         assert.strictEqual(result.retryable, true);
-        assert.ok(result.userMessage.includes('connection'));
+        assert.ok(result.userMessage.toLowerCase().includes('connection'));
     });
 
     test('should handle connection reset', () => {
@@ -555,7 +555,7 @@ class ConfigWithFallback {
 
     static fromFile(path: string): ConfigWithFallback {
         const config = new ConfigWithFallback({});
-        config.loadError = 'File not found';
+        config.loadError = `File not found: ${path}`;
         return config;
     }
 

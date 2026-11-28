@@ -3,7 +3,10 @@ project_name: gosqlx
 before:
   hooks:
     - go mod tidy
-    - go test -race ./...
+    # Tests run before GoReleaser in release.yml: the race suite in four
+    # shards (as in test.yml) and pkg/cbinding with CGO. Re-running the whole
+    # race suite unsharded here would repeat it on one runner and risk the
+    # per-package timeouts the shards avoid.
 
 # The release archives ship the example tools only. Neither example defines a
 # version variable, so a "-X main.version=..." ldflag would be a silent no-op

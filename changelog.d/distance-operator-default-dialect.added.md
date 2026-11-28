@@ -1,1 +1,0 @@
-- **Parser**: the PostgreSQL distance operator `<->` now parses when no dialect is set, in every clause position (`WHERE a <-> b`, `ORDER BY a <-> b`, the select list, `GROUP BY`). PostgreSQL already accepted it; the named dialects, including `generic`, still reject it.

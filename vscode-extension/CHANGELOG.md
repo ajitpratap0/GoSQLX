@@ -2,6 +2,31 @@
 
 All notable changes to the "GoSQLX" extension will be documented in this file.
 
+## [1.18.0] - 2026-11-28
+
+Bundles the GoSQLX v1.18.0 language server. See the
+[main CHANGELOG](https://github.com/ajitpratap0/GoSQLX/blob/main/CHANGELOG.md)
+for the full list.
+
+### Changed
+- **Faster language server**: the bundled server picks up the v1.18.0
+  performance overhaul (allocation-light tokenizer, parser, linter and
+  security scanner), so diagnostics on large files are cheaper.
+- **Fewer false errors without a dialect**: with the default (no dialect)
+  setting, table functions in FROM (`FROM generate_series(1, 3) AS t(x)`), the
+  `<->` operator, `INSERT INTO t AS u`, `FOR UPDATE ... LIMIT n` and
+  `CREATE OR REPLACE FUNCTION ... AS $$ ... $$` no longer report syntax errors.
+- **Error positions**: errors at the second word of a compound keyword (the
+  `BY` of `GROUP BY`, the `JOIN` of `LEFT JOIN`) now point at that word.
+
+### Fixed
+- **Outline**: document symbol ranges use exact statement spans.
+
+### Security
+- Development dependencies updated to clear npm audit advisories (`glob`,
+  `minimatch`, `@azure/identity`); the published extension has no new runtime
+  dependencies.
+
 ## [1.17.0] - 2026-10-31
 
 Bundles the GoSQLX v1.17.0 language server. See the

@@ -8,10 +8,8 @@ We release patches for security vulnerabilities. Currently supported versions:
 
 | Version | Supported          | Security Updates |
 | ------- | ------------------ | ---------------- |
-| 1.5.x   | :white_check_mark: | Active           |
-| 1.4.x   | :white_check_mark: | Active           |
-| 1.0-1.3 | :x:                | Upgrade Required |
-| < 1.0   | :x:                | Not Supported    |
+| 1.18.x  | :white_check_mark: | Active           |
+| < 1.18  | :x:                | Upgrade Required |
 
 **Upgrade Policy**: We recommend always using the latest version for optimal security and performance.
 

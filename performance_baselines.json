@@ -1,5 +1,5 @@
 {
-  "version": "1.17.0",
+  "version": "1.18.0",
   "updated": "2026-11-02",
   "purpose": "SMOKE TEST ONLY. These ns/op ceilings and their 60-65% tolerances exist so TestPerformanceRegression catches order-of-magnitude breakage on noisy CI. They are not a performance gate and must not be tightened to act as one. Regressions are judged by the interleaved A/B gate (scripts/perf/ab.sh, task bench:gate) and the deterministic allocs/op and B/op baselines in benchmarks/baselines/. See docs/PERFORMANCE_METHODOLOGY.md.",
   "baselines": {

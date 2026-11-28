@@ -31,6 +31,13 @@ import (
 // This version tracks feature releases and compatibility.
 // Format: MAJOR.MINOR.PATCH (Semantic Versioning 2.0.0)
 //
+// Version 1.18.0 includes:
+//   - Performance overhaul: allocation-light tokenizer, parser, AST, linter and scanner; single-pass dialect detection
+//   - Query fingerprint v2 (token-stream normal form, "v2:" prefix); ModeLegacy reproduces v1.17 fingerprints
+//   - Parser fixes: INSERT target aliases, FOR UPDATE before LIMIT, CREATE OR REPLACE FUNCTION without a dialect
+//   - Table functions in FROM and the <-> operator in the dialect-free parser
+//   - Pool statistics are counted only while metrics are enabled
+//
 // Version 1.17.0 includes:
 //   - Real-world dialect corpus: 2,813 statements across 8 dialects checked for parse, format and round trip
 //   - Dialect-faithful formatting: Oracle / lines, U& identifiers, T-SQL GO comments, lower-case keywords

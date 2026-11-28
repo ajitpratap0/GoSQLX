@@ -30,6 +30,8 @@ type Rule interface {
 }
 ```
 
+**Resource lifetime (since v1.18.0):** AST nodes, `Context.Nodes()`, token slices and `Word` pointers are borrowed only for the duration of `Check`; the linter releases the AST and recycles token storage once every rule has run. Copy strings such as `tok.Token.Value` and positions during `Check`, join goroutines before returning, and have `Fix` work from its SQL argument and the violations instead of references saved by `Check`.
+
 ### `Severity`
 ```go
 type Severity string

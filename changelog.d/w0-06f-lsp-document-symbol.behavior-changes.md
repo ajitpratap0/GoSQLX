@@ -1,1 +1,0 @@
-- LSP documentSymbol outline ranges now use exact parser statement spans; see Fixed. Clients see different (correct) ranges; positions remain byte columns.

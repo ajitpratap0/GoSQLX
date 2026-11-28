@@ -380,6 +380,7 @@ func (p *Parser) parseArrayConstructor() (*ast.ArrayConstructorExpression, error
 	p.advance() // Consume ARRAY
 
 	arrayExpr := ast.GetArrayConstructor()
+	p.notePooledDraw()
 
 	// Check for square bracket syntax: ARRAY[...]
 	if p.isType(models.TokenTypeLBracket) {
@@ -459,6 +460,8 @@ func (p *Parser) parseBracketArrayLiteral() (*ast.ArrayConstructorExpression, er
 	p.advance() // Consume [
 
 	arrayExpr := ast.GetArrayConstructor()
+	p.notePooledDraw()
+
 	arrayExpr.Bracket = true
 
 	if !p.isType(models.TokenTypeRBracket) {

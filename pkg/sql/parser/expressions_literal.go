@@ -455,6 +455,7 @@ func (p *Parser) parsePrimaryExpression() (ast.Expression, error) {
 		if p.isType(models.TokenTypeComma) {
 			// This is a tuple expression (col1, col2, ...)
 			tuple := ast.GetTupleExpression()
+			p.notePooledDraw()
 			tuple.Expressions = append(tuple.Expressions, expr)
 
 			for p.isType(models.TokenTypeComma) {

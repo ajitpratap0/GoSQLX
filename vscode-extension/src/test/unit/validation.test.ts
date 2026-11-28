@@ -1,6 +1,4 @@
 import * as assert from 'assert';
-import * as path from 'path';
-import * as os from 'os';
 
 /**
  * Configuration Validation Edge Case Tests for GoSQLX extension.
@@ -231,9 +229,10 @@ suite('Executable Path Validation Edge Cases', () => {
         assert.strictEqual(result.valid, true);
     });
 
-    test('should reject whitespace-only string', () => {
+    test('should treat whitespace-only string as empty', () => {
+        // Trimmed to empty, which means "use the bundled binary or PATH fallback" (#367)
         const result = validateExecutablePath('   ');
-        assert.strictEqual(result.valid, false);
+        assert.strictEqual(result.valid, true);
     });
 
     test('should reject path with multiple consecutive spaces', () => {
@@ -243,8 +242,13 @@ suite('Executable Path Validation Edge Cases', () => {
     });
 
     test('should reject path with newlines', () => {
-        const result = validateExecutablePath('/usr/bin/gosqlx\n');
+        const result = validateExecutablePath('/usr/bin\n/gosqlx');
         assert.strictEqual(result.valid, false);
+    });
+
+    test('should trim a trailing newline', () => {
+        const result = validateExecutablePath('/usr/bin/gosqlx\n');
+        assert.strictEqual(result.valid, true);
     });
 
     test('should reject path with tabs', () => {

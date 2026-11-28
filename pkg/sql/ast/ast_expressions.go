@@ -547,7 +547,13 @@ type BinaryExpression struct {
 	// XorAtAdditive records SQL Server's additive precedence for bitwise ^.
 	// MySQL and MariaDB instead bind bitwise ^ tighter than multiplication.
 	XorAtAdditive bool
-	CustomOp      *CustomBinaryOperator // For PostgreSQL custom operators
+	// Lambda records that an Operator "->" is a lambda (ClickHouse
+	// arrayMap(x -> x * 2, a), Snowflake TRANSFORM(a, x -> x * 2)) rather
+	// than JSON field access: Left holds the parameters and Right the body.
+	// A lambda binds looser than every other operator, so formatting for a
+	// dialect with lambdas never parenthesizes its body.
+	Lambda   bool
+	CustomOp *CustomBinaryOperator // For PostgreSQL custom operators
 	// Extras holds the optional pattern ESCAPE clause.
 	Extras *BinaryExtras
 	Pos    models.Location // Source position of the operator (1-based line and column)

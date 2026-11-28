@@ -20,6 +20,7 @@ package parser
 
 import (
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -31,8 +32,9 @@ import (
 
 // parseFromClause parses the FROM clause including comma-separated table references
 // and any subsequent JOIN clauses.  Returns the primary table name (for compatibility),
-// the full table-reference slice, and the join slice.
-func (p *Parser) parseFromClause() (tableName string, tables []ast.TableReference, joins []ast.JoinClause, err error) {
+// the full table-reference slice, and the join slice. buf, which may be nil, is
+// zero-length spare capacity the table list is built in (see newSelectStatement).
+func (p *Parser) parseFromClause(buf []ast.TableReference) (tableName string, tables []ast.TableReference, joins []ast.JoinClause, err error) {
 	// FROM is optional (e.g. SELECT 1).  Validate that the next token makes sense.
 	if !p.isType(models.TokenTypeFrom) {
 		// advance() sets a zero-value sentinel (TokenType == TokenTypeEOF == 0) when
@@ -106,7 +108,7 @@ func (p *Parser) parseFromClause() (tableName string, tables []ast.TableReferenc
 		p.advance() // consume FINAL
 	}
 
-	tables, joins, err = p.parseTableListAndJoins(&firstRef, joins)
+	tables, joins, err = p.parseTableListAndJoins(&firstRef, joins, buf)
 	if err != nil {
 		return "", nil, nil, err
 	}
@@ -118,9 +120,10 @@ func (p *Parser) parseFromClause() (tableName string, tables []ast.TableReferenc
 // references, then the JOIN clauses, including a comma after an explicit join.
 // joins holds the joins already read from a parenthesized group that opened
 // the list, or nil.
-func (p *Parser) parseTableListAndJoins(first *ast.TableReference, joins []ast.JoinClause) (tables []ast.TableReference, _ []ast.JoinClause, err error) {
+func (p *Parser) parseTableListAndJoins(first *ast.TableReference, joins []ast.JoinClause, buf []ast.TableReference) (tables []ast.TableReference, _ []ast.JoinClause, err error) {
 	firstRef := *first
-	tables = []ast.TableReference{firstRef}
+	tables = buf[:0]
+	tables = append(tables, firstRef)
 
 	// Additional comma-separated table references (implicit cross joins)
 	for p.isType(models.TokenTypeComma) {
@@ -409,8 +412,11 @@ func (p *Parser) parseJoinClauses(firstRef ast.TableReference, joins []ast.JoinC
 			}
 		}
 
-		if cap(joins) == 0 {
-			joins = make([]ast.JoinClause, 0, 2)
+		if len(joins) == cap(joins) {
+			// Empty slice: size it from the JOINs ahead. Full slice handed in
+			// by a caller (parenthesized group, comma join): grow by the hint
+			// once instead of letting append double repeatedly.
+			joins = slices.Grow(joins, p.joinsCap())
 		}
 		jc.Type = joinType
 		jc.Left = leftTable
@@ -827,7 +833,7 @@ func (p *Parser) parseGroupByClause(stmt *ast.SelectStatement) ([]ast.Expression
 		return nil, nil
 	}
 
-	groupByExprs := make([]ast.Expression, 0, 4)
+	base := p.exprMark()
 	for {
 		var (
 			expr ast.Expression
@@ -846,9 +852,10 @@ func (p *Parser) parseGroupByClause(stmt *ast.SelectStatement) ([]ast.Expression
 		}
 
 		if err != nil {
+			p.exprDrop(base)
 			return nil, err
 		}
-		groupByExprs = append(groupByExprs, expr)
+		p.exprPush(expr)
 
 		if !p.isType(models.TokenTypeComma) {
 			break
@@ -859,7 +866,7 @@ func (p *Parser) parseGroupByClause(stmt *ast.SelectStatement) ([]ast.Expression
 	// MySQL / SQL Server / ClickHouse: GROUP BY col1 WITH ROLLUP / WITH CUBE / WITH TOTALS
 	p.parseGroupByWithModifiers(stmt)
 
-	return groupByExprs, nil
+	return p.exprPop(base), nil
 }
 
 // supportsGroupByAll reports whether GROUP BY ALL is accepted.
@@ -921,7 +928,7 @@ func (p *Parser) parseOrderByList() ([]ast.OrderByExpression, error) {
 	}
 	p.advance() // Consume BY
 
-	var orderByExprs []ast.OrderByExpression
+	base := p.orderMark()
 	for {
 		var expr ast.Expression
 		if p.isOrderByAll() {
@@ -931,6 +938,7 @@ func (p *Parser) parseOrderByList() ([]ast.OrderByExpression, error) {
 		} else {
 			var err error
 			if expr, err = p.parseExpression(); err != nil {
+				p.orderDrop(base)
 				return nil, err
 			}
 		}
@@ -952,6 +960,7 @@ func (p *Parser) parseOrderByList() ([]ast.OrderByExpression, error) {
 			op := ast.OrderUsingOperatorText(p.peekToken().Token.Value)
 			if op == "" {
 				p.advance() // USING
+				p.orderDrop(base)
 				return nil, p.expectedError("sort operator after USING")
 			}
 			p.advance() // USING
@@ -961,6 +970,7 @@ func (p *Parser) parseOrderByList() ([]ast.OrderByExpression, error) {
 
 		nullsFirst, err := p.parseNullsClause()
 		if err != nil {
+			p.orderDrop(base)
 			return nil, err
 		}
 		entry.NullsFirst = nullsFirst
@@ -972,19 +982,20 @@ func (p *Parser) parseOrderByList() ([]ast.OrderByExpression, error) {
 			strings.EqualFold(p.peekToken().Token.Value, "FILL") {
 			fill, err := p.parseClickHouseWithFill()
 			if err != nil {
+				p.orderDrop(base)
 				return nil, err
 			}
 			entry.WithFill = fill
 		}
 
-		orderByExprs = append(orderByExprs, entry)
+		p.orderPush(entry)
 
 		if !p.isType(models.TokenTypeComma) {
 			break
 		}
 		p.advance()
 	}
-	return orderByExprs, nil
+	return p.orderPop(base), nil
 }
 
 // parseClickHouseWithFill consumes "WITH FILL [FROM x] [TO y] [STEP z]" and
@@ -1254,4 +1265,45 @@ func (p *Parser) isOrderByAll() bool {
 		return true
 	}
 	return equalsUpper(p.peekToken().Token.Value, "NULLS")
+}
+
+// joinHintWindow bounds how far joinsCap looks ahead for JOIN tokens, so the
+// scan stays O(1) per statement on huge scripts.
+const joinHintWindow = 256
+
+// joinsCap returns the initial capacity for a statement's joins slice: 1 plus
+// the number of JOIN tokens that follow at the same parenthesis depth, capped
+// at 8. The scan stops at a depth-0 ';', UNION, EXCEPT or INTERSECT, or at the
+// ')' closing the enclosing level, so neighbouring statements, set-operation
+// branches and nested subqueries never inflate the hint. It also looks at most
+// joinHintWindow tokens ahead. It runs only when a JOIN is about to be
+// appended to an empty or full slice (a full one is handed in by a
+// parenthesized join group or a comma join), so join-free statements pay
+// nothing. The result
+// is a capacity hint only; append still grows past it. Oracle MINUS is
+// tokenized as an identifier, so it is not a boundary and a MINUS chain may
+// over-count later branches' JOINs (bounded by the cap and window).
+func (p *Parser) joinsCap() int {
+	end := min(p.currentPos+joinHintWindow, len(p.tokens))
+	n, depth := 1, 0 // n counts the join being appended; its JOIN token is already consumed
+	for i := p.currentPos; i < end && n < 8; i++ {
+		switch p.tokens[i].Token.Type {
+		case models.TokenTypeJoin:
+			if depth == 0 {
+				n++
+			}
+		case models.TokenTypeLParen:
+			depth++
+		case models.TokenTypeRParen:
+			if depth == 0 {
+				return n
+			}
+			depth--
+		case models.TokenTypeSemicolon, models.TokenTypeUnion, models.TokenTypeExcept, models.TokenTypeIntersect:
+			if depth == 0 {
+				return n
+			}
+		}
+	}
+	return n
 }

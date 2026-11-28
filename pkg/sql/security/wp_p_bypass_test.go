@@ -9,8 +9,8 @@ import (
 	"runtime"
 	"strings"
 	"testing"
-	"time"
 
+	"github.com/ajitpratap0/GoSQLX/internal/scaletest"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/tokenizer"
 )
@@ -385,42 +385,29 @@ func TestWPPPrefilterEquivalence(t *testing.T) {
 		})
 	}
 	for _, pattern := range allCompiledPatterns(t) {
-		for _, literal := range requiredLiterals(pattern.re.String()) {
-			if strings.ContainsAny(string(literal), " \t\n\r\f\v") {
-				t.Errorf("requiredLiterals(%q) includes whitespace: %q", pattern.re.String(), literal)
+		for _, clause := range requiredLiterals(pattern.re.String()) {
+			for _, literal := range clause {
+				if strings.ContainsAny(string(literal), " \t\n\r\f\v") {
+					t.Errorf("requiredLiterals(%q) includes whitespace: %q", pattern.re.String(), literal)
+				}
 			}
 		}
 	}
 }
 
 func TestWPPScanSQLLinear(t *testing.T) {
-	if testing.Short() || raceEnabled {
-		t.Skip("timing regression; skipped under -short and -race")
+	if testing.Short() {
+		t.Skip("timing regression; skipped under -short")
 	}
 	input := func(size int) string {
 		const chunk = "/**/ --x\n a = b "
 		return strings.Repeat(chunk, (size+len(chunk)-1)/len(chunk))[:size]
 	}
 	scanner := NewScanner()
-	measure := func(sql string) time.Duration {
-		best := time.Duration(1<<63 - 1)
-		for i := 0; i < 5; i++ {
-			start := time.Now()
-			_ = scanner.ScanSQL(sql)
-			if elapsed := time.Since(start); elapsed < best {
-				best = elapsed
-			}
-		}
-		return best
-	}
-	small, large := input(64<<10), input(256<<10)
-	_ = scanner.ScanSQL(small)
-	_ = scanner.ScanSQL(large)
-	a, b := measure(small), measure(large)
-	t.Logf("64KiB %s, 256KiB %s, ratio %.2fx", a, b, float64(b)/float64(a))
-	if float64(b)/float64(a) >= 10 {
-		t.Errorf("4x input took %.2fx time (64KiB %s, 256KiB %s)", float64(b)/float64(a), a, b)
-	}
+	small, large := input(16<<10), input(64<<10)
+	scaletest.AssertLinearGrowth(t, "ScanSQL 16KiB -> 64KiB", 10,
+		func() { _ = scanner.ScanSQL(small) },
+		func() { _ = scanner.ScanSQL(large) })
 }
 
 // The old captures provide a small-input oracle for the streaming implementation.
@@ -454,7 +441,7 @@ func TestWPPStreamingTautologyCaptureEquivalence(t *testing.T) {
 				}
 			}
 			got := &ScanResult{}
-			scanner.detectTautologyInSQL([]string{sql}, nil, got)
+			scanner.detectTautologyInSQL([]string{sql}, scanPrefilter{}, got)
 			if !reflect.DeepEqual(got.Findings, want) {
 				t.Errorf("stream differs from capture oracle: got %+v, want %+v", got.Findings, want)
 			}
@@ -466,7 +453,7 @@ func TestWPPStreamingTautologyFullInput(t *testing.T) {
 	falsePairs := strings.Repeat("1=2 ", (1<<20)/4)
 	for _, sql := range []string{falsePairs + " 3=3", "3=3 " + falsePairs} {
 		result := &ScanResult{}
-		NewScanner().detectTautologyInSQL([]string{sql}, nil, result)
+		NewScanner().detectTautologyInSQL([]string{sql}, scanPrefilter{}, result)
 		if len(result.Findings) != 1 || result.Findings[0].Description != "Always-true condition detected (tautology): 3=3" {
 			t.Errorf("lost first true numeric pair in full input: %+v", result.Findings)
 		}

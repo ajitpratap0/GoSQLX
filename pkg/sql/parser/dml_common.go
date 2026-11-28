@@ -299,6 +299,9 @@ func (p *Parser) parseAssignmentTarget() (ast.Expression, error) {
 	if p.isType(models.TokenTypeLParen) {
 		p.advance() // Consume (
 		tuple := &ast.TupleExpression{}
+		// Heap-built, but of a type ReleaseAST recycles: count it so the release
+		// walk still runs and keeps returning it to the pool.
+		p.notePooledDraw()
 		for {
 			col, err := p.parseAssignmentColumn()
 			if err != nil {

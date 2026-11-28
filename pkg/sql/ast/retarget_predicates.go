@@ -46,7 +46,7 @@ func OperatorNeedsRetarget(e Expression, target string) bool {
 			} else if target != "" && target != "postgresql" {
 				return true
 			}
-		} else if form, _ := binaryTargetForm(x.Operator, x.PipesOr, target); form != formKeep {
+		} else if form, _ := binaryTargetForm(x.Operator, x.PipesOr, x.Lambda, target); form != formKeep {
 			return true
 		} else if retargetExpressionPrecedence(x) < 6 {
 			return false

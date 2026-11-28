@@ -223,6 +223,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/ajitpratap0/GoSQLX/internal/metricsgate"
 	sqlerrors "github.com/ajitpratap0/GoSQLX/pkg/errors"
 )
 
@@ -408,13 +409,11 @@ type Metrics struct {
 	errorsMutex sync.RWMutex
 
 	// Configuration - use atomic for thread safety
-	enabled   int32        // 0 = disabled, 1 = enabled (atomic)
 	startTime atomic.Value // time.Time stored atomically
 }
 
 // Global metrics instance
 var globalMetrics = &Metrics{
-	enabled:       0, // 0 = disabled
 	errorCounters: newErrorCodeCounters(),
 	minQuerySize:  -1, // -1 means not set yet
 }
@@ -435,8 +434,8 @@ func init() {
 //	defer metrics.Disable()
 //	// All operations are now tracked
 func Enable() {
-	atomic.StoreInt32(&globalMetrics.enabled, 1)
 	globalMetrics.startTime.Store(time.Now())
+	metricsgate.Set(true)
 }
 
 // Disable deactivates metrics collection globally.
@@ -451,7 +450,7 @@ func Enable() {
 //	// Metrics collection stopped but data preserved
 //	stats := metrics.GetStats() // Still returns last collected stats
 func Disable() {
-	atomic.StoreInt32(&globalMetrics.enabled, 0)
+	metricsgate.Set(false)
 }
 
 // IsEnabled returns whether metrics collection is currently active.
@@ -463,7 +462,7 @@ func Disable() {
 //	    fmt.Println("Metrics are being collected")
 //	}
 func IsEnabled() bool {
-	return atomic.LoadInt32(&globalMetrics.enabled) == 1
+	return metricsgate.Enabled()
 }
 
 // RecordTokenization records a tokenization operation with duration, query size, and error.
@@ -483,7 +482,7 @@ func IsEnabled() bool {
 //	duration := time.Since(start)
 //	metrics.RecordTokenization(duration, len(sqlBytes), err)
 func RecordTokenization(duration time.Duration, querySize int, err error) {
-	if atomic.LoadInt32(&globalMetrics.enabled) == 0 {
+	if !metricsgate.Enabled() {
 		return
 	}
 
@@ -532,7 +531,7 @@ func RecordTokenization(duration time.Duration, querySize int, err error) {
 //	    metrics.RecordPoolPut()
 //	}()
 func RecordPoolGet(fromPool bool) {
-	if atomic.LoadInt32(&globalMetrics.enabled) == 0 {
+	if !metricsgate.Enabled() {
 		return
 	}
 
@@ -554,7 +553,7 @@ func RecordPoolGet(fromPool bool) {
 //	    metrics.RecordPoolPut()
 //	}()
 func RecordPoolPut() {
-	if atomic.LoadInt32(&globalMetrics.enabled) == 0 {
+	if !metricsgate.Enabled() {
 		return
 	}
 
@@ -579,7 +578,7 @@ func RecordPoolPut() {
 //	statementCount := len(ast.Statements)
 //	metrics.RecordParse(duration, statementCount, err)
 func RecordParse(duration time.Duration, statementCount int, err error) {
-	if atomic.LoadInt32(&globalMetrics.enabled) == 0 {
+	if !metricsgate.Enabled() {
 		return
 	}
 
@@ -601,7 +600,7 @@ func RecordParse(duration time.Duration, statementCount int, err error) {
 // This function is a no-op if metrics are disabled.
 // Use this to track AST pool efficiency.
 func RecordASTPoolGet() {
-	if atomic.LoadInt32(&globalMetrics.enabled) == 0 {
+	if !metricsgate.Enabled() {
 		return
 	}
 	atomic.AddInt64(&globalMetrics.astPoolGets, 1)
@@ -611,7 +610,7 @@ func RecordASTPoolGet() {
 // This function is a no-op if metrics are disabled.
 // Use this to track AST pool efficiency.
 func RecordASTPoolPut() {
-	if atomic.LoadInt32(&globalMetrics.enabled) == 0 {
+	if !metricsgate.Enabled() {
 		return
 	}
 	atomic.AddInt64(&globalMetrics.astPoolPuts, 1)
@@ -621,7 +620,7 @@ func RecordASTPoolPut() {
 // This function is a no-op if metrics are disabled.
 // Use this to track statement pool efficiency.
 func RecordStatementPoolGet() {
-	if atomic.LoadInt32(&globalMetrics.enabled) == 0 {
+	if !metricsgate.Enabled() {
 		return
 	}
 	atomic.AddInt64(&globalMetrics.stmtPoolGets, 1)
@@ -631,7 +630,7 @@ func RecordStatementPoolGet() {
 // This function is a no-op if metrics are disabled.
 // Use this to track statement pool efficiency.
 func RecordStatementPoolPut() {
-	if atomic.LoadInt32(&globalMetrics.enabled) == 0 {
+	if !metricsgate.Enabled() {
 		return
 	}
 	atomic.AddInt64(&globalMetrics.stmtPoolPuts, 1)
@@ -641,7 +640,7 @@ func RecordStatementPoolPut() {
 // This function is a no-op if metrics are disabled.
 // Use this to track expression pool efficiency.
 func RecordExpressionPoolGet() {
-	if atomic.LoadInt32(&globalMetrics.enabled) == 0 {
+	if !metricsgate.Enabled() {
 		return
 	}
 	atomic.AddInt64(&globalMetrics.exprPoolGets, 1)
@@ -651,7 +650,7 @@ func RecordExpressionPoolGet() {
 // This function is a no-op if metrics are disabled.
 // Use this to track expression pool efficiency.
 func RecordExpressionPoolPut() {
-	if atomic.LoadInt32(&globalMetrics.enabled) == 0 {
+	if !metricsgate.Enabled() {
 		return
 	}
 	atomic.AddInt64(&globalMetrics.exprPoolPuts, 1)
@@ -752,7 +751,7 @@ type Stats struct {
 //	jsonData, _ := json.MarshalIndent(stats, "", "  ")
 //	fmt.Println(string(jsonData))
 func GetStats() Stats {
-	if atomic.LoadInt32(&globalMetrics.enabled) == 0 {
+	if !metricsgate.Enabled() {
 		return Stats{}
 	}
 

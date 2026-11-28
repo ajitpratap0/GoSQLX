@@ -1,7 +1,7 @@
 'use client';
 import { useCopyFeedback } from "./useCopyFeedback";
 import React, { useState, useEffect, useCallback, useMemo, useRef, Suspense } from "react";
-import { useWasm } from "./WasmLoader";
+import { useWasm, type GoSQLXApi } from "./WasmLoader";
 import SqlEditor from "./SqlEditor";
 import AstTab from "./AstTab";
 import FormatTab, { type SqlOutputData } from "./FormatTab";
@@ -48,11 +48,83 @@ const TABS: { id: TabId; label: string }[] = [
 interface Results {
   /** The SQL these results were computed for. */
   source: string | null;
+  /** SQL, dialect and transpile target these results were computed for. */
+  inputKey: string | null;
   ast: (Record<string, unknown> & { error?: string }) | null;
   format: SqlOutputData;
   transpile: SqlOutputData;
   lint: LintData | null;
   analyze: AnalysisData | null;
+}
+
+type ResultKey = TabId;
+
+const EMPTY_RESULTS: Results = {
+  source: null,
+  inputKey: null,
+  ast: null,
+  format: null,
+  transpile: null,
+  lint: null,
+  analyze: null,
+};
+
+function callFor(api: GoSQLXApi, key: ResultKey, query: string, dial: string, target: string): Promise<unknown> {
+  switch (key) {
+    case "ast":
+      return api.parse(query, dial);
+    case "format":
+      return api.format(query, dial);
+    case "transpile":
+      return api.transpile(query, dial, target);
+    case "lint":
+      return api.lint(query, dial);
+    case "analyze":
+      return api.analyze(query, dial);
+  }
+}
+
+/** The result for key, or { error } when the call fails. */
+async function computeResult(api: GoSQLXApi, key: ResultKey, query: string, dial: string, target: string): Promise<unknown> {
+  try {
+    return await callFor(api, key, query, dial, target);
+  } catch (e: unknown) {
+    return { error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+// Shown in the output panel while the parser downloads and starts. The
+// editor is already usable, so the page renders it straight away instead of
+// a full-page skeleton; that also keeps mounting the editor and rendering the
+// first results in separate main-thread tasks.
+function ParserLoading({ progress }: { progress: number }) {
+  return (
+    <div className="flex flex-col h-full" aria-label="Loading SQL parser">
+      <div className="flex-1 p-4 flex flex-col gap-3">
+        <div className="animate-pulse bg-bg-overlay rounded h-3 w-1/2" />
+        <div className="animate-pulse bg-bg-overlay rounded h-3 w-3/4" />
+        <div className="animate-pulse bg-bg-overlay rounded h-3 w-2/3" />
+      </div>
+      <div className="px-4 py-2 border-t border-border bg-fg/[0.03] flex items-center gap-3">
+        <div className="inline-block w-4 h-4 border-2 border-info border-t-transparent rounded-full animate-spin flex-shrink-0" role="status" />
+        <p className="text-fg-muted text-xs">
+          {progress < 1 ? `Downloading SQL parser… ${Math.round(progress * 100)}%` : "Initializing…"}
+        </p>
+        {progress > 0 && progress < 1 && (
+          <div
+            className="flex-1 bg-bg-overlay rounded-full h-1"
+            role="progressbar"
+            aria-valuenow={Math.round(progress * 100)}
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-label="Download progress"
+          >
+            <div className="bg-info h-1 rounded-full transition-all duration-300" style={{ width: `${progress * 100}%` }} />
+          </div>
+        )}
+      </div>
+    </div>
+  );
 }
 
 export default function Playground() {
@@ -61,63 +133,44 @@ export default function Playground() {
   const [dialect, setDialect] = useState("generic");
   const [transpileTarget, setTranspileTarget] = useState("postgresql");
   const [activeTab, setActiveTab] = useState<TabId>("ast");
-  const [results, setResults] = useState<Results>({
-    source: null,
-    ast: null,
-    format: null,
-    transpile: null,
-    lint: null,
-    analyze: null,
-  });
-  const runIdRef = useRef(0);
-
-  const runAll = useCallback(
-    (query: string, dial: string, target: string) => {
-      if (!api || !query.trim()) {
-        setResults({ source: null, ast: null, format: null, transpile: null, lint: null, analyze: null });
-        return;
-      }
-
-      const runId = ++runIdRef.current;
-
-      const safeCall = (fn: () => unknown) => {
-        try {
-          return fn();
-        } catch (e: unknown) {
-          const message = e instanceof Error ? e.message : String(e);
-          return { error: message };
-        }
-      };
-
-      Promise.resolve().then(() => {
-        if (runId !== runIdRef.current) return;
-
-        const astResult = safeCall(() => api.parse(query, dial)) as Results['ast'];
-        const formatResult = safeCall(() => api.format(query, dial)) as Results['format'];
-        const transpileResult = safeCall(() => api.transpile(query, dial, target)) as Results['transpile'];
-        const lintResult = safeCall(() => api.lint(query, dial)) as Results['lint'];
-        const analyzeResult = safeCall(() => api.analyze(query, dial)) as Results['analyze'];
-
-        if (runId === runIdRef.current) {
-          setResults({
-            source: query,
-            ast: astResult,
-            format: formatResult,
-            transpile: transpileResult,
-            lint: lintResult,
-            analyze: analyzeResult,
-          });
-        }
-      });
-    },
-    [api]
-  );
-
+  const [computedResults, setResults] = useState<Results>(EMPTY_RESULTS);
+  const resultsRef = useRef(computedResults);
   useEffect(() => {
-    if (ready && api) {
-      runAll(sql, dialect, transpileTarget);
-    }
-  }, [ready, api, sql, dialect, transpileTarget, runAll]);
+    resultsRef.current = computedResults;
+  }, [computedResults]);
+  const results = sql.trim() ? computedResults : EMPTY_RESULTS;
+
+  // The parser runs in a Web Worker (see WasmLoader). Compute only what is on
+  // screen: the active tab, plus lint, whose parse error span marks the
+  // editor; other tabs are computed when opened. New results are committed
+  // together, so the previous output stays visible until they are ready, and
+  // results for input that changed meanwhile are dropped.
+  useEffect(() => {
+    if (!ready || !api || !sql.trim()) return;
+
+    const inputKey = JSON.stringify([sql, dialect, transpileTarget]);
+    const current = resultsRef.current;
+    const base = current.inputKey === inputKey ? current : { ...EMPTY_RESULTS, source: sql, inputKey };
+    const wanted: ResultKey[] = activeTab === "lint" ? ["lint"] : [activeTab, "lint"];
+    const pending = wanted.filter((key) => base[key] === null);
+    if (pending.length === 0) return;
+
+    let cancelled = false;
+    (async () => {
+      const computed: Partial<Record<ResultKey, unknown>> = {};
+      for (const key of pending) {
+        computed[key] = await computeResult(api, key, sql, dialect, transpileTarget);
+        if (cancelled) return;
+      }
+      setResults((prev) => ({
+        ...(prev.inputKey === inputKey ? prev : base),
+        ...(computed as Partial<Results>),
+      }));
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [ready, api, sql, dialect, transpileTarget, activeTab]);
 
   const handleSqlChange = useCallback(
     (value: string) => {
@@ -135,7 +188,7 @@ export default function Playground() {
 
   // GoSQLX highlighting in the selected dialect once the parser is loaded.
   const highlighter = useMemo<HighlightSource | null>(
-    () => (api ? (text: string) => api.highlight(text, dialect).spans : null),
+    () => (api ? async (text: string) => (await api.highlight(text, dialect)).spans : null),
     [api, dialect],
   );
 
@@ -148,70 +201,6 @@ export default function Playground() {
       flash("failed");
     });
   }, [flash]);
-
-  if (loading) {
-    return (
-      <div className="flex flex-col h-full bg-bg" aria-busy="true" aria-label="Loading SQL parser">
-        {/* Skeleton toolbar */}
-        <div className="flex items-center justify-between px-4 py-2 border-b border-border bg-fg/[0.03]">
-          <div className="flex items-center gap-3">
-            <div className="animate-pulse bg-bg-overlay rounded h-4 w-28" />
-            <div className="h-4 w-px bg-bg-overlay" />
-            <div className="animate-pulse bg-bg-overlay rounded h-6 w-36" />
-          </div>
-          <div className="animate-pulse bg-bg-overlay rounded h-4 w-20" />
-        </div>
-        {/* Skeleton panels */}
-        <div className="flex flex-col lg:flex-row flex-1 min-h-0 border-x border-b border-pane-border">
-          {/* Left: editor skeleton */}
-          <div className="w-full lg:w-1/2 border-r border-border bg-pane-bg flex flex-col min-h-[240px] lg:min-h-0 p-4 gap-3">
-            <div className="animate-pulse bg-bg-overlay rounded h-3 w-3/4" />
-            <div className="animate-pulse bg-bg-overlay rounded h-3 w-full" />
-            <div className="animate-pulse bg-bg-overlay rounded h-3 w-5/6" />
-            <div className="animate-pulse bg-bg-overlay rounded h-3 w-2/3" />
-            <div className="animate-pulse bg-bg-overlay rounded h-3 w-4/5" />
-          </div>
-          {/* Right: tab + content skeleton */}
-          <div className="w-full lg:w-1/2 bg-pane-bg flex flex-col min-h-0">
-            <div className="flex border-b border-border bg-fg/[0.03] gap-2 px-2 py-1">
-              {[80, 72, 88, 60, 88].map((w, i) => (
-                <div key={i} className={`animate-pulse bg-bg-overlay rounded h-6`} style={{ width: w }} />
-              ))}
-            </div>
-            <div className="flex-1 p-4 flex flex-col gap-3">
-              <div className="animate-pulse bg-bg-overlay rounded h-3 w-1/2" />
-              <div className="animate-pulse bg-bg-overlay rounded h-3 w-3/4" />
-              <div className="animate-pulse bg-bg-overlay rounded h-3 w-2/3" />
-            </div>
-          </div>
-        </div>
-        {/* Progress overlay at bottom */}
-        <div className="px-4 py-2 border-t border-border bg-fg/[0.03] flex items-center gap-3">
-          <div className="inline-block w-4 h-4 border-2 border-info border-t-transparent rounded-full animate-spin flex-shrink-0" role="status" />
-          <p className="text-fg-muted text-xs">
-            {progress < 1
-              ? `Downloading SQL parser… ${Math.round(progress * 100)}%`
-              : "Initializing…"}
-          </p>
-          {progress > 0 && progress < 1 && (
-            <div
-              className="flex-1 bg-bg-overlay rounded-full h-1"
-              role="progressbar"
-              aria-valuenow={Math.round(progress * 100)}
-              aria-valuemin={0}
-              aria-valuemax={100}
-              aria-label="Download progress"
-            >
-              <div
-                className="bg-info h-1 rounded-full transition-all duration-300"
-                style={{ width: `${progress * 100}%` }}
-              />
-            </div>
-          )}
-        </div>
-      </div>
-    );
-  }
 
   if (error) {
     return (
@@ -230,7 +219,7 @@ export default function Playground() {
     );
   }
 
-  const hasResults = results.ast !== null;
+  const hasResults = results.source !== null;
 
   return (
     <div className="flex flex-col h-full bg-bg">
@@ -256,8 +245,8 @@ export default function Playground() {
           </label>
         </div>
         <div className="flex items-center gap-1.5">
-          <span className="w-2 h-2 rounded-full bg-ok" aria-hidden="true" />
-          <span className="text-xs text-fg-muted">Parser ready</span>
+          <span className={`w-2 h-2 rounded-full ${ready ? "bg-ok" : "bg-warn animate-pulse"}`} aria-hidden="true" />
+          <span className="text-xs text-fg-muted">{ready ? "Parser ready" : "Loading parser…"}</span>
         </div>
       </div>
 
@@ -311,10 +300,18 @@ export default function Playground() {
           </div>
 
           {/* Tab content */}
-          <div className="flex-1 overflow-auto min-h-0" role="tabpanel" id={`tabpanel-${activeTab}`} aria-labelledby={`tab-${activeTab}`} aria-live="polite">
-            {activeTab === "ast" && <AstTab data={results.ast} />}
-            {activeTab === "format" && <FormatTab data={results.format} />}
-            {activeTab === "transpile" && (
+          <div
+            className="flex-1 overflow-auto min-h-0"
+            role="tabpanel"
+            id={`tabpanel-${activeTab}`}
+            aria-labelledby={`tab-${activeTab}`}
+            aria-live="polite"
+            aria-busy={loading}
+          >
+            {loading && <ParserLoading progress={progress} />}
+            {ready && activeTab === "ast" && <AstTab data={results.ast} />}
+            {ready && activeTab === "format" && <FormatTab data={results.format} />}
+            {ready && activeTab === "transpile" && (
               <TranspileTab
                 data={results.transpile}
                 dialects={DIALECTS}
@@ -324,8 +321,8 @@ export default function Playground() {
                 onToChange={setTranspileTarget}
               />
             )}
-            {activeTab === "lint" && <LintTab data={results.lint} />}
-            {activeTab === "analyze" && (
+            {ready && activeTab === "lint" && <LintTab data={results.lint} />}
+            {ready && activeTab === "analyze" && (
               <Suspense fallback={<div className="flex items-center justify-center h-full text-fg-muted text-sm">Loading analyzer...</div>}>
                 <AnalyzeTab data={results.analyze} />
               </Suspense>

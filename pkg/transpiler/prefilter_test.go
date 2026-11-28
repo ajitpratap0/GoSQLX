@@ -50,6 +50,18 @@ func TestPrefilterEquivalence(t *testing.T) {
 		`CREATE TABLE t (v "custom")`, "CREATE TABLE t (v `custom`)", "CREATE TABLE t (v [custom])", "CREATE TABLE t (v INT[])",
 		"SELECT 'a\x00b'; SELECT a ^ b", "SELECT a ^ b; SELECT 'a\x00b'",
 		"SELECT emp# FROM t", "SELECT 1 -- ' || [\n", "SELECT 1 /* $ || [ */", "SELECT 1; SELECT 'x'", "SELECT (((1)))",
+		// #897 and #898: expected outputs are pinned in lambda_unicode_test.go.
+		"SELECT arrayMap(x -> x * 2, [1, 2, 3])", "SELECT arrayFilter(x -> x > 1 AND x || 'a' = y, arr) FROM t",
+		`SELECT U&'d\0061t'`, `SELECT U&"d\0061t" FROM t`,
+		// W7-01: one fixture per construct the ops prefilter keys on.
+		"SELECT a ^ b FROM t", "SELECT a | b FROM t", "SELECT a & b FROM t", "SELECT a # b FROM t",
+		"SELECT a << 1 FROM t", "SELECT a >> 1 FROM t", "SELECT ~a FROM t", "SELECT @ a FROM t",
+		"SELECT |/ a FROM t", "SELECT ||/ a FROM t", "SELECT !! 5 FROM t", "SELECT a ? 'k' FROM t",
+		"SELECT a ?| b FROM t", "SELECT a @> b FROM t", "SELECT a <-> b FROM t", "SELECT a ~* b FROM t",
+		"SELECT a !~ b FROM t", "SELECT j -> 'k' FROM t", "SELECT j ->> 'k' FROM t",
+		"SELECT arrayMap(x -> x * 2, [1, 2]) FROM t",
+		"SELECT $5.00 FROM t", "SELECT $5 FROM t", "SELECT {'k': 1} FROM t",
+		`SELECT U&'d\0061t' FROM t`, `SELECT u&'d\0061t' FROM t`,
 	}
 	for _, from := range dialects {
 		for _, to := range dialects {
@@ -61,6 +73,7 @@ func TestPrefilterEquivalence(t *testing.T) {
 		}
 	}
 	files := 0
+	var statements []string
 	err := filepath.WalkDir("../../testdata/realworld", func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
@@ -75,18 +88,13 @@ func TestPrefilterEquivalence(t *testing.T) {
 		}
 		// Deliberately split exactly on semicolons, including chunks inside quoted
 		// strings: malformed fragments also pin equality of parse errors.
-		statements := strings.Split(string(data), ";")
-		if testing.Short() && len(statements) > 2 {
-			statements = statements[:2]
+		chunks := strings.Split(string(data), ";")
+		if testing.Short() && len(chunks) > 2 {
+			chunks = chunks[:2]
 		}
-		for _, sql := range statements {
-			if strings.TrimSpace(sql) == "" {
-				continue
-			}
-			for _, from := range dialects {
-				for _, to := range dialects {
-					checkPrefilterEquivalent(t, sql, from, to)
-				}
+		for _, sql := range chunks {
+			if strings.TrimSpace(sql) != "" {
+				statements = append(statements, sql)
 			}
 		}
 		return nil
@@ -97,6 +105,20 @@ func TestPrefilterEquivalence(t *testing.T) {
 	if files == 0 {
 		t.Fatal("realworld corpus contained no SQL files")
 	}
+	// The corpus × dialect² sweep dominates this package's race-test time, so
+	// each source dialect runs as its own parallel subtest; coverage is unchanged.
+	t.Run("realworld", func(t *testing.T) {
+		for _, from := range dialects {
+			t.Run(string(from), func(t *testing.T) {
+				t.Parallel()
+				for _, sql := range statements {
+					for _, to := range dialects {
+						checkPrefilterEquivalent(t, sql, from, to)
+					}
+				}
+			})
+		}
+	})
 }
 
 func TestScanSourceStringOpeners(t *testing.T) {
@@ -107,8 +129,8 @@ func TestScanSourceStringOpeners(t *testing.T) {
 	}{
 		{"'abc'", keywords.DialectPostgreSQL, sourceFeatures{quote: true}},
 		{`"abc"`, keywords.DialectMySQL, sourceFeatures{quote: true, typeDelim: true}},
-		{"$$abc$$", keywords.DialectPostgreSQL, sourceFeatures{quote: true}},
-		{"$tag$abc$tag$", keywords.DialectPostgreSQL, sourceFeatures{quote: true}},
+		{"$$abc$$", keywords.DialectPostgreSQL, sourceFeatures{quote: true, ops: true}},
+		{"$tag$abc$tag$", keywords.DialectPostgreSQL, sourceFeatures{quote: true, ops: true}},
 		{"‘abc’", keywords.DialectPostgreSQL, sourceFeatures{nonASCII: true}},
 		{"«abc»", keywords.DialectPostgreSQL, sourceFeatures{nonASCII: true}},
 		{"E'abc'", keywords.DialectPostgreSQL, sourceFeatures{quote: true}},
@@ -157,6 +179,23 @@ func TestScanSourceStringOpeners(t *testing.T) {
 			flags := scanSource(sql)
 			if !flags.quote && !flags.nonASCII {
 				t.Fatal("string literal would skip retargeting")
+			}
+		})
+	}
+}
+
+func TestScanSourceByteBoundaries(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		sql  string
+		want sourceFeatures
+	}{
+		{"0x80 is non-ASCII", "SELECT \x80", sourceFeatures{nonASCII: true}},
+		{"0x7f is ASCII", "SELECT \x7f", sourceFeatures{}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := scanSource(tc.sql); got != tc.want {
+				t.Fatalf("scanSource(%q)=%+v, want %+v", tc.sql, got, tc.want)
 			}
 		})
 	}

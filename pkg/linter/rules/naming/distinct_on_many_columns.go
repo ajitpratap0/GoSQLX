@@ -49,28 +49,25 @@ func (r *DistinctOnManyColumnsRule) Check(ctx *linter.Context) ([]linter.Violati
 		return nil, nil
 	}
 	var violations []linter.Violation
-	for _, stmt := range ctx.AST.Statements {
-		ast.Inspect(stmt, func(n ast.Node) bool {
-			sel, ok := n.(*ast.SelectStatement)
-			if !ok {
-				return true
-			}
-			if !sel.Distinct {
-				return true
-			}
-			colCount := len(sel.Columns)
-			if colCount >= distinctColumnThreshold {
-				violations = append(violations, linter.Violation{
-					Rule:       r.ID(),
-					RuleName:   r.Name(),
-					Severity:   r.Severity(),
-					Message:    fmt.Sprintf("DISTINCT on %d columns is expensive and may indicate a missing GROUP BY or join issue", colCount),
-					Location:   sel.Pos,
-					Suggestion: "Consider using GROUP BY with aggregate functions, or investigate whether the query structure can be simplified",
-				})
-			}
-			return true
-		})
+	for _, n := range ctx.Nodes() {
+		sel, ok := n.(*ast.SelectStatement)
+		if !ok {
+			continue
+		}
+		if !sel.Distinct {
+			continue
+		}
+		colCount := len(sel.Columns)
+		if colCount >= distinctColumnThreshold {
+			violations = append(violations, linter.Violation{
+				Rule:       r.ID(),
+				RuleName:   r.Name(),
+				Severity:   r.Severity(),
+				Message:    fmt.Sprintf("DISTINCT on %d columns is expensive and may indicate a missing GROUP BY or join issue", colCount),
+				Location:   sel.Pos,
+				Suggestion: "Consider using GROUP BY with aggregate functions, or investigate whether the query structure can be simplified",
+			})
+		}
 	}
 	return violations, nil
 }

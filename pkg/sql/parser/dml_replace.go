@@ -87,6 +87,8 @@ func (p *Parser) parseReplaceStatement() (ast.Statement, error) {
 	}
 
 	replStmt := ast.GetReplaceStatement()
+	p.notePooledDraw()
+
 	replStmt.TableName = tableName
 	replStmt.Columns = append(replStmt.Columns, columns...)
 	replStmt.Values = append(replStmt.Values, values...)

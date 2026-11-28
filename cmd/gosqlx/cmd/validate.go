@@ -325,10 +325,10 @@ func validationFailed(err error) error {
 }
 
 // validateInlineSQL validates inline SQL passed as a command argument.
-// Uses the fast-path Validate() which skips full AST construction (#274).
+// Uses Validate(), which parses SQL and releases the resulting AST (#274).
 func validateInlineSQL(cmd *cobra.Command, sql string) error {
 	if validateOutputFormat == OutputFormatJSON || validateOutputFormat == OutputFormatSARIF {
-		// A machine-readable report needs the full result, not the fast path.
+		// A machine-readable report needs the full result, not only syntax validity.
 		return validateContent(cmd, inlineDisplayName, []byte(sql))
 	}
 	var err error
@@ -342,13 +342,6 @@ func validateInlineSQL(cmd *cobra.Command, sql string) error {
 			fmt.Fprintf(cmd.ErrOrStderr(), "❌ Invalid SQL: %v\n", err)
 		}
 		return validationFailed(fmt.Errorf("validation failed: %w", err))
-	}
-
-	if sql == "" {
-		if !validateQuiet {
-			fmt.Fprintln(cmd.OutOrStdout(), "✅ Empty input (no statements)")
-		}
-		return nil
 	}
 
 	if !validateQuiet {

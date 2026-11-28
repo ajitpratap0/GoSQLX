@@ -46,33 +46,30 @@ func (r *ImplicitCrossJoinRule) Check(ctx *linter.Context) ([]linter.Violation, 
 		return nil, nil
 	}
 	var violations []linter.Violation
-	for _, stmt := range ctx.AST.Statements {
-		ast.Inspect(stmt, func(n ast.Node) bool {
-			sel, ok := n.(*ast.SelectStatement)
-			if !ok {
-				return true
-			}
-			// Multiple tables in FROM without any JOIN clause = implicit cross join
-			if len(sel.From) >= 2 && len(sel.Joins) == 0 {
-				tableNames := make([]string, 0, len(sel.From))
-				for _, ref := range sel.From {
-					if ref.Name != "" {
-						tableNames = append(tableNames, ref.Name)
-					}
-				}
-				if len(tableNames) >= 2 {
-					violations = append(violations, linter.Violation{
-						Rule:       r.ID(),
-						RuleName:   r.Name(),
-						Severity:   r.Severity(),
-						Message:    "Comma-separated tables in FROM clause create an implicit cross join",
-						Location:   sel.Pos,
-						Suggestion: "Use explicit JOIN syntax with an ON condition instead of comma-separated tables",
-					})
+	for _, n := range ctx.Nodes() {
+		sel, ok := n.(*ast.SelectStatement)
+		if !ok {
+			continue
+		}
+		// Multiple tables in FROM without any JOIN clause = implicit cross join
+		if len(sel.From) >= 2 && len(sel.Joins) == 0 {
+			tableNames := make([]string, 0, len(sel.From))
+			for _, ref := range sel.From {
+				if ref.Name != "" {
+					tableNames = append(tableNames, ref.Name)
 				}
 			}
-			return true
-		})
+			if len(tableNames) >= 2 {
+				violations = append(violations, linter.Violation{
+					Rule:       r.ID(),
+					RuleName:   r.Name(),
+					Severity:   r.Severity(),
+					Message:    "Comma-separated tables in FROM clause create an implicit cross join",
+					Location:   sel.Pos,
+					Suggestion: "Use explicit JOIN syntax with an ON condition instead of comma-separated tables",
+				})
+			}
+		}
 	}
 	return violations, nil
 }

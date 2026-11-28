@@ -19,8 +19,8 @@ import (
 	"sort"
 	"strings"
 	"testing"
-	"time"
 
+	"github.com/ajitpratap0/GoSQLX/internal/scaletest"
 	"github.com/ajitpratap0/GoSQLX/pkg/models"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/keywords"
@@ -446,35 +446,37 @@ func TestJoinWithComments_StartsDisagree(t *testing.T) {
 
 // TestJoinWithComments_ScalesLinearly guards against the quadratic hint
 // placement and comment lookup: thousands of hints in one statement and
-// thousands of commented statements must format quickly. The bounds are
-// generous so that the race detector and slow CI machines pass; the
-// quadratic versions took seconds.
+// thousands of commented statements must format in time linear in the input.
+// Two checks compare a 4x larger input against a smaller one (see scaletest):
+// bytes allocated (deterministic, so valid under -race and load) and a
+// repeated, interleaved timing ratio.
 func TestJoinWithComments_ScalesLinearly(t *testing.T) {
 	if testing.Short() {
-		t.Skip("timing test")
+		t.Skip("scaling test")
 	}
+	layout := CommentLayout{Terminator: ";", Gap: "\n"}
 	tests := []struct {
 		name string
-		sql  string
-		hint int // hints expected in the output
+		gen  func(n int) string // input with n repetitions
+		n    int                // repetitions in the small input; the large one has 4n
 	}{
-		{"hints", strings.Repeat("SELECT /*+ H */ 1 UNION ALL ", 3000) + "SELECT /*+ H */ 1", 3001},
-		{"comments", strings.Repeat("SELECT 1; -- c\n", 20000), 0},
+		{"hints", func(n int) string { return strings.Repeat("SELECT /*+ H */ 1 UNION ALL ", n) + "SELECT /*+ H */ 1" }, 750},
+		{"comments", func(n int) string { return strings.Repeat("SELECT 1; -- c\n", n) }, 5000},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			start := time.Now()
-			got, err := renderJoinDialect(t, tc.sql, keywords.DialectPostgreSQL, CommentLayout{Terminator: ";", Gap: "\n"})
-			elapsed := time.Since(start)
+			small, large := tc.gen(tc.n), tc.gen(4*tc.n)
+			got, err := renderJoinDialect(t, large, keywords.DialectPostgreSQL, layout)
 			if err != nil {
 				t.Fatal(err)
 			}
-			if n := strings.Count(got, "SELECT /*+ H */ 1"); n != tc.hint {
-				t.Errorf("%d hints in place, want %d", n, tc.hint)
+			if want := strings.Count(large, "/*+ H */"); strings.Count(got, "SELECT /*+ H */ 1") != want {
+				t.Errorf("%d hints in place, want %d", strings.Count(got, "SELECT /*+ H */ 1"), want)
 			}
-			if limit := 3 * time.Second; elapsed > limit {
-				t.Errorf("took %v, want under %v", elapsed, limit)
-			}
+			runSmall := func() { _, _ = renderJoinDialect(t, small, keywords.DialectPostgreSQL, layout) }
+			runLarge := func() { _, _ = renderJoinDialect(t, large, keywords.DialectPostgreSQL, layout) }
+			scaletest.AssertLinearBytes(t, tc.name, 8, runSmall, runLarge)
+			scaletest.AssertLinearGrowth(t, tc.name, 10, runSmall, runLarge)
 		})
 	}
 }

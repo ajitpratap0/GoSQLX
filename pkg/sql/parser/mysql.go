@@ -83,6 +83,7 @@ func (p *Parser) parseMatchAgainst(matchFunc *ast.FunctionCall) (ast.Expression,
 //   - SHOW INDEX FROM name
 func (p *Parser) parseShowStatement() (ast.Statement, error) {
 	show := ast.GetShowStatement()
+	p.notePooledDraw()
 
 	upper := strings.ToUpper(p.currentToken.Token.Value)
 
@@ -201,6 +202,7 @@ func (p *Parser) parseDescribeStatement(keyword string) (ast.Statement, error) {
 		return nil, p.qualifiedNameError(err, "table name")
 	}
 	desc := ast.GetDescribeStatement()
+	p.notePooledDraw()
 	desc.TableName = name
 	desc.Keyword = keyword
 	desc.ObjectKind = kind

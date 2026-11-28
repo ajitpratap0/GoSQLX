@@ -17,6 +17,9 @@
 // slice, without adding that borrowed-result contract to the public
 // tokenizer API.
 //
+// These tokscratch callers also reserve the parse's stack here,
+// before tokenizing, so a fresh goroutine grows its stack while frames are shallow.
+//
 // Package tokenizer registers the implementation in its init. Every function
 // here takes the *tokenizer.Tokenizer as t (typed any only to avoid an import
 // cycle) and returns the same tokens and errors as the matching public method
@@ -24,14 +27,17 @@
 // returned slice, and the Word values its tokens point to, are owned by t.
 // They are valid only until the next tokenize call on t, t.Reset or
 // tokenizer.PutTokenizer(t). Callers must copy what they keep (the parser's
-// preprocess step does) and must never return the slice to a user. Token
-// strings are substrings of the input as with the public methods, so they
+// preprocess step does) and must not return the slice as an owned result.
+// The linter lends the borrowed slice to rules via Context.Tokens only for the
+// duration of Check, under the Rule lifetime contract.
+// Token strings are substrings of the input as with the public methods, so they
 // stay valid.
 package tokscratch
 
 import (
 	"context"
 
+	"github.com/ajitpratap0/GoSQLX/internal/stackgrow"
 	"github.com/ajitpratap0/GoSQLX/pkg/models"
 )
 
@@ -54,18 +60,21 @@ func requireImplementation() {
 
 // Bytes is t.Tokenize(input) into t's scratch buffer.
 func Bytes(t any, input []byte) ([]models.TokenWithSpan, error) {
+	stackgrow.Reserve()
 	requireImplementation()
 	return impl(context.Background(), t, input, "", false)
 }
 
 // String is t.TokenizeString(s) into t's scratch buffer.
 func String(t any, s string) ([]models.TokenWithSpan, error) {
+	stackgrow.Reserve()
 	requireImplementation()
 	return impl(context.Background(), t, nil, s, true)
 }
 
 // StringContext is t.TokenizeStringContext(ctx, s) into t's scratch buffer.
 func StringContext(ctx context.Context, t any, s string) ([]models.TokenWithSpan, error) {
+	stackgrow.Reserve()
 	requireImplementation()
 	if err := ctx.Err(); err != nil {
 		return nil, err

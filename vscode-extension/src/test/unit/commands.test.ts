@@ -48,8 +48,8 @@ suite('Configuration Validation Unit Tests', () => {
         assert.strictEqual(validateExecutablePath('/usr/local/bin/gosqlx').valid, true);
         assert.strictEqual(validateExecutablePath('C:\\Program Files\\gosqlx\\gosqlx.exe').valid, true);
 
-        // Invalid paths
-        assert.strictEqual(validateExecutablePath('').valid, false);
+        // Empty means "use the bundled binary or PATH fallback" (#367)
+        assert.strictEqual(validateExecutablePath('').valid, true);
     });
 
     test('validateTimeout should accept reasonable values', () => {
